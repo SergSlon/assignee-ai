@@ -125,6 +125,14 @@ describe("sanitizeDesiredState", () => {
 
   describe("nested object stripping", () => {
     it("strips nested extraneous keys (EC2 CreditSpecification.CpuCredits)", () => {
+      // e96.W2.R5 — codifies the class of bug the story fixed at the
+      // plugin layer: the CFN schema's sub-key is `CPUCredits` (uppercase
+      // CPU). If any future caller emits the lowercase `CpuCredits`
+      // variant, the sanitizer MUST strip it so CCAPI doesn't see two
+      // siblings. This test locks in the contract that the plugin side
+      // uses the canonical `CPUCredits` (see ec2-instance/fields.ts
+      // + ec2-instance.ts), and the sanitizer stays a safety net for
+      // stray LLM / hand-authored desiredStates with the bad casing.
       const schema = {
         properties: {
           InstanceType: { type: "string" },
@@ -140,7 +148,7 @@ describe("sanitizeDesiredState", () => {
         InstanceType: "t3.micro",
         CreditSpecification: {
           CPUCredits: "standard",
-          CpuCredits: "standard", // wrong casing — extraneous
+          CpuCredits: "standard", // wrong casing — extraneous, stripped
           ExtraField: "bad",
         },
       };

@@ -28,6 +28,19 @@ const CIDR_PORT_RE =
   /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}):(\d{1,5})$/;
 
 /**
+ * Grammar for the `sg_high_risk_public_exposure` check_type:
+ *   "<cidr>:<port1>,<port2>,...,<portN>"
+ *
+ * Port list is split on comma post-match. Epic 96 W3.N2 introduced
+ * this grammar to replace BP-SG-004's always-firing awareness check
+ * (legacy BP-SG-007 slot) — the old rule surfaced DB-focused copy
+ * on every SG including port-443-only LB SGs, training users to
+ * ignore HIGH severity.
+ */
+const CIDR_PORT_SET_RE =
+  /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}):([\d,]+)$/;
+
+/**
  * True when the candidate value looks like an SG ingress rule object
  * — at minimum has `CidrIp` (string) and ideally `FromPort`/`ToPort`
  * (numbers). Missing port fields are treated as "any port" (the CFN
@@ -69,6 +82,31 @@ function sgIngressOpensCidrPort(
     if (from <= port && port <= to) return true;
   }
   return false;
+}
+
+/**
+ * Parse a `"<cidr>:<p1>,<p2>,..."` expected_value string into its
+ * components. Returns `undefined` when the grammar does not match,
+ * when any port is out of [0, 65535], or when the port list is empty
+ * — the caller treats undefined as "rule silently passes" so a typo
+ * in the YAML never triggers a flood of findings.
+ */
+function parseCidrPortSet(
+  value: string,
+): { cidr: string; ports: number[] } | undefined {
+  const m = CIDR_PORT_SET_RE.exec(value);
+  if (m === null) return undefined;
+  const cidr = m[1]!;
+  const portsRaw = m[2]!;
+  const parts = portsRaw.split(",").filter((p) => p.length > 0);
+  if (parts.length === 0) return undefined;
+  const ports: number[] = [];
+  for (const p of parts) {
+    const n = Number(p);
+    if (!Number.isFinite(n) || n < 0 || n > 65535) return undefined;
+    ports.push(n);
+  }
+  return { cidr, ports };
 }
 
 /**
@@ -237,6 +275,26 @@ export function checkPasses(
       const patternName = expectedValue as PolicyAntipattern;
       const result = inspectPolicyDocument(fieldValue, patternName);
       return !result.matched;
+    }
+
+    case "sg_high_risk_public_exposure": {
+      // Epic 96 W3.N2 — BP-SG-004 narrowing. `expected_value` carries
+      // the CIDR + comma-separated port set grammar; the rule fails
+      // (finding fires) when any ingress rule opens that CIDR to any
+      // port in the set. Mirrors the `not_equals` CIDR:port branch
+      // but iterates over the port set.
+      //
+      // Defensive passes (no finding):
+      //   - expected_value not a string / grammar mismatch / out-of-range port
+      //   - fieldValue not an SG ingress array (missing / undefined)
+      //   - empty port list
+      if (typeof expectedValue !== "string") return true;
+      const parsed = parseCidrPortSet(expectedValue);
+      if (parsed === undefined) return true;
+      for (const port of parsed.ports) {
+        if (sgIngressOpensCidrPort(fieldValue, parsed.cidr, port)) return false;
+      }
+      return true;
     }
 
     default:

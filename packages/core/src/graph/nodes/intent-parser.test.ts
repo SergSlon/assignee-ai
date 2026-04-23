@@ -448,6 +448,166 @@ describe("extractAssertedValues", () => {
     );
     expect(out.elicited["__assertedRegion"]).toBe("us-west-2");
   });
+
+  describe("error code stamping — e96.W2.R7 INVALID_NAME for non-ASCII name", () => {
+    it("sets errorCode='INVALID_NAME' when a `named <x>` span contains non-ASCII", () => {
+      // Pre-fix, this extraction returned `errors: [...]` with no
+      // machine-readable classifier; the CLI's JSON envelope fell back
+      // to the generic PLAN_FAILED code. A-11 regression of Epic 94 R8.
+      const out = extractAssertedValues(
+        "Create an S3 bucket named résumé-bucket",
+        RESOURCE_TYPES.S3_BUCKET,
+      );
+      expect(out.errors.length).toBeGreaterThanOrEqual(1);
+      expect(out.errors[0]).toContain("non-ASCII characters are not allowed");
+      expect(out.errorCode).toBe("INVALID_NAME");
+    });
+
+    it("does NOT stamp INVALID_NAME on unrelated validation failures", () => {
+      // Example: a bad CIDR fails without setting errorCode. The CLI
+      // path falls back to the generic PLAN_FAILED classifier, which
+      // is the desired behavior for unscoped failures.
+      const out = extractAssertedValues(
+        "Create a VPC with CIDR 999.999.999.999/99",
+        RESOURCE_TYPES.EC2_VPC,
+      );
+      expect(out.errors.length).toBeGreaterThanOrEqual(1);
+      expect(out.errorCode).toBeUndefined();
+    });
+
+    it("does NOT stamp an errorCode on a clean extraction", () => {
+      const out = extractAssertedValues(
+        "Create an S3 bucket named my-clean-bucket",
+        RESOURCE_TYPES.S3_BUCKET,
+      );
+      expect(out.errors).toEqual([]);
+      expect(out.errorCode).toBeUndefined();
+    });
+
+    it("first error wins — a mixed failure keeps its INVALID_NAME code", () => {
+      // If both a non-ASCII name AND another validation failure fire,
+      // the first stamped code wins. Today only extractResourceName
+      // stamps a code, so this is effectively an invariant guard.
+      const out = extractAssertedValues(
+        "Create an S3 bucket named résumé-bucket with CIDR 999.999.999.999/99",
+        RESOURCE_TYPES.S3_BUCKET,
+      );
+      expect(out.errorCode).toBe("INVALID_NAME");
+    });
+  });
+
+  describe("CIDR scope — e96.W2.R6 Route destinations accept /0 and /32", () => {
+    it("accepts 0.0.0.0/0 as EC2::Route DestinationCidrBlock", () => {
+      // B-03 regression repro: before the scope fix, Route used
+      // kind="vpc" (/16-/28 only) so the default route 0.0.0.0/0 was
+      // rejected as "prefix must be 16-28 for a VPC". That broke the
+      // Route BP tests.
+      const out = extractAssertedValues(
+        "Create a default route to 0.0.0.0/0",
+        RESOURCE_TYPES.EC2_ROUTE,
+      );
+      expect(out.errors).toEqual([]);
+      expect(out.elicited["DestinationCidrBlock"]).toBe("0.0.0.0/0");
+      expect(out.elicited["CidrBlock"]).toBeUndefined();
+    });
+
+    it("accepts /32 host routes as EC2::Route DestinationCidrBlock", () => {
+      const out = extractAssertedValues(
+        "Create a host route to 10.0.0.42/32",
+        RESOURCE_TYPES.EC2_ROUTE,
+      );
+      expect(out.errors).toEqual([]);
+      expect(out.elicited["DestinationCidrBlock"]).toBe("10.0.0.42/32");
+    });
+
+    it("still rejects /8 on EC2::VPC (kind=vpc preserved for VPC)", () => {
+      const out = extractAssertedValues(
+        "Create a VPC with CIDR 10.0.0.0/8",
+        RESOURCE_TYPES.EC2_VPC,
+      );
+      expect(out.errors.length).toBeGreaterThanOrEqual(1);
+      expect(out.errors[0]).toContain("prefix must be 16-28");
+    });
+
+    it("still rejects /8 on EC2::Subnet (kind=vpc preserved for Subnet)", () => {
+      const out = extractAssertedValues(
+        "Create a subnet with CIDR 10.0.0.0/8",
+        RESOURCE_TYPES.EC2_SUBNET,
+      );
+      expect(out.errors.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("accepts 0.0.0.0/0 as a SecurityGroup source CIDR (unchanged)", () => {
+      const out = extractAssertedValues(
+        "Allow port 443 from 0.0.0.0/0",
+        RESOURCE_TYPES.EC2_SECURITY_GROUP,
+      );
+      expect(out.errors).toEqual([]);
+    });
+
+    it("emits a Route-specific error hint ('0-32', not '16-28')", () => {
+      // An invalid octet on a Route should still fail loudly, and the
+      // hint should not mislead the user with the VPC /16-/28 range.
+      const out = extractAssertedValues(
+        "Create a route to 999.999.999.999/33",
+        RESOURCE_TYPES.EC2_ROUTE,
+      );
+      expect(out.errors.length).toBeGreaterThanOrEqual(1);
+      expect(out.errors[0]).toContain("0-32");
+      expect(out.errors[0]).not.toContain("16-28");
+    });
+  });
+
+  describe("region extraction — e96.W1.B3 scope to region-intent phrases", () => {
+    it("does NOT match a region-shaped substring nested inside a hyphenated name", () => {
+      // `my-bucket-us-east-1-fake` contains the substring `us-east-1`
+      // but that is a bucket name, not a region assertion. The real
+      // region qualifier is `region eu-west-2`. Pre-fix the regex over-
+      // matched and flagged `my-bucket-us-east-1` as an unknown region.
+      const out = extractAssertedValues(
+        "create S3 bucket named my-bucket-us-east-1-fake region eu-west-2",
+        RESOURCE_TYPES.S3_BUCKET,
+      );
+      expect(out.errors).toEqual([]);
+      expect(out.elicited["__assertedRegion"]).toBe("eu-west-2");
+    });
+
+    it("still catches an adversarial region-shaped token asserted via `region`", () => {
+      // eu-west-fake-1 is whitespace-bracketed, so the loud-fail path
+      // (unknown region) must still fire.
+      const out = extractAssertedValues(
+        "Create an S3 bucket in region eu-west-fake-1",
+        RESOURCE_TYPES.S3_BUCKET,
+      );
+      expect(out.errors.some((e) => e.includes("Unknown AWS region"))).toBe(
+        true,
+      );
+    });
+
+    it("does NOT false-positive on ami-like hyphenated IDs (no region-shape)", () => {
+      const out = extractAssertedValues(
+        "Create an EC2 instance ami-12345abcdef ImageId",
+        RESOURCE_TYPES.EC2_INSTANCE,
+      );
+      expect(out.elicited["__assertedRegion"]).toBeUndefined();
+    });
+
+    it("accepts a bare region token at end-of-string", () => {
+      const out = extractAssertedValues(
+        "Create an S3 bucket in us-west-2",
+        RESOURCE_TYPES.S3_BUCKET,
+      );
+      expect(out.elicited["__assertedRegion"]).toBe("us-west-2");
+    });
+
+    it("accepts a region token followed by punctuation (comma/period)", () => {
+      const out = extractAssertedValues(
+        "Create an S3 bucket in us-west-2, encrypted",
+        RESOURCE_TYPES.S3_BUCKET,
+      );
+      expect(out.elicited["__assertedRegion"]).toBe("us-west-2");
+    });
+  });
 });
 
 describe("token validators", () => {

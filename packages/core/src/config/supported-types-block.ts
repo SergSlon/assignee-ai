@@ -25,6 +25,13 @@ export const HINT_MAX_COLUMNS = 100 as const;
  * derived from `SUPPORTED_TYPES_ARRAY.length` at render time — adding a
  * supported type automatically bumps the header count (and the
  * drift-guard test catches any missing alias in the body).
+ *
+ * Epic 96 Wave 1 B4/B5: the block no longer emits its own `Examples:`
+ * section. The per-command `addHelpText` blocks in `plan.ts` /
+ * `apply.ts` / etc. carry the command-specific examples, and embedding
+ * a second `Examples:` header inside the shared block would cause
+ * `<cmd> --help` to show the header twice (probe
+ * `e96.W1.B4/B5` tripwire, shipped-wired-contract E).
  */
 export function buildSupportedTypesBlock(): string {
   const count = SUPPORTED_TYPES_ARRAY.length;
@@ -47,12 +54,7 @@ export function buildSupportedTypesBlock(): string {
   Security      IAM role, KMS key, Secrets Manager secret,
                 SSM parameter
   Containers    ECR repository
-  Observability CloudWatch alarm, CloudWatch Logs group
-
-Examples:
-  assignee plan "Create an S3 bucket for my static site"
-  assignee plan "Create an EC2 t3.micro with SSH"
-  assignee plan "Create a PostgreSQL database for production"`;
+  Observability CloudWatch alarm, CloudWatch Logs group`;
 }
 
 /**

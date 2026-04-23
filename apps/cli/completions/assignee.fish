@@ -44,6 +44,7 @@ complete -c assignee -n "__fish_seen_subcommand_from apply" -l json -d 'Shorthan
 # Options for 'init'
 complete -c assignee -n "__fish_seen_subcommand_from init" -l global -d 'Create global user config (~/.config/assignee/config.yaml) instead of project config'
 complete -c assignee -n "__fish_seen_subcommand_from init" -l yes -s y -d 'Skip interactive prompts and accept defaults (CI scriptability)'
+complete -c assignee -n "__fish_seen_subcommand_from init" -l wizard -d 'Run the interactive wizard (default behaviour; mutually exclusive with --yes)'
 complete -c assignee -n "__fish_seen_subcommand_from init" -l region -r -d 'AWS region to write into the config (skips the region prompt)'
 complete -c assignee -n "__fish_seen_subcommand_from init" -l auto-fix -r -d 'Set preferences.auto_fix mode: ask | apply | skip (skips the auto-fix prompt)'
 

@@ -23,9 +23,10 @@
 
 import { Command, InvalidArgumentError } from "commander";
 import * as clack from "@clack/prompts";
-import { AutoFixMode } from "@assignee/core";
+import { AutoFixMode, AssigneeError } from "@assignee/core";
 import type { AutoFixModeType } from "@assignee/core";
 import { CommandName, CommandDescription } from "../constants/commands.js";
+import { ErrorCode } from "../constants/errors.js";
 import {
   resolveIntroContext,
   formatIntroContext,
@@ -91,6 +92,7 @@ function isNonInteractive(): boolean {
 interface InitOptions {
   global?: boolean;
   yes?: boolean;
+  wizard?: boolean;
   region?: string;
   autoFix?: AutoFixModeType;
 }
@@ -104,6 +106,21 @@ export const initCommand = new Command(CommandName.INIT)
   .option(
     "-y, --yes",
     "Skip interactive prompts and accept defaults (CI scriptability)",
+  )
+  // Epic 96 Wave 2 R4 (D-05): register `--wizard` as an explicit opt-in
+  // to the interactive wizard. `plan` and `apply` already accept the
+  // flag (Epic 92 Wave 3.b.1 D-13); `init` rejecting it with "unknown
+  // option" was a UX pothole for users who typed the same flag they'd
+  // just used on the prior command. Semantics:
+  //   - TTY, no --yes: indistinguishable from the default — wizard
+  //     runs interactively either way.
+  //   - non-TTY, no --yes: same actionable error as default init.
+  //   - combined with --yes: mutually exclusive, early error (wizard
+  //     means "ask me"; --yes means "don't ask me"; both together is
+  //     user confusion, not a hidden preference).
+  .option(
+    "--wizard",
+    "Run the interactive wizard (default behaviour; mutually exclusive with --yes)",
   )
   .option(
     "--region <region>",
@@ -120,6 +137,8 @@ export const initCommand = new Command(CommandName.INIT)
 Examples:
   $ assignee init
         Create a project config in .assignee/ (interactive, asks auto-fix mode)
+  $ assignee init --wizard
+        Same as above — explicit opt-in to the interactive wizard
   $ assignee init --global
         Create/update ~/.config/assignee/config.yaml for the current user
   $ assignee init --yes --region us-east-1 --auto-fix ask
@@ -132,6 +151,18 @@ to preferences.auto_fix and control how \`assignee plan\` reacts to best
   )
   .action(async (options: InitOptions) => {
     const isGlobal = options.global === true;
+
+    // Epic 96 Wave 2 R4 (D-05): --wizard + --yes is a contradiction —
+    // --wizard says "walk me through each prompt", --yes says "skip
+    // every prompt". Reject combination early so the user's intent
+    // is explicit. Thrown as AssigneeError so top-level Commander
+    // surface emits `Error: ...` with a non-zero exit.
+    if (options.wizard === true && options.yes === true) {
+      throw new AssigneeError(
+        "--wizard and --yes are mutually exclusive. --wizard runs the interactive prompts; --yes skips them. Pick one.",
+        ErrorCode.USAGE_ERROR,
+      );
+    }
 
     // D-39: non-TTY detection. If stdout is not a TTY and the user did
     // not supply --yes, any prompt would block indefinitely. Fail fast

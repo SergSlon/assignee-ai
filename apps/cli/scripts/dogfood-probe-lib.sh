@@ -434,4 +434,91 @@ assert_error_envelope_shape() {
   return 0
 }
 
+# ---------------------------------------------------------------------------
+# Probe 12 — BP finding MUST NOT surface
+# ---------------------------------------------------------------------------
+# Args: BP_ID CMD...
+# Runs CMD, parses the JSON envelope, asserts no element of
+# `.plan.bpFindings[]` (or `.plans[].bpFindings[]` for compounds) has
+# practiceId == BP_ID. Fails if jq is missing, envelope malformed, or
+# the forbidden finding is present.
+#
+# Use this when a predicate-narrowing fix claims "BP-X must not fire on
+# intent Y". Catches the awareness-style over-firing class (BP-SG-007
+# on port 443, BP-SG-005 pre-Epic-94-R4, etc.).
+assert_no_bp_finding_id() {
+  local name="no_bp_finding_id"
+  local bp_id="${1:-}"
+  shift || true
+  if [[ -z "$bp_id" ]]; then
+    _probe_setup_fail "$name" "no BP_ID provided"
+    return 2
+  fi
+  if [[ $# -eq 0 ]]; then
+    _probe_setup_fail "$name" "no CMD provided"
+    return 2
+  fi
+  _probe_require_jq "$name" || return 2
+  local stdout envelope
+  stdout="$("$@" 2>/dev/null || true)"
+  envelope="$(printf '%s' "$stdout" | awk '/^\{/{block=$0; capture=1; next} capture{block=block"\n"$0} END{print block}')"
+  if [[ -z "$envelope" ]] || ! printf '%s' "$envelope" | jq . >/dev/null 2>&1; then
+    _probe_fail "$name" "no JSON envelope on stdout"
+    return 1
+  fi
+  local hits
+  hits="$(printf '%s' "$envelope" | jq -r --arg ID "$bp_id" \
+    '[(.plan?.bpFindings // []), ((.plans // [])[]?.bpFindings // [])] | flatten | map(select(.practiceId == $ID)) | length')"
+  if [[ -z "$hits" ]]; then
+    _probe_fail "$name" "jq failed to count findings"
+    return 1
+  fi
+  if [[ "$hits" -gt 0 ]]; then
+    _probe_fail "$name" "BP id '$bp_id' fired $hits time(s); expected 0"
+    return 1
+  fi
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# Probe 13 — BP finding MUST surface (companion to probe 12)
+# ---------------------------------------------------------------------------
+# Args: BP_ID CMD...
+# Inverse of `assert_no_bp_finding_id` — asserts at least one finding
+# with practiceId == BP_ID is present. Guards against a narrowing fix
+# silently dropping the rule on the intent it was designed to catch.
+assert_bp_finding_id_present() {
+  local name="bp_finding_id_present"
+  local bp_id="${1:-}"
+  shift || true
+  if [[ -z "$bp_id" ]]; then
+    _probe_setup_fail "$name" "no BP_ID provided"
+    return 2
+  fi
+  if [[ $# -eq 0 ]]; then
+    _probe_setup_fail "$name" "no CMD provided"
+    return 2
+  fi
+  _probe_require_jq "$name" || return 2
+  local stdout envelope
+  stdout="$("$@" 2>/dev/null || true)"
+  envelope="$(printf '%s' "$stdout" | awk '/^\{/{block=$0; capture=1; next} capture{block=block"\n"$0} END{print block}')"
+  if [[ -z "$envelope" ]] || ! printf '%s' "$envelope" | jq . >/dev/null 2>&1; then
+    _probe_fail "$name" "no JSON envelope on stdout"
+    return 1
+  fi
+  local hits
+  hits="$(printf '%s' "$envelope" | jq -r --arg ID "$bp_id" \
+    '[(.plan?.bpFindings // []), ((.plans // [])[]?.bpFindings // [])] | flatten | map(select(.practiceId == $ID)) | length')"
+  if [[ -z "$hits" ]]; then
+    _probe_fail "$name" "jq failed to count findings"
+    return 1
+  fi
+  if [[ "$hits" -lt 1 ]]; then
+    _probe_fail "$name" "BP id '$bp_id' did not fire; expected >= 1"
+    return 1
+  fi
+  return 0
+}
+
 # End of probe library.

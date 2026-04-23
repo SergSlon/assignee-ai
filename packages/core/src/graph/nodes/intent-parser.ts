@@ -8,6 +8,7 @@ import {
   renderSupportedTypesHint,
   sanitizeUserIntent,
 } from "../../index.js";
+import { AssigneeError } from "../../errors.js";
 import type { LlmPort } from "../../index.js";
 import {
   resolveCompoundPatternIdLiteral,
@@ -272,6 +273,18 @@ export interface AssertionExtraction {
   errors: string[];
   /** Non-blocking advisories — e.g. trailing name tokens that were ignored. */
   advisories: Advisory[];
+  /**
+   * Machine-readable classifier for the first error in `errors`. Left
+   * `undefined` when the failure is a grab-bag of validation errors with
+   * no single dominant classifier — callers fall back to the generic
+   * `PLAN_FAILED` envelope in that case.
+   *
+   * e96.W2.R7 (A-11) — today only set to `"INVALID_NAME"` when a
+   * `named <x>` span contains non-ASCII characters. The error message
+   * comment at the call site has claimed this for months; R7 wires the
+   * actual code through to the CLI's JSON envelope.
+   */
+  errorCode?: string;
 }
 
 /**
@@ -294,19 +307,39 @@ export function extractAssertedValues(
   const errors: string[] = [];
   const advisories: Advisory[] = [];
   const intentLower = intent.toLowerCase();
+  // e96.W2.R7 — extractResourceName writes INVALID_NAME here when the
+  // `named <x>` span contains non-ASCII characters. Other extractors
+  // leave it untouched. Emitted to the caller so the CLI's JSON-envelope
+  // path can stamp a stable `error.code` on stdout instead of the
+  // generic `PLAN_FAILED` fallback.
+  const errorCodeBox: { code?: string } = {};
 
   extractCidr(intent, resourceType, elicited, errors);
   extractInstanceType(intent, elicited, errors);
   extractAmiId(intent, elicited, errors);
   extractRegion(intent, elicited, errors);
   extractEngineVersion(intent, intentLower, elicited, errors);
-  extractResourceName(intent, resourceType, elicited, errors, advisories);
+  extractResourceName(
+    intent,
+    resourceType,
+    elicited,
+    errors,
+    advisories,
+    errorCodeBox,
+  );
   extractSgIngress(intent, elicited, errors);
   extractNoVpcDirective(intentLower, elicited);
   extractSnsProtocol(intent, intentLower, resourceType, elicited);
   extractRetentionDays(intent, intentLower, resourceType, elicited);
 
-  return { elicited, errors, advisories };
+  return {
+    elicited,
+    errors,
+    advisories,
+    ...(errorCodeBox.code !== undefined
+      ? { errorCode: errorCodeBox.code }
+      : {}),
+  };
 }
 
 /** Extracts the first CIDR-shaped token; fails on invalid. */
@@ -320,25 +353,39 @@ function extractCidr(
   const matches = intent.match(cidrRegex);
   if (!matches || matches.length === 0) return;
 
-  // First CIDR token → CidrBlock (VPC / Subnet / Route context)
+  // First CIDR token → CidrBlock (VPC / Subnet context) or
+  // DestinationCidrBlock (Route) or informational hint (SG, etc.).
   // Additional CIDRs become SecurityGroupIngress sources downstream.
   const primary = matches[0]!;
-  // Choose validation kind based on resource context. VPC / Subnet / Route
-  // demand /16-/28; SG sources can be /0-/32.
-  const isNetworkResource =
+  // Choose validation kind based on resource context.
+  //   VPC / Subnet  → "vpc" (/16-/28, RFC 4632 + AWS VPC limits)
+  //   Route         → "source" (/0-/32) — Route destinations legitimately
+  //                   span the whole prefix space: 0.0.0.0/0 is the
+  //                   canonical default route, /32 is a host route,
+  //                   /16-/20 matches in-VPC routes. e96.W2.R6 —
+  //                   rejecting 0.0.0.0/0 as a Route destination broke
+  //                   the Route BP tests (B-03 regression of Epic 94
+  //                   u.c.3).
+  //   else (SG, …)  → "source" (/0-/32)
+  const isVpcSizedCidrResource =
     resourceType === RESOURCE_TYPES.EC2_VPC ||
-    resourceType === RESOURCE_TYPES.EC2_SUBNET ||
-    resourceType === RESOURCE_TYPES.EC2_ROUTE;
-  const kind = isNetworkResource ? "vpc" : "source";
+    resourceType === RESOURCE_TYPES.EC2_SUBNET;
+  const isRouteDestinationResource = resourceType === RESOURCE_TYPES.EC2_ROUTE;
+  const kind = isVpcSizedCidrResource ? "vpc" : "source";
   if (!isValidCidr(primary, kind)) {
+    const hint = isVpcSizedCidrResource
+      ? "Each octet must be 0-255 and the prefix must be 16-28 for a VPC."
+      : "Each octet must be 0-255 and the prefix must be 0-32.";
     errors.push(
-      `Invalid CIDR block "${primary}". Expected IPv4 CIDR (e.g. 10.0.0.0/16). Each octet must be 0-255 and the prefix must be 16-28 for a VPC.`,
+      `Invalid CIDR block "${primary}". Expected IPv4 CIDR (e.g. 10.0.0.0/16). ${hint}`,
     );
     return;
   }
-  // Network resources → CidrBlock; other resources → informational hint.
-  if (isNetworkResource) {
+  // VPC / Subnet → CidrBlock. Route → DestinationCidrBlock. Else → hint.
+  if (isVpcSizedCidrResource) {
     elicited["CidrBlock"] = primary;
+  } else if (isRouteDestinationResource) {
+    elicited["DestinationCidrBlock"] = primary;
   } else {
     elicited["__assertedCidr"] = primary;
   }
@@ -426,12 +473,22 @@ function extractRegion(
   elicited: Record<string, unknown>,
   errors: string[],
 ): void {
-  // Match region-shaped tokens with 2-4 hyphen-separated segments, the
-  // last segment being a number. Examples we want to catch:
+  // e96.W1.B3 — Match region-shaped tokens with 2-4 hyphen-separated
+  // segments, the last segment being a number. Examples we want to catch:
   //   us-east-1, eu-west-2, us-gov-east-1, eu-west-fake-1
   // The last form is adversarial (C-13) — we need to match it so
   // validation can fail loudly rather than silently accepting.
-  const regionRegex = /\b([a-z]{2,3}(?:-[a-z]+){1,3}-\d+)\b/g;
+  //
+  // Anchors use whitespace / string-boundary instead of JS `\b`: word
+  // boundaries (`\b`) treat `-` as a word-boundary, which lets the
+  // regex match a region-shaped SUBSTRING inside a longer hyphenated
+  // identifier (e.g. `us-east-1` buried inside `my-bucket-us-east-1`
+  // or the entire `my-bucket-us-east-1` being flagged as an unknown
+  // region). The intent-parser's job is to extract region tokens the
+  // user actually asserted, not tokens that happen to pattern-match
+  // deep inside a resource name.
+  const regionRegex =
+    /(?<=^|\s)([a-z]{2,3}(?:-[a-z]+){1,3}-\d+)(?=\s|$|[.,;:!?])/g;
   const matches = intent.match(regionRegex);
   if (!matches || matches.length === 0) return;
   // Pick the first candidate whose leading segment is 2-3 lowercase
@@ -660,6 +717,7 @@ function extractResourceName(
   elicited: Record<string, unknown>,
   errors: string[],
   advisories: Advisory[],
+  errorCodeBox: { code?: string },
 ): void {
   // Grab the entire span after the "named" / "called" keyword up to
   // a conservative terminator: newline, clause-ending punctuation, or
@@ -692,10 +750,18 @@ function extractResourceName(
   // resource names (S3, Lambda, SQS, IAM, …). Surface an explicit
   // INVALID_NAME error instead of writing a silently-truncated
   // ASCII prefix that R1's validator would misattribute.
+  //
+  // e96.W2.R7 (A-11) — also stamp the machine-readable
+  // `INVALID_NAME` code on the extraction so the CLI's JSON envelope
+  // path in plan/orchestrator.ts can propagate it instead of falling
+  // back to the generic `PLAN_FAILED` classifier.
   if (containsNonAscii(parsed.name)) {
     errors.push(
       `Invalid resource name "${parsed.name}" — non-ASCII characters are not allowed. AWS resource names (S3 buckets, Lambda functions, SQS queues, IAM roles, …) must be ASCII-only. Rename using letters, digits, and hyphens.`,
     );
+    if (errorCodeBox.code === undefined) {
+      errorCodeBox.code = "INVALID_NAME";
+    }
     return;
   }
 
@@ -938,6 +1004,30 @@ function mergeAdvisories(
 }
 
 /**
+ * Builds the FAILED partial-state object returned from the intent-parser
+ * when `extractAssertedValues` surfaced one or more errors. e96.W2.R7
+ * wires `extraction.errorCode` through to a typed `state.error` so the
+ * CLI's JSON envelope stamps a stable `error.code` (e.g. `INVALID_NAME`)
+ * instead of the generic `PLAN_FAILED` fallback that the plan
+ * orchestrator uses when `state.error` is absent or not an
+ * `AssigneeError` instance.
+ */
+function buildExtractionFailureUpdate(
+  safeIntent: string,
+  extraction: AssertionExtraction,
+): Partial<AgentState> {
+  const errorMessage = `Intent validation failed: ${extraction.errors.join(" ")}`;
+  return {
+    userIntent: safeIntent,
+    executionStatus: ExecutionStatus.FAILED,
+    errorMessage,
+    ...(extraction.errorCode !== undefined
+      ? { error: new AssigneeError(errorMessage, extraction.errorCode) }
+      : {}),
+  };
+}
+
+/**
  * Factory for the intent_parser LangGraph node.
  * Accepts llmClient via injection — no direct @ai-sdk imports.
  *
@@ -981,11 +1071,7 @@ export function createIntentParserNode({ llmClient }: { llmClient: LlmPort }) {
       } else {
         const extraction = extractAssertedValues(safeIntent, singletonType);
         if (extraction.errors.length > 0) {
-          return {
-            userIntent: safeIntent,
-            executionStatus: ExecutionStatus.FAILED,
-            errorMessage: `Intent validation failed: ${extraction.errors.join(" ")}`,
-          };
+          return buildExtractionFailureUpdate(safeIntent, extraction);
         }
         log({
           ts: new Date().toISOString(),
@@ -1052,11 +1138,7 @@ export function createIntentParserNode({ llmClient }: { llmClient: LlmPort }) {
         patternPrimaryResourceType(detectedPattern.patternId) ?? "";
       const extraction = extractAssertedValues(safeIntent, primaryType);
       if (extraction.errors.length > 0) {
-        return {
-          userIntent: safeIntent,
-          executionStatus: ExecutionStatus.FAILED,
-          errorMessage: `Intent validation failed: ${extraction.errors.join(" ")}`,
-        };
+        return buildExtractionFailureUpdate(safeIntent, extraction);
       }
       log({
         ts: new Date().toISOString(),
@@ -1125,11 +1207,7 @@ Request: "${safeIntent}"`;
     // CIDR / name / ingress rules land on the right CFN properties.
     const extraction = extractAssertedValues(safeIntent, output.resourceType);
     if (extraction.errors.length > 0) {
-      return {
-        userIntent: safeIntent,
-        executionStatus: ExecutionStatus.FAILED,
-        errorMessage: `Intent validation failed: ${extraction.errors.join(" ")}`,
-      };
+      return buildExtractionFailureUpdate(safeIntent, extraction);
     }
 
     // Type safe cast since zod enum is derived from SUPPORTED_TYPES

@@ -74,9 +74,13 @@ describe("renderSupportedTypesHint — CLI style", () => {
     }
   });
 
-  it("ends with the Examples: block", () => {
-    expect(hint).toContain("Examples:");
-    expect(hint).toContain('assignee plan "Create an S3 bucket');
+  it("does NOT embed an Examples: block (Epic 96 B4/B5)", () => {
+    // The CLI-style hint is composed alongside per-command
+    // `addHelpText` wrappers that carry command-specific examples.
+    // Embedding an `Examples:` header here caused `plan --help` and
+    // `apply --help` to render two Examples sections (shipped-wired
+    // contract E tripwire, probes e96.W1.B4/B5).
+    expect(hint).not.toContain("Examples:");
   });
 
   it("every line fits within HINT_MAX_COLUMNS columns", () => {
@@ -98,6 +102,31 @@ describe("renderSupportedTypesHint — short style", () => {
   it("stays within HINT_MAX_COLUMNS per line", () => {
     for (const line of hint.split("\n")) {
       expect(line.length).toBeLessThanOrEqual(HINT_MAX_COLUMNS);
+    }
+  });
+
+  // Epic 96 Wave 2 R3 (D-03): the short variant used to hand-maintain
+  // its own grid that drifted behind the registry. Now it delegates to
+  // `buildSupportedTypesBlock()` so the CLI --help surface and the
+  // intent-parser errorMessage surface can never disagree.
+  it("delegates to buildSupportedTypesBlock (D-03 drift guard)", () => {
+    expect(renderSupportedTypesHint("short")).toBe(buildSupportedTypesBlock());
+  });
+
+  it("includes every domain group header (parity with cli)", () => {
+    for (const group of [
+      "Compute",
+      "Storage",
+      "Databases",
+      "Networking",
+      "Edge / CDN",
+      "API",
+      "Messaging",
+      "Security",
+      "Containers",
+      "Observability",
+    ]) {
+      expect(hint).toContain(group);
     }
   });
 });
@@ -338,8 +367,12 @@ describe("buildSupportedTypesBlock + getTypeHint (Epic 92 wave 3.a)", () => {
     ]) {
       expect(block).toContain(group);
     }
-    expect(block).toContain("Examples:");
-    expect(block).toContain('assignee plan "Create an S3 bucket');
+    // Epic 96 Wave 1 B4/B5: the shared block intentionally does NOT
+    // emit its own `Examples:` heading — the per-command help wrappers
+    // carry command-specific examples, and embedding one here caused
+    // `plan --help` / `apply --help` to render two Examples blocks
+    // (shipped-wired-contract E tripwire).
+    expect(block).not.toContain("Examples:");
   });
 
   it("buildSupportedTypesBlock output equals renderSupportedTypesHint('cli') (SSO invariant)", () => {

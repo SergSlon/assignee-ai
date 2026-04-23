@@ -27,6 +27,7 @@ import {
 } from "../constants/reconcile-actions.js";
 import { runReconcile } from "./reconcile/orchestrator.js";
 import type { ReconcileOpts } from "./reconcile/types.js";
+import { installJsonStderrFilter } from "./json-stderr-filter.js";
 
 // ── Re-exports for external consumers (tests, reconcile-factory) ──────────
 export { ReconcileAction, type ReconcileActionType };
@@ -46,9 +47,22 @@ export { reconcileResource } from "./reconcile/apply-step.js";
 /**
  * Epic 94 Wave 2 N4 (D-08): stdout suppressor for `--json` mode.
  * Mirrors the helpers added to plan.ts/apply.ts/destroy.ts.
+ *
+ * Epic 96 Wave 1 B2 (A-02): success envelope carries an optional
+ * `runId` so reconcile output parses alongside apply/destroy for
+ * downstream correlation. `arn` and `cost` are not threaded through
+ * `runReconcile` today (reconcile operates on N resources — the
+ * envelope would need a per-resource list; that's out of scope for
+ * this blocker and is left as a follow-up).
  */
+interface ReconcileSuccessEnvelope {
+  ok: true;
+  operation: string;
+  runId?: string;
+}
+
 function installJsonStdoutSuppressor(enabled: boolean): {
-  flushSuccess: (operation: string) => void;
+  flushSuccess: (envelope: ReconcileSuccessEnvelope) => void;
   flushError: (code: string, message: string, hint?: string) => void;
   restore: () => void;
 } {
@@ -79,11 +93,11 @@ function installJsonStdoutSuppressor(enabled: boolean): {
   };
 
   return {
-    flushSuccess: (operation) => {
+    flushSuccess: (envelope) => {
       restore();
       originalWrite.call(
         process.stdout,
-        JSON.stringify({ ok: true, operation }, null, 2) + "\n",
+        JSON.stringify(envelope, null, 2) + "\n",
       );
     },
     flushError: (code, message, hint) => {
@@ -139,6 +153,10 @@ Examples:
   .action(async (rawOpts: ReconcileOptsWithJson) => {
     const json = rawOpts.json === true || rawOpts.output === "json";
     const suppressor = installJsonStdoutSuppressor(json);
+    // Epic 96 Wave 3 N4 (D-04): suppress renderError human blocks on
+    // stderr under JSON mode. Structured JSON log lines pass through;
+    // only [ERROR]/[CONTEXT]/[FIX] prefix writes are dropped.
+    const stderrFilter = installJsonStderrFilter(json);
 
     try {
       let runErrored: Error | null = null;
@@ -164,7 +182,7 @@ Examples:
             : "Run with --verbose for full stack trace.";
           suppressor.flushError(code, runErrored.message, hint);
         } else {
-          suppressor.flushSuccess("reconcile");
+          suppressor.flushSuccess({ ok: true, operation: "reconcile" });
         }
       }
 
@@ -182,5 +200,6 @@ Examples:
       }
     } finally {
       suppressor.restore();
+      stderrFilter.restore();
     }
   });

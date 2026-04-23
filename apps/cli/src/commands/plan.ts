@@ -58,6 +58,7 @@ import { resolveIntroContext, formatIntroContext } from "./init.js";
 import { resolvePlanArgs, type PlanOpts } from "./plan/arg-parser.js";
 import { renderDiscoveryBlock } from "./plan/discovery.js";
 import { runPlan } from "./plan/orchestrator.js";
+import { installJsonStderrFilter } from "./json-stderr-filter.js";
 
 /**
  * Buffering stdout interceptor used when `--output json` is active.
@@ -263,6 +264,12 @@ export const planCommand = new Command(CommandName.PLAN)
     // payloads from the formatter land in an aggregator instead of
     // streaming as NDJSON. See installJsonStdoutInterceptor.
     const interceptor = installJsonStdoutInterceptor(outputFormat === "json");
+    // Epic 96 Wave 3 N4 (D-04): suppress renderError human
+    // `[ERROR]/[CONTEXT]/[FIX]` blocks on stderr under JSON mode.
+    // Structured JSON log lines pass through; the same code/message/
+    // hint payload is emitted on stdout as the error envelope, so the
+    // duplicated stderr block is pure noise for machine consumers.
+    const stderrFilter = installJsonStderrFilter(outputFormat === "json");
 
     try {
       let runErrored: Error | null = null;
@@ -322,5 +329,6 @@ export const planCommand = new Command(CommandName.PLAN)
       if (runErrored) throw runErrored;
     } finally {
       interceptor.restore();
+      stderrFilter.restore();
     }
   });

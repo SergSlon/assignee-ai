@@ -99,13 +99,21 @@ describe("intentParserNode — compound-pattern name preservation (A-02)", () =>
     // Guards against the helper throwing or the branch failing when
     // the pattern maps to `null` (no single name field). No
     // FunctionName assertion — just ensure no error.
+    //
+    // Epic 96 W3.N3 (C-02): bare "create an efs file system" now
+    // routes to the AWS::EFS::FileSystem singleton (NOT efs-with-vpc)
+    // — firing the full 10-resource compound on a bare intent was
+    // the Epic 95 C-02 finding. To still exercise the compound path
+    // (which is what this test is guarding against a throw), use the
+    // explicit VPC-qualified intent that survives the singleton-
+    // override negative-phrase filter.
     const mock = new MockLlmAdapter({
       resourceType: RESOURCE_TYPES.EFS_FILE_SYSTEM,
     });
     const node = createIntentParserNode({ llmClient: mock });
 
     const result = await node({
-      userIntent: "Create an efs file system",
+      userIntent: "Create an efs file system with a new VPC",
     } as AgentState);
 
     expect(result.executionStatus).toBeUndefined();

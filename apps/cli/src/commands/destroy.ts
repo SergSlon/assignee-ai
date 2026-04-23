@@ -81,6 +81,7 @@ import {
 } from "../services/resource-resolver.js";
 import { pickFromMatches } from "./destroy/multi-match-prompt.js";
 import { startSpinner, stopSpinner } from "../utils/display.js";
+import { installJsonStderrFilter } from "./json-stderr-filter.js";
 
 // ── Re-exports for back-compat (tests + external callers) ─────────────
 export { resourceConfirmationToken } from "./destroy/typed-confirm.js";
@@ -540,9 +541,22 @@ async function deleteEventBus(resolved: ResolvedResource): Promise<void> {
  * multi-match prompt) are suppressed; a single top-level envelope is
  * written on completion. Mirrors the pattern added to `plan.ts` /
  * `apply.ts`.
+ *
+ * Epic 96 Wave 1 B2 (A-02): success envelope now carries optional
+ * `runId` / `arn` / `cost` fields so destroy envelopes match the
+ * apply contract and CI scripts can reconcile the destroyed ARN
+ * against their inventory. All three keys are elided when undefined.
  */
+interface DestroySuccessEnvelope {
+  ok: true;
+  operation: string;
+  runId?: string;
+  arn?: string;
+  cost?: string;
+}
+
 function installJsonStdoutSuppressor(enabled: boolean): {
-  flushSuccess: (operation: string) => void;
+  flushSuccess: (envelope: DestroySuccessEnvelope) => void;
   flushError: (code: string, message: string, hint?: string) => void;
   restore: () => void;
 } {
@@ -573,11 +587,11 @@ function installJsonStdoutSuppressor(enabled: boolean): {
   };
 
   return {
-    flushSuccess: (operation) => {
+    flushSuccess: (envelope) => {
       restore();
       originalWrite.call(
         process.stdout,
-        JSON.stringify({ ok: true, operation }, null, 2) + "\n",
+        JSON.stringify(envelope, null, 2) + "\n",
       );
     },
     flushError: (code, message, hint) => {
@@ -660,6 +674,11 @@ the resource is still billing and recoverable during the window.
       // Normalise `--json` → `--output json`.
       const json = rawOpts.json === true || rawOpts.output === "json";
       const suppressor = installJsonStdoutSuppressor(json);
+      // Epic 96 Wave 3 N4 (D-04): suppress renderError human blocks on
+      // stderr under JSON mode. The same code/message/hint payload
+      // lands on stdout as the error envelope; duplicating it on
+      // stderr is noise for machine consumers.
+      const stderrFilter = installJsonStderrFilter(json);
 
       try {
         let runErrored: Error | null = null;
@@ -690,7 +709,22 @@ the resource is still billing and recoverable during the window.
               : "Run with --verbose for full stack trace.";
             suppressor.flushError(code, runErrored.message, hint);
           } else {
-            suppressor.flushSuccess("destroy");
+            // Epic 96 Wave 1 B2: the destroy success envelope mirrors
+            // apply — `arn` comes from the user-supplied positional
+            // (it's the exact resource the CLI destroyed, so it's the
+            // most trustworthy field available without threading state
+            // back out of `destroyAction`). `runId` / `cost` are only
+            // populated when we have them; `destroyAction` does not
+            // currently surface either, so we omit rather than emit
+            // fake values.
+            const envelope: DestroySuccessEnvelope = {
+              ok: true,
+              operation: "destroy",
+            };
+            if (resource && /^arn:aws[\w-]*:/.test(resource)) {
+              envelope.arn = resource;
+            }
+            suppressor.flushSuccess(envelope);
           }
         }
 
@@ -711,6 +745,7 @@ the resource is still billing and recoverable during the window.
         }
       } finally {
         suppressor.restore();
+        stderrFilter.restore();
       }
     },
   );

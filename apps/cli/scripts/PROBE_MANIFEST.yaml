@@ -32,12 +32,12 @@ probes:
       Lambda compound pattern (lambda-with-exec-role) must NOT emit
       FunctionName on the IAM::Role slot. The Role slot is for the
       exec role; FunctionName belongs on AWS::Lambda::Function only.
-      Catches A-01 redux. Tripwire: when the user provides an explicit
-      function name ("named my-fn"), the name currently leaks into the
-      Role's desiredState. The fix is to scope user-asserted
-      FunctionName to Lambda::Function slots only in the compound
-      dispatcher / sanitize layer.
-    must_fail_pre_fix: true
+      Catches A-01 redux. Fixed in e96.W1.B1 via
+      `filterElicitedForSlot` in
+      packages/core/src/graph/nodes/plan-generator/compound-helpers.ts
+      — drops name-fields bound to a different resource type before
+      they spread into the slot's desiredState.
+    must_fail_pre_fix: false
     probe: |
       assert_desired_state_missing_key_on_type \
         "AWS::IAM::Role" \
@@ -53,10 +53,11 @@ probes:
       time (e.g. an invalid S3 bucket name like 'invalid..name' that
       the validator should reject but the apply path currently accepts
       and then fails at AWS) must report ok:false AND exit non-zero.
-      Currently emits {ok:true, operation:"apply"} with exit 0 despite
-      the internal "result: FAILED" log — this is the canonical A-02
-      BLOCKER still present on HEAD.
-    must_fail_pre_fix: true
+      Previously emitted {ok:true, operation:"apply"} with exit 0
+      despite the internal "result: FAILED" log — fixed in Epic 96
+      Wave 1 B2 by surfacing orchestrator `success=false` as a thrown
+      AssigneeError in the CLI wrapper.
+    must_fail_pre_fix: false
     probe: |
       # The bucket name "invalid..name" has adjacent dots, which S3
       # rejects. The validator or apply path must surface that as
@@ -72,13 +73,13 @@ probes:
       Region extraction must not match a region-shaped substring
       nested inside another token. Example: the bucket name
       'my-bucket-us-east-1-fake' contains 'us-east-1' as a substring,
-      but the intent also names a real region ('eu-west-2'). The
-      parser currently over-matches — it extracts 'my-bucket-us-east-1'
-      as an "unknown region" and fails the plan, ignoring the real
-      `region eu-west-2` qualifier. Tripwire on HEAD — validates the
-      full-intent probe catches a live false positive that a regex-only
-      unit test misses.
-    must_fail_pre_fix: true
+      but the intent also names a real region ('eu-west-2'). Fixed
+      in e96.W1.B3 by swapping JS `\b` anchors for explicit
+      whitespace/string-boundary lookaround in `extractRegion`
+      (packages/core/src/graph/nodes/intent-parser.ts). `\b` treats
+      `-` as a word-boundary, which let the old regex match
+      region-shaped substrings inside hyphenated identifiers.
+    must_fail_pre_fix: false
     probe: |
       # Expect: plan succeeds (ok:true) because the user IS specifying
       # a valid region (eu-west-2). The bucket-name substring
@@ -92,9 +93,10 @@ probes:
     name: plan-help-single-examples
     description: |
       `plan --help` must emit exactly 1 `Examples:` heading.
-      Currently emits 2 (A-04/D-01/D-08). Tripwire proves the gate
-      catches the dup on HEAD.
-    must_fail_pre_fix: true
+      Fixed in Epic 96 Wave 1 B2 by removing the embedded `Examples:`
+      block from `buildSupportedTypesBlock()` — the per-command
+      `addHelpText` blocks are now the only carriers of `Examples:`.
+    must_fail_pre_fix: false
     probe: |
       assert_single_examples_block $PROBE_CLI_BIN plan --help
 
@@ -102,7 +104,494 @@ probes:
     name: apply-help-single-examples
     description: |
       `apply --help` must emit exactly 1 `Examples:` heading. Same
-      class as B4 (A-04/D-01/D-08). Tripwire on HEAD.
-    must_fail_pre_fix: true
+      class as B4 (A-04/D-01/D-08). Fixed alongside B4 — shared root
+      cause was `buildSupportedTypesBlock()` embedding its own
+      `Examples:` section.
+    must_fail_pre_fix: false
     probe: |
       assert_single_examples_block $PROBE_CLI_BIN apply --help
+
+  - story: e96.W3.N2
+    name: bp-sg-high-risk-no-fire-on-443
+    description: |
+      A port-443-only security group must NOT surface the "high-risk
+      DB ports" best-practice (BP-SG-004). The rule's description
+      copy is explicitly DB-focused ("Databases open to the internet
+      get scanned within minutes…"); firing it on HTTPS trains users
+      to ignore a HIGH severity. Fixed in Epic 96 W3.N2 by swapping
+      BP-SG-004 from `check_type: awareness` (always fires) to a new
+      `check_type: sg_high_risk_public_exposure` that only fires when
+      an ingress rule opens 0.0.0.0/0 to one of the DB/admin ports
+      listed in the Trusted Advisor HCP4007jGY catalogue (+ MongoDB
+      27017 / Redis 6379 / Elasticsearch 9200).
+    must_fail_pre_fix: false
+    probe: |
+      assert_no_bp_finding_id BP-SG-004 \
+        $PROBE_CLI_BIN plan \
+          "Create a security group allowing 0.0.0.0/0 on port 443" \
+          --json
+
+  - story: e96.W3.N2
+    name: bp-sg-high-risk-fires-on-3306
+    description: |
+      Counter-probe for the BP-SG-004 narrowing. A security group
+      opening port 3306 (MySQL) to 0.0.0.0/0 MUST still surface
+      BP-SG-004 — that is the canonical DB-port exposure the rule
+      was designed to catch. Guards against an over-enthusiastic
+      narrowing that silently drops the rule on the intent it is
+      supposed to flag.
+    must_fail_pre_fix: false
+    probe: |
+      assert_bp_finding_id_present BP-SG-004 \
+        $PROBE_CLI_BIN plan \
+          "Create a security group allowing 0.0.0.0/0 on port 3306" \
+          --json
+
+  - story: e96.W2.R3
+    name: short-hint-delegates-to-cli-block
+    description: |
+      Epic 96 Wave 2 R3 (D-03): the "short" supported-types hint used
+      to hand-maintain its own grouped grid — a subset of the CLI grid
+      that silently drifted behind the registry as Epic 92/94 added
+      types. Fix makes `renderSupportedTypesHintShort` delegate to
+      `buildSupportedTypesBlock()` so the error-path hint and the
+      `--help` hint share a single source of truth. Probe asserts that
+      every family header emitted on `plan --help` is also present in
+      the intent-parser errorMessage surfaced via an unsupported-type
+      intent. Both surfaces must render the same 10 groups.
+    must_fail_pre_fix: false
+    probe: |
+      cli_out="$($PROBE_CLI_BIN plan --help 2>&1)"
+      err_out="$($PROBE_CLI_BIN plan 'Create a quantum computer' --json 2>&1 || true)"
+      for group in Compute Storage Databases Networking "Edge / CDN" \
+                   API Messaging Security Containers Observability; do
+        if ! printf '%s' "$cli_out" | grep -Fq "$group"; then
+          echo "[PROBE-FAIL] plan --help missing group header: $group" >&2
+          exit 1
+        fi
+        if ! printf '%s' "$err_out" | grep -Fq "$group"; then
+          echo "[PROBE-FAIL] intent-parser error hint missing group header: $group" >&2
+          exit 1
+        fi
+      done
+
+  - story: e96.W2.R4
+    name: init-wizard-alias-registered
+    description: |
+      Epic 96 Wave 2 R4 (D-05): `init --wizard` must be registered as
+      an accepted flag. Pre-fix, `init --wizard` emitted Commander's
+      "error: unknown option" — inconsistent with `plan --wizard` and
+      `apply --wizard` which both accept the flag. Fix registers
+      `--wizard` on init with mutual-exclusivity vs `--yes`. Probe
+      checks: (a) `init --help` lists --wizard, (b) `init --wizard
+      --yes` errors with an actionable mutually-exclusive message +
+      exit 1 (never hangs, never silently accepts).
+    must_fail_pre_fix: false
+    probe: |
+      help_out="$($PROBE_CLI_BIN init --help 2>&1)"
+      if ! printf '%s' "$help_out" | grep -q -- '--wizard'; then
+        echo "[PROBE-FAIL] init --help does not list --wizard" >&2
+        exit 1
+      fi
+      # Mutual-exclusivity: --wizard + --yes must exit non-zero with
+      # an actionable error message. Run under isolated HOME so the
+      # actual config file is not touched.
+      tmp_home="$(mktemp -d -t assignee-init-wizard-probe.XXXXXX)"
+      trap 'rm -rf "$tmp_home"' EXIT
+      set +e
+      combined="$(HOME="$tmp_home" $PROBE_CLI_BIN init --wizard --yes \
+          --region us-east-1 </dev/null 2>&1)"
+      rc=$?
+      set -e
+      if [[ "$rc" -eq 0 ]]; then
+        echo "[PROBE-FAIL] init --wizard --yes exited 0; expected non-zero" >&2
+        exit 1
+      fi
+      if ! printf '%s' "$combined" | grep -qi 'mutually exclusive'; then
+        echo "[PROBE-FAIL] init --wizard --yes did not emit mutually-exclusive message" >&2
+        exit 1
+      fi
+
+  - story: e96.W3.N4
+    name: json-mode-stderr-no-human-error-blocks
+    description: |
+      Epic 96 Wave 3 N4 (D-04): under `--output json` / `--json`, stderr
+      must NOT carry the renderError human blocks (`[ERROR] ...` /
+      `[CONTEXT] ...` / `[FIX] ...`) that duplicate the payload already
+      on stdout as the error envelope. Structured JSON log lines on
+      stderr are legitimate and pass through. Probe drives apply AND
+      plan with an unsupported intent (`--json`) and asserts per
+      surface: (a) stdout is a single parseable `{ok:false,error:...}`
+      envelope, (b) stderr contains zero `[ERROR]/[CONTEXT]/[FIX]`
+      lines, (c) stderr still carries at least one structured JSON log
+      line (filter is surgical, not a blackhole), (d) exit non-zero.
+      Covers the four cli-fixer-owned JSON surfaces (apply / plan —
+      plan follow-up landed alongside this commit; destroy / reconcile
+      share the same helper).
+    must_fail_pre_fix: false
+    probe: |
+      out_file="$(mktemp)"
+      err_file="$(mktemp)"
+      trap 'rm -f "$out_file" "$err_file"' EXIT
+
+      # Shared per-surface assertion. Args after $1 are the CLI invocation.
+      check_cmd() {
+        local label="$1"
+        shift
+        set +e
+        "$@" >"$out_file" 2>"$err_file"
+        local rc=$?
+        set -e
+        if ! jq -e '.ok == false' "$out_file" >/dev/null 2>&1; then
+          echo "[PROBE-FAIL] [$label] stdout is not a valid ok:false envelope" >&2
+          head -20 "$out_file" >&2
+          return 1
+        fi
+        if ! jq -e '.error.code' "$out_file" >/dev/null 2>&1; then
+          echo "[PROBE-FAIL] [$label] stdout envelope missing .error.code" >&2
+          return 1
+        fi
+        local human_lines
+        human_lines="$(grep -cE '^(\[ERROR\]|\[CONTEXT\]|\[FIX\]) ' "$err_file" || true)"
+        if [[ "$human_lines" -gt 0 ]]; then
+          echo "[PROBE-FAIL] [$label] stderr has $human_lines human renderError lines" >&2
+          head -20 "$err_file" >&2
+          return 1
+        fi
+        if ! grep -qE '^\{"' "$err_file"; then
+          echo "[PROBE-FAIL] [$label] stderr missing structured JSON log lines" >&2
+          return 1
+        fi
+        if [[ "$rc" -eq 0 ]]; then
+          echo "[PROBE-FAIL] [$label] --json on failure exited 0" >&2
+          return 1
+        fi
+        return 0
+      }
+
+      check_cmd "apply" $PROBE_CLI_BIN apply \
+        "Create a quantum entanglement device" --yes --json || exit 1
+      check_cmd "plan" $PROBE_CLI_BIN plan \
+        "Create a quantum entanglement device" --json || exit 1
+
+  - story: e96.W2.R2
+    name: init-global-yes-non-interactive
+    description: |
+      `init --global --yes --region <r> --auto-fix <mode>` must run to
+      completion with no interactive prompts under a non-TTY stdin.
+      Pre-fix the global wizard called `clack.text` unconditionally for
+      the region prompt, so `init --global --yes </dev/null` hung
+      forever despite the user having opted in. Fixed in Epic 96 Wave 2
+      R2 by threading `NonInteractiveOverrides` from `runGlobalInit`
+      through `promptGlobalConfig`. The probe drives the command with
+      a 10-second hard timeout — if the wrapper hangs, timeout returns
+      124 and the probe fails.
+    must_fail_pre_fix: false
+    probe: |
+      # Isolate HOME so the probe writes to a tempdir, not the real
+      # user's ~/.config/assignee. mktemp -d gives us a fresh sandbox
+      # every run and the final rm -rf keeps the CI workspace clean.
+      tmp_home="$(mktemp -d -t assignee-init-probe.XXXXXX)"
+      trap 'rm -rf "$tmp_home"' EXIT
+      # 10s timeout: the real command writes the YAML in < 1s even on
+      # cold Node; anything over 10s means the wizard hung on a prompt.
+      # </dev/null forces stdin to be a pipe, reproducing the CI case
+      # that tripped D-39 the first time.
+      if ! HOME="$tmp_home" timeout 10 $PROBE_CLI_BIN init --global \
+          --yes --region us-east-1 --auto-fix ask </dev/null >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] init --global --yes exited non-zero or hung" >&2
+        exit 1
+      fi
+      # Config must exist AND embed the pinned region — proves the
+      # overrides actually reached the wizard (not just that the
+      # command exited fast).
+      cfg="$tmp_home/.config/assignee/config.yaml"
+      if [[ ! -f "$cfg" ]]; then
+        echo "[PROBE-FAIL] expected config at $cfg, not found" >&2
+        exit 1
+      fi
+      if ! grep -q "region: us-east-1" "$cfg"; then
+        echo "[PROBE-FAIL] config at $cfg missing region: us-east-1" >&2
+        exit 1
+      fi
+      if ! grep -q "auto_fix: ask" "$cfg"; then
+        echo "[PROBE-FAIL] config at $cfg missing auto_fix: ask" >&2
+        exit 1
+      fi
+
+  - story: e96.W2.R5
+    name: ec2-credit-specification-survives-sanitizer
+    description: |
+      Epic 92 Wave 4.b fix seeded a plan-time default of
+      `{CreditSpecification: {CpuCredits: "standard"}}` on the EC2
+      plugin to kill the blank "CPU Credits" plan row. Epic 95 flagged
+      that the plan row still rendered blank (C-01 regression). Root
+      cause: the CFN Registry schema's sub-key is `CPUCredits`
+      (uppercase `CPU`), not `CpuCredits`. The sanitizer correctly
+      stripped the mis-cased sub-key, leaving `CreditSpecification: {}`
+      on the plan. Fixed in e96.W2.R5 by aligning the plugin facade
+      (`ec2-instance.ts`) and the enum field's `toCfn`
+      (`ec2-instance/fields.ts`) to emit the schema-correct casing.
+    must_fail_pre_fix: false
+    probe: |
+      # Runs a plain EC2 t3.micro plan and asserts the sanitised
+      # desiredState carries a non-empty CreditSpecification with the
+      # canonical `CPUCredits` key. Both the presence AND the casing
+      # must survive — a fix that keeps the old casing would leave
+      # CreditSpecification empty after sanitize and re-trip this probe.
+      stdout="$($PROBE_CLI_BIN plan "Create an EC2 t3.micro instance" --output json 2>/dev/null || true)"
+      envelope="$(printf '%s' "$stdout" | awk '/^\{/{block=$0; capture=1; next} capture{block=block"\n"$0} END{print block}')"
+      if [[ -z "$envelope" ]] || ! printf '%s' "$envelope" | jq . >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] no JSON envelope on stdout" >&2
+        exit 1
+      fi
+      if ! printf '%s' "$envelope" | jq -e \
+        '([.plan.desiredState // {}, (.plans // [])[]?.desiredState // {}]
+          | map(.CreditSpecification // {})
+          | any(.CPUCredits == "standard"))' \
+        >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] CreditSpecification.CPUCredits == \"standard\" not present in any plan's desiredState" >&2
+        exit 1
+      fi
+
+  - story: e96.W3.N3
+    name: efs-bare-intent-singleton
+    description: |
+      A bare "Create an EFS file system" intent must route to the
+      single AWS::EFS::FileSystem resource, NOT the 10-resource
+      efs-with-vpc compound. Pre-fix the pattern's keyword list
+      matched "efs file system" → `efs-with-vpc`, which spun up a
+      whole VPC + 2 subnets + route table + 2 associations + NFS SG +
+      2 mount targets on top of the single resource the user asked
+      for. Fixed in Epic 96 W3.N3 by adding a singleton-override cue
+      in `packages/core/src/intent/compound-keywords.ts` for EFS file
+      system / filesystem / FS that is disqualified by VPC-bearing
+      qualifiers (with VPC, with a new VPC, and VPC, in a VPC, in new
+      VPC, etc.). Closes Epic 95 C-02 MED NEW.
+    must_fail_pre_fix: false
+    probe: |
+      # Assert bare intent produces exactly 1 plan with resourceType
+      # AWS::EFS::FileSystem. The CLI may emit a top-level `plan`
+      # (single) or `plans` (array). Pre-fix the intent goes through
+      # the compound path, which emits 10 plans under `.plans` — the
+      # jq expression below fails clean in that case.
+      stdout="$($PROBE_CLI_BIN plan "Create an EFS file system" --json 2>/dev/null || true)"
+      envelope="$(printf '%s' "$stdout" | awk '/^\{/{block=$0; capture=1; next} capture{block=block"\n"$0} END{print block}')"
+      if [[ -z "$envelope" ]] || ! printf '%s' "$envelope" | jq . >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] no JSON envelope on stdout" >&2
+        exit 1
+      fi
+      # Count total plans across both envelope shapes (singleton path
+      # uses .plan; compound path uses .plans[]). Expect exactly 1.
+      count="$(printf '%s' "$envelope" | jq -r '
+        ([.plan? | select(. != null)] + (.plans // [])) | length')"
+      if [[ "$count" -ne 1 ]]; then
+        echo "[PROBE-FAIL] bare EFS intent emitted $count plans; expected 1" >&2
+        exit 1
+      fi
+      # That 1 plan must be the EFS::FileSystem singleton.
+      if ! printf '%s' "$envelope" | jq -e \
+        '[.plan?.resourceType, (.plans // [])[]?.resourceType]
+          | map(select(. != null))
+          | any(. == "AWS::EFS::FileSystem")' \
+        >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] bare EFS intent did not route to AWS::EFS::FileSystem singleton" >&2
+        exit 1
+      fi
+
+  - story: e96.W3.N3
+    name: efs-with-vpc-still-compounds
+    description: |
+      Counter-probe for the EFS singleton-override narrowing: the
+      qualifier "EFS file system with a new VPC" MUST still route
+      through the 10-resource efs-with-vpc compound. Guards against
+      an over-aggressive singleton cue that drops the compound
+      behaviour the pattern was built for.
+    must_fail_pre_fix: false
+    probe: |
+      stdout="$($PROBE_CLI_BIN plan "Create an EFS file system with a new VPC" --json 2>/dev/null || true)"
+      envelope="$(printf '%s' "$stdout" | awk '/^\{/{block=$0; capture=1; next} capture{block=block"\n"$0} END{print block}')"
+      if [[ -z "$envelope" ]] || ! printf '%s' "$envelope" | jq . >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] no JSON envelope on stdout" >&2
+        exit 1
+      fi
+      count="$(printf '%s' "$envelope" | jq -r '
+        ([.plan? | select(. != null)] + (.plans // [])) | length')"
+      if [[ "$count" -lt 5 ]]; then
+        echo "[PROBE-FAIL] compound 'EFS with VPC' intent emitted $count plans; expected >= 5 (compound path)" >&2
+        exit 1
+      fi
+      # Must include at least one AWS::EC2::VPC to prove we took the
+      # compound path, not a single-resource fast-path.
+      if ! printf '%s' "$envelope" | jq -e \
+        '[.plan?.resourceType, (.plans // [])[]?.resourceType]
+          | map(select(. != null))
+          | any(. == "AWS::EC2::VPC")' \
+        >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] compound intent did not include AWS::EC2::VPC — compound path not taken" >&2
+        exit 1
+      fi
+
+  - story: e96.W3.N3
+    name: efs-mount-target-still-singleton
+    description: |
+      Pre-existing EFS mount-target singleton cue (Epic 94 C-08) must
+      survive the W3.N3 additions. The mount-target intent has its
+      own SINGLETON_OVERRIDE_CUES entry; W3.N3 only ADDS a new entry
+      for AWS::EFS::FileSystem. This probe ensures ordering /
+      registration didn't accidentally break the mount-target path.
+    must_fail_pre_fix: false
+    probe: |
+      stdout="$($PROBE_CLI_BIN plan "Create an EFS mount target" --json 2>/dev/null || true)"
+      envelope="$(printf '%s' "$stdout" | awk '/^\{/{block=$0; capture=1; next} capture{block=block"\n"$0} END{print block}')"
+      if [[ -z "$envelope" ]] || ! printf '%s' "$envelope" | jq . >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] no JSON envelope on stdout" >&2
+        exit 1
+      fi
+      # Mount target without SubnetId fails validation — that's fine,
+      # the resourceType must still resolve to the singleton. Accept
+      # both success (singleton + required-field hint) and failure
+      # (PLAN_FAILED with "Missing required fields for
+      # AWS::EFS::MountTarget").
+      if ! printf '%s' "$envelope" | jq -e '
+        (.plan?.resourceType == "AWS::EFS::MountTarget")
+        or ((.error.message // "") | test("AWS::EFS::MountTarget"))' \
+        >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] bare 'EFS mount target' intent did not route to AWS::EFS::MountTarget singleton" >&2
+        exit 1
+      fi
+
+  - story: e96.W2.R6
+    name: route-destination-cidr-accepts-zero-prefix
+    description: |
+      e96.W2.R6 — Wave 2.a CIDR validator forced `kind="vpc"`
+      (prefix /16-/28) on every CIDR token for EC2::VPC, EC2::Subnet,
+      AND EC2::Route. Route destinations legitimately span the whole
+      prefix space — 0.0.0.0/0 is the canonical default route,
+      /32 is a host route — so the global `vpc` clamp rejected every
+      Route intent that didn't happen to fall inside /16-/28. This
+      blocked the Route BP tests (B-03 regression of Epic 94 u.c.3).
+      Fix: Route now uses `kind="source"` (/0-/32) and assertions
+      land on `DestinationCidrBlock` (Route's CFN name) instead of
+      the VPC/Subnet `CidrBlock`. Probe calls extractAssertedValues
+      directly to avoid LLM non-determinism.
+    must_fail_pre_fix: false
+    probe: |
+      node -e '
+        const repo = process.env.PROBE_REPO_ROOT;
+        import(repo + "/packages/core/dist/graph/nodes/intent-parser.js")
+          .then(m => {
+            const accept = [
+              ["Create a default route to 0.0.0.0/0", "0.0.0.0/0"],
+              ["Create a host route to 10.0.0.42/32", "10.0.0.42/32"],
+              ["Create a VPC route to 172.16.0.0/20", "172.16.0.0/20"],
+            ];
+            for (const [intent, expected] of accept) {
+              const out = m.extractAssertedValues(intent, "AWS::EC2::Route");
+              if ((out.errors || []).length > 0) {
+                console.error("[PROBE-FAIL] Route intent rejected: " + intent + " — " + JSON.stringify(out.errors));
+                process.exit(1);
+              }
+              if (out.elicited.DestinationCidrBlock !== expected) {
+                console.error("[PROBE-FAIL] expected DestinationCidrBlock=" + expected + ", got " + JSON.stringify(out.elicited));
+                process.exit(1);
+              }
+              if (out.elicited.CidrBlock !== undefined) {
+                console.error("[PROBE-FAIL] Route intent leaked CidrBlock (should be DestinationCidrBlock): " + JSON.stringify(out.elicited));
+                process.exit(1);
+              }
+            }
+            // VPC preserves the /16-/28 clamp — regression guard so the
+            // fix did not silently widen VPC/Subnet validation too.
+            const vpcTooLarge = m.extractAssertedValues(
+              "Create a VPC with CIDR 10.0.0.0/8",
+              "AWS::EC2::VPC"
+            );
+            if ((vpcTooLarge.errors || []).length === 0) {
+              console.error("[PROBE-FAIL] /8 VPC CIDR should still be rejected (kind=vpc preserved)");
+              process.exit(1);
+            }
+          })
+          .catch(err => { console.error("[PROBE-FAIL] " + err.message); process.exit(1); });
+      '
+
+  - story: e96.W3.N1
+    name: placeholder-guard-prose-scope
+    description: |
+      F-002 — Epic 94 N6 placeholder-resource-id guard caught
+      subnet-<hex> / vpc-<id> in ID-shaped fields (SubnetId, VpcId)
+      but MISSED the same token embedded in prose (Description, Name,
+      Comment, Tag Value). A plan like
+      `{Description: "Public subnet (subnet-<hex>)"}` passed preflight
+      and shipped the hallucinated token verbatim into AWS tags.
+      e96.W3.N1 extends the walker with an embedded-scan regex that
+      fires only on prose-ish fields
+      (PLACEHOLDER_RESOURCE_ID_PROSE_FIELDS + contextual Tag Values).
+      Probe invokes the compiled guard directly against a synthetic
+      desiredState — a CLI-end-to-end probe would depend on LLM
+      non-determinism.
+    must_fail_pre_fix: false
+    probe: |
+      node -e '
+        const repo = process.env.PROBE_REPO_ROOT;
+        import(repo + "/packages/core/dist/graph/nodes/preflight-guard/guards/placeholder-resource-id.js")
+          .then(m => {
+            const cases = [
+              { ds: { Description: "Public subnet (subnet-<hex>) in us-east-1a" }, expect: "Description" },
+              { ds: { Tags: [{ Key: "Name", Value: "See subnet-12345678" }] }, expect: "Tags[0].Value" },
+              { ds: { DistributionConfig: { Comment: "Origin backed by subnet-abc12345" } }, expect: "DistributionConfig.Comment" },
+            ];
+            for (const c of cases) {
+              const hit = m.detectPlaceholderResourceId(c.ds);
+              if (!hit || hit.field !== c.expect) {
+                console.error("[PROBE-FAIL] expected hit on field " + c.expect + ", got " + JSON.stringify(hit));
+                process.exit(1);
+              }
+            }
+            // Negative: real hex-random IDs embedded in prose must NOT fire.
+            const clean = m.detectPlaceholderResourceId({
+              Description: "Subnet backed by vpc-0a1b2c3d4e5f67890"
+            });
+            if (clean) {
+              console.error("[PROBE-FAIL] false-positive on real hex-random ID in Description: " + JSON.stringify(clean));
+              process.exit(1);
+            }
+          })
+          .catch(err => { console.error("[PROBE-FAIL] " + err.message); process.exit(1); });
+      '
+
+  - story: e96.W2.R7
+    name: s3-unicode-emits-invalid-name-error-code
+    description: |
+      e96.W2.R7 — Epic 94 R8's non-ASCII S3 name rejection correctly
+      failed the plan and wrote the human-readable "non-ASCII
+      characters are not allowed" message, but the JSON envelope's
+      `error.code` was the generic `PLAN_FAILED` rather than a
+      stable classifier like `INVALID_NAME`. A-11 regression — scripts
+      couldn't distinguish "user typo in resource name" from generic
+      plumbing failures. Fix: intent-parser's `extractAssertedValues`
+      now returns an optional `errorCode` field, stamped to
+      `INVALID_NAME` when the name span contains non-ASCII; the three
+      FAILED return sites wrap the code in an `AssigneeError` on
+      `state.error` so the plan-orchestrator's JSON envelope path
+      propagates it to stdout instead of the `PLAN_FAILED` fallback.
+    must_fail_pre_fix: false
+    probe: |
+      # Drive the CLI end-to-end — this path exercises both the intent-
+      # parser's stamping AND the plan-orchestrator's error-envelope
+      # wiring, which is exactly what the finding was about.
+      stdout="$($PROBE_CLI_BIN plan "Create an S3 bucket named résumé-bucket" --json 2>/dev/null || true)"
+      envelope="$(printf '%s' "$stdout" | awk '/^\{/{block=$0; capture=1; next} capture{block=block"\n"$0} END{print block}')"
+      if [[ -z "$envelope" ]] || ! printf '%s' "$envelope" | jq . >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] no JSON envelope on stdout" >&2
+        exit 1
+      fi
+      if ! printf '%s' "$envelope" | jq -e '
+        .ok == false
+        and .error.code == "INVALID_NAME"
+        and (.error.message | test("non-ASCII"))
+      ' >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] expected {ok:false, error.code:\"INVALID_NAME\"}, got:" >&2
+        printf '%s' "$envelope" | jq -c '{ok, code: .error.code, msg: .error.message[0:80]}' >&2
+        exit 1
+      fi

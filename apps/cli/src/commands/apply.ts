@@ -47,6 +47,7 @@ import {
   CommandDescription,
   CommandArgs,
 } from "../constants/commands.js";
+import { ErrorCode } from "../constants/errors.js";
 import { LOG_ACTIONS } from "../utils/logger.js";
 import { runCommand } from "../utils/command-runner.js";
 import {
@@ -55,7 +56,8 @@ import {
 } from "../config/constants.js";
 import { resolveIntroContext, formatIntroContext } from "./init.js";
 import { resolveApplyArgs, type ApplyOpts } from "./apply/arg-parser.js";
-import { runApply } from "./apply/orchestrator.js";
+import { runApply, type ApplyRunResult } from "./apply/orchestrator.js";
+import { installJsonStderrFilter } from "./json-stderr-filter.js";
 
 /**
  * Buffering stdout suppressor used when `--output json` is active.
@@ -69,8 +71,24 @@ import { runApply } from "./apply/orchestrator.js";
  * Mirrors the pattern used by `plan.ts` (Wave 92.2.c) but cheaper — we
  * don't need per-resource NDJSON aggregation, just a single envelope.
  */
+/**
+ * Epic 96 Wave 1 B2: success envelope is enriched with optional
+ * `runId` / `arn` / `cost` fields so CI pipelines can thread the
+ * provisioned ARN + monthly cost downstream. All four keys
+ * (`ok`/`operation`/`runId`/`arn`/`cost`) appear in the envelope when
+ * populated; unknown fields are elided rather than emitted as `null`
+ * so machine parsers see a stable shape.
+ */
+interface ApplySuccessEnvelope {
+  ok: true;
+  operation: string;
+  runId?: string;
+  arn?: string;
+  cost?: string;
+}
+
 function installJsonStdoutSuppressor(enabled: boolean): {
-  flushSuccess: (operation: string) => void;
+  flushSuccess: (envelope: ApplySuccessEnvelope) => void;
   flushError: (code: string, message: string, hint?: string) => void;
   restore: () => void;
 } {
@@ -108,9 +126,9 @@ function installJsonStdoutSuppressor(enabled: boolean): {
   };
 
   return {
-    flushSuccess: (operation) => {
+    flushSuccess: (envelope) => {
       restore();
-      const payload = JSON.stringify({ ok: true, operation }, null, 2) + "\n";
+      const payload = JSON.stringify(envelope, null, 2) + "\n";
       originalWrite.call(process.stdout, payload);
     },
     flushError: (code, message, hint) => {
@@ -122,6 +140,21 @@ function installJsonStdoutSuppressor(enabled: boolean): {
     },
     restore,
   };
+}
+
+/**
+ * Build the top-level success envelope from the orchestrator's
+ * `ApplyRunResult`. Only defined fields are projected into the final
+ * object so `JSON.stringify` doesn't emit keys with undefined values.
+ */
+function buildSuccessEnvelope(
+  result: ApplyRunResult | null,
+): ApplySuccessEnvelope {
+  const envelope: ApplySuccessEnvelope = { ok: true, operation: "apply" };
+  if (result?.runId) envelope.runId = result.runId;
+  if (result?.arn) envelope.arn = result.arn;
+  if (result?.cost) envelope.cost = result.cost;
+  return envelope;
 }
 
 /**
@@ -204,9 +237,25 @@ export const applyCommand = new Command(CommandName.APPLY)
     }
 
     const suppressor = installJsonStdoutSuppressor(jsonMode);
+    // Epic 96 Wave 3 N4 (D-04): under `--json`, suppress the human
+    // `[ERROR]/[CONTEXT]/[FIX]` blocks that renderError emits on stderr.
+    // Structured JSON log lines stay visible; only prefix-matched
+    // human-error writes are dropped. Same payload (code/message/hint)
+    // is emitted on stdout as the error envelope, so the duplicated
+    // stderr block is pure noise for machine consumers.
+    const stderrFilter = installJsonStderrFilter(jsonMode);
 
     try {
       let runErrored: Error | null = null;
+      // Epic 96 Wave 1 B2: capture the orchestrator's enriched result
+      // so the CLI can (a) emit `runId` / `arn` / `cost` in the JSON
+      // success envelope and (b) flip a `success=false` short-circuit
+      // (Phase-1 gate terminal) into a thrown AssigneeError with
+      // APPLY_FAILED — the same exit/envelope contract a Phase-2
+      // provisioning failure produces.
+      const applyResultRef: { current: ApplyRunResult | null } = {
+        current: null,
+      };
       try {
         const {
           resolvedCheckpoint,
@@ -227,18 +276,38 @@ export const applyCommand = new Command(CommandName.APPLY)
           // would also write to stdout; `silent:true` routes them to
           // the no-op path (same invariant Wave 2.c added for plan).
           silent: jsonMode,
-          run: async (ctx) =>
-            runApply(ctx, {
+          run: async (ctx) => {
+            const result = await runApply(ctx, {
               opts,
               intent,
               effectiveIntent,
               resolvedCheckpoint,
               resolvedSourceDir,
               sourceFileCount,
-            }),
+            });
+            applyResultRef.current = result;
+            return result;
+          },
         });
       } catch (err) {
         runErrored = err instanceof Error ? err : new Error(String(err));
+      }
+
+      const applyResult = applyResultRef.current;
+
+      // Epic 96 Wave 1 B2 (A-02): if the orchestrator ran to completion
+      // but returned success=false (provisioning FAILED / bp-blocked /
+      // unexpected status), synthesise an AssigneeError so the envelope
+      // + exit-code path below fires. The human-readable error block
+      // has already been written to stderr by `runProvisioningLoop` or
+      // the Phase-1 gate; `alreadyRendered:true` prevents the top-level
+      // Commander catch from painting the message a second time.
+      if (!runErrored && applyResult && applyResult.success === false) {
+        runErrored = new AssigneeError(
+          "Apply failed: provisioning ended without success.",
+          ErrorCode.APPLY_FAILED,
+          { alreadyRendered: true },
+        );
       }
 
       if (jsonMode) {
@@ -256,7 +325,7 @@ export const applyCommand = new Command(CommandName.APPLY)
             : "Run with --verbose for full stack trace.";
           suppressor.flushError(code, runErrored.message, hint);
         } else {
-          suppressor.flushSuccess("apply");
+          suppressor.flushSuccess(buildSuccessEnvelope(applyResult));
         }
       }
 
@@ -265,7 +334,7 @@ export const applyCommand = new Command(CommandName.APPLY)
         // in index.ts does not double-paint (stderr already carries
         // the human block from runCommand's renderError hook).
         if (runErrored instanceof AssigneeError) {
-          throw jsonMode
+          throw jsonMode || runErrored.alreadyRendered
             ? new AssigneeError(runErrored.message, runErrored.code, {
                 alreadyRendered: true,
               })
@@ -279,5 +348,6 @@ export const applyCommand = new Command(CommandName.APPLY)
       }
     } finally {
       suppressor.restore();
+      stderrFilter.restore();
     }
   });

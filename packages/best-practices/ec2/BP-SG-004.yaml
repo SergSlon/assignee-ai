@@ -1,0 +1,19 @@
+id: BP-SG-004
+title: "Security group should not allow unrestricted ingress on high-risk DB/admin ports"
+severity: CRITICAL
+resource_type: "AWS::EC2::SecurityGroup"
+property_path: "SecurityGroupIngress"
+check_type: "sg_high_risk_public_exposure"
+expected_value: "0.0.0.0/0:20,21,1433,1434,1521,3306,3389,4333,5432,5439,5500,6379,9200,27017"
+source: "TrustedAdvisor"
+source_id: "HCP4007jGY"
+description: "Trusted Advisor flags security groups allowing unrestricted access (0.0.0.0/0) on high-risk database and admin ports including FTP (20/21), MSSQL (1433/1434), Oracle (1521), MySQL/Aurora MySQL (3306), RDP (3389), IBM RDB (4333), Postgres/Aurora Postgres (5432), Redshift (5439), VNC (5500), Redis (6379), Elasticsearch (9200), and MongoDB (27017). HTTPS (443) and HTTP (80) are intentionally excluded — they are the canonical public LB ports."
+remediation: "Restrict ingress rules on the listed DB/admin ports to specific IP ranges (corporate VPN CIDR, bastion SG, VPC peering CIDR). Use VPC endpoints or PrivateLink for intra-account DB traffic instead of opening the port to the internet."
+consequence: "Databases (MySQL 3306, Postgres 5432, MSSQL 1433) open to the internet get scanned within minutes — data theft or ransomware follows."
+category: security
+lastVerified: "2026-04-23"
+fixType: "interactive"
+interactiveOptions:
+  - label: "Set allowed DB/admin CIDR range"
+    action: "prompt_value"
+    targetField: "SecurityGroupIngress"

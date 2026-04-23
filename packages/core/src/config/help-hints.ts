@@ -110,28 +110,25 @@ function renderSupportedTypesHintCli(): string {
 
 /**
  * Shorter supported-types hint used inside intent-parser's
- * errorMessage. Retains the grouped layout but omits the EFS/CFN
- * details to keep the inline state-field small.
+ * errorMessage. Epic 96 Wave 2 R3 (D-03): the "short" variant used to
+ * hand-maintain its own grouped grid — a subset of the CLI block with
+ * families silently trimmed. That duplication meant every new supported
+ * type had to be added to TWO strings by hand, and Epic 92/94 added
+ * types without touching the short body → the error-path hint silently
+ * fell behind the `--help` block (Epic 95 D-03 finding). The short
+ * variant now delegates to `buildSupportedTypesBlock()` (the canonical
+ * CLI grid) so the registry is the single source of truth and the
+ * drift-guard test in help-hints.test.ts covers both surfaces.
+ *
+ * Sizing: `buildSupportedTypesBlock()` is ≤ HINT_MAX_COLUMNS (100) per
+ * line and enumerates all 10 user-facing domain groups with the full
+ * type list. Embedding it in an intent-parser errorMessage adds ~20
+ * short lines to stderr — acceptable for the one-shot "we couldn't
+ * parse your intent" message, and strictly better than the old
+ * hand-curated subset which could miss the type the user wanted.
  */
 function renderSupportedTypesHintShort(): string {
-  const count = getSupportedTypeCount();
-  return `What you can create (${count} resource types):
-
-  Compute       EC2 instance, Lambda function, ECS cluster
-  Storage       S3 bucket
-  Databases     RDS (PostgreSQL/MySQL/MariaDB/Aurora), DynamoDB table
-  Networking    VPC, Subnet, Security Group, Internet Gateway,
-                NAT Gateway, Route Table, Route, Load Balancer
-  API           API Gateway v2 (HTTP/WebSocket)
-  Messaging     SQS queue, SNS topic
-  Security      IAM role, Secrets Manager secret, SSM parameter
-  Containers    ECR repository
-  Observability CloudWatch alarm, CloudWatch Logs group
-
-Examples:
-  assignee plan "Create an S3 bucket for my static site"
-  assignee plan "Create an EC2 t3.micro with SSH"
-  assignee plan "Create a PostgreSQL database for production"`;
+  return buildSupportedTypesBlock();
 }
 
 /**
