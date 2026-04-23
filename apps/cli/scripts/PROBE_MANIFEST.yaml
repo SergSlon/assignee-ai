@@ -534,6 +534,55 @@ probes:
         exit 1
       fi
 
+  - story: e98.W2.R2
+    name: w2-r2-plugin-default-empty-leaf
+    description: |
+      Epic 98 Wave 2 R2 — `mergePluginDefaults` empty-leaf backfill.
+      Closes the Epic 97 C-R1 live-FAIL: on larger EC2 intents (e.g.
+      `Create an EC2 instance t3.large with 100GB gp3 volume`) the LLM
+      emits `CreditSpecification: {}`. The old merge guard
+      `if (result[key] !== undefined) continue;` treated `{}` as a real
+      user value and skipped the plugin default `{CPUCredits: "standard"}`,
+      so the "CPU Credits" plan row re-blanked. Fixed in
+      `packages/core/src/graph/nodes/plan-generator/llm-plan/merge.ts`
+      by introducing an exported `isEmptyLeaf()` helper (true for
+      undefined / null / {} / [] / "") and swapping the guard to
+      `!isEmptyLeaf(...)`. Object-valued plugin defaults now deep-merge
+      into partial LLM shells so LLM-emitted sub-keys win AND missing
+      sub-keys pick up the plugin default. Epic 96 W2.R5's probe only
+      covered t3.micro (plugin default path, no LLM conflict); the
+      larger-intent case survived.
+    must_fail_pre_fix: false
+    variations:
+      - cmd: 'plan "Create a t3.micro EC2 instance" --json'
+        assertions: "baseline t3.micro: CreditSpecification.CPUCredits == 'standard' (plugin default on empty slot)"
+      - cmd: 'plan "Create an EC2 instance t3.large with 100GB gp3 volume" --json'
+        assertions: "C-R1 regression: larger intent does NOT strip CreditSpecification to empty {}"
+      - cmd: 'plan "Create a t3.medium EC2 instance encrypted" --json'
+        assertions: "t3.medium + elaborate clause: CreditSpecification survives with CPUCredits set"
+      - cmd: 'plan "Create a t3.small EC2 instance with CPUCredits unlimited" --json'
+        assertions: "user-stated CPUCredits=unlimited wins over plugin default (user always wins)"
+    known_tripwires: []
+    probe: |
+      # Variation 2 — the Epic 97 C-R1 live-FAIL. Post-fix the plan
+      # must emit a non-empty CreditSpecification with CPUCredits set
+      # to either "standard" (plugin default) or "unlimited" (if user
+      # stated otherwise). Empty {} is the failure mode.
+      stdout="$($PROBE_CLI_BIN plan "Create an EC2 instance t3.large with 100GB gp3 volume" --output json 2>/dev/null || true)"
+      envelope="$(printf '%s' "$stdout" | awk '/^\{/{block=$0; capture=1; next} capture{block=block"\n"$0} END{print block}')"
+      if [[ -z "$envelope" ]] || ! printf '%s' "$envelope" | jq . >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] no JSON envelope on stdout" >&2
+        exit 1
+      fi
+      if ! printf '%s' "$envelope" | jq -e \
+        '([.plan.desiredState // {}, (.plans // [])[]?.desiredState // {}]
+          | map(.CreditSpecification // {})
+          | any(.CPUCredits != null and .CPUCredits != ""))' \
+        >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] CreditSpecification.CPUCredits missing on t3.large + gp3 volume plan (C-R1 not closed)" >&2
+        exit 1
+      fi
+
   - story: e96.W3.N3
     name: efs-bare-intent-singleton
     description: |
