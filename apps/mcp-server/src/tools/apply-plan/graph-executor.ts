@@ -14,6 +14,7 @@ import {
   ExecutionStatus,
   BPEnforcementLevel,
   StateField,
+  buildApplyEnvelopeArn,
   type ResourceResult,
 } from "@assignee/core";
 import type { BPFinding } from "@assignee/best-practices";
@@ -140,7 +141,7 @@ export async function runGraphFromCheckpoint({
     }
 
     const finalState = (await ctx.graph.getState(config)).values;
-    return shapeTerminalState(finalState, runId);
+    return await shapeTerminalState(finalState, runId);
   } catch (err) {
     return errorEnvelope({
       message: `Provisioning error: ${err instanceof Error ? err.message : String(err)}`,
@@ -148,11 +149,24 @@ export async function runGraphFromCheckpoint({
   }
 }
 
-/** Translates the graph's terminal state into a MCP tool envelope. */
-function shapeTerminalState(
+/**
+ * Translates the graph's terminal state into a MCP tool envelope.
+ *
+ * Epic 98 e98.W5.N1 (Epic 97 A-01 + B-01 mirror): `resourceArn` and
+ * `primaryIdentifier` now use the same `buildApplyEnvelopeArn`
+ * projection the CLI orchestrator uses. For non-taggable constructs
+ * (Route / SubnetRouteTableAssociation / VPCGatewayAttachment),
+ * `resourceArn: null` + `primaryIdentifier: "<bare id>"`. For
+ * ARN-addressable types the full ARN lands in `resourceArn` and
+ * `primaryIdentifier` is `null`. Compound apply reports the LAST
+ * successfully-provisioned resource as the envelope anchor so
+ * automation can thread `resourceArn || primaryIdentifier` into
+ * `destroy_resource`.
+ */
+async function shapeTerminalState(
   finalState: Record<string, unknown>,
   runId: string,
-): ToolEnvelope {
+): Promise<ToolEnvelope> {
   const success =
     finalState[StateField.EXECUTION_STATUS] === ExecutionStatus.SUCCESS;
 
@@ -165,15 +179,51 @@ function shapeTerminalState(
     });
   }
 
+  const completedResources =
+    (finalState[StateField.COMPLETED_RESOURCES] as ResourceResult[]) ?? [];
+  const anchor = pickEnvelopeAnchor(finalState, completedResources);
+  const projection = await buildApplyEnvelopeArn(
+    anchor.resourceType,
+    anchor.bareIdentifier,
+  );
+
   return successEnvelope({
     status: "SUCCESS",
-    resourceArn: finalState[StateField.RESOURCE_ARN],
-    resourceType: finalState[StateField.RESOURCE_TYPE],
+    resourceArn: projection.arn,
+    primaryIdentifier: projection.primaryIdentifier,
+    resourceType: anchor.resourceType,
     estimatedMonthlyCost: finalState[StateField.ESTIMATED_MONTHLY_COST],
     securityFindings:
       (finalState[StateField.SECURITY_FINDINGS] as unknown[]) ?? [],
-    completedResources:
-      (finalState[StateField.COMPLETED_RESOURCES] as unknown[]) ?? [],
+    completedResources,
     runId,
   });
+}
+
+/**
+ * Pick the (resourceType, bareIdentifier) pair the envelope's
+ * resourceArn/primaryIdentifier should describe. Mirrors the CLI
+ * orchestrator's `pickEnvelopeAnchor`: LAST completed resource on
+ * compound success, terminal state fields otherwise.
+ */
+function pickEnvelopeAnchor(
+  finalState: Record<string, unknown>,
+  completedResources: ResourceResult[],
+): {
+  resourceType: string | undefined;
+  bareIdentifier: string | undefined;
+} {
+  if (completedResources.length > 0) {
+    const last = completedResources[completedResources.length - 1];
+    if (last && last.resourceArn) {
+      return {
+        resourceType: last.resourceType,
+        bareIdentifier: last.resourceArn,
+      };
+    }
+  }
+  return {
+    resourceType: finalState[StateField.RESOURCE_TYPE] as string | undefined,
+    bareIdentifier: finalState[StateField.RESOURCE_ARN] as string | undefined,
+  };
 }

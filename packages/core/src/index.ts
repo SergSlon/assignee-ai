@@ -60,3 +60,7 @@ export {
   promptWithHelp,
 } from "./utils/wizard-helpers.js";
 export { resolveFieldConfigs } from "./utils/field-resolver.js";
+export {
+  buildApplyEnvelopeArn,
+  type ApplyEnvelopeArn,
+} from "./graph/nodes/result-formatter/envelope-arn.js";

@@ -24,7 +24,7 @@ import {
   fetchOrgPolicy,
   readAuthToken,
 } from "../../config/org-policy-cache.js";
-import type { PlanCheckpoint } from "@assignee/core";
+import { buildApplyEnvelopeArn, type PlanCheckpoint } from "@assignee/core";
 import type { CommandContext } from "../../utils/command-runner.js";
 import type { AgentState } from "../../services/graph.js";
 import { runPhase1, type Phase1Deps } from "./phase1-planner.js";
@@ -45,14 +45,22 @@ export interface OrchestratorArgs {
 /**
  * Optional envelope-enrichment fields surfaced alongside `success`. The
  * CLI wrapper reads these in `--json` mode to populate the success
- * envelope with runId / arn / cost (BLOCKER A-02 mandated stub).
- * All fields are optional because Phase-1 terminal paths do not have
- * a final provisioning state.
+ * envelope with runId / arn / primaryIdentifier / cost.
+ *
+ * Epic 98 e98.W5.N1 (Epic 97 A-01, B-01): `arn` is `null` for non-taggable
+ * CFN constructs that have no standalone AWS ARN (Route / SRTA /
+ * VPCGatewayAttachment), and `primaryIdentifier` carries the bare CCAPI
+ * id in that case. For ARN-addressable types the full ARN lands in `arn`
+ * and `primaryIdentifier` is `null`. For Lambda compound apply, the `arn`
+ * field is the full `arn:aws:lambda:...:function:<name>` form of the
+ * LAST successfully-provisioned resource in the queue, so
+ * `apply --json | jq .arn | xargs destroy` works.
  */
 export interface ApplyRunResult {
   success: boolean;
   runId?: string;
-  arn?: string;
+  arn?: string | null;
+  primaryIdentifier?: string | null;
   cost?: string;
 }
 
@@ -137,19 +145,67 @@ export async function runApply(
   // returns. Throwing here would route the failure through
   // `runCommand`'s catch which re-renders the human error block that
   // `runProvisioningLoop` already wrote to stderr.
-  return enrichResult(finalState, success, ctx.runId);
+  return await enrichResult(finalState, success, ctx.runId);
 }
 
-/** Extract runId / arn / cost from the final state for envelope enrichment. */
-function enrichResult(
+/**
+ * Extract runId / arn / primaryIdentifier / cost from the final state
+ * for envelope enrichment.
+ *
+ * Compound apply: the envelope's identifying resource is the LAST
+ * successfully-provisioned entry in `completedResources` (the user's
+ * "primary" intent target — Lambda for lambda-with-exec-role, CloudFront
+ * distribution for static-website, etc.). `finalState.resourceArn` holds
+ * that entry's bare CCAPI identifier (preserved for compound-marker
+ * substitution — see result-formatter invariants), so we feed that into
+ * `buildApplyEnvelopeArn` alongside the entry's `resourceType`.
+ *
+ * Single apply: same helper with `finalState.resourceType` +
+ * `finalState.resourceArn`.
+ */
+async function enrichResult(
   finalState: AgentState,
   success: boolean,
   fallbackRunId: string,
-): ApplyRunResult {
+): Promise<ApplyRunResult> {
+  const { resourceType, bareIdentifier } = pickEnvelopeAnchor(finalState);
+  const projection = await buildApplyEnvelopeArn(resourceType, bareIdentifier);
   return {
     success,
     runId: finalState.runId ?? fallbackRunId,
-    arn: finalState.resourceArn,
+    arn: projection.arn,
+    primaryIdentifier: projection.primaryIdentifier,
     cost: finalState.estimatedMonthlyCost,
+  };
+}
+
+/**
+ * Choose the (resourceType, bareIdentifier) pair the envelope's `arn`
+ * field should describe.
+ *
+ * Compound: the LAST successful entry in `completedResources`
+ * (dependency order → the user's primary intent target). Falls back to
+ * `finalState.resourceArn` / `finalState.resourceType` if the completed
+ * list is empty (defensive; should not happen on a SUCCESS path).
+ *
+ * Single: `finalState.resourceType` + `finalState.resourceArn`.
+ */
+function pickEnvelopeAnchor(finalState: AgentState): {
+  resourceType: string | undefined;
+  bareIdentifier: string | undefined;
+} {
+  const completed = finalState.completedResources;
+  if (completed && completed.length > 0) {
+    const last = completed[completed.length - 1];
+    if (last && last.resourceArn) {
+      return {
+        resourceType: last.resourceType,
+        bareIdentifier: last.resourceArn,
+      };
+    }
+  }
+  return {
+    resourceType: finalState.resourceType,
+    bareIdentifier: finalState.resourceArn,
   };
 }

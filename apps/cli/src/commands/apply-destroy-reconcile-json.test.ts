@@ -184,6 +184,124 @@ describe("applyCommand — --json envelope (Epic 94 N4 / A-14)", () => {
     expect(parsed.operation).toBe("apply");
   });
 
+  // Epic 98 e98.W5.N1 (Epic 97 A-01): full Lambda ARN is emitted as
+  // `arn` (string), primaryIdentifier omitted. Taggable types have
+  // no primaryIdentifier field in the envelope — it's strictly an
+  // opt-in surface for non-taggable constructs.
+  it("success path (Lambda): envelope has full ARN + no primaryIdentifier", async () => {
+    mockRunApply.mockResolvedValueOnce({
+      success: true,
+      runId: "run-a01",
+      arn: "arn:aws:lambda:us-east-1:210987654321:function:dogfood-e97-a-fn-1776953643",
+      primaryIdentifier: null,
+      cost: "~$1.03/million req",
+    });
+    const { applyCommand } = await import("./apply.js");
+    const { stdout, thrown } = await captureStdout(() =>
+      applyCommand.parseAsync(
+        ["node", "apply", "Create a lambda", "--yes", "--json"],
+        { from: "user" },
+      ),
+    );
+    expect(thrown).toBeNull();
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(true);
+    expect(parsed.arn).toBe(
+      "arn:aws:lambda:us-east-1:210987654321:function:dogfood-e97-a-fn-1776953643",
+    );
+    // primaryIdentifier is only rendered when non-null — taggable types
+    // should NOT pollute the envelope with `"primaryIdentifier": null`.
+    expect(parsed).not.toHaveProperty("primaryIdentifier");
+    expect(parsed.cost).toBe("~$1.03/million req");
+  });
+
+  // Epic 98 e98.W5.N1 (Epic 97 B-01): Route / SRTA / VPCGatewayAttachment
+  // have no standalone ARN — envelope emits `arn: null` explicitly so
+  // automation can distinguish "no ARN exists" from "ARN missing".
+  // primaryIdentifier carries the bare CCAPI id which the W1.B1
+  // destroy path resolves via the dual-index provision log.
+  it("success path (Route): envelope has arn:null + primaryIdentifier rtb|cidr", async () => {
+    mockRunApply.mockResolvedValueOnce({
+      success: true,
+      runId: "run-b01-route",
+      arn: null,
+      primaryIdentifier: "rtb-016d13dcc6076462d|0.0.0.0/0",
+      cost: "No charge",
+    });
+    const { applyCommand } = await import("./apply.js");
+    const { stdout, thrown } = await captureStdout(() =>
+      applyCommand.parseAsync(
+        [
+          "node",
+          "apply",
+          "Create a route to 0.0.0.0/0 via igw-... on route table rtb-...",
+          "--yes",
+          "--json",
+        ],
+        { from: "user" },
+      ),
+    );
+    expect(thrown).toBeNull();
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(true);
+    expect(parsed.arn).toBeNull();
+    expect(parsed.primaryIdentifier).toBe("rtb-016d13dcc6076462d|0.0.0.0/0");
+  });
+
+  it("success path (SubnetRouteTableAssociation): envelope has arn:null + primaryIdentifier rtbassoc-XXX", async () => {
+    mockRunApply.mockResolvedValueOnce({
+      success: true,
+      runId: "run-b01-srta",
+      arn: null,
+      primaryIdentifier: "rtbassoc-0b2bb97aacd090704",
+      cost: "Free",
+    });
+    const { applyCommand } = await import("./apply.js");
+    const { stdout, thrown } = await captureStdout(() =>
+      applyCommand.parseAsync(
+        [
+          "node",
+          "apply",
+          "Associate rtbassoc subnet to route table",
+          "--yes",
+          "--json",
+        ],
+        { from: "user" },
+      ),
+    );
+    expect(thrown).toBeNull();
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.arn).toBeNull();
+    expect(parsed.primaryIdentifier).toBe("rtbassoc-0b2bb97aacd090704");
+  });
+
+  it("success path (VPCGatewayAttachment): envelope has arn:null + primaryIdentifier igw|vpc", async () => {
+    mockRunApply.mockResolvedValueOnce({
+      success: true,
+      runId: "run-b01-vpcgw",
+      arn: null,
+      primaryIdentifier: "igw-0abc12345|vpc-0def67890",
+      cost: "Free",
+    });
+    const { applyCommand } = await import("./apply.js");
+    const { stdout, thrown } = await captureStdout(() =>
+      applyCommand.parseAsync(
+        [
+          "node",
+          "apply",
+          "Attach igw-0abc12345 to vpc-0def67890",
+          "--yes",
+          "--json",
+        ],
+        { from: "user" },
+      ),
+    );
+    expect(thrown).toBeNull();
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.arn).toBeNull();
+    expect(parsed.primaryIdentifier).toBe("igw-0abc12345|vpc-0def67890");
+  });
+
   it("failure path (AssigneeError) emits {ok:false,error:{code,message,hint}} envelope", async () => {
     const { AssigneeError } = await import("@assignee/core");
     mockRunApply.mockRejectedValueOnce(

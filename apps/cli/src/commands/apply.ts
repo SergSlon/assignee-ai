@@ -74,16 +74,30 @@ import { installJsonStderrFilter } from "./json-stderr-filter.js";
 /**
  * Epic 96 Wave 1 B2: success envelope is enriched with optional
  * `runId` / `arn` / `cost` fields so CI pipelines can thread the
- * provisioned ARN + monthly cost downstream. All four keys
- * (`ok`/`operation`/`runId`/`arn`/`cost`) appear in the envelope when
- * populated; unknown fields are elided rather than emitted as `null`
- * so machine parsers see a stable shape.
+ * provisioned ARN + monthly cost downstream.
+ *
+ * Epic 98 e98.W5.N1 (Epic 97 A-01 + B-01): `primaryIdentifier` added
+ * alongside `arn`. For non-taggable CFN constructs (Route /
+ * SubnetRouteTableAssociation / VPCGatewayAttachment), AWS has no
+ * standalone ARN so `arn` is emitted as literal `null` and the bare
+ * CCAPI id lands in `primaryIdentifier` (which the W1.B1 destroy path
+ * resolves via the dual-index provision log). For ARN-addressable
+ * types, `arn` is the full `arn:<partition>:...` form and
+ * `primaryIdentifier` is omitted. Automation pipelines that prefer
+ * a single lookup key can read `.primaryIdentifier // .arn` and get
+ * a destroy-able handle in every case.
+ *
+ * Undefined fields are elided by JSON.stringify (stable shape); the
+ * deliberate `arn: null` for non-taggable types IS serialised as
+ * `"arn": null` so downstream scripts can distinguish "no ARN
+ * exists" from "ARN field missing due to early-exit".
  */
 interface ApplySuccessEnvelope {
   ok: true;
   operation: string;
   runId?: string;
-  arn?: string;
+  arn?: string | null;
+  primaryIdentifier?: string;
   cost?: string;
 }
 
@@ -152,7 +166,14 @@ function buildSuccessEnvelope(
 ): ApplySuccessEnvelope {
   const envelope: ApplySuccessEnvelope = { ok: true, operation: "apply" };
   if (result?.runId) envelope.runId = result.runId;
-  if (result?.arn) envelope.arn = result.arn;
+  // Epic 98 e98.W5.N1: `arn` is emitted as `null` for non-taggable
+  // constructs (no standalone AWS ARN exists). Distinguish that from
+  // `arn=undefined` (Phase-1 early-exit — nothing provisioned yet) by
+  // testing `arn !== undefined` rather than truthiness.
+  if (result?.arn !== undefined) envelope.arn = result.arn;
+  if (result?.primaryIdentifier) {
+    envelope.primaryIdentifier = result.primaryIdentifier;
+  }
   if (result?.cost) envelope.cost = result.cost;
   return envelope;
 }
