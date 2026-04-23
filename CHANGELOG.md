@@ -12,6 +12,41 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 96 M1 — methodology gate: dogfood probe-lib + pre-close-probes + shipped-wired contracts (2026-04-23)
+
+**Why**: three consecutive epics (92 / 94 / 95-recon) shipped at ~25-35% partial-landing rate. Unit tests pass. Superficial CLI probes (`jq -e .`) pass. But deep integration breaks at apply-time, or the module lands without being wired into the graph, or help-text regenerates without deduplicating emit points. Root cause: weak closure criterion — stories marked closed based on unit-tests + `jq -e`. M1 replaces that with a stronger gate that catches 6 documented classes of partial-landing.
+
+#### Added
+
+- **`apps/cli/scripts/dogfood-probe-lib.sh`** (437 LOC, 11 helpers) — reusable semantic-probe shell library. Helpers: `assert_envelope_shape`, `assert_exit_code_matches_ok` (catches "ok:true + exit 0 on failure"), `assert_arn_visible_in_success`, `assert_single_examples_block`, `assert_no_placeholder`, `assert_single_stderr_substring` (duplicate hint-grid), `assert_plan_has_resource_type`, `assert_desired_state_has_key`, `assert_desired_state_missing_key_on_type` (catches companion-slot pollution like Lambda FunctionName leak), `assert_regex_scope` (catches region regex false-positives), `assert_error_envelope_shape`. Each helper: `set -euo pipefail`, exit 0 on PASS, 1 on ASSERTION_FAIL, 2 on SETUP_FAIL.
+- **`apps/cli/scripts/PROBE_MANIFEST.yaml`** (108 LOC, 5 seeded probes) — manifest of every probe keyed by story ID. Seeded with Wave-1 BLOCKER probes that tripe on HEAD: `e96.W1.B1` Lambda FunctionName leak, `e96.W1.B2` apply exit-code + envelope parity, `e96.W1.B3` region regex substring false-positive, `e96.W1.B4/B5` plan/apply --help duplicate Examples.
+- **`apps/cli/scripts/pre-close-probes.sh`** (321 LOC) — manifest-driven probe runner. Bash-3.2 + macOS compatible (yq-free awk YAML parser). Supports `--scope <regex>` for pre-commit pruning. Runs 5 probes end-to-end in ~60s. Added `pnpm --filter assignee pre-close-probes` alias.
+- **`packages/core/src/__tests__/shipped-wired-contract.test.ts`** (528 LOC, 6 contracts, 12 tests) — vitest drift-guards covering the 6 classes of partial-landing:
+  - **A** Graph wiring — every `GRAPH_NODES` entry present in `create-graph.ts` edge list (catches dead-code wiring like Epic 92's `validateDesiredStateNode`).
+  - **B** Commander flag coverage — every registered `.option(...)` cross-checked against PROBE_MANIFEST with a 22-flag whitelist tagged to unit-test file (catches drift like `init --wizard` never registered).
+  - **C** Pattern-template registry parity — every `COMPOUND_PATTERN_IDS` entry has a registry entry + `help-hints.ts` descriptions entry + test file (catches 10→11 count drift).
+  - **D** Plugin-default survival — every plugin default survives `sanitizeDesiredState` roundtrip (catches `CreditSpecification` stripped downstream).
+  - **E** Single-Examples — every top-level command's `--help` output has exactly 1 `Examples:` heading (catches Wave 3.b.1 partial-landing via `KNOWN_TRIPWIRE_COMMANDS` — the contract PASSES on HEAD asserting bug presence, FLIPS to FAIL when plan/apply get fixed, forcing the fix-PR to consciously update the tripwire set in the same commit).
+  - **F** Envelope-schema parity — every `--json` command's success AND error envelopes match the documented shape.
+- **`.husky/pre-commit`** (+36 LOC) — auto-runs `pre-close-probes.sh` when hot-path sources are staged (plan.ts / apply.ts / destroy.ts / list.ts / init.ts / reconcile.ts / create-graph.ts / help-hints.ts / intent-parser.ts). `ASSIGNEE_SKIP_PRE_CLOSE_PROBES=1` emergency bypass.
+
+#### Gate tripwire evidence (against HEAD, before any Epic 96 fix)
+
+`bash apps/cli/scripts/pre-close-probes.sh` → exit 1, **5/5 probes TRIP**:
+
+1. **B1** — `"create lambda-with-exec-role named my-fn ..."` → FunctionName `my-fn` leaks into IAM Role desiredState (verified via jq).
+2. **B2** — `apply "create S3 bucket named invalid..name" --yes --json` → `{ok:true, operation:"apply"}` with exit 0 despite internal `result: FAILED` log. Canonical A-02 BLOCKER reproducer.
+3. **B3** — `plan "create S3 bucket named my-bucket-us-east-1-fake region eu-west-2"` → parser extracts substring `us-east-1` and fails with `"Unknown AWS region"` ignoring the real `region=eu-west-2` qualifier.
+4. **B4/B5** — `plan --help` and `apply --help` each emit 2 `Examples:` headings on stderr+stdout combined.
+
+These are the exact 5 Epic 95 bugs Wave 1 will fix — proving the gate catches them BEFORE the fix lands.
+
+#### Test totals
+
+`packages/core` 6302 → 6314 (+12 M1 contracts, 245 files). `apps/cli` 1316 unchanged. `packages/best-practices` 639 unchanged. `apps/mcp-server` 624 unchanged. 136 skipped (RUN_E2E=1 gated).
+
+Full gate run green: `pnpm lint / check-types / lint:barrels / lint:shims / doc-lint / citation-lint / audit --prod / build / -r test:coverage` — plus the NEW `pre-close-probes.sh` which correctly exits non-zero against the pre-fix tree.
+
 ### Epic 94 — Wave 2 N6 + Wave 3 + Wave 4 (2026-04-22)
 
 Closed the NEW + PREEXISTING lanes via a persistent **3-member opus-4-7[1m] team** (`epic94-fix-team`) working on disjoint file slices — graph-fixer on preflight+checkpoint, display-fixer on render+pattern, pricing-fixer on advisory-prices+cost-history. Each member processed stories serially within itself; all three in parallel across the team. No concurrent-write race (Epic 92 lesson applied: calibrated to 3 members, not 8).
