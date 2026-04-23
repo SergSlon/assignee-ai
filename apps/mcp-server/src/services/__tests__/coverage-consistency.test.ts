@@ -74,6 +74,11 @@ const TYPE_TO_KEYWORD: Record<string, string> = {
   // that would otherwise misclassify them.
   "AWS::CloudFront::OriginAccessControl": "cloudfront oac",
   "AWS::S3::BucketPolicy": "s3 bucket policy",
+  // e98.W5.N5 (B-03): AWS::EC2::EIP first-class. The classifier's
+  // cost-estimator routes "elastic ip" to the EIP type via a
+  // priority-keywords entry to avoid collision with the bare "ec2"
+  // keyword that would otherwise classify it as an EC2 Instance.
+  "AWS::EC2::EIP": "elastic ip",
 };
 
 describe("cross-system consistency", () => {

@@ -47,6 +47,8 @@ import { cloudFrontOriginAccessControlPlugin } from "./plugins/cloudfront-origin
 import { s3BucketPolicyPlugin } from "./plugins/s3-bucket-policy.js";
 // 2026-04-13: RDS::DBSubnetGroup for three-tier-web compound
 import { rdsDbSubnetGroupPlugin } from "./plugins/rds-db-subnet-group.js";
+// e98.W5.N5 (B-03): Elastic IP promoted to first-class.
+import { ec2EipPlugin } from "./plugins/ec2-eip.js";
 import { genericPlugin } from "./plugins/generic.js";
 
 /**
@@ -106,6 +108,8 @@ defaultPluginRegistry.register(cloudFrontOriginAccessControlPlugin);
 defaultPluginRegistry.register(s3BucketPolicyPlugin);
 // 2026-04-13: RDS::DBSubnetGroup for three-tier-web compound
 defaultPluginRegistry.register(rdsDbSubnetGroupPlugin);
+// e98.W5.N5 (B-03): Elastic IP first-class.
+defaultPluginRegistry.register(ec2EipPlugin);
 defaultPluginRegistry.register(genericPlugin);
 
 // Story 58-it1-05 (L4-L1, plugin OCP): the 37 individual plugin named

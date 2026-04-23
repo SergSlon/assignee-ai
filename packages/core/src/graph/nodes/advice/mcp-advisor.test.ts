@@ -52,6 +52,9 @@ const PAID_TYPES = new Set<string>([
   "AWS::Events::ApiDestination",
   "AWS::KMS::Key",
   "AWS::CloudFront::Distribution",
+  // e98.W5.N5 (B-03): EIP — hourly rate when unattached, free when
+  // attached to a running target. Billable, so PAID_TYPES.
+  "AWS::EC2::EIP",
 ]);
 
 const FREE_WIRING_TYPES = new Set<string>([

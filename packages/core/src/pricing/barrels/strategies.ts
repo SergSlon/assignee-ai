@@ -41,6 +41,8 @@ import { cloudFrontOacPricingStrategy } from "../strategies/cloudfront-origin-ac
 import { s3BucketPolicyPricingStrategy } from "../strategies/s3-bucket-policy.js";
 // 2026-04-13: RDS::DBSubnetGroup (free — cost on parent RDS instance)
 import { rdsDbSubnetGroupPricingStrategy } from "../strategies/rds-db-subnet-group.js";
+// e98.W5.N5 (B-03) — EIP first-class (hourly rate when unattached)
+import { ec2EipPricingStrategy } from "../strategies/ec2-eip.js";
 // A11 (2026-04-09) — KMS::Key first-class (customer-managed keys)
 import { kmsKeyPricingStrategy } from "../strategies/kms-key.js";
 // A12 (2026-04-09) — Events::Connection first-class (free)
@@ -204,5 +206,7 @@ defaultPricingRegistry.register(
   RESOURCE_TYPES.RDS_DB_SUBNET_GROUP,
   rdsDbSubnetGroupPricingStrategy,
 );
+// e98.W5.N5 (B-03): EC2::EIP — hourly rate when unattached, free when attached.
+defaultPricingRegistry.register(RESOURCE_TYPES.EC2_EIP, ec2EipPricingStrategy);
 
 export { PricingStrategyRegistry };

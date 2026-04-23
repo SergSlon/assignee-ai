@@ -42,7 +42,7 @@ _assignee() {
             '--set[Pre-set field values (repeatable), supports human names (e.g., --set size=t3.medium)]:key=value:' \
             '--yes[Accepted for CI wrapper compatibility; plan is read-only and does not mutate.]' \
             '--quick[Skip wizard prompts that have defaults — only ask for required fields without a default. Shows a summary gate before generating the plan.]' \
-            '--wizard[Alias for --quick; runs the wizard flow that asks only for required fields without a default.]'
+            '--wizard[Run interactive configuration wizard (prompts for required fields; plan-only, no provisioning).]'
           ;;
         apply)
           _arguments \
@@ -86,8 +86,7 @@ _assignee() {
             '--json[Shorthand for --output json]' \
             '--output-file[Write JSON report to file (requires --json)]:file:' \
             '--concurrency[Max parallel drift checks (default 10, max 50)]:n:' \
-            '--detailed[Show all fields including matching ones]' \
-            '--yes[Accepted for CI wrapper compatibility; drift is read-only and does not mutate.]'
+            '--detailed[Show all fields including matching ones]'
           ;;
         optimize)
           _arguments \

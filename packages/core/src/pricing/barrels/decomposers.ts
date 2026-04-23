@@ -20,6 +20,8 @@ import { ecrPricingDecomposer } from "../decomposers/ecr.js";
 import { ssmPricingDecomposer } from "../decomposers/ssm.js";
 // A1 (2026-04-08) — EFS
 import { efsPricingDecomposer } from "../decomposers/efs.js";
+// e98.W5.N5 (B-03) — EIP first-class
+import { ec2EipPricingDecomposer } from "../decomposers/ec2-eip.js";
 import {
   vpcPricingDecomposer,
   subnetPricingDecomposer,
@@ -104,5 +106,7 @@ defaultDecomposerRegistry.register(cloudFrontOacPricingDecomposer);
 defaultDecomposerRegistry.register(s3BucketPolicyPricingDecomposer);
 // 2026-04-13: RDS::DBSubnetGroup
 defaultDecomposerRegistry.register(rdsDbSubnetGroupPricingDecomposer);
+// e98.W5.N5 (B-03) — EIP first-class.
+defaultDecomposerRegistry.register(ec2EipPricingDecomposer);
 
 export { PricingDecomposerRegistry };

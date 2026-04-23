@@ -19,8 +19,8 @@ import { defaultPatternRegistry } from "../../pattern-templates/index.js";
 describe("help-hints — registry-derivation (drift guards)", () => {
   it("getSupportedTypeCount matches SUPPORTED_TYPES_ARRAY.length", () => {
     expect(getSupportedTypeCount()).toBe(SUPPORTED_TYPES_ARRAY.length);
-    // Epic 54 iteration 1 baseline: 37 curated types.
-    expect(getSupportedTypeCount()).toBe(37);
+    // e98.W5.N5 (B-03): AWS::EC2::EIP promoted to first-class → 38.
+    expect(getSupportedTypeCount()).toBe(38);
   });
 
   it("getPatternCount matches defaultPatternRegistry.size()", () => {
@@ -232,6 +232,8 @@ describe("drift guard — registry coverage", () => {
       "AWS::CloudFront::Distribution": "cloudfront distribution",
       "AWS::CloudFront::OriginAccessControl": "cloudfront oac",
       "AWS::RDS::DBSubnetGroup": "rds db subnet group",
+      // e98.W5.N5 (B-03): EIP promoted to first-class.
+      "AWS::EC2::EIP": "elastic ip",
     };
 
     // Every SUPPORTED_TYPES_ARRAY entry must have an alias in the map

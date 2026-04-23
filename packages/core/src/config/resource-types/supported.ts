@@ -61,6 +61,11 @@ export const SUPPORTED_TYPES_ARRAY = [
   "AWS::S3::BucketPolicy",
   // 2026-04-13: RDS::DBSubnetGroup first-class.
   "AWS::RDS::DBSubnetGroup",
+  // e98.W5.N5 (B-03) — EIP promoted to first-class. Previously only
+  // a COMPANION resource emitted inline by the NAT Gateway; standalone
+  // `Create an Elastic IP` intents now route through the ec2-eip
+  // plugin and render on the supported-types help grid.
+  "AWS::EC2::EIP",
 ] as const;
 
 /** Union of all supported CloudFormation resource type strings. Derived from SUPPORTED_TYPES_ARRAY. */
