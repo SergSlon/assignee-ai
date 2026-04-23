@@ -215,11 +215,19 @@ describe("planCommand — flag parsing", () => {
 
 // ── Epic 92 Wave 3.b.1 — flag alias registration (D-13) ───────────────────
 describe("planCommand — flag aliases (Epic 92 D-13)", () => {
-  it("registers --wizard as a boolean option (synonym for --quick)", async () => {
+  it("registers --wizard as a boolean option (behaviour-equivalent to --quick, D-14 harmonised help text)", async () => {
     const { planCommand } = await import("./plan.js");
     const wizard = planCommand.options.find((o) => o.long === "--wizard");
     expect(wizard?.long).toBe("--wizard");
-    expect(wizard?.description).toMatch(/--quick/);
+    // Epic 98 e98.W5.N5 (Epic 97 D-14): help text harmonised with
+    // apply.ts's `--wizard` description — both surfaces now describe
+    // the same concept ("interactive configuration wizard"), closing
+    // the drift where plan said "Alias for --quick" while apply
+    // described it as a distinct interactive mode. Internally plan
+    // still aliases --wizard → --quick (plan is read-only so there
+    // is no "full wizard" mode beyond required-field prompts), but
+    // the help surface is now consistent across plan/apply.
+    expect(wizard?.description).toMatch(/interactive configuration wizard/i);
     // It MUST be a boolean flag (no argument), so the help renders as
     // `--wizard` not `--wizard <value>`.
     expect(wizard?.flags).toBe("--wizard");

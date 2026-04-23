@@ -50,10 +50,14 @@ export const driftCommand = new Command("drift")
   .option("--output-file <file>", "Write JSON report to file (requires --json)")
   .option("--concurrency <n>", "Max parallel drift checks (default 10, max 50)")
   .option("--detailed", "Show all fields including matching ones")
-  .option(
-    "-y, --yes",
-    "Accepted for CI wrapper compatibility; drift is read-only and does not mutate.",
-  )
+  // Epic 98 e98.W5.N5 (Epic 97 D-15): `-y, --yes` DROPPED. Pre-fix the
+  // flag was registered "for CI wrapper compatibility" but the help
+  // footer contradictedly said "No --yes flag is needed". The reader
+  // had to guess which statement was authoritative. Drift is truly
+  // read-only (except `--baseline` which only writes a local
+  // snapshot, and `reconcile --yes` is the correct path for auto-
+  // apply), so removing the flag closes the contradiction without
+  // losing a meaningful CI path.
   .addHelpText(
     "after",
     `
@@ -72,7 +76,7 @@ Examples:
         Detailed diff for a single resource, including matching fields
 
 drift is read-only (it never mutates AWS state except when --baseline is
-used, which only writes a local snapshot). No --yes flag is needed — use
+used, which only writes a local snapshot). Use
 \`assignee reconcile --yes\` to auto-apply drift corrections.
 
 Use the global \`--no-color\` and \`--verbose\` flags (see Global Options)
