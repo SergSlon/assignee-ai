@@ -101,6 +101,15 @@ interface RuleSpec {
   propertyPath: string;
   checkType: CheckType;
   expectedValue: unknown;
+  /**
+   * Optional severity lock. When declared, the Coverage meta-check
+   * verifies the YAML-loaded severity matches this value. Used to
+   * lock severity regressions for rules whose severity was
+   * deliberately set by a story (e.g. W5.P1 normalisation). Omitting
+   * the field means "no severity assertion" — the audit tests won't
+   * complain about drift on unlocked rules.
+   */
+  severity?: "INFO" | "MEDIUM" | "HIGH" | "CRITICAL";
 }
 
 const ALWAYS_FIRE_TYPES: CheckType[] = [
@@ -833,32 +842,41 @@ const ec2Rules: RuleSpec[] = [
     expectedValue: 1,
   },
   {
+    // Epic 98 W5.P1 — severity normalised MEDIUM → INFO (runtime-only).
     id: "BP-EC2-018",
     resourceType: "AWS::EC2::Instance",
     propertyPath: "InstanceId",
     checkType: "awareness",
     expectedValue: true,
+    severity: "INFO",
   },
   {
+    // Epic 98 W5.P1 — severity normalised MEDIUM → INFO (runtime-only).
     id: "BP-EC2-019",
     resourceType: "AWS::EC2::Instance",
     propertyPath: "InstanceType",
     checkType: "awareness",
     expectedValue: true,
+    severity: "INFO",
   },
   {
+    // Epic 98 W5.P1 — severity normalised MEDIUM → INFO (runtime-only).
     id: "BP-EC2-020",
     resourceType: "AWS::EC2::Instance",
     propertyPath: "BlockDeviceMappings",
     checkType: "awareness",
     expectedValue: true,
+    severity: "INFO",
   },
   {
+    // Epic 98 W5.P1 — severity normalised HIGH → MEDIUM
+    // (security-hint caveat on unverifiable snapshot backup).
     id: "BP-EC2-021",
     resourceType: "AWS::EC2::Instance",
     propertyPath: "BlockDeviceMappings[0].Ebs.VolumeId",
     checkType: "awareness",
     expectedValue: true,
+    severity: "MEDIUM",
   },
   {
     id: "BP-EC2-022",
@@ -868,11 +886,14 @@ const ec2Rules: RuleSpec[] = [
     expectedValue: true,
   },
   {
+    // Epic 98 W5.P1 — severity normalised HIGH → MEDIUM
+    // (security-hint caveat on unverifiable Tag-based backup plan).
     id: "BP-EC2-023",
     resourceType: "AWS::EC2::Instance",
     propertyPath: "Tags",
     checkType: "awareness",
     expectedValue: true,
+    severity: "MEDIUM",
   },
 ];
 

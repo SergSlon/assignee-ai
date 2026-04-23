@@ -1,14 +1,14 @@
 id: BP-EC2-023
 title: "EC2 instance should have a backup strategy"
-severity: HIGH
+severity: MEDIUM
 resource_type: "AWS::EC2::Instance"
 property_path: "Tags"
 check_type: "awareness"
 expected_value: true
 source: "TrustedAdvisor"
 source_id: "TA-ec2-backup"
-description: "EC2 instances should be included in a backup plan via AWS Backup or have AMI creation scheduled. Without backups, instance failure can result in permanent data and configuration loss."
+description: "EC2 instances should be included in a backup plan via AWS Backup or have AMI creation scheduled. Without backups, instance failure can result in permanent data and configuration loss. Epic 98 W5.P1: severity normalised HIGH → MEDIUM — backup-plan enrolment is a runtime attribute the plan-time evaluator cannot verify, but the reliability caveat keeps it above the pure-cost rules at MEDIUM (not INFO). The rule still surfaces the gap as a security-hint reminder to configure AWS Backup at apply time."
 remediation: "Add the instance to an AWS Backup plan or configure Amazon Data Lifecycle Manager to create regular AMI snapshots."
 consequence: "Instance failure without backups means permanent loss of data, configuration, and application state — full rebuild from scratch."
 category: reliability
-lastVerified: "2026-03-24"
+lastVerified: "2026-04-23"

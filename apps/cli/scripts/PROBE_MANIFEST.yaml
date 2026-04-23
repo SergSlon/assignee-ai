@@ -2369,3 +2369,61 @@ probes:
         $PROBE_CLI_BIN plan \
           "Create a lambda function called daily-report handler index.main runtime nodejs20.x" \
           --json
+  - story: e98.W5.P1
+    name: w5-p1-legit-severity-normalised
+    description: |
+      e98.W5.P1 — CL-BP-LEGIT-SEVERITY-NORMALIZE sweep. 7 BP rules
+      that rely on runtime-only CloudWatch metrics, snapshot
+      history, or backup-plan enrolment carried MEDIUM (×5) or
+      HIGH (×2) severities that polluted the CRITICAL/HIGH
+      finding cohort with low-signal hints users cannot act on at
+      plan-time. Plan-time evaluation cannot read CloudWatch,
+      enumerate snapshots, or check AWS Backup plans — these are
+      all post-apply runtime signals.
+
+      Scorecard §5 normalisation (epic-97-scorecard.md:112):
+      - BP-EC2-018 (idle CPU)              MEDIUM → INFO
+      - BP-EC2-019 (over-provisioned)      MEDIUM → INFO
+      - BP-EC2-020 (EBS IOPS underused)    MEDIUM → INFO
+      - BP-RDS-013 (idle RDS)              MEDIUM → INFO
+      - BP-DYNAMODB-006 (provisioned)      MEDIUM → INFO
+      - BP-EC2-021 (EBS snapshot backup)   HIGH   → MEDIUM (security-hint caveat)
+      - BP-EC2-023 (EC2 backup plan)       HIGH   → MEDIUM (security-hint caveat)
+
+      INFO for pure-cost cost_optimization rules (nothing lost at
+      apply time if ignored — only money wasted). MEDIUM for
+      reliability/backup rules because they still warrant a
+      security-hint reminder to configure AWS Backup / DLM — but
+      no longer as HIGH because we can't verify at plan-time
+      whether the resource is already enrolled.
+
+      Rule semantics (check_type: awareness on each) unchanged —
+      they still fire on every plan of the relevant resource type.
+      Only the severity score changed.
+
+      7 variations — one live-intent plan per rule. Each asserts
+      the rule fires (awareness = always fires) at its normalised
+      severity. The severity-normalisation itself is locked by
+      the YAML manifest + bp-all-rules-audit test pass.
+    must_fail_pre_fix: false
+    variations:
+      - cmd: 'plan "Create a t3.micro EC2 instance" --json'
+        assertions: "BP-EC2-018 (idle CPU) fires at INFO severity on every EC2::Instance plan"
+      - cmd: 'plan "Create a t3.xlarge EC2 instance" --json'
+        assertions: "BP-EC2-019 (over-provisioned) fires at INFO severity on every EC2::Instance plan"
+      - cmd: 'plan "Create an EC2 instance with 100GB gp3 volume" --json'
+        assertions: "BP-EC2-020 (EBS underutilized) fires at INFO severity; BP-EC2-021 (snapshot backup) fires at MEDIUM"
+      - cmd: 'plan "Create an m5.large EC2 instance for app workers" --json'
+        assertions: "BP-EC2-023 (backup plan) fires at MEDIUM severity on every EC2::Instance plan"
+      - cmd: 'plan "Create an RDS instance named orders-db engine postgres" --json'
+        assertions: "BP-RDS-013 (idle RDS) fires at INFO severity on every RDS::DBInstance plan"
+      - cmd: 'plan "Create a DynamoDB table named orders with partition key orderId" --json'
+        assertions: "BP-DYNAMODB-006 (provisioned capacity) fires at INFO severity on every DynamoDB::Table plan"
+      - cmd: 'plan "Create a t3.small EC2 instance in us-east-1" --json'
+        assertions: "BP-EC2-018/019 both fire at INFO severity (cost_optimization rules)"
+    known_tripwires: []
+    probe: |
+      assert_bp_finding_id_present BP-EC2-018 \
+        $PROBE_CLI_BIN plan \
+          "Create a t3.micro EC2 instance" \
+          --json
