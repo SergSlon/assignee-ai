@@ -84,6 +84,30 @@ export const BP_CHECK_TYPE = [
    * 443-only load balancers) — see Epic 96 W3.N2.
    */
   "sg_high_risk_public_exposure",
+  /**
+   * Predicate-based check over a nested array inside every element of
+   * an outer array field. `property_path` resolves to the outer array
+   * (e.g. `ContainerDefinitions`); `expected_value` carries a
+   * JSONPath-like predicate of the shape
+   *   "<innerArray>[?(@.<prop>=~/<regex>/<flags>)] does not exist"
+   *
+   * The rule FAILS (finding fires) when any inner-array element's
+   * `<prop>` value matches the regex; PASSES when no match exists
+   * across all outer elements.
+   *
+   * Canonical use case: BP-ECS-004 — detect secret-like identifiers
+   * (PASSWORD, SECRET, API_KEY, TOKEN, CONNECTION_STRING…) declared
+   * as plaintext ECS container Environment variables when they should
+   * be referenced through the `Secrets` array. Before Epic 98 W4.B1
+   * the rule was marked `awareness` and always fired, training users
+   * to ignore CRITICAL severity on every ECS task definition.
+   *
+   * Defensive posture: malformed grammar or non-array field values
+   * PASS silently — a YAML typo must never flood findings.
+   *
+   * @see packages/best-practices/src/evaluate/predicates/nested-array-predicate.ts
+   */
+  "nested_array_predicate",
 ] as const;
 export type BPCheckType = (typeof BP_CHECK_TYPE)[number];
 

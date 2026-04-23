@@ -92,7 +92,8 @@ type CheckType =
   | "cross_resource_count"
   | "cross_resource_reference"
   | "policy_antipattern"
-  | "sg_high_risk_public_exposure";
+  | "sg_high_risk_public_exposure"
+  | "nested_array_predicate";
 
 interface RuleSpec {
   id: string;
@@ -231,6 +232,40 @@ function firingState(spec: RuleSpec): Record<string, unknown> {
       // the production check uses).
       const doc = buildAntipatternFiringDoc(String(spec.expectedValue));
       return stateWith(spec.propertyPath, doc);
+    }
+
+    case "nested_array_predicate": {
+      // Epic 98 W4.B1 — grammar:
+      //   "<innerArray>[?(@.<prop>=~/<regex>/<flags>)] does not exist"
+      // Fire by placing one outer-array element whose inner array
+      // contains an element whose <prop> matches the regex. Falls back
+      // to the canonical ECS Environment=PASSWORD shape when the
+      // grammar can't be parsed — keeps this test harness robust to
+      // future YAML authors who mistype the expected_value; the rule's
+      // own scope test (bp-ecs-004-scope.test.ts etc.) is the real
+      // enforcement surface.
+      const expr = String(spec.expectedValue);
+      const m =
+        /^([A-Za-z_][\w]*)\[\?\(@\.([A-Za-z_][\w]*)=~\/(.+?)\/[gimsuy]*\)\]\s+does not exist$/.exec(
+          expr,
+        );
+      if (m === null) {
+        return stateWith(spec.propertyPath, [
+          { Environment: [{ Name: "PASSWORD", Value: "plaintext-bad" }] },
+        ]);
+      }
+      const [, innerArray, prop, regexBody] = m;
+      // Produce a sample value that MATCHES the regex by taking the
+      // first literal alternative inside the pattern; fall back to a
+      // fixed "PASSWORD" token which matches the BP-ECS-004 regex.
+      const firstAlt = regexBody!
+        .replace(/^\^\(?|\)?\$$/g, "")
+        .split("|")[0]!
+        .replace(/[\\[\]^$.?*+(){}]/g, "");
+      const sample = firstAlt.length > 0 ? firstAlt.toUpperCase() : "PASSWORD";
+      return stateWith(spec.propertyPath, [
+        { [innerArray!]: [{ [prop!]: sample, Value: "bad-plaintext" }] },
+      ]);
     }
 
     default:
@@ -419,6 +454,16 @@ function passingState(spec: RuleSpec): Record<string, unknown> {
       // the test will fail loudly, which is the intended safeguard.
       return stateWith(spec.propertyPath, [
         { IpProtocol: "tcp", FromPort: 443, ToPort: 443, CidrIp: "0.0.0.0/0" },
+      ]);
+    }
+
+    case "nested_array_predicate": {
+      // Passing case for BP-ECS-004: outer array contains one element
+      // whose inner array entry's <prop> deliberately does NOT match
+      // the secret regex. Uses a benign LOG_LEVEL env var — the
+      // textbook "safe" ECS env-var example.
+      return stateWith(spec.propertyPath, [
+        { Environment: [{ Name: "LOG_LEVEL", Value: "debug" }] },
       ]);
     }
 
@@ -1244,9 +1289,10 @@ const ecsRules: RuleSpec[] = [
   {
     id: "BP-ECS-004",
     resourceType: "AWS::ECS::TaskDefinition",
-    propertyPath: "ContainerDefinitions[0].Secrets",
-    checkType: "awareness",
-    expectedValue: true,
+    propertyPath: "ContainerDefinitions",
+    checkType: "nested_array_predicate",
+    expectedValue:
+      "Environment[?(@.Name=~/^(password|secret|api[_-]?key|token|connection[_-]?string)$/i)] does not exist",
   },
   {
     id: "BP-ECS-005",
