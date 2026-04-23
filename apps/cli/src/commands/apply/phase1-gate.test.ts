@@ -300,26 +300,42 @@ describe("handlePhase1Outcome — failure class", () => {
 // ── BP-findings gate (PENDING + preflightPassed=false) ────────────────
 
 describe("handlePhase1Outcome — BP findings gate", () => {
-  it("blocking findings remain → bp_blocked, success=false, no re-invoke", async () => {
+  it("blocking findings remain → bp_blocked, success=false, failure carries practiceIds, no re-invoke", async () => {
     const ctx = makeCtx();
     const deps = makeDeps();
+    // Epic 98 e98.W5.N4: the blocking practiceId carried on the finding
+    // MUST surface on the returned `result.failure.practiceIds` so the
+    // CLI `--json` envelope can stamp `error.code = BP_BLOCKED` +
+    // `error.detail.practiceIds[]` (closes B-05). The pre-N4 assertion
+    // just checked `{success: false}` which was indistinguishable from
+    // the generic APPLY_FAILED path — strengthened here.
+    const blockingFinding = makeBpFinding({ blocking: true });
     const state = makeState({
       executionStatus: ExecutionStatus.PENDING,
       preflightPassed: false,
-      bpFindings: [makeBpFinding({ blocking: true })],
+      bpFindings: [blockingFinding],
       appliedFixes: [],
     });
 
     const result = await handlePhase1Outcome(ctx, deps, state, "intent");
 
-    expect(result).toEqual({ kind: "done", result: { success: false } });
+    expect(result).toEqual({
+      kind: "done",
+      result: {
+        success: false,
+        failure: {
+          kind: "bp_blocked",
+          practiceIds: [blockingFinding.practiceId],
+        },
+      },
+    });
     expect(ctx.graph.invoke).not.toHaveBeenCalled();
     expect(log).toHaveBeenCalledWith(
       expect.objectContaining({ result: "bp_blocked" }),
     );
   });
 
-  it("no fixes applied → bp_blocked even when no blocking findings remain", async () => {
+  it("no fixes applied → bp_blocked even when no blocking findings remain (failure.practiceIds empty)", async () => {
     const ctx = makeCtx();
     const deps = makeDeps();
     const state = makeState({
@@ -331,7 +347,19 @@ describe("handlePhase1Outcome — BP findings gate", () => {
 
     const result = await handlePhase1Outcome(ctx, deps, state, "intent");
 
-    expect(result).toEqual({ kind: "done", result: { success: false } });
+    // Empty bpFindings ⇒ no blocking finding to enumerate, but the
+    // gate still short-circuits as bp_blocked (pre-N4 semantic
+    // preserved). The failure discriminator is still attached so
+    // the wrapper picks BP_BLOCKED instead of APPLY_FAILED, and
+    // practiceIds is an empty array — caller's message falls back
+    // to "an unspecified blocking finding".
+    expect(result).toEqual({
+      kind: "done",
+      result: {
+        success: false,
+        failure: { kind: "bp_blocked", practiceIds: [] },
+      },
+    });
     expect(ctx.graph.invoke).not.toHaveBeenCalled();
   });
 

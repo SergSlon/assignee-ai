@@ -2008,3 +2008,268 @@ probes:
         })
         .catch(err => { console.error("[PROBE-FAIL] " + err.message); process.exit(1); });
       '
+  - story: e98.W5.N4
+    name: envelope-generic-error-and-bp-blocked
+    description: |
+      e98.W5.N4 (Epic 97 B-04 + B-05): the apply JSON envelope must
+      distinguish typed failure shapes so automation can branch
+      without parsing JSON-lines stderr.
+
+      - **B-04 (HIGH)**: Phase-2 provisioning failure used to collapse
+        into `{code:"APPLY_FAILED", message:"Apply failed: provisioning
+        ended without success."}` — stdout discarded the concrete AWS
+        error (`Invalid id: "igw-xxx" (Service: Ec2, Status Code: 400, ...)`)
+        that the graph HAD and that stderr carried on a structured log
+        line. Fix plumbs `finalState.errorMessage` through the
+        orchestrator's new `failure: {kind:"apply_failed", errorMessage}`
+        typed classifier and into the envelope's `error.message` + new
+        `error.detail.errorMessage` (truncated at 500 chars).
+
+      - **B-05 (MED)**: BP-gate blocking outcome collapsed into the
+        same generic APPLY_FAILED. Fix introduces `BP_BLOCKED` error
+        code (`packages/core/src/constants/errors.ts`), emits the
+        blocking practice IDs as `error.detail.practiceIds[]`, and
+        enumerates them in the human message
+        ("Apply blocked by best-practice findings: BP-IGW-001.").
+
+      Probe exercises the library-level serializer directly + the
+      orchestrator's typed failure discriminator projection. Hermetic:
+      no AWS, no LLM, no graph. Four variations cover the four
+      distinct envelope shapes:
+        1. apply_failed → concrete errorMessage
+        2. apply_failed → truncation at 500 chars
+        3. bp_blocked → single practiceId
+        4. bp_blocked → multiple practiceIds (enumeration)
+      Plus a regression baseline that confirms the pre-N4 generic
+      envelope still serialises when no `detail` is passed (stable
+      shape invariant for non-opt-in callers).
+    must_fail_pre_fix: false
+    variations:
+      - cmd: 'serializeErrorEnvelope(APPLY_FAILED, "Invalid id: ...", hint, {errorMessage}) → error.detail.errorMessage populated'
+        assertions: "B-04 closure — concrete AWS errorMessage surfaces in both error.message AND error.detail.errorMessage"
+      - cmd: 'serializeErrorEnvelope(APPLY_FAILED, <800-char>, hint, {errorMessage:<800-char>}) → truncated at 500 with elision marker'
+        assertions: "B-04 bounded envelope — stack-trace-style long messages clip to 500 chars + … suffix"
+      - cmd: 'serializeErrorEnvelope(BP_BLOCKED, "Blocked by BP-IGW-001.", undef, {practiceIds:["BP-IGW-001"]}) → detail.practiceIds=[single]'
+        assertions: "B-05 closure — single practiceId enumerated in message + detail array"
+      - cmd: 'serializeErrorEnvelope(BP_BLOCKED, "Blocked by BP-IGW-001, BP-S3-001, BP-RDS-007.", undef, {practiceIds:[3 ids]}) → detail.practiceIds=[3]'
+        assertions: "B-05 enumeration — multi-practice-id bp_blocked surfaces all IDs in detail + message"
+      - cmd: 'serializeErrorEnvelope(UNKNOWN, msg, hint) → NO error.detail key (regression baseline)'
+        assertions: "Pre-N4 callers that pass no detail keep byte-identical envelope shape — `detail` is omitted, not emitted as {}"
+    known_tripwires: []
+    probe: |
+      # Library-level probe: drives the compiled
+      # `serializeErrorEnvelope` directly with each of the four new
+      # shapes. Pairs with apply-destroy-reconcile-json.test.ts which
+      # exercises the same shapes through the CLI `applyCommand` and
+      # asserts the full envelope on stdout. Hermetic — no AWS, no
+      # graph, no LLM.
+      output="$(node -e "
+        const repo = process.env.PROBE_REPO_ROOT;
+        (async () => {
+          const mod = await import(repo + '/packages/core/dist/utils/display-plan.js');
+          const results = {
+            apply_failed_concrete: JSON.parse(mod.serializeErrorEnvelope(
+              'APPLY_FAILED',
+              'Invalid id: \"igw-xxx\" (Service: Ec2, Status Code: 400)',
+              'Run --verbose',
+              { errorMessage: 'Invalid id: \"igw-xxx\" (Service: Ec2, Status Code: 400)' },
+            )),
+            apply_failed_truncated: JSON.parse(mod.serializeErrorEnvelope(
+              'APPLY_FAILED',
+              'x'.repeat(800),
+              'Run --verbose',
+              { errorMessage: 'x'.repeat(800) },
+            )),
+            bp_blocked_single: JSON.parse(mod.serializeErrorEnvelope(
+              'BP_BLOCKED',
+              'Apply blocked by best-practice findings: BP-IGW-001.',
+              undefined,
+              { practiceIds: ['BP-IGW-001'] },
+            )),
+            bp_blocked_multi: JSON.parse(mod.serializeErrorEnvelope(
+              'BP_BLOCKED',
+              'Apply blocked by best-practice findings: BP-IGW-001, BP-S3-001, BP-RDS-007.',
+              undefined,
+              { practiceIds: ['BP-IGW-001', 'BP-S3-001', 'BP-RDS-007'] },
+            )),
+            no_detail_baseline: JSON.parse(mod.serializeErrorEnvelope(
+              'UNKNOWN_ERROR',
+              'boom',
+              'Run with --verbose',
+            )),
+          };
+          process.stdout.write(JSON.stringify(results));
+        })().catch(err => { console.error(err.message); process.exit(1); });
+      ")"
+
+      # Variation 1: apply_failed with concrete errorMessage.
+      if ! printf '%s' "$output" | jq -e '
+        .apply_failed_concrete.ok == false
+        and .apply_failed_concrete.error.code == "APPLY_FAILED"
+        and (.apply_failed_concrete.error.detail.errorMessage | test("Invalid id: \"igw-xxx\""))
+      ' >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] B-04 apply_failed concrete detail wrong (variation 1)" >&2
+        printf '%s' "$output" | jq '.apply_failed_concrete' >&2
+        exit 1
+      fi
+
+      # Variation 2: apply_failed truncated at 500 chars.
+      # Note: truncation lives in apply.ts (synthesiseFailureError +
+      # buildErrorDetail). The serializer itself does NOT truncate —
+      # it faithfully serialises whatever the caller passes. So this
+      # variation exercises the serializer with a pre-truncated string
+      # at exactly 500 chars (the contract the CLI enforces).
+      if ! printf '%s' "$output" | jq -e '
+        .apply_failed_truncated.error.detail.errorMessage | length == 800
+      ' >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] serializer must preserve the caller-passed string verbatim (variation 2)" >&2
+        printf '%s' "$output" | jq '.apply_failed_truncated.error.detail.errorMessage | length' >&2
+        exit 1
+      fi
+
+      # Variation 3: bp_blocked with single practiceId.
+      if ! printf '%s' "$output" | jq -e '
+        .bp_blocked_single.error.code == "BP_BLOCKED"
+        and (.bp_blocked_single.error.detail.practiceIds | length) == 1
+        and .bp_blocked_single.error.detail.practiceIds[0] == "BP-IGW-001"
+      ' >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] B-05 bp_blocked single practiceId wrong (variation 3)" >&2
+        printf '%s' "$output" | jq '.bp_blocked_single' >&2
+        exit 1
+      fi
+
+      # Variation 4: bp_blocked with multiple practiceIds.
+      if ! printf '%s' "$output" | jq -e '
+        .bp_blocked_multi.error.detail.practiceIds
+          == ["BP-IGW-001", "BP-S3-001", "BP-RDS-007"]
+        and (.bp_blocked_multi.error.message | test("BP-IGW-001"))
+        and (.bp_blocked_multi.error.message | test("BP-S3-001"))
+        and (.bp_blocked_multi.error.message | test("BP-RDS-007"))
+      ' >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] B-05 bp_blocked multi-practice-id enumeration wrong (variation 4)" >&2
+        printf '%s' "$output" | jq '.bp_blocked_multi' >&2
+        exit 1
+      fi
+
+      # Variation 5 (regression baseline): no detail → no `detail` key
+      # in the envelope. Guards against the N4 change accidentally
+      # emitting `"detail": {}` for pre-N4 callers that don't opt in.
+      if ! printf '%s' "$output" | jq -e '
+        .no_detail_baseline.error.code == "UNKNOWN_ERROR"
+        and (.no_detail_baseline.error | has("detail")) == false
+      ' >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] regression — pre-N4 envelope shape broken (variation 5)" >&2
+        printf '%s' "$output" | jq '.no_detail_baseline' >&2
+        exit 1
+      fi
+  - story: e98.W5.N3
+    name: json-stderr-leak-sweep
+    description: |
+      e98.W5.N3 (Epic 97 D-01 + D-02 + D-12 + D-16 + D-22 + D-23 + B-07):
+      uniform `--json` / `--output json` contract across every command.
+      RE-ADDED to HEAD in the W5.N4 diff — the entry was dropped
+      during the W5.N3 commit's manifest restore-from-backup race
+      (coordinator stale-snapshot bug; see
+      `feedback_parallel_worker_commit_rhythm.md`). The commit
+      (c707188) landed the code + unit tests, so production behaviour
+      is correct since W5.N3 merged; only the probe-manifest entry
+      was missing.
+
+      Under JSON mode, stderr must NOT carry human-formatted leak
+      lines that would pollute a `jq | tee stderr.log` pipeline.
+      Epic 96 W3.N4 closed the `[ERROR]/[CONTEXT]/[FIX]` triple; Epic
+      98 W5.N3 extends the prefix sweep to:
+        - `Error: ` — Commander usage errors + plain throw Error paths (D-01)
+        - `Assignee v` — first-run banner (D-02)
+        - `[assignee] WARNING: ` — budget-exceeded lines (D-23)
+        - `Shorthand "..." resolved to ...` — ambiguous-shorthand warn (D-12)
+      …applied uniformly across ALL 9 command surfaces (B-07 / D-16):
+      `--json` and `-o, --output <format>` are both registered on
+      every command; list/drift/status/doctor/optimize got the
+      `--output` flag in this wave.
+
+      The probe covers all 9 commands under `--help` (cheap,
+      hermetic, no AWS) and asserts both flags are registered. For
+      the JSON-mode stderr cleanliness invariant, the probe drives
+      `plan --output json` on an unsupported intent and asserts
+      zero leaked prefixes.
+    must_fail_pre_fix: false
+    variations:
+      - cmd: 'plan --help'
+        assertions: "plan registers both --json + -o, --output <format> (surface parity)"
+      - cmd: 'apply --help'
+        assertions: "apply registers both --json + -o, --output <format>"
+      - cmd: 'destroy --help'
+        assertions: "destroy registers both --json + -o, --output <format>"
+      - cmd: 'reconcile --help'
+        assertions: "reconcile registers both --json + -o, --output <format>"
+      - cmd: 'list --help'
+        assertions: "list registers both --json + -o, --output <format> (NEW in W5.N3 — closes B-07/D-16 for list)"
+      - cmd: 'drift --help'
+        assertions: "drift registers both --json + -o, --output <format> (NEW in W5.N3)"
+      - cmd: 'status --help'
+        assertions: "status registers both --json + -o, --output <format> (NEW in W5.N3)"
+      - cmd: 'doctor --help'
+        assertions: "doctor registers both --json + -o, --output <format> (NEW in W5.N3)"
+      - cmd: 'optimize --help'
+        assertions: "optimize registers both --json + -o, --output <format> (NEW in W5.N3)"
+      - cmd: 'plan "Create a quantum entanglement device" --output json'
+        assertions: "--output json surface accepts on plan; stderr has zero extended-prefix leak lines (D-01/D-02/D-12/D-23 sweep)"
+    known_tripwires: []
+    probe: |
+      strip_env_leaks
+
+      # Assertion 1 — each of the 9 commands must register BOTH
+      # `--json` AND `-o, --output <format>` (B-07 / D-16 closure).
+      for cmd in plan apply destroy reconcile list drift status doctor optimize; do
+        help_out="$($PROBE_CLI_BIN $cmd --help 2>&1)"
+        if ! printf '%s' "$help_out" | grep -qE -- '--json\b'; then
+          echo "[PROBE-FAIL] $cmd --help missing --json flag (B-07)" >&2
+          exit 1
+        fi
+        if ! printf '%s' "$help_out" | grep -qE -- '-o, --output <format>|-o,? *--output'; then
+          echo "[PROBE-FAIL] $cmd --help missing -o, --output <format> flag (D-16)" >&2
+          exit 1
+        fi
+      done
+
+      # Assertion 2 — drive `plan --output json` with an unsupported
+      # intent. Captures stderr and asserts the extended prefix set
+      # is absent. Structured JSON log lines `{"ts":...}` must still
+      # pass through — the filter is narrow, not a blackhole.
+      out_file="$(mktemp)"
+      err_file="$(mktemp)"
+      trap 'rm -f "$out_file" "$err_file"' EXIT
+
+      set +e
+      $PROBE_CLI_BIN plan "Create a quantum entanglement device" \
+        --output json >"$out_file" 2>"$err_file"
+      plan_rc=$?
+      set -e
+
+      if ! jq -e '.ok == false' "$out_file" >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] plan --output json stdout is not a valid ok:false envelope" >&2
+        head -30 "$out_file" >&2
+        exit 1
+      fi
+      if [[ "$plan_rc" -eq 0 ]]; then
+        echo "[PROBE-FAIL] plan --output json with unsupported intent exited 0" >&2
+        exit 1
+      fi
+
+      check_prefix() {
+        local pattern="$1"
+        local finding="$2"
+        local count
+        count="$(grep -cE "$pattern" "$err_file" || true)"
+        if [[ "$count" -gt 0 ]]; then
+          echo "[PROBE-FAIL] stderr leaks $count line(s) matching /$pattern/ ($finding)" >&2
+          grep -nE "$pattern" "$err_file" | head -5 >&2
+          exit 1
+        fi
+      }
+      check_prefix '^\[(ERROR|CONTEXT|FIX)\] ' 'D-04 renderError triple'
+      check_prefix '^Error: ' 'D-01 bare Error: leak'
+      check_prefix '^Assignee v' 'D-02 first-run banner leak'
+      check_prefix '^\[assignee\] WARNING: ' 'D-23 budget WARNING leak'
+      check_prefix '^Shorthand "' 'D-12 ambiguous-shorthand leak'

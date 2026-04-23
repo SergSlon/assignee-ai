@@ -188,6 +188,7 @@ export {
   serializePlanEnvelope,
   serializeErrorEnvelope,
   type JsonErrorEnvelope,
+  type JsonErrorDetail,
   type JsonSuccessEnvelope,
 } from "../utils/display-plan.js";
 export {

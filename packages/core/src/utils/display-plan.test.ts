@@ -328,4 +328,80 @@ describe("serializeErrorEnvelope — failure path (D-29 / D-30)", () => {
     const out = serializeErrorEnvelope("X", "y", "z");
     expect(() => JSON.parse(out)).not.toThrow();
   });
+
+  // ── Epic 98 e98.W5.N4 (B-04 + B-05) — error.detail bag ──────────
+
+  it("emits error.detail.errorMessage when passed (B-04 closure)", () => {
+    const out = serializeErrorEnvelope(
+      "APPLY_FAILED",
+      "Invalid id",
+      "Run --verbose",
+      {
+        errorMessage: 'Invalid id: "igw-xxx" (Service: Ec2, Status Code: 400)',
+      },
+    );
+    const parsed = JSON.parse(out) as {
+      error: {
+        code: string;
+        message: string;
+        hint: string;
+        detail: { errorMessage: string };
+      };
+    };
+    expect(parsed.error.code).toBe("APPLY_FAILED");
+    expect(parsed.error.detail.errorMessage).toBe(
+      'Invalid id: "igw-xxx" (Service: Ec2, Status Code: 400)',
+    );
+  });
+
+  it("emits error.detail.practiceIds[] when passed (B-05 closure)", () => {
+    const out = serializeErrorEnvelope(
+      "BP_BLOCKED",
+      "Apply blocked by BP-IGW-001.",
+      undefined,
+      { practiceIds: ["BP-IGW-001", "BP-S3-001"] },
+    );
+    const parsed = JSON.parse(out) as {
+      error: { code: string; detail: { practiceIds: string[] } };
+    };
+    expect(parsed.error.code).toBe("BP_BLOCKED");
+    expect(parsed.error.detail.practiceIds).toEqual([
+      "BP-IGW-001",
+      "BP-S3-001",
+    ]);
+  });
+
+  it("OMITS error.detail when the bag has no defined keys (stable shape for non-opt-in callers)", () => {
+    const out = serializeErrorEnvelope("X", "y", "z", {});
+    const parsed = JSON.parse(out) as { error: Record<string, unknown> };
+    expect(parsed.error).not.toHaveProperty("detail");
+  });
+
+  it("OMITS error.detail when practiceIds is an empty array (hasDefinedKeys guard)", () => {
+    const out = serializeErrorEnvelope("BP_BLOCKED", "y", undefined, {
+      practiceIds: [],
+    });
+    const parsed = JSON.parse(out) as { error: Record<string, unknown> };
+    expect(parsed.error).not.toHaveProperty("detail");
+  });
+
+  it("OMITS error.detail when all fields are undefined (hasDefinedKeys guard)", () => {
+    const out = serializeErrorEnvelope("X", "y", undefined, {
+      errorMessage: undefined,
+      practiceIds: undefined,
+    });
+    const parsed = JSON.parse(out) as { error: Record<string, unknown> };
+    expect(parsed.error).not.toHaveProperty("detail");
+  });
+
+  it("emits error.detail alongside hint when both are provided", () => {
+    const out = serializeErrorEnvelope("APPLY_FAILED", "msg", "hint", {
+      errorMessage: "concrete cause",
+    });
+    const parsed = JSON.parse(out) as {
+      error: { hint: string; detail: { errorMessage: string } };
+    };
+    expect(parsed.error.hint).toBe("hint");
+    expect(parsed.error.detail.errorMessage).toBe("concrete cause");
+  });
 });

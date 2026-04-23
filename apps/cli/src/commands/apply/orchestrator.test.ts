@@ -106,8 +106,11 @@ function mkArgs() {
   } as never;
 }
 
-async function invokeRunApply(finalState: Record<string, unknown>) {
-  mockRunProvisioningLoop.mockResolvedValue({ finalState, success: true });
+async function invokeRunApply(
+  finalState: Record<string, unknown>,
+  success = true,
+) {
+  mockRunProvisioningLoop.mockResolvedValue({ finalState, success });
   const { runApply } = await import("./orchestrator.js");
   return runApply(mkCtx(), mkArgs());
 }
@@ -303,5 +306,69 @@ describe("runApply enrichResult — defensive edge cases", () => {
 
     const result = await invokeRunApply(finalState);
     expect(result.runId).toBe("run-orchestrator-test");
+  });
+});
+
+// ── Epic 98 e98.W5.N4 (Epic 97 B-04) — apply_failed surface ────────
+
+describe("runApply enrichResult — Phase-2 failure detail propagation (B-04)", () => {
+  it("attaches apply_failed + errorMessage when provisioning loop returns success=false with errorMessage", async () => {
+    mockBuildApplyEnvelopeArn.mockResolvedValueOnce({
+      arn: null,
+      primaryIdentifier: "igw-xxx|vpc-yyy",
+    });
+    const finalState = {
+      runId: "run-b04",
+      resourceType: "AWS::EC2::VPCGatewayAttachment",
+      resourceArn: "igw-xxx|vpc-yyy",
+      errorMessage:
+        'Invalid id: "igw-xxx" (Service: Ec2, Status Code: 400, SDK Attempt Count: 1)',
+      completedResources: [],
+    };
+
+    const result = await invokeRunApply(finalState, /* success */ false);
+
+    expect(result.success).toBe(false);
+    expect(result.failure).toEqual({
+      kind: "apply_failed",
+      errorMessage:
+        'Invalid id: "igw-xxx" (Service: Ec2, Status Code: 400, SDK Attempt Count: 1)',
+    });
+  });
+
+  it("leaves failure undefined when provisioning succeeded", async () => {
+    mockBuildApplyEnvelopeArn.mockResolvedValueOnce({
+      arn: "arn:aws:s3:::success-bucket",
+      primaryIdentifier: null,
+    });
+    const finalState = {
+      runId: "run-success",
+      resourceType: "AWS::S3::Bucket",
+      resourceArn: "success-bucket",
+      completedResources: [],
+    };
+
+    const result = await invokeRunApply(finalState, /* success */ true);
+
+    expect(result.success).toBe(true);
+    expect(result.failure).toBeUndefined();
+  });
+
+  it("leaves failure undefined when provisioning failed but no errorMessage was set (defensive — caller falls back to generic)", async () => {
+    mockBuildApplyEnvelopeArn.mockResolvedValueOnce({
+      arn: null,
+      primaryIdentifier: null,
+    });
+    const finalState = {
+      runId: "run-no-msg",
+      resourceType: "AWS::S3::Bucket",
+      resourceArn: "bucket-no-msg",
+      completedResources: [],
+    };
+
+    const result = await invokeRunApply(finalState, /* success */ false);
+
+    expect(result.success).toBe(false);
+    expect(result.failure).toBeUndefined();
   });
 });

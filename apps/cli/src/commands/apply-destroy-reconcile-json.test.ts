@@ -320,6 +320,151 @@ describe("applyCommand — --json envelope (Epic 94 N4 / A-14)", () => {
     expect(parsed.error.code).toBe("SCHEMA_ERROR");
     expect(parsed.error.message).toBe("Schema fetch failed");
     expect(typeof parsed.error.hint).toBe("string");
+    // Epic 98 e98.W5.N4: external AssigneeError paths (not from the
+    // orchestrator's typed `failure`) carry no `error.detail` — the
+    // serializer omits the key entirely so the pre-N4 shape is
+    // preserved byte-for-byte for callers that don't opt in.
+    expect(parsed.error).not.toHaveProperty("detail");
+  });
+
+  // Epic 98 e98.W5.N4 (Epic 97 B-04): Phase-2 provisioning failure
+  // surfaces the concrete AWS errorMessage on envelope.message AND
+  // on error.detail.errorMessage. Pre-N4 the envelope collapsed to
+  // "Apply failed: provisioning ended without success." and automation
+  // had to re-parse JSON-lines stderr. After the fix, `jq
+  // '.error.detail.errorMessage'` is the actionable string.
+  it("success=false with apply_failed detail emits concrete errorMessage on envelope + error.detail (B-04)", async () => {
+    const awsMessage =
+      'Invalid id: "igw-xxx" (Service: Ec2, Status Code: 400, Request ID: abc-123, SDK Attempt Count: 1)';
+    mockRunApply.mockResolvedValueOnce({
+      success: false,
+      runId: "run-b04",
+      failure: { kind: "apply_failed", errorMessage: awsMessage },
+    });
+    const { applyCommand } = await import("./apply.js");
+    const { stdout } = await captureStdout(() =>
+      applyCommand.parseAsync(
+        ["node", "apply", "Attach igw-xxx to vpc-yyy", "--yes", "--json"],
+        { from: "user" },
+      ),
+    );
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe("APPLY_FAILED");
+    // Message is the concrete AWS error, NOT the generic fallback.
+    expect(parsed.error.message).toBe(awsMessage);
+    expect(parsed.error.detail.errorMessage).toBe(awsMessage);
+  });
+
+  it("success=false with apply_failed detail truncates errorMessage at 500 chars (bounded envelope)", async () => {
+    // Defensive: a multi-KB stack-trace-style error must NOT bloat the
+    // JSON envelope. Truncation uses a trailing `…` elision marker.
+    const longMessage =
+      "AWS Error: " + "x".repeat(800) + " (SDK Attempt Count: 3)";
+    mockRunApply.mockResolvedValueOnce({
+      success: false,
+      runId: "run-b04-trunc",
+      failure: { kind: "apply_failed", errorMessage: longMessage },
+    });
+    const { applyCommand } = await import("./apply.js");
+    const { stdout } = await captureStdout(() =>
+      applyCommand.parseAsync(
+        ["node", "apply", "Create an S3 bucket", "--yes", "--json"],
+        { from: "user" },
+      ),
+    );
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.error.message).toHaveLength(500);
+    expect(parsed.error.message.endsWith("…")).toBe(true);
+    expect(parsed.error.detail.errorMessage).toHaveLength(500);
+    expect(parsed.error.detail.errorMessage.endsWith("…")).toBe(true);
+  });
+
+  // Epic 98 e98.W5.N4 (Epic 97 B-05): bp_blocked terminal has its own
+  // envelope code + detail.practiceIds[]. Pre-N4 this collapsed into
+  // generic APPLY_FAILED; automation couldn't tell "add --force-unsafe"
+  // from "retry with different intent". The typed envelope unlocks
+  // machine-readable branching.
+  it("success=false with bp_blocked detail emits BP_BLOCKED code + practiceIds[] (B-05)", async () => {
+    mockRunApply.mockResolvedValueOnce({
+      success: false,
+      runId: "run-b05",
+      failure: { kind: "bp_blocked", practiceIds: ["BP-IGW-001"] },
+    });
+    const { applyCommand } = await import("./apply.js");
+    const { stdout } = await captureStdout(() =>
+      applyCommand.parseAsync(
+        [
+          "node",
+          "apply",
+          "Create an Internet Gateway tagged Name=blocked",
+          "--yes",
+          "--json",
+        ],
+        { from: "user" },
+      ),
+    );
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe("BP_BLOCKED");
+    expect(parsed.error.message).toBe(
+      "Apply blocked by best-practice findings: BP-IGW-001.",
+    );
+    expect(parsed.error.detail.practiceIds).toEqual(["BP-IGW-001"]);
+  });
+
+  it("success=false with bp_blocked and multiple practiceIds enumerates all in message + detail", async () => {
+    mockRunApply.mockResolvedValueOnce({
+      success: false,
+      runId: "run-b05-multi",
+      failure: {
+        kind: "bp_blocked",
+        practiceIds: ["BP-IGW-001", "BP-S3-001", "BP-RDS-007"],
+      },
+    });
+    const { applyCommand } = await import("./apply.js");
+    const { stdout } = await captureStdout(() =>
+      applyCommand.parseAsync(
+        ["node", "apply", "Create a VPC with gateway", "--yes", "--json"],
+        { from: "user" },
+      ),
+    );
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.error.code).toBe("BP_BLOCKED");
+    expect(parsed.error.message).toContain("BP-IGW-001");
+    expect(parsed.error.message).toContain("BP-S3-001");
+    expect(parsed.error.message).toContain("BP-RDS-007");
+    expect(parsed.error.detail.practiceIds).toEqual([
+      "BP-IGW-001",
+      "BP-S3-001",
+      "BP-RDS-007",
+    ]);
+  });
+
+  it("success=false with no `failure` discriminator falls back to the generic APPLY_FAILED message", async () => {
+    // Pre-N4 callers (Phase-1 CANCELLED with success:false or any
+    // legacy orchestrator that forgets to attach `failure`) still get
+    // a graceful envelope — no crash, no partial fields. The generic
+    // message stays identical to the pre-N4 wire format so backwards-
+    // compat is preserved for that path.
+    mockRunApply.mockResolvedValueOnce({
+      success: false,
+      runId: "run-legacy",
+    });
+    const { applyCommand } = await import("./apply.js");
+    const { stdout } = await captureStdout(() =>
+      applyCommand.parseAsync(
+        ["node", "apply", "Create an S3 bucket", "--yes", "--json"],
+        { from: "user" },
+      ),
+    );
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.error.code).toBe("APPLY_FAILED");
+    expect(parsed.error.message).toBe(
+      "Apply failed: provisioning ended without success.",
+    );
+    // No structured failure → no `detail` key in the envelope.
+    expect(parsed.error).not.toHaveProperty("detail");
   });
 
   it("failure path (plain Error) emits UNKNOWN_ERROR envelope", async () => {

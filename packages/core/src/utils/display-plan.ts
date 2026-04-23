@@ -312,12 +312,32 @@ export function formatAutoFixHint(state: RenderableState): string | null {
  * The helpers are pure — no I/O. CLI `plan.ts` / `list.ts` do the
  * `process.stdout.write(... + "\n")` themselves.
  */
+/**
+ * `error.detail` payload surfaced in the `--json` envelope. Open-ended
+ * key/value bag, narrowed where the CLI has a stable contract:
+ *   - Epic 98 e98.W5.N4 (B-04): `errorMessage` carries the concrete
+ *     provisioning error (truncated to 500 chars) so automation can
+ *     distinguish AWS errors like "Invalid id" from plumbing failures
+ *     without parsing JSON-lines stderr.
+ *   - Epic 98 e98.W5.N4 (B-05): `practiceIds` carries the blocking
+ *     BP practice IDs when `error.code === "BP_BLOCKED"`.
+ */
+export interface JsonErrorDetail {
+  /** Concrete provisioning error (B-04 closure). Truncated at 500 chars. */
+  errorMessage?: string;
+  /** Blocking BP practice IDs (B-05 closure). Non-empty when present. */
+  practiceIds?: string[];
+  /** Forward-compat: additional keys tolerated without schema churn. */
+  [key: string]: unknown;
+}
+
 export interface JsonErrorEnvelope {
   ok: false;
   error: {
     code: string;
     message: string;
     hint?: string;
+    detail?: JsonErrorDetail;
   };
 }
 
@@ -447,18 +467,40 @@ export function serializePlanEnvelope(payloads: unknown[]): string {
 }
 
 /**
- * Serialise a failure envelope. Code/message required; hint optional.
+ * Serialise a failure envelope. Code/message required; hint + detail optional.
+ *
+ * Epic 98 e98.W5.N4 (B-04 + B-05): `detail` is an optional structured
+ * bag. It's emitted only when at least one of its known fields is set
+ * so the existing stable shape stays unchanged for callers that don't
+ * opt in. Callers that opt in (apply.ts JSON error path) pass either
+ * `{ errorMessage }` (B-04) or `{ practiceIds }` (B-05) or both.
  */
 export function serializeErrorEnvelope(
   code: string,
   message: string,
   hint?: string,
+  detail?: JsonErrorDetail,
 ): string {
-  const envelope: JsonErrorEnvelope = {
-    ok: false,
-    error: hint !== undefined ? { code, message, hint } : { code, message },
-  };
+  const error: JsonErrorEnvelope["error"] = { code, message };
+  if (hint !== undefined) error.hint = hint;
+  if (detail !== undefined && hasDefinedKeys(detail)) error.detail = detail;
+  const envelope: JsonErrorEnvelope = { ok: false, error };
   return JSON.stringify(envelope, null, 2) + "\n";
+}
+
+/**
+ * `true` when the detail object has at least one key whose value is
+ * defined. Keeps `error.detail` from serialising as `{}` when all
+ * fields on the passed-in detail are undefined — a common shape from
+ * `{errorMessage: maybeUndef, practiceIds: maybeEmpty}` construction.
+ */
+function hasDefinedKeys(obj: JsonErrorDetail): boolean {
+  for (const value of Object.values(obj)) {
+    if (value === undefined) continue;
+    if (Array.isArray(value) && value.length === 0) continue;
+    return true;
+  }
+  return false;
 }
 
 /**
