@@ -11,6 +11,7 @@ import {
   type PolicyAntipattern,
 } from "../policy-inspector.js";
 import { isAwarenessCheck } from "./awareness-filter.js";
+import { nestedArrayPredicatePasses } from "./predicates/nested-array-predicate.js";
 
 /**
  * Epic 94 R4 (B-02). `expected_value: "0.0.0.0/0:22"` and `"0.0.0.0/0:3389"`
@@ -275,6 +276,19 @@ export function checkPasses(
       const patternName = expectedValue as PolicyAntipattern;
       const result = inspectPolicyDocument(fieldValue, patternName);
       return !result.matched;
+    }
+
+    case "nested_array_predicate": {
+      // Epic 98 W4.B1 — BP-ECS-004 closure. Generic predicate check_type
+      // for "every element of an outer array, any element of an inner
+      // array matches a regex on a property" — the canonical secret-
+      // in-env shape. Grammar + parser live in
+      // `./predicates/nested-array-predicate.ts`; malformed grammar or
+      // non-array fieldValue PASSES silently (avoids flooding findings
+      // on a YAML typo). Future rules that need a JSONPath-filter
+      // predicate can reuse this check_type without a bespoke branch.
+      if (typeof expectedValue !== "string") return true;
+      return nestedArrayPredicatePasses(fieldValue, expectedValue);
     }
 
     case "sg_high_risk_public_exposure": {

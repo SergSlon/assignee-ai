@@ -1,14 +1,14 @@
 id: BP-ECS-004
-title: "ECS task definition should not pass secrets as environment variables"
+title: "ECS task definition should not pass secrets as plaintext environment variables"
 severity: CRITICAL
 resource_type: "AWS::ECS::TaskDefinition"
-property_path: "ContainerDefinitions[0].Secrets"
-check_type: "awareness"
-expected_value: true
+property_path: "ContainerDefinitions"
+check_type: "nested_array_predicate"
+expected_value: "Environment[?(@.Name=~/^(password|secret|api[_-]?key|token|connection[_-]?string)$/i)] does not exist"
 source: "FSBP"
 source_id: "ECS.8"
-description: "ECS task definitions should use the Secrets property to inject sensitive values from Secrets Manager or SSM Parameter Store, not plain-text Environment variables. Environment variables are visible in the console and API."
-remediation: "Move sensitive values from Environment to Secrets. Reference Secrets Manager secrets or SSM SecureString parameters using the Secrets array."
-consequence: "Passwords and API keys are visible in plaintext via the ECS console, API, and CloudTrail — any reader can steal them."
+description: "ECS container definitions must not expose sensitive values — passwords, API keys, tokens, connection strings — as plaintext entries in the Environment array. Every container Environment entry is visible in the ECS console, Describe*/RegisterTaskDefinition API responses, and CloudTrail plan output. Sensitive values belong in the `Secrets` array so ECS injects them from Secrets Manager or SSM Parameter Store at task-launch time."
+remediation: "Move every plaintext secret out of the Environment array into the Secrets array: `Secrets: [{ Name: DB_PASSWORD, ValueFrom: 'arn:aws:secretsmanager:...' }]`. Reference Secrets Manager ARNs or SSM SecureString parameters — never embed the raw value in Environment."
+consequence: "Passwords and API keys stored in Environment are visible in plaintext via the ECS console, API, and CloudTrail — any reader can steal them."
 category: security
-lastVerified: "2026-03-24"
+lastVerified: "2026-04-23"
