@@ -307,6 +307,38 @@ function buildAntipatternFiringDoc(pattern: string): Record<string, unknown> {
           },
         ],
       };
+    case "wildcard-principal-no-condition":
+      // Epic 98 W4.B2 — wildcard Principal + no Condition clause.
+      // Canonical BP-SNS-004 firing shape: public SNS topic policy.
+      return {
+        ...base,
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: "*",
+            Action: "sns:Subscribe",
+            Resource: "arn:aws:sns:us-east-1:210987654321:public-notifications",
+          },
+        ],
+      };
+    case "missing-secure-transport-deny":
+      // Epic 98 W4.B4 — absence check. Fires when the BucketPolicy
+      // has no Deny-non-SSL statement. This fixture gives the bucket
+      // a narrow Allow read but intentionally omits the required
+      // Deny, so the missing-secure-transport-deny antipattern
+      // matches (rule fires).
+      return {
+        ...base,
+        Statement: [
+          {
+            Sid: "AllowPublicRead",
+            Effect: "Allow",
+            Principal: "*",
+            Action: "s3:GetObject",
+            Resource: "arn:aws:s3:::appdata-210987654321-us-east-1/*",
+          },
+        ],
+      };
     case "allow-plus-not-action":
       return {
         ...base,
@@ -364,6 +396,43 @@ function buildAntipatternPassingDoc(): Record<string, unknown> {
       },
     ],
   };
+}
+
+/**
+ * Build a real-shaped policy document that CONTAINS the desired
+ * statement an absence antipattern looks for. Used by `passingState()`
+ * for absence-semantics antipatterns (Epic 98 W4.B4+): the narrow
+ * passing doc has no Deny-non-SSL clause, so for absence patterns we
+ * need to emit the canonical mitigation instead.
+ */
+function buildAntipatternPassingDocForAbsence(
+  pattern: string,
+): Record<string, unknown> {
+  switch (pattern) {
+    case "missing-secure-transport-deny":
+      return {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Sid: "DenyNonSSL",
+            Effect: "Deny",
+            Principal: "*",
+            Action: "s3:*",
+            Resource: [
+              "arn:aws:s3:::appdata-210987654321-us-east-1",
+              "arn:aws:s3:::appdata-210987654321-us-east-1/*",
+            ],
+            Condition: {
+              Bool: { "aws:SecureTransport": "false" },
+            },
+          },
+        ],
+      };
+    default:
+      // Unknown absence pattern — fall back to the narrow-passing
+      // doc so the test fails loudly with a clear diagnostic.
+      return buildAntipatternPassingDoc();
+  }
 }
 
 function passingState(spec: RuleSpec): Record<string, unknown> {
@@ -442,9 +511,21 @@ function passingState(spec: RuleSpec): Record<string, unknown> {
       return {};
 
     case "policy_antipattern":
-      // Narrow, auditable policy — no wildcards, no inversions. The
-      // trust-policy rule (BP-IAM-015) targets `AssumeRolePolicyDocument`
-      // which is shape-compatible; we use the same doc for both.
+      // Presence patterns: return a narrow, auditable policy — no
+      // wildcards, no inversions. The trust-policy rule (BP-IAM-015)
+      // targets `AssumeRolePolicyDocument` which is shape-compatible;
+      // we use the same doc for both.
+      //
+      // Absence patterns (Epic 98 W4.B4+): return a policy that
+      // SATISFIES the required statement so the antipattern does
+      // NOT match. `buildAntipatternPassingDocForAbsence` emits the
+      // canonical Deny-non-SSL shape for missing-secure-transport-deny.
+      if (spec.expectedValue === "missing-secure-transport-deny") {
+        return stateWith(
+          spec.propertyPath,
+          buildAntipatternPassingDocForAbsence(String(spec.expectedValue)),
+        );
+      }
       return stateWith(spec.propertyPath, buildAntipatternPassingDoc());
 
     case "sg_high_risk_public_exposure": {
@@ -542,11 +623,20 @@ const s3Rules: RuleSpec[] = [
     expectedValue: true,
   },
   {
+    // Epic 98 W4.B4 — BP-S3-011 SSL-only HIGH MISLABELED closure.
+    // Migrated from `check_type: awareness` on AWS::S3::Bucket →
+    // structural absence-check on AWS::S3::BucketPolicy matching the
+    // BP-S3-018/019/020 resource-level convention. The new
+    // `missing-secure-transport-deny` antipattern fires when NO Deny
+    // statement matches the canonical `aws:SecureTransport=false`
+    // shape. Unlike presence patterns (BP-S3-018 etc.), a completely
+    // missing BucketPolicy ALSO fires the rule — absence of the
+    // required Deny is exactly the failure mode.
     id: "BP-S3-011",
-    resourceType: "AWS::S3::Bucket",
-    propertyPath: "BucketPolicy.Statement",
-    checkType: "awareness",
-    expectedValue: true,
+    resourceType: "AWS::S3::BucketPolicy",
+    propertyPath: "PolicyDocument",
+    checkType: "policy_antipattern",
+    expectedValue: "missing-secure-transport-deny",
   },
   {
     id: "BP-S3-012",
@@ -1498,16 +1588,23 @@ const snsRules: RuleSpec[] = [
     expectedValue: true,
   },
   {
+    // Epic 98 W4.B2 — BP-SNS-004 MISLABELED closure. Migrated from
+    // `check_type: awareness` → structural check via the new
+    // `wildcard-principal-no-condition` antipattern. Kept on the
+    // first-class `AWS::SNS::Topic` resource targeting the inline
+    // `TopicPolicy` field — the `AWS::SNS::TopicPolicy` resource
+    // type is not a first-class supported type yet, so targeting it
+    // would make the rule unreachable on real plan output. The
+    // inline TopicPolicy field IS the policy document (same
+    // `{Version, Statement}` shape the inspector walks).
     id: "BP-SNS-004",
     resourceType: "AWS::SNS::Topic",
     propertyPath: "TopicPolicy",
-    checkType: "awareness",
-    expectedValue: true,
+    checkType: "policy_antipattern",
+    expectedValue: "wildcard-principal-no-condition",
   },
   // ── A5.3: SNS topic policy anti-patterns. Target AWS::SNS::TopicPolicy,
-  // ── a separate resource from AWS::SNS::Topic. BP-SNS-004 covers the
-  // ── wildcard-principal case already (via the public-access awareness
-  // ── rule), so we only add NotAction / NotPrincipal here.
+  // ── a separate resource from AWS::SNS::Topic.
   {
     id: "BP-SNS-005",
     resourceType: "AWS::SNS::TopicPolicy",
