@@ -467,17 +467,45 @@ function extractAmiId(
   elicited["ImageId"] = token;
 }
 
+/**
+ * Mask `named <X>` / `called <X>` / `name=<X>` spans so the region
+ * extractor never scans a user-supplied resource name. Replaces the
+ * span body with spaces (length-preserving) so downstream indexing is
+ * not disturbed.
+ *
+ * Epic 98 W2.R1 (B-09): the region regex accepts an alpha-alpha-digit
+ * shape (`my-abc-1`), so any resource name with 2-3 lowercase leading
+ * chars followed by a hyphenated digit tail would be classified as an
+ * unknown region. The name is the user's to pick; we must NOT
+ * recycle it as a region candidate.
+ */
+function maskNameSpans(intent: string): string {
+  let masked = intent;
+  // `named <span>` / `called <span>` — mirror the terminator set used
+  // in extractResourceName. Case-insensitive; preserves length so the
+  // later regex indices line up with the original intent.
+  const spanRegex =
+    /\b(?:named|called)\s+((?:\.(?=[A-Za-z0-9])|[^\n,;.?!])*)/gi;
+  masked = masked.replace(spanRegex, (match) => " ".repeat(match.length));
+  // `name=<token>` / `Name=<token>` — no whitespace between keyword
+  // and value. Terminate on whitespace or clause punctuation.
+  const kvRegex = /\bname\s*=\s*[^\s,;.?!]+/gi;
+  masked = masked.replace(kvRegex, (match) => " ".repeat(match.length));
+  return masked;
+}
+
 /** Extracts an AWS region token; fails on unknown region. */
 function extractRegion(
   intent: string,
   elicited: Record<string, unknown>,
   errors: string[],
 ): void {
-  // e96.W1.B3 — Match region-shaped tokens with 2-4 hyphen-separated
-  // segments, the last segment being a number. Examples we want to catch:
-  //   us-east-1, eu-west-2, us-gov-east-1, eu-west-fake-1
-  // The last form is adversarial (C-13) — we need to match it so
-  // validation can fail loudly rather than silently accepting.
+  // e96.W1.B3 + e98.W2.R1 — Match region-shaped tokens with 2-4
+  // hyphen-separated segments, the last segment being a number.
+  // Examples we want to catch: us-east-1, eu-west-2, us-gov-east-1,
+  // eu-west-fake-1. The last form is adversarial (C-13) — we need to
+  // match it so validation can fail loudly rather than silently
+  // accepting.
   //
   // Anchors use whitespace / string-boundary instead of JS `\b`: word
   // boundaries (`\b`) treat `-` as a word-boundary, which lets the
@@ -487,15 +515,63 @@ function extractRegion(
   // region). The intent-parser's job is to extract region tokens the
   // user actually asserted, not tokens that happen to pattern-match
   // deep inside a resource name.
-  const regionRegex =
-    /(?<=^|\s)([a-z]{2,3}(?:-[a-z]+){1,3}-\d+)(?=\s|$|[.,;:!?])/g;
-  const matches = intent.match(regionRegex);
-  if (!matches || matches.length === 0) return;
-  // Pick the first candidate whose leading segment is 2-3 lowercase
-  // letters (the AWS convention) so we don't false-positive on
-  // ami- / arn- / other prefixed tokens.
-  const candidate = matches.find((t) => /^[a-z]{2,3}-/.test(t));
-  if (!candidate) return;
+  //
+  // Two-pass resolution (W2.R1):
+  //   1. Prefer explicit region-tail: `region <X>` / `in <X>` / `at <X>`.
+  //      The leading keyword is a loud assertion — trust it over
+  //      anything that merely looks region-shaped.
+  //   2. Fallback scan over the intent with `named <X>` / `called <X>`
+  //      / `name=<X>` spans masked out, so a bucket named `my-abc-1`
+  //      cannot be misread as a region.
+  const regionShape = /([a-z]{2,3}(?:-[a-z]+){1,3}-\d+)/;
+  const tailRegex = new RegExp(
+    `\\b(?:region|in|at)\\s+${regionShape.source}(?=\\s|$|[.,;:!?])`,
+    "gi",
+  );
+  let candidate: string | undefined;
+  let path: "tail" | "substring" | "none" = "none";
+  let tailMatch: RegExpExecArray | null;
+  // eslint-disable-next-line no-cond-assign
+  while ((tailMatch = tailRegex.exec(intent)) !== null) {
+    const tok = tailMatch[1]!.toLowerCase();
+    if (/^[a-z]{2,3}-/.test(tok)) {
+      candidate = tok;
+      path = "tail";
+      break;
+    }
+  }
+  if (candidate === undefined) {
+    const masked = maskNameSpans(intent);
+    const regionRegex =
+      /(?<=^|\s)([a-z]{2,3}(?:-[a-z]+){1,3}-\d+)(?=\s|$|[.,;:!?])/g;
+    const matches = masked.match(regionRegex);
+    if (matches && matches.length > 0) {
+      // Pick the first candidate whose leading segment is 2-3 lowercase
+      // letters (the AWS convention) so we don't false-positive on
+      // ami- / arn- / other prefixed tokens.
+      candidate = matches.find((t) => /^[a-z]{2,3}-/.test(t));
+      if (candidate !== undefined) {
+        path = "substring";
+      }
+    }
+  }
+  if (candidate === undefined) {
+    log({
+      ts: new Date().toISOString(),
+      runId: "",
+      level: "info",
+      action: LOG_ACTIONS.REGION_EXTRACTION,
+      extras: { path, candidate: null },
+    });
+    return;
+  }
+  log({
+    ts: new Date().toISOString(),
+    runId: "",
+    level: "info",
+    action: LOG_ACTIONS.REGION_EXTRACTION,
+    extras: { path, candidate },
+  });
   if (!KNOWN_AWS_REGIONS.has(candidate)) {
     errors.push(
       `Unknown AWS region "${candidate}". Use a valid region code (e.g. us-east-1, eu-west-1, ap-southeast-2).`,

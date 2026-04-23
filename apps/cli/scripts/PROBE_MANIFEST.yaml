@@ -136,10 +136,11 @@ probes:
         assertions: "explicit `in us-west-2` tail lifted into plan.region"
       - cmd: 'plan "Create an S3 bucket" --json'
         assertions: "bare intent produces plan with default region (no parse failure)"
-    known_tripwires:
-      - cmd: '$PROBE_CLI_BIN plan "Create a lambda named my-abc-1" --json'
-        expected_exit: "non-zero"
-        expected_fail_anchor: 'Unknown AWS region "my-abc-1"'
+    # e98.W2.R1 removed the `my-abc-1` tripwire after landing the two-pass
+    # region extractor (tail wins + name-span masking). The invariant is
+    # now enforced by the `w2-r1-region-regex` probe below plus the unit
+    # test suite intent-parser-region-scoping-variations.test.ts.
+    known_tripwires: []
     probe: |
       # Expect: plan succeeds (ok:true) because the user IS specifying
       # a valid region (eu-west-2). The bucket-name substring
@@ -148,6 +149,39 @@ probes:
         $PROBE_CLI_BIN plan \
           "create S3 bucket named my-bucket-us-east-1-fake region eu-west-2" \
           --json
+
+  - story: e98.W2.R1
+    name: w2-r1-region-regex
+    description: |
+      Epic 98 Wave 2 R1 — region-regex scope fix (B-09 + B-10).
+      Closes the Epic 97 live-FAIL `Create a lambda named my-abc-1` where
+      the parser rejected the intent with `Unknown AWS region "my-abc-1"`.
+      Root cause: region regex `[a-z]{2,3}(?:-[a-z]+){1,3}-\d+` matched
+      the user's alpha-alpha-digit resource name. Fix: two-pass extractor
+      in `packages/core/src/graph/nodes/intent-parser.ts extractRegion`
+      — (1) explicit tail `region <X>` / `in <X>` / `at <X>` wins, (2)
+      fallback scan runs against an intent with `named <X>` / `called
+      <X>` / `name=<X>` spans masked out. Epic 96 W1.B3 paper-closed the
+      substring-inside-name case but never asserted the tail-wins or
+      name-masking invariants, letting the name-shaped bug survive.
+    must_fail_pre_fix: false
+    variations:
+      - cmd: 'plan "Create a lambda named my-abc-1" --json'
+        assertions: "alpha-alpha-digit name does NOT trigger Unknown-region error"
+      - cmd: 'plan "Create an S3 bucket named my-bucket-us-east-1-fake region eu-west-2" --json'
+        assertions: "explicit `region` tail wins over in-name substring"
+      - cmd: 'plan "Create an SQS queue named sqs-json-1776927324" --json'
+        assertions: "name with three-letter prefix + digit tail does NOT trigger region false-positive"
+      - cmd: 'plan "Create an S3 bucket" --json'
+        assertions: "bare intent produces plan with default region (no parse failure)"
+      - cmd: 'plan "Create a lambda in us-west-2 named my-fn" --json'
+        assertions: "explicit `in us-west-2` tail lifted into plan without conflict with name"
+    known_tripwires: []
+    probe: |
+      # Variation 1 — the Epic 97 B-09 live-FAIL. After the fix this
+      # must PASS with ok:true.
+      assert_exit_code_matches_ok zero true \
+        $PROBE_CLI_BIN plan "Create a lambda named my-abc-1" --json
 
   - story: e96.W1.B4
     name: plan-help-single-examples
@@ -1050,6 +1084,7 @@ probes:
         $PROBE_CLI_BIN plan \
           "Create a t3.micro EC2 instance" \
           --json
+
   - story: e98.W4.B1
     name: bp-ecs-004-fires-on-plaintext-secret-env
     description: |
@@ -1078,6 +1113,7 @@ probes:
         $PROBE_CLI_BIN plan \
           "Create an ECS task with env PASSWORD=foo" \
           --json
+
   - story: e98.W4.B1
     name: bp-ecs-004-no-fire-on-safe-env
     description: |
