@@ -40,6 +40,10 @@ import { defaultPluginRegistry } from "../resource-plugins/index.js";
 import { SUPPORTED_TYPES_ARRAY } from "../config/resource-types/supported.js";
 import { sanitizeDesiredState } from "../graph/nodes/result-formatter/formatters/plan.js";
 import { renderPatternsHint } from "../config/help-hints.js";
+import {
+  isEmptyLeaf,
+  mergePluginDefaults,
+} from "../graph/nodes/plan-generator/llm-plan/merge.js";
 
 // ---------------------------------------------------------------------------
 // Resolve repo-root relative paths.
@@ -419,6 +423,109 @@ describe("shipped-wired contract D — plugin-default survival", () => {
       leaks,
       `Plugin defaults dropped by sanitizeDesiredState (C-01 class): ${leaks
         .map((l) => `${l.resourceType}.${l.droppedKey}`)
+        .join(", ")}`,
+    ).toEqual([]);
+  });
+
+  // e98.W3.A1 extension — every resource type registered for
+  // LLM-path plugin-default backfill (via `mergePluginDefaults`) must
+  // actually backfill every top-level non-empty default when the LLM
+  // emits a minimal output. This is the cross-check that W3 broadened
+  // the allowlist and the backfill logic still honours each entry.
+  //
+  // Approach:
+  //   1. For each allowlisted resourceType (pulled by running the
+  //      merge against a `ProbeSentinel` resource type to collect the
+  //      synthetic unmerged shape), read the plugin's defaults.
+  //   2. Call mergePluginDefaults({}, resourceType).
+  //   3. For every non-empty-leaf key in defaults, assert the merged
+  //      object has a non-empty-leaf value for that key too.
+  //
+  // We don't hard-code the allowlist here — it is imported from
+  // merge.ts only indirectly (the merge function itself is the
+  // authority). Instead we iterate SUPPORTED_TYPES_ARRAY and check
+  // whichever types' merge call produces a change from the empty
+  // input. That way future additions to the allowlist automatically
+  // get covered; future REMOVALS from the allowlist silently fall
+  // back to the "no backfill occurred" path, which is still allowed
+  // (a missing entry is not automatically a violation — that's a
+  // scoping decision a reviewer must make explicitly).
+  it("every plugin backfilled by mergePluginDefaults restores each non-empty default", () => {
+    const failures: Array<{ resourceType: string; key: string }> = [];
+
+    for (const resourceType of SUPPORTED_TYPES_ARRAY) {
+      const plugin = defaultPluginRegistry.get(resourceType);
+      if (!plugin || !plugin.defaults) continue;
+      const merged = mergePluginDefaults({}, resourceType);
+      // If merging produced nothing beyond `{}`, this type is not on
+      // the allowlist — skip. (Accessors like SNS TopicName always
+      // return a string, so any allowlisted plugin will emit at
+      // least one key here.)
+      if (Object.keys(merged).length === 0) continue;
+
+      for (const key of Object.keys(plugin.defaults)) {
+        const defaultValue = (plugin.defaults as Record<string, unknown>)[key];
+        if (isEmptyLeaf(defaultValue)) continue; // empty defaults are no-ops
+        const mergedValue = (merged as Record<string, unknown>)[key];
+        if (isEmptyLeaf(mergedValue)) {
+          failures.push({ resourceType, key });
+        }
+      }
+    }
+
+    expect(
+      failures,
+      `mergePluginDefaults failed to backfill: ${failures
+        .map((f) => `${f.resourceType}.${f.key}`)
+        .join(", ")}`,
+    ).toEqual([]);
+  });
+
+  // e98.W3.A1 — the backfill must also defeat the C-R1 empty-leaf
+  // class. For every allowlisted plugin's non-empty default key, an
+  // LLM output that carries the key with an empty-leaf value
+  // (undefined / null / {} / [] / "") must still resolve to the
+  // plugin default (W2.R2 invariant propagated to W3).
+  it("empty-leaf LLM values on allowlisted plugin default keys are replaced by the default", () => {
+    const failures: Array<{
+      resourceType: string;
+      key: string;
+      leafKind: string;
+    }> = [];
+    const EMPTY_LEAVES: ReadonlyArray<[string, unknown]> = [
+      ["undefined", undefined],
+      ["null", null],
+      ["empty-string", ""],
+      ["empty-object", {}],
+      ["empty-array", []],
+    ];
+
+    for (const resourceType of SUPPORTED_TYPES_ARRAY) {
+      const plugin = defaultPluginRegistry.get(resourceType);
+      if (!plugin || !plugin.defaults) continue;
+      const probeBare = mergePluginDefaults({}, resourceType);
+      if (Object.keys(probeBare).length === 0) continue; // not allowlisted
+
+      for (const key of Object.keys(plugin.defaults)) {
+        const defaultValue = (plugin.defaults as Record<string, unknown>)[key];
+        if (isEmptyLeaf(defaultValue)) continue;
+        for (const [leafKind, leafValue] of EMPTY_LEAVES) {
+          const merged = mergePluginDefaults(
+            { [key]: leafValue },
+            resourceType,
+          );
+          const mergedValue = (merged as Record<string, unknown>)[key];
+          if (isEmptyLeaf(mergedValue)) {
+            failures.push({ resourceType, key, leafKind });
+          }
+        }
+      }
+    }
+
+    expect(
+      failures,
+      `mergePluginDefaults failed to restore default against empty-leaf LLM input: ${failures
+        .map((f) => `${f.resourceType}.${f.key} (${f.leafKind})`)
         .join(", ")}`,
     ).toEqual([]);
   });

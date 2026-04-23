@@ -88,20 +88,77 @@ export function mergeElicitedOptions(
 
 /**
  * Resource types whose plugin `defaults` should be backfilled into LLM
- * output for missing keys. Intentionally narrow — see the block comment
- * on `mergePluginDefaults` for the scoping rationale.
+ * output for missing keys. Each entry is a deliberate secure-by-default
+ * decision — see per-line rationale and the block comment on
+ * `mergePluginDefaults` for the scoping protocol.
  *
- * e96.W2.R5-part-2 — seeded with EC2::Instance only (the finding that
- * prompted this helper). Broader rollout (e.g. S3) requires updating
- * the BP-enforcement integration tests that explicitly assert "the
- * plan is MISSING safety config → BP-S3-001 fires blocking." Those
- * tests validate that the safety net still catches bad plans, and a
- * plugin-default backfill for S3 would silently dismantle them.
- * Adding a new resource type here SHOULD come with a review of any
- * BP rules that fire on a missing default for that type.
+ * e96.W2.R5-part-2 — seeded with EC2::Instance only.
+ *
+ * e98.W3.A1 — expanded to cover 11 additional plugins where the
+ * plugin's `defaults` carry safety / compliance invariants that
+ * previously reached the plan only if the LLM happened to emit them.
+ * Each addition was reviewed against the corresponding best-practice
+ * rules in `packages/best-practices/` (bp-worker consult). The
+ * backfill promotes each of the following rules from safety-net to
+ * sanity-check — i.e. the plugin default now satisfies the rule on
+ * every plan, so the rule's real-world fire rate drops to near-zero
+ * for bare-intent flows (a re-scoring is logged for W5.P1 BP severity
+ * normalisation):
+ *
+ *   Rule              Severity  Blocking  Default that disarms it
+ *   ----------------  --------  --------  ------------------------------
+ *   BP-SNS-001        HIGH      auto-fix  SNS.KmsMasterKeyId=alias/aws/sns
+ *   BP-SQS-001        HIGH      auto-fix  SQS.SqsManagedSseEnabled=true
+ *   BP-RDS-002        CRITICAL  blocking  RDS.StorageEncrypted=true
+ *   BP-ECR-001        HIGH      blocking  ECR.ImageScanningConfiguration.ScanOnPush=true
+ *   BP-ECR-002        HIGH      advisory  ECR.ImageTagMutability=IMMUTABLE
+ *   BP-EFS-001        CRITICAL  blocking  EFS.Encrypted=true
+ *   BP-EFS-002        HIGH      advisory  EFS.BackupPolicy.Status=ENABLED
+ *   BP-ECS-007        HIGH      blocking  ECS.ClusterSettings[containerInsights]=enabled
+ *
+ * Rules that still fire post-W3.A1 (values are not in the default
+ * set — the plugin doesn't backfill them, so user/LLM drift can still
+ * produce bad plans):
+ *   BP-APIGW-002 (CORS), BP-APIGW-007 (endpoint), BP-CF-001 (viewer
+ *   protocol), BP-CF-002 (logging), BP-ELB-001/002/003 (LB attributes),
+ *   BP-NAT-001/003 (cross-resource refs), BP-RT-001 (gateway attach),
+ *   BP-SQS-003 (KmsMasterKeyId — SSE via Sqs vs. KMS distinct).
+ *
+ * Awareness-tier rules always fire regardless of values:
+ *   BP-ELB-007 (Scheme awareness) — pre-W3.A1 the LLM could have
+ *   omitted Scheme; post-W3.A1 the default is `internet-facing` so
+ *   users see the awareness finding on every ALB plan. No behavioural
+ *   change (awareness ignores the value).
+ *   BP-NAT-002 (ConnectivityType awareness) — same pattern.
+ *
+ * NOT on the allowlist and MUST NOT be added without a BP-enforcement
+ * test rewrite:
+ *   - `AWS::S3::Bucket` — defaults carry `PublicAccessBlockConfiguration`
+ *     with all four block flags true. Backfilling here would disarm
+ *     BP-S3-001/002/003/004 (all CRITICAL blocking) silently; the
+ *     bp-enforcement integration suite relies on the LLM path
+ *     emitting these as empty-leaves so the rules fire. Exclude until
+ *     BP severity normalisation (W5.P1) decides the policy.
+ *   - `AWS::DynamoDB::Table` — similar BP-DYN rules depend on the
+ *     encryption / PITR defaults being LLM-controlled.
+ * Keep S3 + DynamoDB on the auto-fix path; add them here only after
+ * migrating their BP tests to assert against explicitly-bad plans
+ * instead of plan-omission-implies-bad.
  */
 const LLM_PATH_PLUGIN_DEFAULT_BACKFILL_ALLOWLIST: readonly string[] = [
   RESOURCE_TYPES.EC2_INSTANCE,
+  // e98.W3.A1 — W3 expansion wave (11 plugins):
+  RESOURCE_TYPES.SNS_TOPIC, // KmsMasterKeyId: alias/aws/sns — BP-SNS-001
+  RESOURCE_TYPES.SQS_QUEUE, // SqsManagedSseEnabled=true, VisibilityTimeout=30
+  RESOURCE_TYPES.EC2_ROUTE, // DestinationCidrBlock=0.0.0.0/0, RouteType=public
+  RESOURCE_TYPES.EC2_NAT_GATEWAY, // ConnectivityType=public
+  RESOURCE_TYPES.ELBV2_LOAD_BALANCER, // Type=application, Scheme=internet-facing, IpAddressType=ipv4
+  RESOURCE_TYPES.RDS_DB_INSTANCE, // StorageEncrypted=true, MultiAz=false, StorageType=gp3 — BP-RDS-002
+  RESOURCE_TYPES.ECS_CLUSTER, // ClusterSettings.containerInsights=enabled, CapacityProviders=[FARGATE]
+  RESOURCE_TYPES.ECR_REPOSITORY, // ImageTagMutability=IMMUTABLE, ScanOnPush=true — BP-ECR-001/002
+  RESOURCE_TYPES.EFS_FILE_SYSTEM, // Encrypted=true, BackupPolicy.Status=ENABLED — BP-EFS-001
+  RESOURCE_TYPES.APIGATEWAYV2_API, // ProtocolType=HTTP
+  RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION, // no non-empty defaults today — listed as ordered-pair so adding defaults later auto-participates
 ];
 
 /**
