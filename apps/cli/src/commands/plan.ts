@@ -201,7 +201,17 @@ export const planCommand = new Command(CommandName.PLAN)
   )
   .option(
     "--wizard",
-    "Alias for --quick; runs the wizard flow that asks only for required fields without a default.",
+    // Epic 98 e98.W5.N5 (Epic 97 D-14): pre-fix this help text said
+    // "Alias for --quick" which contradicted `apply --wizard`'s
+    // "Run interactive configuration wizard..." phrasing. Users who
+    // read `plan --help` and assume the same semantics apply to
+    // `apply` would be surprised. Harmonised to match apply.ts so
+    // both surfaces describe the same concept — an opt-in
+    // interactive configuration flow. plan's internal alias from
+    // --wizard → --quick is preserved (see the normalisation at
+    // line ~230) because plan is read-only and has no "full wizard"
+    // mode beyond the required-field prompts.
+    "Run interactive configuration wizard (prompts for required fields; plan-only, no provisioning).",
   )
   // Epic 92 Wave 3.b.1 (C-24 / D-01): single consolidated Examples +
   // discovery block — previously composed as two separate addHelpText

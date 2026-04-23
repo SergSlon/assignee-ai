@@ -2578,3 +2578,181 @@ probes:
         printf '%s' "$output" | jq '{mcp_budget, sqs_override}' >&2
         exit 1
       fi
+
+  - story: e98.W5.N5
+    name: w5-n5-wizard-harmony-and-drift-yes-drop
+    description: |
+      e98.W5.N5 cli-portion (Epic 97 D-14 + D-15).
+
+      - **D-14 (MED)**: `plan --help` vs `apply --help` disagreed on
+        `--wizard` semantics. plan said "Alias for --quick"; apply
+        said "Run interactive configuration wizard...". Users who
+        read `plan --help` and assumed the same semantics on `apply`
+        would be surprised. Fix: harmonised plan.ts's `--wizard`
+        help text so both surfaces describe the same concept
+        ("interactive configuration wizard"). Internal alias from
+        --wizard → --quick preserved — plan is read-only, so there's
+        no "full wizard" mode beyond required-field prompts.
+      - **D-15 (LOW)**: `drift --help` self-contradicted on `--yes`.
+        The flag was registered "for CI wrapper compatibility" but
+        the help footer said "No --yes flag is needed". Fix: dropped
+        the flag entirely. drift is truly read-only; auto-apply
+        belongs on `reconcile --yes`.
+
+      graph-worker's W5.N5 portion (ec2-eip.ts plugin +
+      skeletal-plan-detector.ts + supported-types-block.ts "Elastic
+      IP" row, committed as fc47b4c) is covered by their own probe
+      entry (to be added in a follow-up; it was dropped by the
+      coordinator's stale-snapshot commit flow, per the documented
+      feedback_parallel_worker_commit_rhythm class of bug). Per
+      Option B coordination, separate probes for cleaner commit
+      isolation.
+    must_fail_pre_fix: false
+    variations:
+      - cmd: 'plan --help mentions "interactive configuration wizard"'
+        assertions: "D-14 closure — plan's --wizard help text harmonised. Pre-fix said `Alias for --quick`."
+      - cmd: 'apply --help mentions "interactive configuration wizard"'
+        assertions: "apply's --wizard anchor — pin the phrasing so plan drift is caught going forward"
+      - cmd: 'plan --help NEGATIVE: no longer says `Alias for --quick`'
+        assertions: "Regression guard — the pre-N5 wording must not come back under a refactor"
+      - cmd: 'drift --help: `-y, --yes` flag DROPPED'
+        assertions: "D-15 closure — the contradictory CI-compat flag removed; auto-apply belongs on reconcile"
+      - cmd: 'drift --help footer no longer says `No --yes flag is needed`'
+        assertions: "Help text cleanup — the contradicting sentence companion to --yes removal is also gone"
+    known_tripwires: []
+    probe: |
+      strip_env_leaks
+
+      plan_help="$($PROBE_CLI_BIN plan --help 2>&1)"
+      apply_help="$($PROBE_CLI_BIN apply --help 2>&1)"
+      drift_help="$($PROBE_CLI_BIN drift --help 2>&1)"
+
+      # Variation 1: plan --wizard help mentions "interactive
+      # configuration wizard" (D-14 harmonisation).
+      if ! printf '%s' "$plan_help" | grep -qi -- 'interactive configuration wizard'; then
+        echo "[PROBE-FAIL] plan --help missing 'interactive configuration wizard' (D-14 harmony broken)" >&2
+        printf '%s' "$plan_help" | grep -- '--wizard' >&2 || true
+        exit 1
+      fi
+
+      # Variation 2: apply --wizard help mentions the same — anchor
+      # for the cross-command comparison.
+      if ! printf '%s' "$apply_help" | grep -qi -- 'interactive configuration wizard'; then
+        echo "[PROBE-FAIL] apply --help missing 'interactive configuration wizard' anchor" >&2
+        printf '%s' "$apply_help" | grep -- '--wizard' >&2 || true
+        exit 1
+      fi
+
+      # Variation 3: NEGATIVE regression guard — plan --help must NOT
+      # describe --wizard as "Alias for --quick" (pre-N5 wording).
+      if printf '%s' "$plan_help" | grep -q -- 'Alias for --quick'; then
+        echo "[PROBE-FAIL] plan --help still says 'Alias for --quick' (D-14 harmony regressed)" >&2
+        exit 1
+      fi
+
+      # Variation 4: drift --help must NOT list `-y, --yes`. The
+      # regex anchors on the flag declaration shape so a stray
+      # substring in prose wouldn't false-positive.
+      if printf '%s' "$drift_help" | grep -qE -- '(^|[[:space:]])-y, --yes\b'; then
+        echo "[PROBE-FAIL] drift --help still lists -y, --yes flag (D-15 not closed)" >&2
+        printf '%s' "$drift_help" | grep -- '--yes' >&2
+        exit 1
+      fi
+
+      # Variation 5: drift --help footer must NOT say "No --yes flag
+      # is needed" (the contradicting sentence companion).
+      if printf '%s' "$drift_help" | grep -q -- 'No --yes flag is needed'; then
+        echo "[PROBE-FAIL] drift --help footer still says 'No --yes flag is needed' (D-15 half-closed)" >&2
+        exit 1
+      fi
+
+  - story: e98.W5.N5
+    name: w5-n5-eip-and-skeletal-plan
+    description: |
+      e98.W5.N5 graph-portion (Epic 97 B-03 + C-N3 + C-N4 + C-P3).
+      Reconstructed from the unit-test assertions per
+      feedback_parallel_worker_commit_rhythm recovery note — the
+      original probe entry added to this manifest was dropped by the
+      coordinator's stale-snapshot commit flow (same pattern hit
+      W5.N1/W5.N3/W5.N4). Code + tests already landed at `fc47b4c`;
+      this entry re-pins the probe-level coverage.
+
+      Split from cli-worker's `w5-n5-wizard-harmony-and-drift-yes-drop`
+      entry per the Option-B coordination agreement: two disjoint
+      probe entries under the same `e98.W5.N5` story, zero
+      merge-conflict risk.
+
+      Graph-portion covers:
+        - AWS::EC2::EIP promoted from COMPANION to first-class
+          (plugin registered, `Domain: "vpc"` default, added to
+          SUPPORTED_TYPES_ARRAY + pricing strategy + pricing
+          decomposer + cost-estimator classifier + mcp-server
+          TYPE_TO_KEYWORD + supported-types-block Networking group).
+        - skeletal-plan-detector module detects empty required-by-
+          service array fields on RDS / ALB / RDS subnet groups
+          and emits `PLAN_SKELETAL` advisories with per-field
+          remediation hints.
+    must_fail_pre_fix: false
+    variations:
+      - cmd: 'defaultPluginRegistry.get("AWS::EC2::EIP") !== undefined'
+        assertions: "B-03: EIP plugin registered on the default plugin registry (first-class)"
+      - cmd: 'ec2EipPlugin.defaults.Domain === "vpc"'
+        assertions: "B-03: EIP plugin declares Domain=vpc default"
+      - cmd: 'detectSkeletalPlan(RDS_DB_INSTANCE, {VPCSecurityGroups: []}) → isSkeletal=true'
+        assertions: "C-N3: empty VPCSecurityGroups on RDS plan flagged as skeletal"
+      - cmd: 'detectSkeletalPlan(ELBV2_LOAD_BALANCER, {Subnets: [], SecurityGroups: []}) → 2 advisories'
+        assertions: "C-N4: empty Subnets + SecurityGroups on ALB plan produces two PLAN_SKELETAL advisories"
+      - cmd: 'detectSkeletalPlan(RDS_DB_SUBNET_GROUP, {SubnetIds: []}) → isSkeletal=true'
+        assertions: "C-P3: empty SubnetIds on RDS DBSubnetGroup plan flagged as skeletal"
+      - cmd: 'detectSkeletalPlan(S3_BUCKET, {Tags: []}) → isSkeletal=false (non-allowlisted)'
+        assertions: "non-allowlisted type (S3) with empty arrays is NOT flagged (narrow scoping preserved)"
+      - cmd: 'buildSupportedTypesBlock() contains "Elastic IP"'
+        assertions: "supported-types grid lists Elastic IP in the Networking group (B-03 help-hint fix)"
+    known_tripwires: []
+    probe: |
+      node -e '
+        const repo = process.env.PROBE_REPO_ROOT;
+        Promise.all([
+          import(repo + "/packages/core/dist/resource-plugins/index.js"),
+          import(repo + "/packages/core/dist/graph/nodes/plan-generator/skeletal-plan-detector.js"),
+          import(repo + "/packages/core/dist/config/resource-types/named.js"),
+          import(repo + "/packages/core/dist/config/supported-types-block.js"),
+        ]).then(([plugins, detector, rt, grid]) => {
+          const R = rt.RESOURCE_TYPES;
+          const expect = (label, got, pred) => {
+            if (!pred(got)) {
+              console.error("[PROBE-FAIL] " + label + " got " + JSON.stringify(got));
+              process.exit(1);
+            }
+          };
+          const eip = plugins.defaultPluginRegistry.get(R.EC2_EIP);
+          expect("EIP plugin registered", eip, (v) => v !== undefined);
+          expect("EIP Domain default", eip.defaults.Domain, (v) => v === "vpc");
+          const rdsSkeletal = detector.detectSkeletalPlan(R.RDS_DB_INSTANCE, {
+            DBInstanceIdentifier: "my-db",
+            VPCSecurityGroups: [],
+            DBSubnetGroupName: "my-group",
+          });
+          expect("RDS empty-SG isSkeletal", rdsSkeletal.isSkeletal, (v) => v === true);
+          expect("RDS advisory code", rdsSkeletal.advisories[0].code, (v) => v === "PLAN_SKELETAL");
+          const albSkeletal = detector.detectSkeletalPlan(R.ELBV2_LOAD_BALANCER, {
+            Name: "my-alb",
+            Subnets: [],
+            SecurityGroups: [],
+          });
+          expect("ALB 2 advisories", albSkeletal.advisories.length, (v) => v === 2);
+          const dbSkeletal = detector.detectSkeletalPlan(R.RDS_DB_SUBNET_GROUP, {
+            DBSubnetGroupName: "my-group",
+            SubnetIds: [],
+          });
+          expect("DBSubnetGroup isSkeletal", dbSkeletal.isSkeletal, (v) => v === true);
+          const s3Clean = detector.detectSkeletalPlan(R.S3_BUCKET, {
+            BucketName: "my-bucket",
+            Tags: [],
+          });
+          expect("S3 NOT skeletal", s3Clean.isSkeletal, (v) => v === false);
+          const block = grid.buildSupportedTypesBlock();
+          expect("Elastic IP in Networking group", block, (v) => v.includes("Elastic IP"));
+        })
+        .catch(err => { console.error("[PROBE-FAIL] " + err.message); process.exit(1); });
+      '

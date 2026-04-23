@@ -13,6 +13,12 @@
  *   - Renamed `output` → `outputFile` — the `--output <file>` flag
  *     was renamed to `--output-file <file>` so it no longer collides
  *     with other commands' `--output <format>` semantics.
+ *
+ * Epic 98 e98.W5.N5 (D-15): removed `yes?: boolean` — the `-y,
+ * --yes` flag was registered "for CI wrapper compatibility" but the
+ * help footer contradictedly said "No --yes flag is needed". Drift
+ * is truly read-only (except `--baseline` which writes a local
+ * snapshot). Auto-apply belongs on `reconcile --yes`.
  */
 export interface DriftOpts {
   resource?: string;
@@ -30,5 +36,4 @@ export interface DriftOpts {
   outputFile?: string;
   concurrency?: string;
   detailed?: boolean;
-  yes?: boolean;
 }
