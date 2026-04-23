@@ -23,6 +23,18 @@ function truncateArn(arn: string, maxLen: number): string {
   return arn.slice(0, maxLen - 1) + "…";
 }
 
+/**
+ * Pick the display string for the Resource column. Epic 98 e98.W1.B1:
+ * non-taggable constructs (Route / SRTA / VPCGatewayAttachment) carry
+ * an empty `arn` and their CCAPI primaryIdentifier in `primaryIdentifier`.
+ * Fall back to that when ARN is absent so the row isn't blank.
+ */
+function displayKey(r: ManagedResource, maxLen: number): string {
+  if (r.arn) return truncateArn(r.arn, maxLen);
+  if (r.primaryIdentifier) return truncateArn(r.primaryIdentifier, maxLen);
+  return "";
+}
+
 function renderTTYTable(resources: ManagedResource[]): void {
   const col = (label: string, values: string[], min: number) =>
     Math.max(min, label.length + 2, ...values.map((v) => v.length + 2));
@@ -34,7 +46,7 @@ function renderTTYTable(resources: ManagedResource[]): void {
   const maxArn = 45;
   const cArn = col(
     "Resource",
-    resources.map((r) => truncateArn(r.arn, maxArn)),
+    resources.map((r) => displayKey(r, maxArn)),
     30,
   );
   const cRegion = col(
@@ -63,7 +75,7 @@ function renderTTYTable(resources: ManagedResource[]): void {
   const rows = resources.map(
     (r) =>
       r.resourceType.padEnd(cType) +
-      truncateArn(r.arn, maxArn).padEnd(cArn) +
+      displayKey(r, maxArn).padEnd(cArn) +
       r.region.padEnd(cRegion) +
       fmtDate(r.createdDate).padEnd(cDate) +
       r.estimatedMonthlyCost,
@@ -90,10 +102,10 @@ function renderTTYTable(resources: ManagedResource[]): void {
 }
 
 function renderPlainTable(resources: ManagedResource[]): void {
-  const header = "Type\tARN\tRegion\tCreated\tEst. Cost";
+  const header = "Type\tResource\tRegion\tCreated\tEst. Cost";
   const rows = resources.map(
     (r) =>
-      `${r.resourceType}\t${r.arn}\t${r.region}\t${r.createdDate}\t${r.estimatedMonthlyCost}`,
+      `${r.resourceType}\t${r.arn || r.primaryIdentifier || ""}\t${r.region}\t${r.createdDate}\t${r.estimatedMonthlyCost}`,
   );
   process.stdout.write([header, ...rows].join("\n") + "\n");
 }

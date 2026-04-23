@@ -26,6 +26,7 @@ import { AssigneeTag } from "../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../config/resource-types.js";
 import { isGlobalService } from "../config/arn-type-map.js";
 import { getFreeTierCostLabel } from "../utils/free-tier.js";
+import { listNonTaggableProvisionRecords } from "../managed-resources/index.js";
 import { loadProvisionData } from "./provision-log.js";
 import { parseArn } from "./parse-arn.js";
 import type { ManagedResource } from "./types.js";
@@ -154,6 +155,7 @@ export async function fetchManagedResources(
     resources.push({
       resourceType: parsed.resourceType,
       arn,
+      keyKind: "arn",
       region: displayRegion,
       createdDate,
       estimatedMonthlyCost:
@@ -177,6 +179,7 @@ export async function fetchManagedResources(
         resources.push({
           resourceType: RESOURCE_TYPES.IAM_ROLE,
           arn: role.arn,
+          keyKind: "arn",
           region: "global",
           createdDate:
             timestampMap.get(role.arn) ??
@@ -200,6 +203,37 @@ export async function fetchManagedResources(
         );
       }
     }
+  }
+
+  // ── Non-taggable constructs from provision log (e98.W1.B1) ────────
+  // AWS::EC2::Route / SubnetRouteTableAssociation / VPCGatewayAttachment
+  // don't support tagging, so RGTA never returns them. Read them from
+  // the provision log — writeProvisionRecord already captured the
+  // primaryIdentifier in its `resourceArn` slot when apply succeeded.
+  // Closes B-02 BLOCKER: user creates these and list silently drops them.
+  try {
+    const nonTaggable = await listNonTaggableProvisionRecords();
+    const seenKeys = new Set<string>(
+      resources.map((r) => r.primaryIdentifier ?? r.arn),
+    );
+    for (const entry of nonTaggable) {
+      if (seenKeys.has(entry.key)) continue;
+      resources.push({
+        resourceType: entry.resourceType,
+        arn: "",
+        primaryIdentifier: entry.key,
+        keyKind: "primaryIdentifier",
+        region: entry.region || region,
+        createdDate: entry.createdDate,
+        estimatedMonthlyCost:
+          entry.estimatedMonthlyCost || CostEstimateLabel.NA,
+      });
+    }
+  } catch {
+    // Provision log missing / unreadable is normal for new users;
+    // `listProvisionRecords` already handles the ENOENT path silently.
+    // Any other read failure must not cascade into list — keep list
+    // best-effort and fall through to the rest of the pipeline.
   }
 
   // ── Billing enrichment (Story 19.7) ───────────────────────────────

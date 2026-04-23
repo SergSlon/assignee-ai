@@ -12,6 +12,7 @@ export * from "./barrels/errors.js";
 export * from "./barrels/ports-services.js";
 export * from "./destroy-strategies/index.js";
 export * from "./list-resources/index.js";
+export * from "./managed-resources/index.js";
 export * from "./aws/index.js";
 
 // Story 60-it1-02 (L4-005 MED close): lift previously-narrow sub-path

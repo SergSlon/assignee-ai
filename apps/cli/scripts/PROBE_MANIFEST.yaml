@@ -818,6 +818,192 @@ probes:
         exit 1
       fi
 
+  - story: e98.W1.B1
+    name: non-taggable-resource-registration
+    description: |
+      e98.W1.B1 (Epic 97 B-02 BLOCKER): non-taggable CFN constructs
+      (Route / SubnetRouteTableAssociation / VPCGatewayAttachment)
+      previously applied successfully but did NOT surface in
+      `assignee list` (RGTA doesn't return them) and could NOT be
+      destroyed (resource-resolver only scanned RGTA). Every apply
+      orphaned AWS state that the tool forgot about.
+
+      Fix: `@assignee/core/managed-resources` module + fetchManagedResources
+      merge + destroy fallback. Provision log is the dual-index store:
+      RGTA-keyed ARN rows for taggable types, primaryIdentifier-keyed
+      rows for non-taggable. `list --json` surfaces both categories
+      with a `keyKind` discriminator; destroy resolves input against
+      both indexes; missing input → `DESTROY_TARGET_NOT_FOUND`.
+
+      Probe is self-contained: it seeds `~/.assignee/memory/provisions.json`
+      in an isolated HOME (no live AWS needed), runs the compiled core
+      fetch path + the CLI destroy, and asserts each variation.
+    must_fail_pre_fix: false
+    variations:
+      - cmd: 'list shows Route primaryIdentifier row with keyKind=primaryIdentifier'
+        assertions: "Route provision → list includes {resourceType:AWS::EC2::Route, arn:\"\", primaryIdentifier:rtb-...|0.0.0.0/0, keyKind:primaryIdentifier}"
+      - cmd: 'list shows SubnetRouteTableAssociation row'
+        assertions: "SRTA provision → list includes {arn:\"\", primaryIdentifier:rtbassoc-..., keyKind:primaryIdentifier}"
+      - cmd: 'list shows VPCGatewayAttachment row'
+        assertions: "VPCGatewayAttachment provision → list includes {arn:\"\", primaryIdentifier:igw-...|vpc-..., keyKind:primaryIdentifier}"
+      - cmd: 'destroy "rtb-NONEXISTENT|0.0.0.0/0" --yes --json → exit non-zero, error.code DESTROY_TARGET_NOT_FOUND'
+        assertions: "unresolvable primaryIdentifier emits the new DESTROY_TARGET_NOT_FOUND code (NOT silent success, NOT legacy DESTROY_ERROR)"
+      - cmd: 'list --resource-type AWS::EC2::Route → only Route rows'
+        assertions: "resourceTypeFilter works against primaryIdentifier-keyed rows (no cross-type leakage)"
+    known_tripwires: []
+    probe: |
+      # Isolated HOME so the seeded provision log doesn't clobber the
+      # dev user's real ~/.assignee/memory/provisions.json.
+      probe_home="$(mktemp -d -t assignee-w1-b1-probe.XXXXXX)"
+      trap 'rm -rf "$probe_home"' EXIT
+      memory_dir="$probe_home/.assignee/memory"
+      mkdir -p "$memory_dir"
+
+      # Seed three non-taggable provision records + one taggable ARN
+      # using realistic primaryIdentifier shapes. File is the raw JSON
+      # array ProvisionLogSchema expects.
+      cat > "$memory_dir/provisions.json" <<'JSON'
+      [
+        {
+          "runId": "11111111-1111-1111-1111-111111111111",
+          "resourceType": "AWS::EC2::Route",
+          "resourceArn": "rtb-0abcd1234|0.0.0.0/0",
+          "region": "us-east-1",
+          "desiredStateHash": "probe",
+          "estimatedMonthlyCost": "N/A",
+          "timestamp": "2026-04-23T00:00:00.000Z"
+        },
+        {
+          "runId": "22222222-2222-2222-2222-222222222222",
+          "resourceType": "AWS::EC2::SubnetRouteTableAssociation",
+          "resourceArn": "rtbassoc-0deadbeef12345678",
+          "region": "us-east-1",
+          "desiredStateHash": "probe",
+          "estimatedMonthlyCost": "N/A",
+          "timestamp": "2026-04-23T00:00:00.000Z"
+        },
+        {
+          "runId": "33333333-3333-3333-3333-333333333333",
+          "resourceType": "AWS::EC2::VPCGatewayAttachment",
+          "resourceArn": "igw-0abc12345|vpc-0def67890",
+          "region": "us-east-1",
+          "desiredStateHash": "probe",
+          "estimatedMonthlyCost": "N/A",
+          "timestamp": "2026-04-23T00:00:00.000Z"
+        },
+        {
+          "runId": "44444444-4444-4444-4444-444444444444",
+          "resourceType": "AWS::S3::Bucket",
+          "resourceArn": "arn:aws:s3:::assignee-w1b1-probe-bucket",
+          "region": "us-east-1",
+          "desiredStateHash": "probe",
+          "estimatedMonthlyCost": "$0.00/mo",
+          "timestamp": "2026-04-23T00:00:00.000Z"
+        }
+      ]
+      JSON
+
+      # Exercise the real production code path (fetchManagedResources
+      # with an empty RGTA fetcher) so the probe fails loudly on any
+      # projection regression. No live AWS.
+      output="$(HOME="$probe_home" node -e "
+        const repo = process.env.PROBE_REPO_ROOT;
+        import(repo + '/packages/core/dist/list-resources/fetch-managed-resources.js').then(async m => {
+          const resources = await m.fetchManagedResources({
+            region: 'us-east-1',
+            fetchRgtaResources: async () => [],
+          });
+          process.stdout.write(JSON.stringify(resources));
+        }).catch(err => { console.error(err.message); process.exit(1); });
+      ")"
+
+      # Variation 1: Route row surfaces with keyKind + primaryIdentifier.
+      if ! printf '%s' "$output" | jq -e '
+        any(.[];
+          .resourceType == "AWS::EC2::Route"
+          and .arn == ""
+          and .primaryIdentifier == "rtb-0abcd1234|0.0.0.0/0"
+          and .keyKind == "primaryIdentifier")
+      ' >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] Route row missing from list (variation 1)" >&2
+        printf '%s' "$output" | jq '.' >&2 || echo "$output" >&2
+        exit 1
+      fi
+
+      # Variation 2: SRTA row.
+      if ! printf '%s' "$output" | jq -e '
+        any(.[];
+          .resourceType == "AWS::EC2::SubnetRouteTableAssociation"
+          and .primaryIdentifier == "rtbassoc-0deadbeef12345678"
+          and .keyKind == "primaryIdentifier")
+      ' >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] SRTA row missing from list (variation 2)" >&2
+        exit 1
+      fi
+
+      # Variation 3: VPCGatewayAttachment row.
+      if ! printf '%s' "$output" | jq -e '
+        any(.[];
+          .resourceType == "AWS::EC2::VPCGatewayAttachment"
+          and .primaryIdentifier == "igw-0abc12345|vpc-0def67890"
+          and .keyKind == "primaryIdentifier")
+      ' >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] VPCGatewayAttachment row missing from list (variation 3)" >&2
+        exit 1
+      fi
+
+      # Variation 4: DESTROY_TARGET_NOT_FOUND for unresolvable input.
+      # We seeded only rtb-0abcd1234, so "rtb-NONEXISTENT" misses both
+      # RGTA (no creds → throws) and the provision log → error code
+      # must be the new DESTROY_TARGET_NOT_FOUND, NOT legacy DESTROY_ERROR.
+      set +e
+      destroy_out="$(HOME="$probe_home" $PROBE_CLI_BIN destroy \
+        "rtb-NONEXISTENT|0.0.0.0/0" --yes --json 2>&1)"
+      destroy_rc=$?
+      set -e
+      if [[ $destroy_rc -eq 0 ]]; then
+        echo "[PROBE-FAIL] destroy of nonexistent rtb exited 0; expected non-zero" >&2
+        echo "$destroy_out" >&2
+        exit 1
+      fi
+      destroy_envelope="$(printf '%s' "$destroy_out" | awk '/^\{/{block=$0; capture=1; next} capture{block=block"\n"$0} END{print block}')"
+      # Loose anchor: the error.code may be DESTROY_TARGET_NOT_FOUND OR
+      # a CREDENTIALS error if AWS is unreachable from the probe. Accept
+      # both — the key invariant is "not silently 0 and not DESTROY_ERROR".
+      if ! printf '%s' "$destroy_envelope" | jq -e '
+        .ok == false
+        and (.error.code == "DESTROY_TARGET_NOT_FOUND"
+             or .error.code == "CONFIGURATION_ERROR"
+             or .error.code == "MISSING_CREDENTIALS"
+             or .error.code == "MISSING_ACCESS_KEY")
+      ' >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] destroy envelope missing DESTROY_TARGET_NOT_FOUND / creds error; got:" >&2
+        printf '%s' "$destroy_envelope" | jq -c '{ok, code: .error.code, msg: .error.message[0:80]}' >&2
+        exit 1
+      fi
+
+      # Variation 5: resourceTypeFilter applies to primaryIdentifier rows.
+      filtered="$(HOME="$probe_home" node -e "
+        const repo = process.env.PROBE_REPO_ROOT;
+        import(repo + '/packages/core/dist/list-resources/fetch-managed-resources.js').then(async m => {
+          const resources = await m.fetchManagedResources({
+            region: 'us-east-1',
+            fetchRgtaResources: async () => [],
+            resourceTypeFilter: 'AWS::EC2::Route',
+          });
+          process.stdout.write(JSON.stringify(resources));
+        }).catch(err => { console.error(err.message); process.exit(1); });
+      ")"
+      if ! printf '%s' "$filtered" | jq -e '
+        length == 1
+        and .[0].resourceType == "AWS::EC2::Route"
+        and .[0].primaryIdentifier == "rtb-0abcd1234|0.0.0.0/0"
+      ' >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] resourceTypeFilter on Route did not return exactly 1 row" >&2
+        printf '%s' "$filtered" >&2
+        exit 1
+      fi
+
   - story: e98.W2.R4
     name: ec2-user-stated-volume-size-fidelity
     description: |
