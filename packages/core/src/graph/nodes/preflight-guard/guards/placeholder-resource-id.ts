@@ -137,11 +137,42 @@ export const PLACEHOLDER_RESOURCE_ID_EMBEDDED_REGEX = new RegExp(
  * on legitimate freeform text that happens to mention `subnet-12345678`
  * in a docstring. These are the names the LLM actually hallucinates
  * placeholder tokens inside per F-002.
+ *
+ * e98.W2.R3 (B-11 + B-12) — Epic 97 live-FAILs showed the LLM regularly
+ * embeds placeholder tokens in service-specific prose fields beyond the
+ * original `Description`/`Name`/`Comment` set. Concrete cases observed:
+ *
+ *   - `AWS::EC2::SecurityGroup.GroupDescription` — hallucinates
+ *     `subnet-<hex>` in the required description body.
+ *   - `AWS::RDS::DBSubnetGroup.DBSubnetGroupDescription` — same pattern.
+ *   - `AWS::CloudWatch::Dashboard.DashboardBody` — embeds `sg-<YOUR-SG>`
+ *     tokens in the JSON dashboard definition.
+ *   - `AWS::Logs::LogGroup.LogGroupName` + `.LogStreamName` — the LLM
+ *     sometimes templates `subnet-<hex>` into a path-shaped name.
+ *   - `AWS::Lambda::Function.Description` (aliased `FunctionDescription`
+ *     in some schema surfaces) + `AWS::IAM::Role.Description` (alias
+ *     `RoleDescription`) — extra coverage for known LLM-sensitive
+ *     surfaces.
+ *
+ * The list stays an explicit allowlist (not "scan all strings") because
+ * legitimate operator intents often include `subnet-abc12345` verbatim
+ * inside opaque config blobs that are NOT prose — e.g. a UserData shell
+ * script referencing a real (customer-provided) subnet. Scanning every
+ * string would false-positive on those.
  */
 export const PLACEHOLDER_RESOURCE_ID_PROSE_FIELDS: readonly string[] = [
   "Description",
   "Name",
   "Comment",
+  // e98.W2.R3 expansion — see block comment above for per-field
+  // rationale. Ordered to match the B-11 + B-12 finding list.
+  "GroupDescription",
+  "DBSubnetGroupDescription",
+  "DashboardBody",
+  "LogGroupName",
+  "LogStreamName",
+  "FunctionDescription",
+  "RoleDescription",
 ];
 
 function isProsePath(path: string): boolean {
