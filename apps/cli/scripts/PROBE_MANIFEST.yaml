@@ -1540,3 +1540,172 @@ probes:
         $PROBE_CLI_BIN plan \
           "Create an S3 bucket named logs-archive" \
           --json
+  - story: e98.W3.A1
+    name: w3-a1-plugin-default-survival
+    description: |
+      Epic 98 Wave 3 A1 — `mergePluginDefaults` allowlist expansion
+      from EC2_INSTANCE-only to 11 additional plugins (SNS, SQS,
+      EC2::Route, EC2::NatGateway, ELBv2, RDS, ECS, ECR, EFS,
+      APIGatewayV2, CloudFront). Every plugin on the expanded list
+      must backfill its own defaults onto a bare LLM output so the
+      plan ships the same security/compliance values every run
+      regardless of LLM drift.
+
+      The probe loads the compiled merge module directly and asserts
+      each plugin restores its canonical default key(s) both on a
+      bare `{}` input and on the C-R1 empty-leaf shapes
+      (`{}` / `null` / `""`). This is the architectural W3 story
+      that closes A-04, A-05, B-15, C-N1.
+    must_fail_pre_fix: false
+    variations:
+      - cmd: 'mergePluginDefaults({}, SNS_TOPIC) → KmsMasterKeyId=alias/aws/sns'
+        assertions: "SNS plugin backfills KmsMasterKeyId secure default (BP-SNS-001)"
+      - cmd: 'mergePluginDefaults({}, SQS_QUEUE) → SqsManagedSseEnabled=true, VisibilityTimeout=30'
+        assertions: "SQS backfills managed SSE + default visibility timeout"
+      - cmd: 'mergePluginDefaults({}, RDS_DB_INSTANCE) → StorageEncrypted=true'
+        assertions: "RDS backfills StorageEncrypted (BP-RDS-002)"
+      - cmd: 'mergePluginDefaults({}, ECR_REPOSITORY) → ScanOnPush=true, ImageTagMutability=IMMUTABLE'
+        assertions: "ECR backfills ScanOnPush + IMMUTABLE tags (BP-ECR-001/002)"
+      - cmd: 'mergePluginDefaults({}, EFS_FILE_SYSTEM) → Encrypted=true, BackupPolicy.Status=ENABLED'
+        assertions: "EFS backfills encryption + backup defaults (BP-EFS-001)"
+      - cmd: 'mergePluginDefaults({}, ECS_CLUSTER) → ClusterSettings includes containerInsights'
+        assertions: "ECS backfills containerInsights + FARGATE capacity provider"
+      - cmd: 'mergePluginDefaults({}, ELBV2_LOAD_BALANCER) → Type=application, Scheme=internet-facing'
+        assertions: "ELBv2 backfills LB type/scheme/IP defaults"
+      - cmd: 'mergePluginDefaults({}, EC2_ROUTE) → DestinationCidrBlock=0.0.0.0/0'
+        assertions: "EC2::Route backfills public-internet destination"
+      - cmd: 'mergePluginDefaults({}, EC2_NAT_GATEWAY) → ConnectivityType=public'
+        assertions: "NatGateway backfills ConnectivityType=public"
+      - cmd: 'mergePluginDefaults({}, APIGATEWAYV2_API) → ProtocolType=HTTP'
+        assertions: "APIGatewayV2 backfills ProtocolType=HTTP"
+      - cmd: 'mergePluginDefaults({PublicAccessBlockConfiguration:{}}, S3_BUCKET) = unchanged'
+        assertions: "S3 stays off the allowlist — BP-S3-001 must remain the safety net"
+      - cmd: 'mergePluginDefaults({KmsMasterKeyId: null}, SNS_TOPIC) → default restored'
+        assertions: "empty-leaf (null) restoration per W2.R2 invariant"
+    known_tripwires: []
+    probe: |
+      node -e '
+        const repo = process.env.PROBE_REPO_ROOT;
+        Promise.all([
+          import(repo + "/packages/core/dist/graph/nodes/plan-generator/llm-plan/merge.js"),
+          import(repo + "/packages/core/dist/config/resource-types/named.js"),
+          import(repo + "/packages/core/dist/resource-plugins/index.js"),
+        ]).then(([merge, rt, rp]) => {
+          const R = rt.RESOURCE_TYPES;
+          const reg = rp.defaultPluginRegistry;
+
+          const expect = (label, got, pred) => {
+            if (!pred(got)) {
+              console.error(
+                "[PROBE-FAIL] " + label + " got " + JSON.stringify(got)
+              );
+              process.exit(1);
+            }
+          };
+
+          // Variation 1 — SNS KmsMasterKeyId.
+          const sns = merge.mergePluginDefaults({}, R.SNS_TOPIC);
+          expect("SNS KmsMasterKeyId", sns.KmsMasterKeyId, (v) => v === "alias/aws/sns");
+
+          // Variation 2 — SQS backfill.
+          const sqs = merge.mergePluginDefaults({}, R.SQS_QUEUE);
+          expect("SQS SqsManagedSseEnabled", sqs.SqsManagedSseEnabled, (v) => v === true);
+          expect("SQS VisibilityTimeout", sqs.VisibilityTimeout, (v) => v === 30);
+
+          // Variation 3 — RDS StorageEncrypted.
+          const rds = merge.mergePluginDefaults({}, R.RDS_DB_INSTANCE);
+          expect("RDS StorageEncrypted", rds.StorageEncrypted, (v) => v === true);
+
+          // Variation 4 — ECR scanning + immutability.
+          const ecr = merge.mergePluginDefaults({}, R.ECR_REPOSITORY);
+          expect("ECR ImageTagMutability", ecr.ImageTagMutability, (v) => v === "IMMUTABLE");
+          expect(
+            "ECR ScanOnPush",
+            ecr.ImageScanningConfiguration && ecr.ImageScanningConfiguration.ScanOnPush,
+            (v) => v === true
+          );
+
+          // Variation 5 — EFS encryption + backup.
+          const efs = merge.mergePluginDefaults({}, R.EFS_FILE_SYSTEM);
+          expect("EFS Encrypted", efs.Encrypted, (v) => v === true);
+          expect(
+            "EFS BackupPolicy.Status",
+            efs.BackupPolicy && efs.BackupPolicy.Status,
+            (v) => v === "ENABLED"
+          );
+
+          // Variation 6 — ECS containerInsights + FARGATE.
+          const ecs = merge.mergePluginDefaults({}, R.ECS_CLUSTER);
+          expect(
+            "ECS ClusterSettings containerInsights",
+            ecs.ClusterSettings,
+            (v) =>
+              Array.isArray(v) &&
+              v.some((s) => s && s.Name === "containerInsights" && s.Value === "enabled")
+          );
+          expect(
+            "ECS CapacityProviders includes FARGATE",
+            ecs.CapacityProviders,
+            (v) => Array.isArray(v) && v.includes("FARGATE")
+          );
+
+          // Variation 7 — ELBv2 type/scheme/ip.
+          const elb = merge.mergePluginDefaults({}, R.ELBV2_LOAD_BALANCER);
+          expect("ELBv2 Type", elb.Type, (v) => v === "application");
+          expect("ELBv2 Scheme", elb.Scheme, (v) => v === "internet-facing");
+          expect("ELBv2 IpAddressType", elb.IpAddressType, (v) => v === "ipv4");
+
+          // Variation 8 — EC2::Route destination.
+          const route = merge.mergePluginDefaults({}, R.EC2_ROUTE);
+          expect("EC2::Route DestinationCidrBlock", route.DestinationCidrBlock, (v) => v === "0.0.0.0/0");
+
+          // Variation 9 — NatGateway connectivity.
+          const nat = merge.mergePluginDefaults({}, R.EC2_NAT_GATEWAY);
+          expect("NatGateway ConnectivityType", nat.ConnectivityType, (v) => v === "public");
+
+          // Variation 10 — APIGatewayV2 protocol.
+          const apigw = merge.mergePluginDefaults({}, R.APIGATEWAYV2_API);
+          expect("APIGWv2 ProtocolType", apigw.ProtocolType, (v) => v === "HTTP");
+
+          // Variation 11 — S3 exclusion (safety net).
+          const s3 = merge.mergePluginDefaults({ BucketName: "my-bucket" }, R.S3_BUCKET);
+          expect(
+            "S3 stays off allowlist (no PublicAccessBlockConfiguration backfill)",
+            s3.PublicAccessBlockConfiguration,
+            (v) => v === undefined
+          );
+
+          // Variation 12 — empty-leaf restoration (W2.R2 invariant propagated).
+          const snsLeaf = merge.mergePluginDefaults(
+            { KmsMasterKeyId: null },
+            R.SNS_TOPIC
+          );
+          expect(
+            "SNS KmsMasterKeyId restored after null leaf",
+            snsLeaf.KmsMasterKeyId,
+            (v) => v === "alias/aws/sns"
+          );
+
+          // Drift-guard: ensure plugin registry still exposes every
+          // type we cited — a silent plugin removal would let the
+          // probe pass vacuously otherwise.
+          for (const name of [
+            "SNS_TOPIC",
+            "SQS_QUEUE",
+            "RDS_DB_INSTANCE",
+            "ECR_REPOSITORY",
+            "EFS_FILE_SYSTEM",
+            "ECS_CLUSTER",
+            "ELBV2_LOAD_BALANCER",
+            "EC2_ROUTE",
+            "EC2_NAT_GATEWAY",
+            "APIGATEWAYV2_API",
+          ]) {
+            if (!reg.get(R[name])) {
+              console.error("[PROBE-FAIL] plugin missing: " + name);
+              process.exit(1);
+            }
+          }
+        })
+        .catch(err => { console.error("[PROBE-FAIL] " + err.message); process.exit(1); });
+      '

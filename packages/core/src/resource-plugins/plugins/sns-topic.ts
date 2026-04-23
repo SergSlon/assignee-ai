@@ -152,6 +152,14 @@ export const snsTopicPlugin: ResourcePlugin = {
     get [CfnKey.TOPIC_NAME](): string {
       return generateSnsTopicName();
     },
+    // e98.W3.A1 — ship encryption-at-rest by default. The AWS-managed
+    // SNS key (`alias/aws/sns`) is free, enabled at the account level,
+    // and satisfies BP-SNS-001 (CRITICAL). Before this default landed,
+    // BP-SNS-001 relied on auto-fix to patch the plan post-hoc; making
+    // it a plugin default means the secure value ships on the first
+    // emission and survives empty-leaf LLM drift (paired with the
+    // mergePluginDefaults allowlist expansion in this same story).
+    [CfnKey.KMS_MASTER_KEY_ID]: `${KMS_ALIAS_PREFIX}aws/sns`,
   },
   configHints: [
     "SNS KmsMasterKeyId: Consider setting to 'alias/aws/sns' for server-side encryption at rest using the AWS-managed SNS key.",
