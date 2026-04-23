@@ -20,6 +20,19 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
+# Env-var sanitization (Epic 97 D-22 methodology fix)
+# ---------------------------------------------------------------------------
+# The in-repo .env sets ASSIGNEE_VERBOSITY=verbose and ASSIGNEE_LOG_LEVEL=debug
+# for local-dev convenience. When probes run the CLI as a subprocess FROM the
+# repo cwd, those vars leak in and silently change stderr behaviour — which
+# caused W3.N4 stderr-cleanliness probes to PASS for the wrong reason. Clear
+# the dev-only observability knobs so the CLI behaves like a fresh user install.
+# Forces every probe helper's subprocess invocations to see a sanitized env.
+unset ASSIGNEE_VERBOSITY
+unset ASSIGNEE_LOG_LEVEL
+unset ASSIGNEE_LOG_LEVEL_STREAM
+
+# ---------------------------------------------------------------------------
 # Internal helpers (not exported as probes).
 # ---------------------------------------------------------------------------
 
