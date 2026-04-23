@@ -68,6 +68,30 @@ export const POLICY_ANTIPATTERNS = [
   /** `iam:PassRole` with `Resource: "*"` — direct privilege-escalation vector. */
   "passrole-wildcard-resource",
   /**
+   * Cross-account `sts:AssumeRole` trust without an `sts:ExternalId`
+   * Condition. Epic 98 W4.B5 — BP-IAM-010 closure. Fires on an Allow
+   * statement in an `AssumeRolePolicyDocument` where:
+   *   - `Action` covers `sts:AssumeRole` (or a wildcard that covers it), AND
+   *   - `Principal.AWS` is an IAM user/role ARN (arn:aws:iam::<acct>:...)
+   *     or an account-root wildcard (`arn:aws:iam::<acct>:root`), AND
+   *   - no `Condition.StringEquals["sts:ExternalId"]` (or StringLike)
+   *     narrows the trust.
+   *
+   * Guards against the canonical confused-deputy attack: a malicious
+   * tenant in the trusted account induces your role-holder to assume
+   * the role on their behalf. The External ID is the shared secret
+   * that breaks that chain — without it, any principal in the trusted
+   * account can assume the role.
+   *
+   * Service-principal trusts (`Principal.Service: "lambda.amazonaws.com"`)
+   * do not fire — those are intra-service and the ExternalId pattern
+   * doesn't apply. Wildcard Principals (`"*"`, `{AWS:"*"}`) are
+   * flagged by `wildcard-principal` / `wildcard-principal-no-condition`
+   * already; this rule complements them by catching the narrower
+   * ARN-based cross-account shape that those patterns miss.
+   */
+  "cross-account-no-external-id",
+  /**
    * ABSENCE check (inverse semantics): fires when the BucketPolicy
    * document does NOT contain a statement that denies non-SSL access.
    * Epic 98 W4.B4 — BP-S3-011 SSL-only closure.
@@ -186,6 +210,71 @@ function principalIsWildcard(principal: unknown): boolean {
 }
 
 /**
+ * IAM ARN shape: `arn:aws:iam::<12-digit-account>:<entity>`. Used by
+ * the cross-account-no-external-id check to identify principals that
+ * could be in another AWS account. Partition-agnostic (`arn:aws-us-gov`,
+ * `arn:aws-cn`) so GovCloud and China trust policies are covered.
+ */
+const IAM_ARN_RE = /^arn:aws[\w-]*:iam::\d{12}:/;
+
+/**
+ * True when the Principal field references at least one IAM entity
+ * by ARN (user, role, or account-root). Shapes handled:
+ *   - `"arn:aws:iam::<acct>:root"` (string)
+ *   - `["arn:aws:iam::<acct>:role/X", "arn:..."]` (array of strings)
+ *   - `{ AWS: "arn:aws:iam::<acct>:root" }` (object form, single ARN)
+ *   - `{ AWS: ["arn:aws:iam::<acct>:role/X", "arn:..."] }` (object, array)
+ *
+ * Returns false for wildcard Principals (covered by sibling checks),
+ * Service principals, Federated principals, and absent Principals.
+ */
+function principalHasIamArn(principal: unknown): boolean {
+  if (typeof principal === "string") return IAM_ARN_RE.test(principal);
+  if (Array.isArray(principal)) {
+    return principal.some((p) => typeof p === "string" && IAM_ARN_RE.test(p));
+  }
+  if (principal !== null && typeof principal === "object") {
+    const awsKey = (principal as Record<string, unknown>)["AWS"];
+    if (typeof awsKey === "string") return IAM_ARN_RE.test(awsKey);
+    if (Array.isArray(awsKey)) {
+      return awsKey.some((v) => typeof v === "string" && IAM_ARN_RE.test(v));
+    }
+  }
+  return false;
+}
+
+/**
+ * True when the given Condition object contains a narrowing clause
+ * keyed on `sts:ExternalId`. Tolerates:
+ *   - `StringEquals` (canonical)
+ *   - `StringLike`  (accepted — operators sometimes use this for
+ *     prefix/wildcard ExternalId generation)
+ *   - `StringEqualsIgnoreCase`
+ * Under any of those, the value must be a non-empty string or a
+ * non-empty array of strings. Empty strings or empty arrays count as
+ * "no narrow" so a stub condition doesn't silently disarm the rule.
+ */
+function hasExternalIdCondition(condition: unknown): boolean {
+  if (condition === null || typeof condition !== "object") return false;
+  if (Array.isArray(condition)) return false;
+  const cond = condition as Record<string, unknown>;
+  const operators = ["StringEquals", "StringLike", "StringEqualsIgnoreCase"];
+  for (const op of operators) {
+    const opBlock = cond[op];
+    if (opBlock === null || typeof opBlock !== "object") continue;
+    if (Array.isArray(opBlock)) continue;
+    const externalId = (opBlock as Record<string, unknown>)["sts:ExternalId"];
+    if (typeof externalId === "string" && externalId.length > 0) return true;
+    if (Array.isArray(externalId)) {
+      if (externalId.some((v) => typeof v === "string" && v.length > 0)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
  * Return the `Statement[]` array from a document, normalising the two
  * legal forms: a single statement object or an array. Returns `null`
  * (distinct from an empty array) when the input isn't a plausible
@@ -294,6 +383,28 @@ const CHECKS: Record<PolicyAntipattern, StatementCheck> = {
     );
     if (!grantsPassRole) return false;
     return containsStarLiteral(toStringArray(stmt.Resource));
+  },
+
+  "cross-account-no-external-id": (stmt) => {
+    // Epic 98 W4.B5 — BP-IAM-010 closure. Fires on an Allow statement
+    // in a trust policy where a cross-account AWS principal can assume
+    // the role without an sts:ExternalId guard. Shape:
+    //   Action covers sts:AssumeRole AND
+    //   Principal.AWS is an IAM ARN (arn:aws:iam::<acct>:...) AND
+    //   Condition has no sts:ExternalId narrow.
+    // Service-principal trusts (lambda.amazonaws.com etc.) are out of
+    // scope — those aren't vulnerable to the confused-deputy pattern.
+    if (!isAllow(stmt)) return false;
+    const actions = toStringArray(stmt.Action);
+    const grantsAssumeRole = actions.some(
+      (a) => a === "sts:AssumeRole" || a === "sts:*" || a === "*",
+    );
+    if (!grantsAssumeRole) return false;
+    if (!principalHasIamArn(stmt.Principal)) return false;
+    // Already-wildcard Principals are flagged by sibling checks — let
+    // those own the finding and avoid double-firing here.
+    if (principalIsWildcard(stmt.Principal)) return false;
+    return !hasExternalIdCondition(stmt["Condition"]);
   },
 
   // Epic 98 W4.B4 — absence check dispatched separately below.

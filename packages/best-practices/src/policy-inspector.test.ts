@@ -657,16 +657,248 @@ describe("inspectPolicyDocument", () => {
     });
   });
 
+  describe("missing-secure-transport-deny (Epic 98 W4.B4)", () => {
+    // Epic 98 W4.B4 fixtures — real-shaped S3 BucketPolicy documents.
+    // Absence check: matched=true means the required Deny-non-SSL
+    // statement is MISSING. Uses reserved-test account 210987654321.
+    const BUCKET_ARN = "arn:aws:s3:::appdata-210987654321-us-east-1";
+
+    const CANONICAL_DENY_SSL = {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Sid: "DenyNonSSL",
+          Effect: "Deny",
+          Principal: "*",
+          Action: "s3:*",
+          Resource: [BUCKET_ARN, `${BUCKET_ARN}/*`],
+          Condition: {
+            Bool: { "aws:SecureTransport": "false" },
+          },
+        },
+      ],
+    };
+
+    const DENY_SSL_PLUS_ALLOW = {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Sid: "AllowNarrowRead",
+          Effect: "Allow",
+          Principal: { AWS: "arn:aws:iam::210987654321:role/app-reader" },
+          Action: "s3:GetObject",
+          Resource: `${BUCKET_ARN}/*`,
+        },
+        {
+          Sid: "DenyNonSSL",
+          Effect: "Deny",
+          Principal: "*",
+          Action: "s3:*",
+          Resource: [BUCKET_ARN, `${BUCKET_ARN}/*`],
+          Condition: {
+            Bool: { "aws:SecureTransport": "false" },
+          },
+        },
+      ],
+    };
+
+    const DENY_SSL_BOOLEAN_FALSE = {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Deny",
+          Principal: "*",
+          Action: "s3:*",
+          Resource: [BUCKET_ARN, `${BUCKET_ARN}/*`],
+          Condition: {
+            // CloudFormation sometimes emits the boolean literal
+            // instead of the string "false"; the inspector tolerates
+            // both per the FSBP S3.5 guidance.
+            Bool: { "aws:SecureTransport": false },
+          },
+        },
+      ],
+    };
+
+    const NO_DENY_AT_ALL = {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Sid: "AllowPublicRead",
+          Effect: "Allow",
+          Principal: "*",
+          Action: "s3:GetObject",
+          Resource: `${BUCKET_ARN}/*`,
+        },
+      ],
+    };
+
+    const DENY_BUT_WRONG_CONDITION = {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Deny",
+          Principal: "*",
+          Action: "s3:*",
+          Resource: [BUCKET_ARN, `${BUCKET_ARN}/*`],
+          Condition: {
+            StringEquals: { "aws:SourceVpc": "vpc-12345" },
+          },
+        },
+      ],
+    };
+
+    const DENY_BUT_NARROW_PRINCIPAL = {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Deny",
+          Principal: { AWS: "arn:aws:iam::210987654321:role/foo" },
+          Action: "s3:*",
+          Resource: [BUCKET_ARN, `${BUCKET_ARN}/*`],
+          Condition: {
+            Bool: { "aws:SecureTransport": "false" },
+          },
+        },
+      ],
+    };
+
+    const DENY_BUT_WRONG_ACTION = {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Deny",
+          Principal: "*",
+          Action: "lambda:InvokeFunction",
+          Resource: "*",
+          Condition: {
+            Bool: { "aws:SecureTransport": "false" },
+          },
+        },
+      ],
+    };
+
+    it("does NOT match when the canonical Deny-non-SSL statement is present", () => {
+      expect(
+        inspectPolicyDocument(
+          CANONICAL_DENY_SSL,
+          "missing-secure-transport-deny",
+        ),
+      ).toEqual({ matched: false });
+    });
+
+    it("does NOT match when an Allow is followed by the canonical Deny-non-SSL (real bucket policy shape)", () => {
+      expect(
+        inspectPolicyDocument(
+          DENY_SSL_PLUS_ALLOW,
+          "missing-secure-transport-deny",
+        ),
+      ).toEqual({ matched: false });
+    });
+
+    it("does NOT match when Condition uses the boolean false literal (CFN-emitted form)", () => {
+      expect(
+        inspectPolicyDocument(
+          DENY_SSL_BOOLEAN_FALSE,
+          "missing-secure-transport-deny",
+        ),
+      ).toEqual({ matched: false });
+    });
+
+    it("matches when the policy has no Deny statement at all (public Allow-only)", () => {
+      expect(
+        inspectPolicyDocument(NO_DENY_AT_ALL, "missing-secure-transport-deny"),
+      ).toEqual({ matched: true });
+    });
+
+    it("matches when the Deny's Condition is not aws:SecureTransport (e.g. SourceVpc)", () => {
+      expect(
+        inspectPolicyDocument(
+          DENY_BUT_WRONG_CONDITION,
+          "missing-secure-transport-deny",
+        ),
+      ).toEqual({ matched: true });
+    });
+
+    it("matches when the Deny is against a narrow Principal (leaves other callers unprotected)", () => {
+      expect(
+        inspectPolicyDocument(
+          DENY_BUT_NARROW_PRINCIPAL,
+          "missing-secure-transport-deny",
+        ),
+      ).toEqual({ matched: true });
+    });
+
+    it("matches when the Deny's Action does not cover s3:* (wrong service)", () => {
+      expect(
+        inspectPolicyDocument(
+          DENY_BUT_WRONG_ACTION,
+          "missing-secure-transport-deny",
+        ),
+      ).toEqual({ matched: true });
+    });
+
+    it("matches when the policy document is undefined (no BucketPolicy at all)", () => {
+      expect(
+        inspectPolicyDocument(undefined, "missing-secure-transport-deny"),
+      ).toEqual({ matched: true });
+    });
+
+    it("matches when the policy document is null", () => {
+      expect(
+        inspectPolicyDocument(null, "missing-secure-transport-deny"),
+      ).toEqual({ matched: true });
+    });
+
+    it("matches when Statement is an empty array", () => {
+      expect(
+        inspectPolicyDocument(
+          { Version: "2012-10-17", Statement: [] },
+          "missing-secure-transport-deny",
+        ),
+      ).toEqual({ matched: true });
+    });
+
+    it("matches when the narrow S3 read doc has no Deny at all", () => {
+      // The default passing doc used across the catalogue is narrow-
+      // Allow-only with no Deny — absence pattern MUST catch it.
+      expect(
+        inspectPolicyDocument(NARROW_S3_READ, "missing-secure-transport-deny"),
+      ).toEqual({ matched: true });
+    });
+
+    it("does NOT match when the Deny uses array-of-values Condition (['false'] form)", () => {
+      const doc = {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Deny",
+            Principal: "*",
+            Action: "s3:*",
+            Resource: [BUCKET_ARN, `${BUCKET_ARN}/*`],
+            Condition: {
+              Bool: { "aws:SecureTransport": ["false"] },
+            },
+          },
+        ],
+      };
+      expect(
+        inspectPolicyDocument(doc, "missing-secure-transport-deny"),
+      ).toEqual({ matched: false });
+    });
+  });
+
   describe("POLICY_ANTIPATTERNS catalogue", () => {
-    it("contains exactly the nine patterns we enforce (Epic 98 W4.B4 added missing-secure-transport-deny)", () => {
+    it("contains exactly the ten patterns we enforce (Epic 98 W4.B5 added cross-account-no-external-id)", () => {
       // If this count changes, update the gap-analysis memo in
       // docs/bp-cfn-guard-gap-analysis-2026-04-08.md too.
-      expect(POLICY_ANTIPATTERNS).toHaveLength(9);
+      expect(POLICY_ANTIPATTERNS).toHaveLength(10);
       expect([...POLICY_ANTIPATTERNS].sort()).toEqual(
         [
           "allow-plus-not-action",
           "allow-plus-not-principal",
           "allow-plus-not-resource",
+          "cross-account-no-external-id",
           "missing-secure-transport-deny",
           "passrole-wildcard-resource",
           "wildcard-action",

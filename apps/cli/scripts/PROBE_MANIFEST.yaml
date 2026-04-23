@@ -1494,3 +1494,49 @@ probes:
         printf '%s' "$output" | jq '.ddb' >&2
         exit 1
       fi
+  - story: e98.W4.B4
+    name: bp-s3-011-no-fire-on-plain-bucket
+    description: |
+      e98.W4.B4 — BP-S3-011 HIGH MISLABELED closure (no-fire baseline
+      / false-positive catcher). Before the fix, BP-S3-011 was
+      `check_type: awareness` and surfaced on every S3 bucket plan
+      regardless of whether the bucket's policy actually enforced
+      SSL-only access. Fix migrates BP-S3-011 to
+      `resource_type: AWS::S3::BucketPolicy`, `check_type:
+      policy_antipattern`, `expected_value:
+      missing-secure-transport-deny` — a new ABSENCE-semantics
+      antipattern that fires when the BucketPolicy document does not
+      contain a Deny statement matching the canonical
+      `Condition.Bool["aws:SecureTransport"] = "false"` shape.
+      Implementation in src/policy-inspector.ts + rule-runner routing
+      via `isAbsenceAntipattern`. A plain S3 bucket plan that does not
+      emit a separate BucketPolicy resource must NOT surface the rule
+      at plan-time (the rule applies only when an AWS::S3::BucketPolicy
+      resource is present).
+
+      DEFERRED (Epic 99 backlog): once the CLI's plan generator can
+      emit AWS::S3::BucketPolicy alongside AWS::S3::Bucket for intents
+      that imply "public bucket" or "bucket with policy", add a
+      companion fire-probe asserting
+      `assert_bp_finding_id_present BP-S3-011` when the emitted
+      BucketPolicy PolicyDocument lacks a Deny-non-SSL statement.
+      Today the CLI doesn't emit separate BucketPolicy resources on
+      plan, so the fire-path has no CLI probe surface — absence /
+      fire branches are exhaustively covered by unit tests in
+      `packages/best-practices/__tests__/bp-s3-011-scope.test.ts`
+      and `packages/best-practices/src/policy-inspector.test.ts`
+      (`describe("missing-secure-transport-deny (Epic 98 W4.B4)")`).
+    must_fail_pre_fix: false
+    variations:
+      - cmd: 'plan "Create an S3 bucket named logs-archive" --json'
+        assertions: "BP-S3-011 does NOT fire on a plain S3 bucket with no BucketPolicy resource (no-fire baseline)"
+      - cmd: 'plan "Create an S3 bucket named app-data with versioning enabled" --json'
+        assertions: "BP-S3-011 does NOT fire on a versioned S3 bucket (still no BucketPolicy resource)"
+      - cmd: 'plan "Create an encrypted S3 bucket for backups" --json'
+        assertions: "BP-S3-011 does NOT fire on an encrypted backup bucket"
+    known_tripwires: []
+    probe: |
+      assert_no_bp_finding_id BP-S3-011 \
+        $PROBE_CLI_BIN plan \
+          "Create an S3 bucket named logs-archive" \
+          --json

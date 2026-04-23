@@ -339,6 +339,20 @@ function buildAntipatternFiringDoc(pattern: string): Record<string, unknown> {
           },
         ],
       };
+    case "cross-account-no-external-id":
+      // Epic 98 W4.B5 — BP-IAM-010 firing shape: cross-account trust
+      // by IAM ARN without an sts:ExternalId condition.
+      return {
+        ...base,
+        Statement: [
+          {
+            Sid: "TrustPartnerAccount",
+            Effect: "Allow",
+            Principal: { AWS: "arn:aws:iam::210987654321:root" },
+            Action: "sts:AssumeRole",
+          },
+        ],
+      };
     case "allow-plus-not-action":
       return {
         ...base,
@@ -1231,11 +1245,19 @@ const iamRules: RuleSpec[] = [
     expectedValue: true,
   },
   {
+    // Epic 98 W4.B5 — BP-IAM-010 MISLABELED closure. Migrated from
+    // `check_type: awareness` (always fired on every role's trust
+    // policy regardless of whether the trust was cross-account) to
+    // the new `cross-account-no-external-id` structural antipattern.
+    // Fires only when the AssumeRolePolicyDocument allows an IAM-ARN
+    // principal to sts:AssumeRole without an sts:ExternalId guard.
+    // Service-principal trusts (lambda, ec2, events, etc.) no longer
+    // false-positive — the confused-deputy attack doesn't apply to them.
     id: "BP-IAM-010",
     resourceType: "AWS::IAM::Role",
     propertyPath: "AssumeRolePolicyDocument",
-    checkType: "awareness",
-    expectedValue: true,
+    checkType: "policy_antipattern",
+    expectedValue: "cross-account-no-external-id",
   },
   // ── A5.2: IAM policy-document anti-patterns (Tier 1 of the cfn-guard
   // ── gap analysis). Each uses the shared policy_antipattern check type

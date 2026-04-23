@@ -1,17 +1,17 @@
 id: BP-S3-011
-title: "S3 bucket should enforce SSL-only requests"
+title: "S3 bucket policy must deny non-SSL requests"
 severity: HIGH
-resource_type: "AWS::S3::Bucket"
-property_path: "BucketPolicy.Statement"
-check_type: "awareness"
-expected_value: true
+resource_type: "AWS::S3::BucketPolicy"
+property_path: "PolicyDocument"
+check_type: "policy_antipattern"
+expected_value: "missing-secure-transport-deny"
 source: "FSBP"
 source_id: "S3.5"
-description: "S3 buckets should have a bucket policy that denies non-SSL requests. Without enforcing SSL, data in transit can be intercepted by network attackers."
-remediation: "Add a bucket policy with a Condition of aws:SecureTransport=false to deny all non-SSL requests."
-consequence: "Data in transit is sent over plaintext HTTP — network attackers can intercept, read, and modify objects mid-flight."
+description: "An S3 bucket policy must contain a Deny statement that rejects non-HTTPS requests via `Condition: { Bool: { 'aws:SecureTransport': 'false' } }`. Without it, plaintext HTTP requests to the bucket succeed and data in transit can be intercepted, read, or modified by network attackers. The Deny must target `s3:*` (or broader) on wildcard Principal to close the gap for every caller — a narrow Principal leaves unprotected callers."
+remediation: "Add a Deny statement to the bucket policy: `{ Effect: 'Deny', Principal: '*', Action: 's3:*', Resource: [<bucket-arn>, <bucket-arn>/*], Condition: { Bool: { 'aws:SecureTransport': 'false' } } }`. The condition evaluates to true for HTTP requests, triggering the Deny and returning an access-denied response to the client."
+consequence: "Data in transit is sent over plaintext HTTP — network attackers on the path can intercept, read, and modify objects mid-flight."
 fix_hint: "Add bucket policy to deny non-HTTPS requests"
 category: security
-lastVerified: "2026-03-24"
+lastVerified: "2026-04-23"
 triggers:
   - excludePatterns: ["static-website"]
