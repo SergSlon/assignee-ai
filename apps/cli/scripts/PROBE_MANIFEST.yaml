@@ -10,6 +10,17 @@
 #       name:               <human-readable name>
 #       description:        <one-line sentence>
 #       must_fail_pre_fix:  true | false  # true = gate tripwire against CURRENT tree
+#       variations:                       # REQUIRED: ≥ 3 per Epic 98 M2
+#         - cmd: "<exact command>"
+#           assertions: "<brief description of what's asserted>"
+#         - cmd: "<second variant>"
+#           assertions: "..."
+#         - cmd: "<third variant>"
+#           assertions: "..."
+#       known_tripwires:                  # OPTIONAL: forcing-flip witnesses
+#         - cmd: "<live-FAIL command>"
+#           expected_exit: "non-zero"     # "zero" | "non-zero" | "<N>"
+#           expected_fail_anchor: "..."   # grep substring proving the bug
 #       probe: |
 #         <multi-line bash block; runs under `set -euo pipefail`>
 #
@@ -20,6 +31,17 @@
 #     PROBE_CLI_BIN and PROBE_REPO_ROOT so probes are portable.
 #   - Keep each probe < 5s wall-clock for normal CI; probes that spawn
 #     the graph may take 20-60s on cold cache — tolerate and cache.
+#   - Every entry MUST declare ≥ 3 variations (Epic 98 M2). Epic 96's narrow
+#     single-phrasing probes silently rubber-stamped 3 live bugs (B-09, C-R1,
+#     B-11); the declarative variations list makes coverage gaps visible at
+#     schema-load time, enforced by `pre-close-probes.sh --strict-multi-variation`
+#     and by Contract G in shipped-wired-contract.test.ts.
+#   - `known_tripwires` entries are the exact live-FAIL commands that a fix
+#     must flip green. Epic 98 seeds B-09 (W1.B3 regression), C-R1 (W2.R5
+#     regression), B-11 (W3.N1 regression). `--tripwire-only` runs these and
+#     returns 0 when they fail as expected (forcing-flip witnesses); once the
+#     Wave 2 fix lands the witnesses flip to PASS, and the story author
+#     removes the known_tripwires block in the same commit.
 #
 # Seeded with the 3 Wave-1 BLOCKERs (B1/B2/B3) + two duplicated-Examples
 # tripwires (B4/B5). Subsequent Wave 1/2 stories add their probes here.
@@ -38,6 +60,14 @@ probes:
       — drops name-fields bound to a different resource type before
       they spread into the slot's desiredState.
     must_fail_pre_fix: false
+    variations:
+      - cmd: 'plan "create lambda-with-exec-role named my-fn handler handler.main runtime nodejs20.x" --json'
+        assertions: "AWS::IAM::Role slot does NOT contain FunctionName key (name-field filter)"
+      - cmd: 'plan "create lambda with role named api-handler handler index.main runtime nodejs20.x" --json'
+        assertions: "AWS::IAM::Role slot rejects FunctionName with alt phrasing (compound-keyword variant)"
+      - cmd: 'plan "lambda-with-exec-role called processor handler worker.run runtime python3.11" --json'
+        assertions: "AWS::IAM::Role slot rejects FunctionName with 'called' name token + python runtime"
+    known_tripwires: []
     probe: |
       assert_desired_state_missing_key_on_type \
         "AWS::IAM::Role" \
@@ -58,6 +88,14 @@ probes:
       Wave 1 B2 by surfacing orchestrator `success=false` as a thrown
       AssigneeError in the CLI wrapper.
     must_fail_pre_fix: false
+    variations:
+      - cmd: 'apply "create S3 bucket named invalid..name" --yes --json'
+        assertions: "adjacent-dot bucket name → ok:false, exit non-zero (validator rejects)"
+      - cmd: 'apply "create S3 bucket named INVALID-UPPER" --yes --json'
+        assertions: "uppercase bucket name → ok:false, exit non-zero (S3 naming rule)"
+      - cmd: 'apply "create S3 bucket named a" --yes --json'
+        assertions: "1-char bucket name → ok:false, exit non-zero (min length 3)"
+    known_tripwires: []
     probe: |
       # The bucket name "invalid..name" has adjacent dots, which S3
       # rejects. The validator or apply path must surface that as
@@ -79,7 +117,29 @@ probes:
       (packages/core/src/graph/nodes/intent-parser.ts). `\b` treats
       `-` as a word-boundary, which let the old regex match
       region-shaped substrings inside hyphenated identifiers.
+
+      Epic 98 M2 retrofit — 5 variations cover (a) alpha-alpha-digit
+      name tripwire (`my-abc-1` — Epic 97 B-09 live-FAIL), (b) explicit
+      region tail winning over substring, (c) bucket with region-
+      substring in NAME, (d) explicit `in us-west-2`, (e) bare intent
+      defaulting region. Variant (a) currently FAILs against HEAD;
+      Wave 2 e98.W2.R1 must flip it to PASS.
     must_fail_pre_fix: false
+    variations:
+      - cmd: 'plan "Create a lambda named my-abc-1" --json'
+        assertions: "alpha-alpha-digit name does NOT trigger region false-positive; plan.region defaults"
+      - cmd: 'plan "create S3 bucket named my-bucket-us-east-1-fake region eu-west-2" --json'
+        assertions: "explicit region tail (eu-west-2) wins over substring match inside name"
+      - cmd: 'plan "create S3 bucket named log-ap-northeast-2-archive" --json'
+        assertions: "region-shaped substring inside name does NOT clobber default region"
+      - cmd: 'plan "Create a lambda named my-fn in us-west-2" --json'
+        assertions: "explicit `in us-west-2` tail lifted into plan.region"
+      - cmd: 'plan "Create an S3 bucket" --json'
+        assertions: "bare intent produces plan with default region (no parse failure)"
+    known_tripwires:
+      - cmd: '$PROBE_CLI_BIN plan "Create a lambda named my-abc-1" --json'
+        expected_exit: "non-zero"
+        expected_fail_anchor: 'Unknown AWS region "my-abc-1"'
     probe: |
       # Expect: plan succeeds (ok:true) because the user IS specifying
       # a valid region (eu-west-2). The bucket-name substring
@@ -97,6 +157,14 @@ probes:
       block from `buildSupportedTypesBlock()` — the per-command
       `addHelpText` blocks are now the only carriers of `Examples:`.
     must_fail_pre_fix: false
+    variations:
+      - cmd: "plan --help"
+        assertions: "`plan --help` emits exactly 1 `Examples:` heading"
+      - cmd: "plan -h"
+        assertions: "short-flag alias emits exactly 1 `Examples:` heading (shared helptext)"
+      - cmd: "help plan"
+        assertions: "Commander `help <cmd>` invocation emits exactly 1 `Examples:` heading"
+    known_tripwires: []
     probe: |
       assert_single_examples_block $PROBE_CLI_BIN plan --help
 
@@ -108,6 +176,14 @@ probes:
       cause was `buildSupportedTypesBlock()` embedding its own
       `Examples:` section.
     must_fail_pre_fix: false
+    variations:
+      - cmd: "apply --help"
+        assertions: "`apply --help` emits exactly 1 `Examples:` heading"
+      - cmd: "apply -h"
+        assertions: "short-flag alias emits exactly 1 `Examples:` heading"
+      - cmd: "help apply"
+        assertions: "Commander `help apply` invocation emits exactly 1 `Examples:` heading"
+    known_tripwires: []
     probe: |
       assert_single_examples_block $PROBE_CLI_BIN apply --help
 
@@ -125,6 +201,14 @@ probes:
       listed in the Trusted Advisor HCP4007jGY catalogue (+ MongoDB
       27017 / Redis 6379 / Elasticsearch 9200).
     must_fail_pre_fix: false
+    variations:
+      - cmd: 'plan "Create a security group allowing 0.0.0.0/0 on port 443" --json'
+        assertions: "BP-SG-004 does NOT fire on HTTPS (not a DB/admin port)"
+      - cmd: 'plan "Create a security group allowing 0.0.0.0/0 on port 80" --json'
+        assertions: "BP-SG-004 does NOT fire on HTTP (not a DB/admin port)"
+      - cmd: 'plan "Create a security group allowing 0.0.0.0/0 on port 8080" --json'
+        assertions: "BP-SG-004 does NOT fire on non-DB port 8080"
+    known_tripwires: []
     probe: |
       assert_no_bp_finding_id BP-SG-004 \
         $PROBE_CLI_BIN plan \
@@ -141,6 +225,14 @@ probes:
       narrowing that silently drops the rule on the intent it is
       supposed to flag.
     must_fail_pre_fix: false
+    variations:
+      - cmd: 'plan "Create a security group allowing 0.0.0.0/0 on port 3306" --json'
+        assertions: "BP-SG-004 fires on MySQL (3306) exposed to world"
+      - cmd: 'plan "Create a security group allowing 0.0.0.0/0 on port 5432" --json'
+        assertions: "BP-SG-004 fires on PostgreSQL (5432) exposed to world"
+      - cmd: 'plan "Create a security group allowing 0.0.0.0/0 on port 27017" --json'
+        assertions: "BP-SG-004 fires on MongoDB (27017) exposed to world"
+    known_tripwires: []
     probe: |
       assert_bp_finding_id_present BP-SG-004 \
         $PROBE_CLI_BIN plan \
@@ -160,6 +252,14 @@ probes:
       the intent-parser errorMessage surfaced via an unsupported-type
       intent. Both surfaces must render the same 10 groups.
     must_fail_pre_fix: false
+    variations:
+      - cmd: 'plan --help && plan "Create a quantum computer" --json'
+        assertions: "10 family group headers (Compute/Storage/Databases/Networking/Edge-CDN/API/Messaging/Security/Containers/Observability) present in BOTH help text and error hint"
+      - cmd: 'plan "Create a time machine" --json'
+        assertions: "unsupported-intent error hint includes all 10 group headers (shared renderer)"
+      - cmd: 'apply "Create a unicorn" --yes --json'
+        assertions: "apply error surface shares same group headers (cross-command consistency)"
+    known_tripwires: []
     probe: |
       cli_out="$($PROBE_CLI_BIN plan --help 2>&1)"
       err_out="$($PROBE_CLI_BIN plan 'Create a quantum computer' --json 2>&1 || true)"
@@ -187,6 +287,14 @@ probes:
       --yes` errors with an actionable mutually-exclusive message +
       exit 1 (never hangs, never silently accepts).
     must_fail_pre_fix: false
+    variations:
+      - cmd: "init --help"
+        assertions: "--wizard flag listed in init --help output"
+      - cmd: "init --wizard --yes --region us-east-1"
+        assertions: "mutual-exclusivity: exits non-zero with `mutually exclusive` message"
+      - cmd: "init --wizard --yes --global --region us-east-1"
+        assertions: "global+wizard+yes combo still rejected (mutual-exclusivity applies to global too)"
+    known_tripwires: []
     probe: |
       help_out="$($PROBE_CLI_BIN init --help 2>&1)"
       if ! printf '%s' "$help_out" | grep -q -- '--wizard'; then
@@ -229,6 +337,14 @@ probes:
       plan follow-up landed alongside this commit; destroy / reconcile
       share the same helper).
     must_fail_pre_fix: false
+    variations:
+      - cmd: 'apply "Create a quantum entanglement device" --yes --json'
+        assertions: "apply --json: stderr lacks [ERROR]/[CONTEXT]/[FIX]; stdout has {ok:false,error.code}"
+      - cmd: 'plan "Create a quantum entanglement device" --json'
+        assertions: "plan --json: stderr lacks human error blocks; stdout envelope valid"
+      - cmd: 'plan "Create a time machine" --output json'
+        assertions: "--output json alias yields same surgical filter as --json"
+    known_tripwires: []
     probe: |
       out_file="$(mktemp)"
       err_file="$(mktemp)"
@@ -287,6 +403,14 @@ probes:
       a 10-second hard timeout — if the wrapper hangs, timeout returns
       124 and the probe fails.
     must_fail_pre_fix: false
+    variations:
+      - cmd: "init --global --yes --region us-east-1 --auto-fix ask"
+        assertions: "10s timeout: completes, writes config with region + auto_fix"
+      - cmd: "init --global --yes --region eu-west-1 --auto-fix always"
+        assertions: "non-default region + auto_fix mode threaded through"
+      - cmd: "init --global --yes --region ap-southeast-2 --auto-fix never"
+        assertions: "auto_fix=never mode accepted; no prompt hang"
+    known_tripwires: []
     probe: |
       # Isolate HOME so the probe writes to a tempdir, not the real
       # user's ~/.config/assignee. mktemp -d gives us a fresh sandbox
@@ -332,7 +456,33 @@ probes:
       on the plan. Fixed in e96.W2.R5 by aligning the plugin facade
       (`ec2-instance.ts`) and the enum field's `toCfn`
       (`ec2-instance/fields.ts`) to emit the schema-correct casing.
+
+      Epic 98 M2 retrofit — 4 variations cover (a) t3.micro baseline,
+      (b) t3.large + 100GB tripwire (Epic 97 C-R1 live-FAIL — the
+      merge-skip bug strips CreditSpecification when the LLM emits
+      {}), (c) stub-LLM `{CreditSpecification:{}}` empty shell,
+      (d) user-stated `CPUCredits unlimited` (user-wins). Variant (b)
+      currently FAILs against HEAD; Wave 2 e98.W2.R2 must flip it to
+      PASS.
     must_fail_pre_fix: false
+    variations:
+      - cmd: 'plan "Create an EC2 t3.micro instance" --json'
+        assertions: "t3.micro: CreditSpecification.CPUCredits == 'standard' (plugin default)"
+      - cmd: 'plan "Create an EC2 instance t3.large with 100GB gp3 volume" --json'
+        assertions: "t3.large + volume: CreditSpecification.CPUCredits == 'standard' (NOT empty {})"
+      - cmd: 'plan "Create a t3.medium EC2 instance" --json'
+        assertions: "t3.medium: CreditSpecification survives sanitizer with CPUCredits set"
+      - cmd: 'plan "Create a t3.small EC2 instance with CPUCredits unlimited" --json'
+        assertions: "user-stated CPUCredits unlimited wins over plugin default"
+    known_tripwires:
+      # C-R1 reproducer (deterministic): grep merge.ts for the unfixed
+      # skip-condition `result[key] !== undefined` (line 155 at time of
+      # Epic 97). Presence of that token proves the bug is live. Once
+      # Wave 2 e98.W2.R2 replaces it with `!isEmptyLeaf(result[key])`,
+      # the grep misses and the tripwire flips to PASS → FORCING-FLIP.
+      - cmd: 'if grep -q "result\[key\] !== undefined" "$PROBE_REPO_ROOT/packages/core/src/graph/nodes/plan-generator/llm-plan/merge.ts"; then echo "C-R1 LIVE: merge-skip still on undefined-check (line 155)" >&2; exit 1; else exit 0; fi'
+        expected_exit: "non-zero"
+        expected_fail_anchor: "C-R1 LIVE"
     probe: |
       # Runs a plain EC2 t3.micro plan and asserts the sanitised
       # desiredState carries a non-empty CreditSpecification with the
@@ -369,6 +519,14 @@ probes:
       qualifiers (with VPC, with a new VPC, and VPC, in a VPC, in new
       VPC, etc.). Closes Epic 95 C-02 MED NEW.
     must_fail_pre_fix: false
+    variations:
+      - cmd: 'plan "Create an EFS file system" --json'
+        assertions: "bare EFS intent → exactly 1 plan, resourceType AWS::EFS::FileSystem"
+      - cmd: 'plan "Create an EFS filesystem" --json'
+        assertions: "single-word 'filesystem' phrasing routes to singleton"
+      - cmd: 'plan "Create an EFS FS" --json'
+        assertions: "abbreviated 'FS' phrasing routes to singleton (no compound spillover)"
+    known_tripwires: []
     probe: |
       # Assert bare intent produces exactly 1 plan with resourceType
       # AWS::EFS::FileSystem. The CLI may emit a top-level `plan`
@@ -408,6 +566,14 @@ probes:
       an over-aggressive singleton cue that drops the compound
       behaviour the pattern was built for.
     must_fail_pre_fix: false
+    variations:
+      - cmd: 'plan "Create an EFS file system with a new VPC" --json'
+        assertions: "'with a new VPC' qualifier → compound path, ≥5 plans incl AWS::EC2::VPC"
+      - cmd: 'plan "Create an EFS file system and VPC" --json'
+        assertions: "'and VPC' qualifier routes to compound"
+      - cmd: 'plan "Create an EFS file system in a new VPC" --json'
+        assertions: "'in a new VPC' qualifier routes to compound"
+    known_tripwires: []
     probe: |
       stdout="$($PROBE_CLI_BIN plan "Create an EFS file system with a new VPC" --json 2>/dev/null || true)"
       envelope="$(printf '%s' "$stdout" | awk '/^\{/{block=$0; capture=1; next} capture{block=block"\n"$0} END{print block}')"
@@ -441,6 +607,14 @@ probes:
       for AWS::EFS::FileSystem. This probe ensures ordering /
       registration didn't accidentally break the mount-target path.
     must_fail_pre_fix: false
+    variations:
+      - cmd: 'plan "Create an EFS mount target" --json'
+        assertions: "'EFS mount target' routes to AWS::EFS::MountTarget singleton"
+      - cmd: 'plan "Create an EFS mount-target" --json'
+        assertions: "hyphenated 'mount-target' routes to singleton"
+      - cmd: 'plan "Create a mount target for EFS" --json'
+        assertions: "prepositional-phrase 'for EFS' still resolves to MountTarget singleton"
+    known_tripwires: []
     probe: |
       stdout="$($PROBE_CLI_BIN plan "Create an EFS mount target" --json 2>/dev/null || true)"
       envelope="$(printf '%s' "$stdout" | awk '/^\{/{block=$0; capture=1; next} capture{block=block"\n"$0} END{print block}')"
@@ -476,6 +650,16 @@ probes:
       the VPC/Subnet `CidrBlock`. Probe calls extractAssertedValues
       directly to avoid LLM non-determinism.
     must_fail_pre_fix: false
+    variations:
+      - cmd: 'extractAssertedValues("Create a default route to 0.0.0.0/0", "AWS::EC2::Route")'
+        assertions: "/0 prefix accepted on Route; DestinationCidrBlock==0.0.0.0/0; no CidrBlock leak"
+      - cmd: 'extractAssertedValues("Create a host route to 10.0.0.42/32", "AWS::EC2::Route")'
+        assertions: "/32 prefix accepted on Route; DestinationCidrBlock==10.0.0.42/32"
+      - cmd: 'extractAssertedValues("Create a VPC route to 172.16.0.0/20", "AWS::EC2::Route")'
+        assertions: "/20 mid-prefix accepted on Route; DestinationCidrBlock==172.16.0.0/20"
+      - cmd: 'extractAssertedValues("Create a VPC with CIDR 10.0.0.0/8", "AWS::EC2::VPC")'
+        assertions: "VPC regression guard: /8 still rejected (kind=vpc clamp preserved)"
+    known_tripwires: []
     probe: |
       node -e '
         const repo = process.env.PROBE_REPO_ROOT;
@@ -530,7 +714,37 @@ probes:
       Probe invokes the compiled guard directly against a synthetic
       desiredState — a CLI-end-to-end probe would depend on LLM
       non-determinism.
+
+      Epic 98 M2 retrofit — 6 variations cover (a) Description,
+      (b) Name, (c) Comment (existing 3), (d) GroupDescription (SG —
+      Epic 97 B-11 live-FAIL tripwire), (e) DBSubnetGroupDescription
+      (RDS), (f) DashboardBody (CloudWatch). Variant (d) currently
+      FAILs against HEAD because the prose-field allowlist was
+      scoped too narrowly; Wave 2 e98.W2.R3 must flip it to PASS.
     must_fail_pre_fix: false
+    variations:
+      - cmd: 'detectPlaceholderResourceId({Description: "Public subnet (subnet-<hex>)"})'
+        assertions: "Description prose field detects subnet-<hex>"
+      - cmd: 'detectPlaceholderResourceId({Name: "See vpc-<ID> tag"})'
+        assertions: "Name prose field detects vpc-<ID>"
+      - cmd: 'detectPlaceholderResourceId({DistributionConfig: {Comment: "Origin for subnet-abc12345"}})'
+        assertions: "Comment prose field detects placeholder token"
+      - cmd: 'detectPlaceholderResourceId({GroupDescription: "Traffic from subnet-<hex>"})'
+        assertions: "GroupDescription (SG prose) detects placeholder — Epic 97 B-11 tripwire"
+      - cmd: 'detectPlaceholderResourceId({DBSubnetGroupDescription: "Subnets for subnet-<hex>"})'
+        assertions: "DBSubnetGroupDescription (RDS prose) detects placeholder"
+      - cmd: 'detectPlaceholderResourceId({DashboardBody: "Contains sg-<YOUR-SG>"})'
+        assertions: "DashboardBody (CloudWatch prose) detects placeholder"
+    known_tripwires:
+      # B-11 reproducer (deterministic): the PLACEHOLDER_RESOURCE_ID_PROSE_FIELDS
+      # allowlist at line 141 of placeholder-resource-id.ts currently holds
+      # only Description / Name / Comment, so GroupDescription + other CFN
+      # prose fields are not scanned — B-11 live. Once Wave 2 e98.W2.R3
+      # adds GroupDescription to the allowlist, the grep fires and the
+      # tripwire flips to PASS → FORCING-FLIP.
+      - cmd: 'if ! grep -q "\"GroupDescription\"" "$PROBE_REPO_ROOT/packages/core/src/graph/nodes/preflight-guard/guards/placeholder-resource-id.ts"; then echo "B-11 LIVE: GroupDescription missing from placeholder-guard allowlist" >&2; exit 1; else exit 0; fi'
+        expected_exit: "non-zero"
+        expected_fail_anchor: "B-11 LIVE"
     probe: |
       node -e '
         const repo = process.env.PROBE_REPO_ROOT;
@@ -576,6 +790,14 @@ probes:
       `state.error` so the plan-orchestrator's JSON envelope path
       propagates it to stdout instead of the `PLAN_FAILED` fallback.
     must_fail_pre_fix: false
+    variations:
+      - cmd: 'plan "Create an S3 bucket named résumé-bucket" --json'
+        assertions: "Latin-1 accented chars → error.code INVALID_NAME, message cites non-ASCII"
+      - cmd: 'plan "Create an S3 bucket named 日本-bucket" --json'
+        assertions: "CJK chars → error.code INVALID_NAME"
+      - cmd: 'plan "Create an S3 bucket named 👋-bucket" --json'
+        assertions: "emoji chars → error.code INVALID_NAME (not PLAN_FAILED fallback)"
+    known_tripwires: []
     probe: |
       # Drive the CLI end-to-end — this path exercises both the intent-
       # parser's stamping AND the plan-orchestrator's error-envelope

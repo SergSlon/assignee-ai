@@ -534,3 +534,134 @@ describe("shipped-wired contract F — envelope-schema parity", () => {
     ).toBeGreaterThanOrEqual(3);
   });
 });
+
+// ---------------------------------------------------------------------------
+// G. Probe variation coverage (Epic 98 M2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse PROBE_MANIFEST.yaml into a flat list of
+ *   { story, name, variationsCount }
+ * records. We avoid a YAML dependency (js-yaml is not a prod dep of the
+ * core package) and use an indentation-aware line scan that matches the
+ * awk parser in pre-close-probes.sh. Keep the two in sync: if the
+ * manifest shape changes, update both.
+ */
+function parseManifestEntries(): Array<{
+  story: string;
+  name: string;
+  variationsCount: number;
+  hasKnownTripwiresBlock: boolean;
+  lineNumber: number;
+}> {
+  const text = readProbeManifestText();
+  if (!text) return [];
+  const lines = text.split(/\r?\n/);
+  const entries: Array<{
+    story: string;
+    name: string;
+    variationsCount: number;
+    hasKnownTripwiresBlock: boolean;
+    lineNumber: number;
+  }> = [];
+  let current: {
+    story: string;
+    name: string;
+    variationsCount: number;
+    hasKnownTripwiresBlock: boolean;
+    lineNumber: number;
+  } | null = null;
+  let inVariations = false;
+
+  const flush = () => {
+    if (current) entries.push(current);
+  };
+
+  for (let idx = 0; idx < lines.length; idx += 1) {
+    const line = lines[idx] ?? "";
+    const storyMatch = line.match(/^\s{2,4}-\s+story:\s*(\S.*)$/);
+    if (storyMatch) {
+      flush();
+      current = {
+        story: storyMatch[1]!.trim(),
+        name: "",
+        variationsCount: 0,
+        hasKnownTripwiresBlock: false,
+        lineNumber: idx + 1,
+      };
+      inVariations = false;
+      continue;
+    }
+    if (!current) continue;
+    const nameMatch = line.match(/^\s+name:\s*(\S.*)$/);
+    if (nameMatch) {
+      current.name = nameMatch[1]!.trim();
+      continue;
+    }
+    if (/^\s{4}variations:\s*$/.test(line)) {
+      inVariations = true;
+      continue;
+    }
+    if (/^\s{4}known_tripwires:/.test(line)) {
+      current.hasKnownTripwiresBlock = true;
+      inVariations = false;
+      continue;
+    }
+    if (/^\s+probe:\s*\|\s*$/.test(line)) {
+      inVariations = false;
+      continue;
+    }
+    // Another 4-space top-level key exits variations block.
+    if (inVariations) {
+      if (/^\s{4}[a-zA-Z_]+:/.test(line)) {
+        inVariations = false;
+      } else if (/^\s{6}-\s+cmd:/.test(line)) {
+        current.variationsCount += 1;
+      }
+    }
+  }
+  flush();
+  return entries;
+}
+
+describe("shipped-wired contract G — probe variation coverage (Epic 98 M2)", () => {
+  const entries = parseManifestEntries();
+
+  it("PROBE_MANIFEST has at least one probe entry", () => {
+    // Defensive guard: if the parser regresses, we'd silently pass a
+    // zero-length list. Force at least the 18 Epic 96 probes to parse.
+    expect(
+      entries.length,
+      "probe manifest parser returned zero entries",
+    ).toBeGreaterThanOrEqual(1);
+  });
+
+  it("every probe declares >= 3 variations", () => {
+    const offenders = entries.filter((e) => e.variationsCount < 3);
+    const detail = offenders
+      .map(
+        (o) =>
+          `${o.story} :: ${o.name} :: variations=${o.variationsCount} (line ${o.lineNumber})`,
+      )
+      .join("\n  ");
+    expect(
+      offenders,
+      `Probes below Epic 98 M2 variation floor (< 3 variations):\n  ${detail}`,
+    ).toEqual([]);
+  });
+
+  it("every probe declares a known_tripwires block (list or [])", () => {
+    // Required for schema-parseability even if the list is empty. The
+    // known_tripwires block is how Wave 2 forcing-flip witnesses are
+    // registered; a probe that omits the block entirely is a silent
+    // contract violation.
+    const missing = entries.filter((e) => !e.hasKnownTripwiresBlock);
+    const detail = missing
+      .map((o) => `${o.story} :: ${o.name} (line ${o.lineNumber})`)
+      .join("\n  ");
+    expect(
+      missing,
+      `Probes missing known_tripwires block:\n  ${detail}`,
+    ).toEqual([]);
+  });
+});
