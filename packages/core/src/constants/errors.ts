@@ -70,6 +70,16 @@ export const ErrorCode = {
   // "apply failed at AWS" from generic plumbing errors.
   APPLY_FAILED: "APPLY_FAILED",
 
+  // ── BP-blocked apply (Epic 98 e98.W5.N4 — Epic 97 B-05) ─────
+  // Emitted by the apply orchestrator when the Phase-1 BP gate
+  // rejects the plan (blocking-severity findings remain after
+  // any interactive fix pass). Distinct from APPLY_FAILED so
+  // automation can decide whether to (a) add `--force-unsafe`,
+  // (b) rephrase the intent, or (c) retry as a compound plan —
+  // the `error.detail.practiceIds[]` carries the specific
+  // practice IDs (e.g. `BP-IGW-001`) that blocked.
+  BP_BLOCKED: "BP_BLOCKED",
+
   // ── Intent-parser validation failures (Epic 96 Wave 2 R7) ────
   // Emitted by the intent-parser when a `named <x>` span contains
   // non-ASCII characters. Previously surfaced as the generic

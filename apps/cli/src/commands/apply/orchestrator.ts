@@ -30,6 +30,7 @@ import type { AgentState } from "../../services/graph.js";
 import { runPhase1, type Phase1Deps } from "./phase1-planner.js";
 import { handlePhase1Outcome } from "./phase1-gate.js";
 import type { ApplyOpts } from "./arg-parser.js";
+import type { ApplyFailureDetail } from "./phase1-gate/types.js";
 
 export type OrchestratorCtx = CommandContext;
 
@@ -62,6 +63,19 @@ export interface ApplyRunResult {
   arn?: string | null;
   primaryIdentifier?: string | null;
   cost?: string;
+  /**
+   * Epic 98 e98.W5.N4 (Epic 97 B-04 + B-05): typed failure classifier
+   * so the CLI `--json` wrapper can stamp the right error.code +
+   * error.detail on the envelope.
+   *   - `{kind: "bp_blocked", practiceIds}` → envelope error.code =
+   *     `BP_BLOCKED`, detail.practiceIds carries the blocking IDs.
+   *   - `{kind: "apply_failed", errorMessage}` → envelope error.code =
+   *     `APPLY_FAILED`, detail.errorMessage carries the concrete
+   *     Phase-2 failure from result-formatter (truncated at the CLI
+   *     serialisation boundary).
+   * Absent on success paths.
+   */
+  failure?: ApplyFailureDetail;
 }
 
 /**
@@ -120,6 +134,9 @@ export async function runApply(
     // Phase 1 terminal: CANCELLED (success=true) / FAILED / bp-blocked
     // (success=false). Surface runId so the CLI wrapper can emit it on
     // either path; arn/cost are not yet populated at Phase 1.
+    // Epic 98 e98.W5.N4: `failure` (when present) carries the bp_blocked
+    // practiceIds so the wrapper can pick BP_BLOCKED + detail in the
+    // JSON envelope instead of the generic APPLY_FAILED.
     return { ...gate.result, runId: ctx.runId };
   }
 
@@ -170,13 +187,25 @@ async function enrichResult(
 ): Promise<ApplyRunResult> {
   const { resourceType, bareIdentifier } = pickEnvelopeAnchor(finalState);
   const projection = await buildApplyEnvelopeArn(resourceType, bareIdentifier);
-  return {
+  const base: ApplyRunResult = {
     success,
     runId: finalState.runId ?? fallbackRunId,
     arn: projection.arn,
     primaryIdentifier: projection.primaryIdentifier,
     cost: finalState.estimatedMonthlyCost,
   };
+  // Epic 98 e98.W5.N4 (B-04): Phase-2 provisioning failed — propagate
+  // the concrete `finalState.errorMessage` (e.g. `Invalid id: "igw-xxx"
+  // (Service: Ec2, Status Code: 400, ...)`) so the JSON envelope can
+  // stamp it on `error.detail.errorMessage` instead of collapsing into
+  // the generic "Apply failed: provisioning ended without success."
+  if (!success && finalState.errorMessage) {
+    base.failure = {
+      kind: "apply_failed",
+      errorMessage: finalState.errorMessage,
+    };
+  }
+  return base;
 }
 
 /**

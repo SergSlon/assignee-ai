@@ -55,9 +55,25 @@ export async function handleBpBlocked(
 
   if (!fixesApplied || hasBlockingRemaining) {
     logApplyComplete(ctx, "bp_blocked");
+    // Epic 98 e98.W5.N4 (B-05): surface the blocking practice IDs to
+    // the CLI wrapper via the `failure` discriminator so the JSON
+    // envelope can stamp `error.code = BP_BLOCKED` +
+    // `error.detail.practiceIds[]`. Without this, the envelope
+    // collapses into the generic APPLY_FAILED with a message that
+    // strips the practice IDs — automation can't distinguish
+    // "add --force-unsafe" from "retry with different intent".
+    const blockingIds = residualFindings
+      .filter((f) => f.blocking)
+      .map((f) => f.practiceId);
     return {
       next: phase1State,
-      result: { kind: "done", result: { success: false } },
+      result: {
+        kind: "done",
+        result: {
+          success: false,
+          failure: { kind: "bp_blocked", practiceIds: blockingIds },
+        },
+      },
     };
   }
 

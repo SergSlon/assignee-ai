@@ -41,7 +41,11 @@
  */
 
 import { Command } from "commander";
-import { AssigneeError, serializeErrorEnvelope } from "@assignee/core";
+import {
+  AssigneeError,
+  serializeErrorEnvelope,
+  type JsonErrorDetail,
+} from "@assignee/core";
 import {
   CommandName,
   CommandDescription,
@@ -103,7 +107,12 @@ interface ApplySuccessEnvelope {
 
 function installJsonStdoutSuppressor(enabled: boolean): {
   flushSuccess: (envelope: ApplySuccessEnvelope) => void;
-  flushError: (code: string, message: string, hint?: string) => void;
+  flushError: (
+    code: string,
+    message: string,
+    hint?: string,
+    detail?: JsonErrorDetail,
+  ) => void;
   restore: () => void;
 } {
   if (!enabled) {
@@ -145,15 +154,99 @@ function installJsonStdoutSuppressor(enabled: boolean): {
       const payload = JSON.stringify(envelope, null, 2) + "\n";
       originalWrite.call(process.stdout, payload);
     },
-    flushError: (code, message, hint) => {
+    flushError: (code, message, hint, detail) => {
       restore();
       originalWrite.call(
         process.stdout,
-        serializeErrorEnvelope(code, message, hint),
+        serializeErrorEnvelope(code, message, hint, detail),
       );
     },
     restore,
   };
+}
+
+/**
+ * Upper bound on the characters copied from `errorMessage` into
+ * `error.detail.errorMessage` for the B-04 envelope closure. Prevents
+ * a multi-kilobyte stack-trace-style string from bloating the JSON
+ * envelope in automation pipelines.
+ */
+const ERROR_DETAIL_MAX_CHARS = 500;
+
+/**
+ * Epic 98 e98.W5.N4 (Epic 97 B-04 + B-05): synthesise an `AssigneeError`
+ * from the orchestrator's typed `failure` classifier so the envelope
+ * emits a specific code + message instead of the generic
+ * "Apply failed: provisioning ended without success."
+ *
+ * - `bp_blocked` — message enumerates the blocking practice IDs so the
+ *   human-readable message is actionable ("Blocked by BP-IGW-001"),
+ *   and `error.detail.practiceIds[]` carries the machine-readable form.
+ * - `apply_failed` — message is the concrete `finalState.errorMessage`
+ *   passed up from the result-formatter (truncated to 500 chars at
+ *   the envelope boundary to keep stdout bounded).
+ * - No `failure` attached — fall back to the pre-N4 generic message so
+ *   existing callers / Phase-1 CANCELLED paths stay byte-identical.
+ *
+ * `alreadyRendered: true` is set on every branch because the
+ * human-readable block is already on stderr via renderError /
+ * renderProvisioningLoop — we must NOT let index.ts double-paint it.
+ */
+function synthesiseFailureError(result: ApplyRunResult): AssigneeError {
+  const failure = result.failure;
+  if (failure?.kind === "bp_blocked") {
+    const idsSummary =
+      failure.practiceIds.length > 0
+        ? failure.practiceIds.join(", ")
+        : "an unspecified blocking finding";
+    return new AssigneeError(
+      `Apply blocked by best-practice findings: ${idsSummary}.`,
+      ErrorCode.BP_BLOCKED,
+      { alreadyRendered: true },
+    );
+  }
+  if (failure?.kind === "apply_failed") {
+    return new AssigneeError(
+      truncate(failure.errorMessage, ERROR_DETAIL_MAX_CHARS),
+      ErrorCode.APPLY_FAILED,
+      { alreadyRendered: true },
+    );
+  }
+  return new AssigneeError(
+    "Apply failed: provisioning ended without success.",
+    ErrorCode.APPLY_FAILED,
+    { alreadyRendered: true },
+  );
+}
+
+/**
+ * Project the orchestrator's typed `failure` classifier onto the JSON
+ * envelope's `error.detail` bag. Returns `undefined` when there is no
+ * failure payload (Phase-1 CANCELLED / success paths / plain-Error
+ * throws) so the serialiser omits the `detail` key entirely and the
+ * pre-N4 envelope shape is preserved byte-for-byte.
+ */
+function buildErrorDetail(
+  failure: ApplyRunResult["failure"],
+): JsonErrorDetail | undefined {
+  if (failure === undefined) return undefined;
+  if (failure.kind === "bp_blocked") {
+    if (failure.practiceIds.length === 0) return undefined;
+    return { practiceIds: failure.practiceIds };
+  }
+  if (failure.kind === "apply_failed") {
+    if (!failure.errorMessage) return undefined;
+    return {
+      errorMessage: truncate(failure.errorMessage, ERROR_DETAIL_MAX_CHARS),
+    };
+  }
+  return undefined;
+}
+
+/** Truncate `s` to at most `max` chars with a `…` elision marker. */
+function truncate(s: string, max: number): string {
+  if (s.length <= max) return s;
+  return s.slice(0, max - 1) + "…";
 }
 
 /**
@@ -323,12 +416,17 @@ export const applyCommand = new Command(CommandName.APPLY)
       // has already been written to stderr by `runProvisioningLoop` or
       // the Phase-1 gate; `alreadyRendered:true` prevents the top-level
       // Commander catch from painting the message a second time.
+      //
+      // Epic 98 e98.W5.N4 (B-04 + B-05): branch on `applyResult.failure`
+      // so the synthesised error carries the right code (BP_BLOCKED vs
+      // APPLY_FAILED) and a concrete message (the Phase-2
+      // `errorMessage` rather than the generic "provisioning ended
+      // without success"). The structured `failure` payload is also
+      // stamped onto `error.detail` when the JSON envelope flushes
+      // below so automation has machine-readable practice IDs / the
+      // concrete AWS error without parsing stderr JSON-lines.
       if (!runErrored && applyResult && applyResult.success === false) {
-        runErrored = new AssigneeError(
-          "Apply failed: provisioning ended without success.",
-          ErrorCode.APPLY_FAILED,
-          { alreadyRendered: true },
-        );
+        runErrored = synthesiseFailureError(applyResult);
       }
 
       if (jsonMode) {
@@ -344,7 +442,12 @@ export const applyCommand = new Command(CommandName.APPLY)
             ? ((runErrored as { hint?: string }).hint ??
               "Run `assignee --verbose apply` to see the full node trace.")
             : "Run with --verbose for full stack trace.";
-          suppressor.flushError(code, runErrored.message, hint);
+          // Epic 98 e98.W5.N4: attach `error.detail` when the failure
+          // came from the orchestrator with structured classification.
+          // External throws (plain Errors, other AssigneeError paths)
+          // get `undefined` → serializer omits the detail key entirely.
+          const detail = buildErrorDetail(applyResult?.failure);
+          suppressor.flushError(code, runErrored.message, hint, detail);
         } else {
           suppressor.flushSuccess(buildSuccessEnvelope(applyResult));
         }
