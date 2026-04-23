@@ -817,3 +817,50 @@ probes:
         printf '%s' "$envelope" | jq -c '{ok, code: .error.code, msg: .error.message[0:80]}' >&2
         exit 1
       fi
+
+  - story: e98.W2.R4
+    name: ec2-user-stated-volume-size-fidelity
+    description: |
+      e98.W2.R4 (Epic 97 C-R2): when the user intent contains a `<N>GB` /
+      `<N> GiB` span on an EC2 instance plan, the resulting
+      BlockDeviceMappings[0].Ebs.VolumeSize MUST equal <N>. Pre-fix the
+      EC2 plugin's 8GB default silently survived — a user asking for
+      100GB got 8GB at apply time with zero warning. Fix landed in
+      `applyUserStatedVolumeSize` (packages/core/src/graph/nodes/
+      plan-generator/llm-plan/sanitize.ts), wired between sanitize and
+      repair in llm-plan.ts. Post-parse deterministic regex patcher,
+      scoped to EC2::Instance, first match wins.
+    must_fail_pre_fix: false
+    variations:
+      - cmd: 'plan "Create an EC2 instance t3.large with 100GB gp3 volume" --json'
+        assertions: "BlockDeviceMappings[0].Ebs.VolumeSize == 100 (not the LLM's 8)"
+      - cmd: 'plan "Create a t3.micro with 50GB volume" --json'
+        assertions: "BlockDeviceMappings[0].Ebs.VolumeSize == 50"
+      - cmd: 'plan "Create a t3.micro EC2 instance" --json'
+        assertions: "no volume-size span → BlockDeviceMappings[0].Ebs.VolumeSize == 8 (default preserved)"
+    known_tripwires: []
+    probe: |
+      # Variation 1: t3.large + 100GB — canonical C-R2 reproducer. Uses
+      # assert_json_path_equals for exact-value match (closes B-10 gap).
+      assert_json_path_equals \
+        '.plan.desiredState.BlockDeviceMappings[0].Ebs.VolumeSize' \
+        '100' \
+        $PROBE_CLI_BIN plan \
+          "Create an EC2 instance t3.large with 100GB gp3 volume" \
+          --json
+      # Variation 2: t3.micro + 50GB — smaller size, different instance type.
+      assert_json_path_equals \
+        '.plan.desiredState.BlockDeviceMappings[0].Ebs.VolumeSize' \
+        '50' \
+        $PROBE_CLI_BIN plan \
+          "Create a t3.micro with 50GB volume" \
+          --json
+      # Variation 3: bare intent, no volume-size span — default must hold.
+      # Guards against an over-aggressive patcher that would zero out the
+      # plugin default on intents that never mentioned a size.
+      assert_json_path_equals \
+        '.plan.desiredState.BlockDeviceMappings[0].Ebs.VolumeSize' \
+        '8' \
+        $PROBE_CLI_BIN plan \
+          "Create a t3.micro EC2 instance" \
+          --json

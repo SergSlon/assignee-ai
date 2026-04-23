@@ -26,7 +26,11 @@ import {
   mergePluginDefaults,
   stripPlaceholders,
 } from "./llm-plan/merge.js";
-import { repairRequired, sanitizeAgainstSchema } from "./llm-plan/sanitize.js";
+import {
+  applyUserStatedVolumeSize,
+  repairRequired,
+  sanitizeAgainstSchema,
+} from "./llm-plan/sanitize.js";
 import {
   postRepairPostProcess,
   preRepairPostProcess,
@@ -72,6 +76,19 @@ export async function runLlmPlan(
     schemaKeys,
     state.runId,
     resourceType,
+  );
+
+  // Phase 3a.5 — user-stated VolumeSize fidelity (e98.W2.R4).
+  // Runs AFTER sanitize (so schema coercion doesn't clobber the override)
+  // and BEFORE repair (so the user value survives required-field logic).
+  // Deterministic regex patcher — scoped to EC2::Instance; no-op for
+  // every other resource type. Closes Epic 97 C-R2: user says `100GB`,
+  // gets `100GB` on the plan row, not the LLM's 8GB default.
+  desiredState = applyUserStatedVolumeSize(
+    desiredState,
+    resourceType,
+    state.userIntent ?? "",
+    state.runId,
   );
 
   // Phase 4a — pre-repair post-processing (EC2 AMI / NAT EIP).
