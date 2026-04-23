@@ -1,14 +1,14 @@
 id: BP-EC2-021
 title: "EBS volume should have a snapshot backup"
-severity: HIGH
+severity: MEDIUM
 resource_type: "AWS::EC2::Instance"
 property_path: "BlockDeviceMappings[0].Ebs.VolumeId"
 check_type: "awareness"
 expected_value: true
 source: "TrustedAdvisor"
 source_id: "H7IgTzjTYb"
-description: "Trusted Advisor identifies EBS volumes without recent snapshots. Without snapshots, data on the volume cannot be recovered if the volume is corrupted or accidentally deleted."
+description: "Trusted Advisor identifies EBS volumes without recent snapshots. Without snapshots, data on the volume cannot be recovered if the volume is corrupted or accidentally deleted. Epic 98 W5.P1: severity normalised HIGH → MEDIUM — snapshot history is a runtime attribute the plan-time evaluator cannot verify, but the security/reliability caveat keeps it above the pure-cost rules at MEDIUM (not INFO). The rule still surfaces the gap as a security-hint reminder to configure AWS Backup / DLM at apply time."
 remediation: "Create EBS snapshots regularly using AWS Backup or Amazon Data Lifecycle Manager (DLM). Configure automated snapshot policies with appropriate retention."
 consequence: "Without snapshots, a corrupted or deleted EBS volume means permanent data loss — there is no recovery path."
 category: reliability
-lastVerified: "2026-03-24"
+lastVerified: "2026-04-23"

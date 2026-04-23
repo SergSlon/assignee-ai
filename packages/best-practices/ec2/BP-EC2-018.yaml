@@ -1,15 +1,15 @@
 id: BP-EC2-018
 title: "EC2 instance should not be idle (low CPU utilization)"
-severity: MEDIUM
+severity: INFO
 resource_type: "AWS::EC2::Instance"
 property_path: "InstanceId"
 check_type: "awareness"
 expected_value: true
 source: "TrustedAdvisor"
 source_id: "Qch7DwouX1"
-description: "Trusted Advisor flags EC2 instances with average CPU utilization below 10% over 14 days. Idle instances waste compute costs without providing value."
+description: "Trusted Advisor flags EC2 instances with average CPU utilization below 10% over 14 days. Idle instances waste compute costs without providing value. Epic 98 W5.P1: severity normalised MEDIUM → INFO because the check is a runtime-only heuristic — plan-time evaluation cannot read CloudWatch utilization metrics, so the rule is purely informational until the instance has been running long enough to accumulate data."
 remediation: "Right-size or terminate idle instances. Consider using AWS Instance Scheduler for dev/test workloads or switching to spot instances for fault-tolerant workloads."
 consequence: "An idle instance burns its full hourly rate 24/7 for nothing — a forgotten m5.xlarge wastes over $1,400/year."
 fix_hint: "Right-size or terminate idle instances to reduce cost"
 category: cost_optimization
-lastVerified: "2026-03-24"
+lastVerified: "2026-04-23"

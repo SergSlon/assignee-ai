@@ -1,15 +1,15 @@
 id: BP-EC2-019
 title: "EC2 instance should not be over-provisioned"
-severity: MEDIUM
+severity: INFO
 resource_type: "AWS::EC2::Instance"
 property_path: "InstanceType"
 check_type: "awareness"
 expected_value: true
 source: "TrustedAdvisor"
 source_id: "TA-overprovisioned-ec2"
-description: "Trusted Advisor identifies EC2 instances where CPU, memory, or network utilization consistently stays below 40% of capacity. Over-provisioned instances waste money on unused resources."
+description: "Trusted Advisor identifies EC2 instances where CPU, memory, or network utilization consistently stays below 40% of capacity. Over-provisioned instances waste money on unused resources. Epic 98 W5.P1: severity normalised MEDIUM → INFO because the check requires AWS Compute Optimizer recommendations and 14+ days of CloudWatch data that plan-time evaluation cannot access — the rule is informational until the instance has accumulated runtime telemetry."
 remediation: "Downsize the instance to a smaller type. Use AWS Compute Optimizer recommendations to find the right instance type for the workload."
 consequence: "Over-provisioned instances waste 60%+ of their capacity — across a fleet, this adds up to thousands of dollars per month in unused compute."
 fix_hint: "Downsize to a smaller instance type based on actual usage"
 category: cost_optimization
-lastVerified: "2026-03-24"
+lastVerified: "2026-04-23"
