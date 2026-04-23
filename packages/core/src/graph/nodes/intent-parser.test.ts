@@ -123,7 +123,11 @@ describe("intentParserNode", () => {
     // first-class to unblock the static-website compound migration, count 36.
     expect(SUPPORTED_TYPES).toContain("AWS::CloudFront::OriginAccessControl");
     expect(SUPPORTED_TYPES).toContain("AWS::S3::BucketPolicy");
-    expect(SUPPORTED_TYPES).toHaveLength(37);
+    // 2026-04-13: RDS::DBSubnetGroup first-class, count 37.
+    expect(SUPPORTED_TYPES).toContain("AWS::RDS::DBSubnetGroup");
+    // e98.W5.N5 (B-03): EIP promoted from companion to first-class, count 38.
+    expect(SUPPORTED_TYPES).toContain("AWS::EC2::EIP");
+    expect(SUPPORTED_TYPES).toHaveLength(38);
   });
 
   // ─── Epic 92 Wave 2 — asserted-token preservation (B-01/B-07/B-09/B-16/C-12/C-13/A-03) ───

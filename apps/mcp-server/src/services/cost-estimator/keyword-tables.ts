@@ -249,6 +249,21 @@ export const COMPOUND_CROSS_REF_KEYWORDS: KeywordEntry[] = [
     ],
     resourceType: RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION,
   },
+  // e98.W5.N5 (B-03): EIP classifier. Priority block so "elastic ip"
+  // wins against the bare "ec2" keyword that would otherwise
+  // classify it as EC2_INSTANCE. All the canonical user phrases
+  // land on the same resource type.
+  {
+    keywords: [
+      "elastic ip",
+      "elasticip",
+      "elastic ip address",
+      "eip",
+      "public ipv4 address",
+      "allocate elastic ip",
+    ],
+    resourceType: RESOURCE_TYPES.EC2_EIP,
+  },
 ];
 
 /**

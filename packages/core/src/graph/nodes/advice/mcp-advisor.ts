@@ -190,6 +190,9 @@ export function resourceTypeToServiceCode(
     // A14 (2026-04-09): CloudFront::Distribution
     // (data transfer out + HTTPS requests, tiered by geography).
     "AWS::CloudFront::Distribution": "AmazonCloudFront",
+    // e98.W5.N5 (B-03): EIP — unattached addresses bill at the
+    // ElasticIP:Address group under AmazonEC2.
+    "AWS::EC2::EIP": "AmazonEC2",
   };
   return map[resourceType];
 }

@@ -116,6 +116,11 @@ export const RESOURCE_IDENTIFIER_KEYS: Record<ResourceType, string> = {
   // can Read-Before-Write against the name if it's present in
   // desiredState — otherwise skips like other auto-ID types.
   [RESOURCE_TYPES.RDS_DB_SUBNET_GROUP]: "DBSubnetGroupName",
+  // e98.W5.N5 (B-03): AWS::EC2::EIP primary identifier is the
+  // auto-generated AllocationId (eipalloc-xxxxxxxx). Never present
+  // in desiredState at plan time — state guard skips Read-Before-
+  // Write, same pattern as other auto-ID types (VPC, InternetGateway).
+  [RESOURCE_TYPES.EC2_EIP]: "AllocationId",
 } as const;
 
 /**

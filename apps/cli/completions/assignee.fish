@@ -28,7 +28,7 @@ complete -c assignee -n "__fish_seen_subcommand_from plan" -l source -s s -r -d 
 complete -c assignee -n "__fish_seen_subcommand_from plan" -l set -r -d 'Pre-set field values (repeatable), supports human names (e.g., --set size=t3.medium)'
 complete -c assignee -n "__fish_seen_subcommand_from plan" -l yes -s y -d 'Accepted for CI wrapper compatibility; plan is read-only and does not mutate.'
 complete -c assignee -n "__fish_seen_subcommand_from plan" -l quick -s q -d 'Skip wizard prompts that have defaults — only ask for required fields without a default. Shows a summary gate before generating the plan.'
-complete -c assignee -n "__fish_seen_subcommand_from plan" -l wizard -d 'Alias for --quick; runs the wizard flow that asks only for required fields without a default.'
+complete -c assignee -n "__fish_seen_subcommand_from plan" -l wizard -d 'Run interactive configuration wizard (prompts for required fields; plan-only, no provisioning).'
 
 # Options for 'apply'
 complete -c assignee -n "__fish_seen_subcommand_from apply" -l wizard -d 'Run interactive configuration wizard (without this flag, defaults are auto-selected from your intent)'
@@ -67,7 +67,6 @@ complete -c assignee -n "__fish_seen_subcommand_from drift" -l json -d 'Shorthan
 complete -c assignee -n "__fish_seen_subcommand_from drift" -l output-file -r -d 'Write JSON report to file (requires --json)'
 complete -c assignee -n "__fish_seen_subcommand_from drift" -l concurrency -r -d 'Max parallel drift checks (default 10, max 50)'
 complete -c assignee -n "__fish_seen_subcommand_from drift" -l detailed -d 'Show all fields including matching ones'
-complete -c assignee -n "__fish_seen_subcommand_from drift" -l yes -s y -d 'Accepted for CI wrapper compatibility; drift is read-only and does not mutate.'
 
 # Options for 'optimize'
 complete -c assignee -n "__fish_seen_subcommand_from optimize" -l region -r -d 'AWS region to scan (defaults to AWS_REGION env var)'

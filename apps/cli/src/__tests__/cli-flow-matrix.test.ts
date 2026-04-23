@@ -1075,8 +1075,8 @@ describe("supported resource types", () => {
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::Lambda::Function");
   });
 
-  it("SUPPORTED_TYPES_ARRAY has exactly 37 types (36 + RDS::DBSubnetGroup)", async () => {
+  it("SUPPORTED_TYPES_ARRAY has exactly 38 types (37 + AWS::EC2::EIP via e98.W5.N5)", async () => {
     const { SUPPORTED_TYPES_ARRAY } = await import("@assignee/core");
-    expect(SUPPORTED_TYPES_ARRAY.length).toBe(37);
+    expect(SUPPORTED_TYPES_ARRAY.length).toBe(38);
   });
 });

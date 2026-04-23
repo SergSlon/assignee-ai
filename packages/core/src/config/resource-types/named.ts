@@ -61,4 +61,10 @@ export const RESOURCE_TYPES = {
   S3_BUCKET_POLICY: "AWS::S3::BucketPolicy",
   // 2026-04-13: RDS::DBSubnetGroup for three-tier-web compound
   RDS_DB_SUBNET_GROUP: "AWS::RDS::DBSubnetGroup",
+  // e98.W5.N5 (B-03) — EIP promoted from companion to first-class.
+  // A standalone `Create an Elastic IP` intent routes through the
+  // ec2-eip plugin now. The COMPANION_RESOURCE_TYPES.EC2_EIP alias
+  // in `./companion.ts` is retained for backwards-compat with
+  // nat-gateway companion callers that auto-allocate inline.
+  EC2_EIP: "AWS::EC2::EIP",
 } as const satisfies Record<string, ResourceType>;

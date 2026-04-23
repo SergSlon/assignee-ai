@@ -45,7 +45,7 @@ export function buildSupportedTypesBlock(): string {
   Networking    VPC, Subnet, Security Group, Internet Gateway,
                 VPC Gateway Attachment, Route Table, Route,
                 Subnet <-> Route Table Association, NAT Gateway,
-                Load Balancer
+                Elastic IP, Load Balancer
   Edge / CDN    CloudFront distribution, CloudFront OAC
   API           API Gateway v2 (HTTP / WebSocket)
   Messaging     SQS queue, SNS topic, SNS subscription,
