@@ -87,6 +87,15 @@ export const LOG_ACTIONS = {
    * `assignee status` invocation with `durationMs` + `result:"ok"|"error"`.
    */
   STATUS_COMPLETE: "status_complete",
+  /**
+   * Epic 98 Wave 2 R1 (B-09/B-10): emitted by `extractRegion` when a
+   * region token is resolved from the natural-language intent. Extras
+   * carry `{ path: "tail" | "substring", candidate }` so --verbose users
+   * can see which code path won when the regex matched both an explicit
+   * `region <x>` tail AND a region-shaped substring inside a resource
+   * name. Reference: feedback_instrument_before_iterating.md.
+   */
+  REGION_EXTRACTION: "region_extraction",
 } as const;
 
 export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];
