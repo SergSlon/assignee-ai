@@ -1080,11 +1080,14 @@ const rdsRules: RuleSpec[] = [
     expectedValue: true,
   },
   {
+    // Epic 98 W5.P1 — severity normalised MEDIUM → INFO (runtime-only
+    // idle-RDS detection).
     id: "BP-RDS-013",
     resourceType: "AWS::RDS::DBInstance",
     propertyPath: "DBInstanceIdentifier",
     checkType: "awareness",
     expectedValue: true,
+    severity: "INFO",
   },
   {
     id: "BP-RDS-014",
@@ -1380,11 +1383,14 @@ const dynamodbRules: RuleSpec[] = [
     expectedValue: true,
   },
   {
+    // Epic 98 W5.P1 — severity normalised MEDIUM → INFO (runtime-only
+    // provisioned-throughput detection).
     id: "BP-DYNAMODB-006",
     resourceType: "AWS::DynamoDB::Table",
     propertyPath: "BillingMode",
     checkType: "awareness",
     expectedValue: true,
+    severity: "INFO",
   },
   // (f) 2026-04-09 Task 9 — Epic 30 Phase 2 WA expansion: enable
   // ContributorInsights for hot-key observability.
@@ -2579,6 +2585,33 @@ describe("BP All Rules Audit", () => {
       expect(
         untested.map((bp) => bp.id),
         `These YAML rules have no test spec`,
+      ).toEqual([]);
+    });
+
+    it("every spec that declares severity matches the loaded YAML severity (Epic 98 W5.P1 lock)", () => {
+      // When a RuleSpec declares a `severity`, treat it as a
+      // regression-lock: the on-disk YAML MUST carry the same value.
+      // Used by W5.P1 to prevent accidental severity drift on the 7
+      // CL-BP-LEGIT-SEVERITY-NORMALIZE rules. Specs that omit
+      // severity are silently skipped — no assertion load on
+      // rules whose severity isn't story-locked.
+      const mismatches: Array<{ id: string; spec: string; yaml: string }> = [];
+      for (const spec of allSpecs) {
+        if (spec.severity === undefined) continue;
+        const bp = allPractices.find((p) => p.id === spec.id);
+        if (bp === undefined) continue;
+        if (bp.severity !== spec.severity) {
+          mismatches.push({
+            id: spec.id,
+            spec: spec.severity,
+            yaml: bp.severity,
+          });
+        }
+      }
+      expect(
+        mismatches,
+        `Severity drift detected on ${mismatches.length} rule(s). ` +
+          `Expected (RuleSpec) vs actual (YAML): ${JSON.stringify(mismatches)}`,
       ).toEqual([]);
     });
   });
