@@ -331,6 +331,7 @@ export function extractAssertedValues(
   extractNoVpcDirective(intentLower, elicited);
   extractSnsProtocol(intent, intentLower, resourceType, elicited);
   extractRetentionDays(intent, intentLower, resourceType, elicited);
+  extractCloudWatchAlarmMetric(intentLower, resourceType, elicited);
 
   return {
     elicited,
@@ -966,7 +967,15 @@ function extractSnsProtocol(
   const httpMatch = /\bhttp:\/\/\S+/i.exec(intent);
   const sqsArnMatch = /arn:aws[\w-]*:sqs:[^\s"']+/i.exec(intent);
   const lambdaArnMatch = /arn:aws[\w-]*:lambda:[^\s"']+/i.exec(intent);
+  const firehoseArnMatch = /arn:aws[\w-]*:firehose:[^\s"']+/i.exec(intent);
   const emailMatch = /\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/i.exec(intent);
+  // e98.W5.N2 (D-13) — E.164 phone number: `+` followed by 7-15 digits,
+  // optionally grouped with spaces/dashes/parens. Spec: ITU-T E.164 allows
+  // up to 15 digits including country code. Example matches:
+  //   +15551234567, +44 20 7946 0958, +1 (555) 123-4567
+  // Non-E.164 numbers (no leading `+`) are rejected to avoid matching
+  // random digit sequences (zip codes, IDs, ARNs with accounts, etc.).
+  const phoneMatch = /(?<!\S)\+\d(?:[\d\s().-]{6,18})\d(?!\S)/.exec(intent);
   if (httpsMatch) {
     elicited["Protocol"] = "https";
     elicited["Endpoint"] = httpsMatch[0];
@@ -986,6 +995,23 @@ function extractSnsProtocol(
     elicited["Protocol"] = "lambda";
     elicited["Endpoint"] = lambdaArnMatch[0];
     return;
+  }
+  if (firehoseArnMatch) {
+    elicited["Protocol"] = "firehose";
+    elicited["Endpoint"] = firehoseArnMatch[0];
+    return;
+  }
+  if (phoneMatch) {
+    // Normalise to a compact E.164 form (strip whitespace / punctuation
+    // between digits; keep the leading `+`).
+    const compact = "+" + phoneMatch[0].replace(/[^\d]/g, "");
+    // Re-validate after normalisation: E.164 allows 8-15 digits
+    // including country code.
+    if (/^\+\d{8,15}$/.test(compact)) {
+      elicited["Protocol"] = "sms";
+      elicited["Endpoint"] = compact;
+      return;
+    }
   }
   if (emailMatch && /\b(email|notify|subscribe)\b/.test(intentLower)) {
     elicited["Protocol"] = "email";
@@ -1025,6 +1051,139 @@ function extractRetentionDays(
     if (!Number.isFinite(n) || n <= 0) continue;
     elicited["RetentionInDays"] = n;
     return;
+  }
+}
+
+/**
+ * e98.W5.N2 (D-13 sibling D-17) — extract the CloudWatch namespace +
+ * metric name from service keywords in the user intent. Before this
+ * closed, a `Create an alarm on S3 bucket size` intent fell through to
+ * the plugin's `initialValue: "CPUUtilization"` + `"AWS/EC2"` defaults,
+ * so the alarm targeted the wrong metric while the rest of the plan
+ * looked correct. The SME user who had to diagnose the silent override
+ * reported it as D-17 HIGH.
+ *
+ * Strategy: match a per-service keyword set against the lowered intent
+ * and pick the first hit. We intentionally only populate values when
+ * both Namespace AND MetricName can be confidently inferred — partial
+ * inference falls back to the elicitor so the user sees the gap
+ * instead of a silent wrong default.
+ *
+ * The mapping is deliberately narrow — the ~10 most common "alarm on
+ * X" intents AWS customers write. Broader coverage (e.g. full metric
+ * catalog) would require a proper metric registry and belongs in a
+ * W5.P2 backlog story, not this fix.
+ */
+interface CloudWatchMetricInference {
+  readonly namespace: string;
+  readonly metric: string;
+  /** Case-insensitive phrases that uniquely identify this (ns, metric). */
+  readonly cues: readonly string[];
+}
+
+const CLOUDWATCH_METRIC_INFERENCES: readonly CloudWatchMetricInference[] = [
+  // S3 — BucketSizeBytes is the canonical "bucket grew too large" alarm.
+  {
+    namespace: "AWS/S3",
+    metric: "BucketSizeBytes",
+    cues: ["s3 bucket-size", "s3 bucket size", "bucket size", "bucket-size"],
+  },
+  // S3 — NumberOfObjects is the counted-item companion alarm.
+  {
+    namespace: "AWS/S3",
+    metric: "NumberOfObjects",
+    cues: ["s3 object count", "number of objects", "object count"],
+  },
+  // SQS DLQ visibility — the #1 SQS reliability alarm.
+  {
+    namespace: "AWS/SQS",
+    metric: "ApproximateNumberOfMessagesVisible",
+    cues: [
+      "sqs dlq",
+      "dead letter queue depth",
+      "dead-letter queue depth",
+      "dlq depth",
+      "messages visible",
+      "sqs queue depth",
+    ],
+  },
+  // Lambda Errors — canonical Lambda failure alarm.
+  {
+    namespace: "AWS/Lambda",
+    metric: "Errors",
+    cues: ["lambda error", "lambda errors", "lambda failures"],
+  },
+  // Lambda Throttles — companion of the Errors alarm.
+  {
+    namespace: "AWS/Lambda",
+    metric: "Throttles",
+    cues: ["lambda throttle", "lambda throttles"],
+  },
+  // Lambda Duration — latency alarm.
+  {
+    namespace: "AWS/Lambda",
+    metric: "Duration",
+    cues: ["lambda duration", "lambda latency"],
+  },
+  // RDS CPU — the most common database performance alarm.
+  {
+    namespace: "AWS/RDS",
+    metric: "CPUUtilization",
+    cues: ["rds cpu", "database cpu", "db cpu"],
+  },
+  // RDS FreeStorageSpace — disk-exhaustion alarm.
+  {
+    namespace: "AWS/RDS",
+    metric: "FreeStorageSpace",
+    cues: ["rds free storage", "rds storage", "database free storage"],
+  },
+  // RDS DatabaseConnections — connection-pool-pressure alarm.
+  {
+    namespace: "AWS/RDS",
+    metric: "DatabaseConnections",
+    cues: ["rds connection", "database connection"],
+  },
+  // ALB TargetResponseTime — latency-at-the-edge alarm.
+  {
+    namespace: "AWS/ApplicationELB",
+    metric: "TargetResponseTime",
+    cues: ["alb latency", "alb response time", "target response time"],
+  },
+  // ALB HTTPCode_Target_5XX_Count — backend-error alarm.
+  {
+    namespace: "AWS/ApplicationELB",
+    metric: "HTTPCode_Target_5XX_Count",
+    cues: ["alb 5xx", "alb target 5xx", "backend 5xx"],
+  },
+  // DynamoDB throttled requests.
+  {
+    namespace: "AWS/DynamoDB",
+    metric: "ThrottledRequests",
+    cues: ["dynamodb throttle", "ddb throttle", "dynamodb throttled"],
+  },
+  // EC2 CPU (retains the long-standing default; listed last so more
+  // specific service keywords win first when both match).
+  {
+    namespace: "AWS/EC2",
+    metric: "CPUUtilization",
+    cues: ["ec2 cpu", "instance cpu"],
+  },
+];
+
+function extractCloudWatchAlarmMetric(
+  intentLower: string,
+  resourceType: string,
+  elicited: Record<string, unknown>,
+): void {
+  if (resourceType !== RESOURCE_TYPES.CLOUDWATCH_ALARM) return;
+  for (const entry of CLOUDWATCH_METRIC_INFERENCES) {
+    for (const cue of entry.cues) {
+      if (intentLower.includes(cue)) {
+        elicited["Namespace"] = entry.namespace;
+        elicited["MetricName"] = entry.metric;
+        return;
+      }
+    }
   }
 }
 

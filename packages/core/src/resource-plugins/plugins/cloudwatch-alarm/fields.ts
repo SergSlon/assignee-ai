@@ -67,6 +67,13 @@ export const commonFields: ResourcePlugin["commonFields"] = [
           value: "AWS/ApplicationELB",
           label: "AWS/ApplicationELB — Application Load Balancer",
         },
+        // e98.W5.N2 (D-17) — added so intent-parser's service-keyword
+        // inference has valid enum entries to write. Without these,
+        // "alarm on S3 bucket size" would either fail enum validation
+        // in the wizard surface or silently fall back to AWS/EC2 via
+        // the plugin default.
+        { value: "AWS/S3", label: "AWS/S3 — S3 buckets" },
+        { value: "AWS/DynamoDB", label: "AWS/DynamoDB — DynamoDB tables" },
         { value: "Custom", label: "Custom namespace (enter manually)" },
       ],
       initialValue: "AWS/EC2",

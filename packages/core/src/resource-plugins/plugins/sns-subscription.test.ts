@@ -10,8 +10,14 @@ describe("snsSubscriptionPlugin", () => {
     );
   });
 
-  it("declares Protocol default as 'sqs'", () => {
-    expect(snsSubscriptionPlugin.defaults[CfnKey.PROTOCOL]).toBe("sqs");
+  it("does NOT declare a Protocol default (e98.W5.N2 / D-13)", () => {
+    // The `Protocol: "sqs"` default was removed because it silently
+    // clamped the protocol on every intent where inference failed —
+    // phone numbers became SQS subscriptions, Lambda ARNs became SQS
+    // subscriptions, etc. Intent-parser now infers Protocol from the
+    // Endpoint shape; if inference fails, elicitation surfaces the
+    // choice instead of silently defaulting.
+    expect(snsSubscriptionPlugin.defaults[CfnKey.PROTOCOL]).toBeUndefined();
   });
 
   it("declares RawMessageDelivery default as false", () => {

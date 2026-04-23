@@ -60,7 +60,7 @@ export const snsSubscriptionPlugin: ResourcePlugin = {
       question: {
         type: "enum",
         label: "Protocol",
-        hint: "Required + createOnly. Determines how SNS delivers messages to subscribers. 'sqs' and 'lambda' are the common programmatic choices; 'https' for webhook endpoints; 'email'/'email-json' for human notification; 'firehose' for streaming to S3/Redshift.",
+        hint: "Required + createOnly. Determines how SNS delivers messages to subscribers. 'sqs' and 'lambda' are the common programmatic choices; 'https' for webhook endpoints; 'email'/'email-json' for human notification; 'sms' for phone numbers; 'firehose' for streaming to S3/Redshift.",
         options: [
           { value: "sqs", label: "SQS queue" },
           { value: "lambda", label: "Lambda function" },
@@ -72,7 +72,16 @@ export const snsSubscriptionPlugin: ResourcePlugin = {
           { value: "firehose", label: "Kinesis Data Firehose" },
           { value: "application", label: "Mobile push (application endpoint)" },
         ],
-        initialValue: "sqs",
+        // e98.W5.N2 (D-13) — no default Protocol. The previous
+        // `initialValue: "sqs"` + `defaults.Protocol=sqs` combination
+        // silently clamped the protocol to SQS when the endpoint was a
+        // phone number, Lambda ARN, or email address, producing plans
+        // that looked correct but sent every message to the wrong
+        // consumer class. Intent-parser infers Protocol from the
+        // Endpoint shape (E.164 phone → sms, Lambda ARN → lambda, etc.);
+        // if inference fails the wizard / LLM must explicitly elicit
+        // the value so users see the dispatch choice surface instead
+        // of silently defaulting.
       },
     },
     {
@@ -234,7 +243,10 @@ export const snsSubscriptionPlugin: ResourcePlugin = {
     },
   ],
   defaults: {
-    [CfnKey.PROTOCOL]: "sqs",
+    // e98.W5.N2 (D-13) — removed Protocol: "sqs" default. See the
+    // commentary on the Protocol field above. Endpoint shape drives
+    // protocol inference in the intent-parser; elicitation owns the
+    // fallback when inference can't determine the type.
     RawMessageDelivery: false,
   },
   configHints: [
