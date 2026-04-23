@@ -134,6 +134,63 @@ export const SINGLETON_OVERRIDE_CUES: ReadonlyArray<{
     resourceType: "AWS::EFS::MountTarget",
   },
   {
+    // Epic 96 W3.N2/N3 (C-02 MED NEW): bare "EFS file system" /
+    // "EFS filesystem" / "EFS FS" → singleton AWS::EFS::FileSystem.
+    // Pre-fix the efs-with-vpc compound matched on "efs file system"
+    // and "efs" substrings, spinning up a 10-resource stack (VPC,
+    // subnets, RT, associations, NFS SG, mount targets) on top of the
+    // single resource the user asked for. Power users who already
+    // have a VPC, and beginners just kicking the tyres, both
+    // overwhelmingly want the singleton. Users who DO want the full
+    // compound have unambiguous phrasing — "with a VPC", "and a VPC",
+    // "in a new VPC" — which is captured as the negative-phrase list
+    // so the cue does not fire for the compound intent.
+    //
+    // Note "efs" alone is NOT in the phrase list: that's too broad
+    // and would catch "efs with vpc" before the negative check.
+    // Require the user to name the concrete resource ("EFS file
+    // system" / "EFS FS") to claim the singleton route.
+    //
+    // Downstream: intent-parser calls `extractAssertedValues` against
+    // AWS::EFS::FileSystem. FileSystem has no strictly required CFN
+    // fields (all properties have server-side defaults) so the plan
+    // succeeds with an empty desiredState; user can then add
+    // properties through the interactive wizard or --set flags.
+    phrases: [
+      "efs file system",
+      "efs filesystem",
+      "efs file-system",
+      "efs fs",
+      "elastic file system",
+      "elastic filesystem",
+    ],
+    negativePhrases: [
+      "with vpc",
+      "with a vpc",
+      "with new vpc",
+      "with a new vpc",
+      "and vpc",
+      "and a vpc",
+      "and new vpc",
+      "and a new vpc",
+      "in vpc",
+      "in a vpc",
+      "in new vpc",
+      "in a new vpc",
+      "plus vpc",
+      "plus a vpc",
+      "plus new vpc",
+      "plus a new vpc",
+      // mount-target qualifier — the C-08 cue handles this, but an
+      // intent like "EFS file system with mount target in subnet…"
+      // should still fall through to the compound path when it names
+      // a subnet (which pulls in VPC context). Leave mount-target off
+      // the negatives: the C-08 cue runs first in iteration order and
+      // steals the routing anyway.
+    ],
+    resourceType: "AWS::EFS::FileSystem",
+  },
+  {
     // C-09: "http api gateway" / "http api" → singleton
     // ApiGatewayV2::Api. Disqualify when the user also said
     // "websocket" (that's a different resource family: the websocket

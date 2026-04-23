@@ -62,6 +62,28 @@ export const BP_CHECK_TYPE = [
    * @see A1 warmup — BP-IAM-017 elevated *FullAccess heuristic
    */
   "not_contains_pattern",
+  /**
+   * Security-group predicate: fires (rule fails) when `fieldValue`
+   * (expected to be a `SecurityGroupIngress` array) contains at least
+   * one rule that opens the given CIDR to ANY port in a comma-
+   * separated set of high-risk/admin/DB ports.
+   *
+   * `expected_value` grammar:
+   *   "<cidr>:<port1>,<port2>,...,<portN>"
+   * Example:
+   *   "0.0.0.0/0:20,21,1433,1434,1521,3306,3389,4333,5432,5439,5500,6379,9200,27017"
+   *
+   * Semantics mirror the single-port CIDR:port grammar used by the
+   * `not_equals` branch (BP-SG-002, BP-SG-005): range rules that
+   * cover any port in the set fire, all-traffic rules (IpProtocol: -1,
+   * no port bounds) fire, non-matching CIDRs do not fire.
+   *
+   * Used by BP-SG-004 (renamed from the legacy BP-SG-007 slot) to
+   * replace the `awareness`-tagged always-fire behaviour that
+   * surfaced DB-focused copy on every SG plan (including safe port-
+   * 443-only load balancers) — see Epic 96 W3.N2.
+   */
+  "sg_high_risk_public_exposure",
 ] as const;
 export type BPCheckType = (typeof BP_CHECK_TYPE)[number];
 

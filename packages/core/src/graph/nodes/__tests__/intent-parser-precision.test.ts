@@ -155,6 +155,102 @@ describe("intent-parser pattern precision (e94.N5)", () => {
   });
 
   // -------------------------------------------------------------------
+  // C-02 (Epic 96 W3.N3) — singleton EFS FileSystem
+  // -------------------------------------------------------------------
+  describe("C-02: `Create an EFS file system` → singleton AWS::EFS::FileSystem", () => {
+    it("resolveSingletonOverride picks EFS::FileSystem for plain phrasing", () => {
+      expect(resolveSingletonOverride("Create an EFS file system")).toBe(
+        "AWS::EFS::FileSystem",
+      );
+    });
+
+    it("matches filesystem / file-system / FS variants (case-insensitive)", () => {
+      expect(resolveSingletonOverride("Create an EFS filesystem")).toBe(
+        "AWS::EFS::FileSystem",
+      );
+      expect(resolveSingletonOverride("create an efs file-system")).toBe(
+        "AWS::EFS::FileSystem",
+      );
+      expect(resolveSingletonOverride("Create an EFS FS")).toBe(
+        "AWS::EFS::FileSystem",
+      );
+      expect(resolveSingletonOverride("Provision elastic file system")).toBe(
+        "AWS::EFS::FileSystem",
+      );
+    });
+
+    it("VPC qualifiers DISQUALIFY the singleton override (compound routing preserved)", () => {
+      // Every negative-phrase form must flip the cue to null so the
+      // efs-with-vpc compound takes the intent.
+      for (const vpcPhrase of [
+        "with vpc",
+        "with a vpc",
+        "and vpc",
+        "and a vpc",
+        "and new vpc",
+        "and a new vpc",
+        "in vpc",
+        "in a vpc",
+        "in new vpc",
+        "in a new vpc",
+        "plus vpc",
+        "plus a vpc",
+      ]) {
+        const intent = `Create an EFS file system ${vpcPhrase}`;
+        expect(resolveSingletonOverride(intent)).toBeNull();
+      }
+    });
+
+    it("does NOT match bare 'efs' alone — must name the concrete resource", () => {
+      // The cue is intentionally scoped to phrases that name EFS as a
+      // filesystem / FS — a generic "create efs" is ambiguous and
+      // falls through to the compound, which is the safe default for
+      // beginners who need the full scaffolding.
+      expect(resolveSingletonOverride("Create an EFS")).toBeNull();
+      expect(resolveSingletonOverride("Please set up efs")).toBeNull();
+    });
+
+    it("mount-target cue still wins over filesystem cue (C-08 ordering preserved)", () => {
+      // 'EFS mount target' mentions "efs" but the C-08 cue appears
+      // first in the array and its phrases match — so the override
+      // resolves to AWS::EFS::MountTarget, not AWS::EFS::FileSystem.
+      expect(resolveSingletonOverride("Create an EFS mount target")).toBe(
+        "AWS::EFS::MountTarget",
+      );
+    });
+
+    it("intent-parser node returns AWS::EFS::FileSystem, NOT the efs-with-vpc compound", async () => {
+      const mock = new MockLlmAdapter({
+        resourceType: RESOURCE_TYPES.S3_BUCKET,
+      });
+      const node = createIntentParserNode({ llmClient: mock });
+      const state = {
+        userIntent: "Create an EFS file system",
+      } as AgentState;
+      const result = await node(state);
+      expect(result.executionStatus).toBeUndefined();
+      expect(result.resourceType).toBe("AWS::EFS::FileSystem");
+      // Compound dispatch must be bypassed.
+      expect(result.resourcePattern).toBeUndefined();
+    });
+
+    it("intent-parser node preserves compound routing for `EFS file system with a new VPC`", async () => {
+      const mock = new MockLlmAdapter({
+        resourceType: RESOURCE_TYPES.S3_BUCKET,
+      });
+      const node = createIntentParserNode({ llmClient: mock });
+      const state = {
+        userIntent: "Create an EFS file system with a new VPC",
+      } as AgentState;
+      const result = await node(state);
+      expect(result.executionStatus).toBeUndefined();
+      // Compound path: resourcePattern is populated with the full
+      // ArchitecturePattern object — assert on .patternId.
+      expect(result.resourcePattern?.patternId).toBe(PatternId.EFS_WITH_VPC);
+    });
+  });
+
+  // -------------------------------------------------------------------
   // C-09 — singleton HTTP API Gateway
   // -------------------------------------------------------------------
   describe("C-09: `Create an HTTP API Gateway` → singleton ApiGatewayV2::Api", () => {

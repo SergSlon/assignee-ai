@@ -440,14 +440,17 @@ describe("shipped-wired contract E — single Examples block per --help", () => 
     ["reconcile"],
   ] as const;
 
-  // Known-tripwire commands: these currently emit 2 Examples blocks on
-  // HEAD; the dup is tracked in PROBE_MANIFEST.yaml (e96.W1.B4, B5) and
-  // owned by Wave-1 story authors. The drift-guard contract here MUST
-  // NOT block Wave-1 gate — the probe manifest is the authoritative
-  // tripwire for these two. When the dup is fixed:
-  //   1. flip must_fail_pre_fix to false in PROBE_MANIFEST.yaml
-  //   2. remove the command from KNOWN_TRIPWIRE_COMMANDS below.
-  const KNOWN_TRIPWIRE_COMMANDS = new Set<string>(["plan", "apply"]);
+  // Known-tripwire commands: commands that intentionally emit more than
+  // one `Examples:` heading are tracked in PROBE_MANIFEST.yaml. When the
+  // dup is fixed, flip `must_fail_pre_fix` to false in the manifest AND
+  // remove the command from this set in the SAME commit so the contract
+  // immediately enforces the 1-Examples invariant going forward.
+  //
+  // Epic 96 Wave 1 B2 closed the `plan` + `apply` dup by stripping the
+  // embedded `Examples:` block from `buildSupportedTypesBlock()`. Set is
+  // now empty; keep it as a sentinel so future tripwires have an
+  // obvious home.
+  const KNOWN_TRIPWIRE_COMMANDS = new Set<string>();
 
   for (const args of COMMANDS) {
     const isTripwire = KNOWN_TRIPWIRE_COMMANDS.has(args[0]!);

@@ -1256,6 +1256,217 @@ describe("assignee init non-interactive flags (e92-u.d)", () => {
   });
 });
 
+// Epic 96 Wave 2 R2 (D-02 regression of Epic 94 u.d D-39).
+// `init --global --yes` previously hung at the region prompt because the
+// non-interactive overrides were not plumbed through to
+// `promptGlobalConfig`. Only the project flow honoured `--yes` /
+// `--region` / `--auto-fix`. The tests here pin the fix and guard every
+// combination so the next wave cannot regress silently.
+describe("assignee init --global non-interactive flags (Epic 96 W2 R2)", () => {
+  let globalConfigDir: string;
+  const ORIGINAL_STDOUT_IS_TTY = process.stdout.isTTY;
+  const ORIGINAL_STDIN_IS_TTY = process.stdin.isTTY;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const { initCommand } = await import("./init.js");
+    (
+      initCommand as unknown as { _optionValues: Record<string, unknown> }
+    )._optionValues = {};
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "init-global-ud-test-"));
+    globalConfigDir = path.join(tmpDir, ".config", "assignee");
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+
+    vi.mocked(resolveConfigPath).mockReturnValue(
+      path.join(globalConfigDir, "config.yaml"),
+    );
+
+    // Default to TTY context for the R6 non-interactive guard — tests
+    // that want to exercise the piped stdin branch flip it explicitly.
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: true,
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: true,
+      configurable: true,
+      writable: true,
+    });
+  });
+
+  afterEach(async () => {
+    process.chdir(originalCwd);
+    await fs.rm(tmpDir, { recursive: true, force: true });
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: ORIGINAL_STDOUT_IS_TTY,
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: ORIGINAL_STDIN_IS_TTY,
+      configurable: true,
+      writable: true,
+    });
+  });
+
+  it("--global --yes --region --auto-fix: no prompts, config written", async () => {
+    await runInitAction([
+      "node",
+      "init",
+      "--global",
+      "--yes",
+      "--region",
+      "eu-west-2",
+      "--auto-fix",
+      "apply",
+    ]);
+
+    // CORE REGRESSION CHECK: promptGlobalConfig must NOT have issued a
+    // single clack.text call. Pre-fix, the region prompt fired
+    // unconditionally — a non-TTY stdin would hang the process.
+    expect(clack.text).not.toHaveBeenCalled();
+    expect(clack.select).not.toHaveBeenCalled();
+
+    const configPath = path.join(globalConfigDir, "config.yaml");
+    const content = await fs.readFile(configPath, "utf-8");
+    const parsed = parseYaml(content) as Record<string, unknown>;
+    const defaults = parsed["defaults"] as Record<string, unknown>;
+    expect(defaults["region"]).toBe("eu-west-2");
+    const prefs = parsed["preferences"] as Record<string, unknown>;
+    expect(prefs["auto_fix"]).toBe("apply");
+  });
+
+  it("--global --yes alone: uses DEFAULT_AWS_REGION + auto_fix=ask, no prompts", async () => {
+    await runInitAction(["node", "init", "--global", "--yes"]);
+
+    expect(clack.text).not.toHaveBeenCalled();
+    expect(clack.select).not.toHaveBeenCalled();
+
+    const configPath = path.join(globalConfigDir, "config.yaml");
+    const content = await fs.readFile(configPath, "utf-8");
+    const parsed = parseYaml(content) as Record<string, unknown>;
+    const defaults = parsed["defaults"] as Record<string, unknown>;
+    // DEFAULT_AWS_REGION baked into @assignee/core is us-east-1.
+    expect(defaults["region"]).toBe("us-east-1");
+    const prefs = parsed["preferences"] as Record<string, unknown>;
+    expect(prefs["auto_fix"]).toBe("ask");
+    // No tags or naming prefix collected under --yes.
+    expect(defaults["tags"]).toBeUndefined();
+    expect(defaults["naming"]).toBeUndefined();
+  });
+
+  it("--global --yes silently overwrites existing config (no confirm prompt)", async () => {
+    // Pre-existing config — the flow must not call clack.confirm.
+    await fs.mkdir(globalConfigDir, { recursive: true });
+    await fs.writeFile(
+      path.join(globalConfigDir, "config.yaml"),
+      "defaults:\n  region: old-region\n",
+    );
+
+    await runInitAction([
+      "node",
+      "init",
+      "--global",
+      "--yes",
+      "--region",
+      "ap-south-1",
+    ]);
+
+    expect(clack.confirm).not.toHaveBeenCalled();
+
+    const content = await fs.readFile(
+      path.join(globalConfigDir, "config.yaml"),
+      "utf-8",
+    );
+    expect(content).toContain("ap-south-1");
+    expect(content).not.toContain("old-region");
+  });
+
+  it("--global with --region only (no --yes) still prompts for tags and auto-fix", async () => {
+    // Non-regression guard: per-flag overrides must only skip their own
+    // prompt, not the entire wizard. Region is pinned via --region, but
+    // the tag loop, naming prefix, and auto-fix select still fire.
+    vi.mocked(clack.text)
+      .mockResolvedValueOnce("") // done with tags (first tag entry)
+      .mockResolvedValueOnce(""); // no naming prefix
+    vi.mocked(clack.select).mockResolvedValueOnce("skip");
+
+    await runInitAction(["node", "init", "--global", "--region", "us-west-1"]);
+
+    // Region prompt was skipped; tags + prefix fired (2 text calls).
+    expect(vi.mocked(clack.text).mock.calls).toHaveLength(2);
+    // auto-fix select fired.
+    expect(vi.mocked(clack.select).mock.calls).toHaveLength(1);
+
+    const content = await fs.readFile(
+      path.join(globalConfigDir, "config.yaml"),
+      "utf-8",
+    );
+    const parsed = parseYaml(content) as Record<string, unknown>;
+    const defaults = parsed["defaults"] as Record<string, unknown>;
+    expect(defaults["region"]).toBe("us-west-1");
+    const prefs = parsed["preferences"] as Record<string, unknown>;
+    expect(prefs["auto_fix"]).toBe("skip");
+  });
+
+  it("--global --auto-fix only (no --yes) still prompts for region", async () => {
+    // Symmetric to the --region-only test: --auto-fix skips only the
+    // auto-fix select.
+    vi.mocked(clack.text)
+      .mockResolvedValueOnce("ca-central-1") // region
+      .mockResolvedValueOnce("") // done with tags
+      .mockResolvedValueOnce(""); // no naming prefix
+
+    await runInitAction(["node", "init", "--global", "--auto-fix", "apply"]);
+
+    // No clack.select — auto-fix bypassed by the override.
+    expect(clack.select).not.toHaveBeenCalled();
+    // 3 text calls: region + tag-loop-exit + naming-prefix.
+    expect(vi.mocked(clack.text).mock.calls).toHaveLength(3);
+
+    const content = await fs.readFile(
+      path.join(globalConfigDir, "config.yaml"),
+      "utf-8",
+    );
+    const parsed = parseYaml(content) as Record<string, unknown>;
+    const defaults = parsed["defaults"] as Record<string, unknown>;
+    expect(defaults["region"]).toBe("ca-central-1");
+    const prefs = parsed["preferences"] as Record<string, unknown>;
+    expect(prefs["auto_fix"]).toBe("apply");
+  });
+
+  it("non-TTY stdin + --global --yes: does NOT hang (D-02 regression)", async () => {
+    // Simulate `assignee init --global --yes --region us-east-1 </dev/null`.
+    // Pre-fix this hung forever on clack.text for the region. Post-fix:
+    // overrides short-circuit every prompt before clack ever opens stdin.
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: undefined,
+      configurable: true,
+      writable: true,
+    });
+
+    await runInitAction([
+      "node",
+      "init",
+      "--global",
+      "--yes",
+      "--region",
+      "us-east-1",
+      "--auto-fix",
+      "ask",
+    ]);
+
+    expect(clack.text).not.toHaveBeenCalled();
+    expect(clack.select).not.toHaveBeenCalled();
+    // Config file exists — the flow ran to completion.
+    const configPath = path.join(globalConfigDir, "config.yaml");
+    const content = await fs.readFile(configPath, "utf-8");
+    expect(content).toContain("us-east-1");
+  });
+});
+
 // D-05 code-emit half: ensure init source writes `.assignee/` (hidden),
 // never `./assignee/` (visible subdir). The help-text half already has
 // its own guard above (describe "assignee init --help").
@@ -1306,5 +1517,198 @@ describe("assignee init D-05 code-emit half (e92-u.d)", () => {
     await expect(
       fs.access(path.join(tmpDir, "assignee", "config.yaml")),
     ).rejects.toThrow();
+  });
+});
+
+// Epic 96 Wave 2 R4 (D-05): `init --wizard` alias registration.
+// `plan --wizard` and `apply --wizard` already exist; init rejecting
+// the same flag with "unknown option" was a UX pothole. Tests below
+// pin the flag surface + mutual-exclusivity semantics.
+describe("assignee init --wizard alias (Epic 96 W2 R4)", () => {
+  const ORIGINAL_STDOUT_IS_TTY = process.stdout.isTTY;
+  const ORIGINAL_STDIN_IS_TTY = process.stdin.isTTY;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const { initCommand } = await import("./init.js");
+    (
+      initCommand as unknown as { _optionValues: Record<string, unknown> }
+    )._optionValues = {};
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "init-wizard-test-"));
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: true,
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: true,
+      configurable: true,
+      writable: true,
+    });
+
+    mockCredentials({
+      detected: true,
+      source: "env",
+      profile: "default",
+    });
+    mockRegion({ region: "us-east-1" });
+  });
+
+  afterEach(async () => {
+    process.chdir(originalCwd);
+    await fs.rm(tmpDir, { recursive: true, force: true });
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: ORIGINAL_STDOUT_IS_TTY,
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: ORIGINAL_STDIN_IS_TTY,
+      configurable: true,
+      writable: true,
+    });
+  });
+
+  it("--wizard option is registered on the command", async () => {
+    const { initCommand } = await import("./init.js");
+    const wizardOption = initCommand.options.find(
+      (opt) => opt.long === "--wizard",
+    );
+    expect(wizardOption?.long).toBe("--wizard");
+    expect(wizardOption?.description).toMatch(/interactive wizard/i);
+  });
+
+  it("--wizard under TTY runs the same interactive flow as default init", async () => {
+    // With a TTY, --wizard is a no-op signal — the wizard runs either
+    // way. The test passes mocked prompt answers and asserts the
+    // config is written.
+    mockPrompts({
+      region: "ap-southeast-1",
+      profile: "default",
+      environment: "development",
+    });
+
+    await runInitAction(["node", "init", "--wizard"]);
+
+    // text (region + profile) and select (env + auto_fix) fired.
+    expect(clack.text).toHaveBeenCalled();
+    expect(clack.select).toHaveBeenCalled();
+
+    const configPath = path.join(tmpDir, ".assignee", "config.yaml");
+    const content = await fs.readFile(configPath, "utf-8");
+    const parsed = parseYaml(content) as Record<string, unknown>;
+    expect(parsed["region"]).toBe("ap-southeast-1");
+  });
+
+  it("--wizard + --yes: rejected with USAGE_ERROR (mutually exclusive)", async () => {
+    // Combination is a contradiction — --wizard says "ask me"; --yes
+    // says "don't ask". Must error early, never partial-apply.
+    const { AssigneeError } = await import("@assignee/core");
+    await expect(
+      runInitAction([
+        "node",
+        "init",
+        "--wizard",
+        "--yes",
+        "--region",
+        "us-east-1",
+      ]),
+    ).rejects.toThrow(AssigneeError);
+
+    // No prompts fired — the flow bailed before the wizard.
+    expect(clack.text).not.toHaveBeenCalled();
+    expect(clack.select).not.toHaveBeenCalled();
+    // No config file should have been written.
+    const configPath = path.join(tmpDir, ".assignee", "config.yaml");
+    await expect(fs.access(configPath)).rejects.toThrow();
+  });
+
+  it("--wizard error message is actionable", async () => {
+    const { AssigneeError } = await import("@assignee/core");
+    try {
+      await runInitAction(["node", "init", "--wizard", "--yes"]);
+      expect.fail("expected throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(AssigneeError);
+      const msg = (err as Error).message;
+      expect(msg).toContain("--wizard");
+      expect(msg).toContain("--yes");
+      expect(msg).toMatch(/mutually exclusive/i);
+    }
+  });
+
+  it("--wizard --global runs the global wizard interactively", async () => {
+    // Symmetry check: --wizard works with --global too. The global
+    // flow mocks the region/tag/prefix/auto-fix prompts like the
+    // existing --global describe block does.
+    vi.mocked(resolveConfigPath).mockReturnValue(
+      path.join(tmpDir, ".config", "assignee", "config.yaml"),
+    );
+    vi.mocked(clack.text)
+      .mockResolvedValueOnce("sa-east-1") // region
+      .mockResolvedValueOnce("") // done with tags
+      .mockResolvedValueOnce(""); // no prefix
+    vi.mocked(clack.select).mockResolvedValueOnce("ask"); // auto_fix
+
+    await runInitAction(["node", "init", "--wizard", "--global"]);
+
+    // Prompts fired.
+    expect(clack.text).toHaveBeenCalled();
+    expect(clack.select).toHaveBeenCalled();
+
+    const configPath = path.join(tmpDir, ".config", "assignee", "config.yaml");
+    const content = await fs.readFile(configPath, "utf-8");
+    expect(content).toContain("sa-east-1");
+  });
+
+  it("--wizard under non-TTY without --yes: hits the non-interactive guard", async () => {
+    // --wizard alone doesn't bypass the TTY guard — same actionable
+    // error as plain `init` when stdin is piped.
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: undefined,
+      configurable: true,
+      writable: true,
+    });
+
+    let errBuf = "";
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((chunk: unknown): boolean => {
+        errBuf += String(chunk);
+        return true;
+      });
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((code?: number | string | null | undefined) => {
+        throw new Error(`__TEST_EXIT__:${String(code ?? "")}`);
+      });
+
+    let caughtMsg = "";
+    try {
+      await runInitAction(["node", "init", "--wizard"]);
+    } catch (err) {
+      caughtMsg = err instanceof Error ? err.message : String(err);
+    } finally {
+      stderrSpy.mockRestore();
+      exitSpy.mockRestore();
+    }
+
+    expect(caughtMsg).toBe("__TEST_EXIT__:1");
+    expect(errBuf).toContain("[ERROR] init requires a TTY OR --yes flag");
+  });
+
+  it("--help output lists --wizard in the Options section", async () => {
+    const { initCommand } = await import("./init.js");
+    let captured = "";
+    initCommand.outputHelp({
+      write: (chunk: string) => {
+        captured += chunk;
+      },
+    } as unknown as { error: boolean });
+    expect(captured).toContain("--wizard");
+    expect(captured).toMatch(/Examples:[\s\S]*--wizard/);
   });
 });

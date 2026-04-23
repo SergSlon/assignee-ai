@@ -136,10 +136,15 @@ describe("ec2InstancePlugin", () => {
 
   it("defaults includes secure settings: IMDSv2 + hop limit, encrypted EBS, termination protection, EBS optimized, CPU credits standard", () => {
     // Epic 92 Wave 4.b (finding C-16): the facade seeds
-    // CreditSpecification = { CpuCredits: "standard" } on top of the
+    // CreditSpecification = { CPUCredits: "standard" } on top of the
     // inner plugin's defaults so the plan-row "CPU Credits" is never
     // empty. "standard" matches AWS's own default for burstable
     // (t3/t4g) types and is a no-op for non-burstable types at apply.
+    //
+    // e96.W2.R5 — the sub-key is `CPUCredits` (uppercase CPU), per the
+    // CFN Registry schema. The earlier `CpuCredits` casing was stripped
+    // by the desiredState sanitizer and surfaced the empty plan row
+    // (C-01 regression) that this test originally guarded against.
     expect(ec2InstancePlugin.defaults).toEqual({
       MetadataOptions: { HttpTokens: "required", HttpPutResponseHopLimit: 1 },
       DisableApiTermination: true,
@@ -150,18 +155,20 @@ describe("ec2InstancePlugin", () => {
           Ebs: { Encrypted: true, VolumeType: "gp3" },
         },
       ],
-      CreditSpecification: { CpuCredits: "standard" },
+      CreditSpecification: { CPUCredits: "standard" },
     });
   });
 
-  it("CPU Credits default (C-16): CreditSpecification seeded with CpuCredits=standard", () => {
+  it("CPU Credits default (C-16): CreditSpecification seeded with CPUCredits=standard", () => {
     // Finding C-16 root cause: when the user didn't supply a
     // CreditSpecification, the plan-display row "CPU Credits" (from
     // utils/display-helpers/friendly-names.ts) rendered with an empty
     // value and looked broken. The facade now seeds the AWS-native
     // default so every plan row has a meaningful value.
+    //
+    // e96.W2.R5 — asserts the schema-correct key casing `CPUCredits`.
     expect(ec2InstancePlugin.defaults["CreditSpecification"]).toEqual({
-      CpuCredits: "standard",
+      CPUCredits: "standard",
     });
   });
 

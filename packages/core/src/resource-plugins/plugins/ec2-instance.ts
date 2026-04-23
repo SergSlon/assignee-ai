@@ -14,11 +14,20 @@
  * shows `CreditSpecification → "CPU Credits"`, so the row existed but had
  * no value to display, which looked broken to dogfood users.
  *
- * This facade seeds a plan-time default of `{ CpuCredits: "standard" }`
+ * This facade seeds a plan-time default of `{ CPUCredits: "standard" }`
  * on top of the inner plugin's static `defaults` object. `"standard"` is
  * the AWS default for all burstable types and matches the field's own
  * `initialValue: "standard"` in `fields.ts`, so the value is consistent
  * across wizard elicitation, LLM prompts, and the plan-time display.
+ *
+ * e96.W2.R5 — the sub-key is `CPUCredits` (uppercase `CPU`), per the
+ * CloudFormation Registry schema for `AWS::EC2::Instance`. The earlier
+ * casing `CpuCredits` was stripped by the desiredState sanitizer as
+ * "extraneous key" against the real schema, producing an empty
+ * `CreditSpecification: {}` on the plan and (combined with the friendly-
+ * name map in `utils/display-helpers/friendly-names.ts`) the blank
+ * "CPU Credits" plan row that Epic 92 Wave 4.b originally set out to
+ * fix. Aligning the casing here closes the C-01 regression.
  *
  * Scope is intentionally narrow — only `CreditSpecification` is mutated
  * here. All other EC2 defaults (IMDSv2, encrypted EBS, termination
@@ -35,7 +44,7 @@ import { CfnKey } from "../../config/cfn-keys.js";
 // required-field repair, plan display) sees the additional entry.
 if (innerPlugin.defaults[CfnKey.CREDIT_SPECIFICATION] === undefined) {
   innerPlugin.defaults[CfnKey.CREDIT_SPECIFICATION] = {
-    CpuCredits: "standard",
+    CPUCredits: "standard",
   };
 }
 

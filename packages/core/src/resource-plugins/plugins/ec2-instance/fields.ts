@@ -225,7 +225,11 @@ export const advancedFields: ResourcePlugin["advancedFields"] = [
     },
     toCfn: (answer: unknown) => {
       if (typeof answer !== "string") return undefined;
-      return { CpuCredits: answer };
+      // CFN schema key is `CPUCredits` (uppercase `CPU`). The earlier
+      // `CpuCredits` casing was stripped by the desiredState sanitizer
+      // as extraneous, producing the empty CreditSpecification plan row
+      // that Epic 95 C-01 flagged. e96.W2.R5.
+      return { CPUCredits: answer };
     },
   },
   {

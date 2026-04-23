@@ -3,15 +3,15 @@
  *
  * Epic 92 u.d: accepts the same `NonInteractiveOverrides` bag as the
  * project flow. `--yes` silently overwrites an existing config (implicit
- * consent) rather than prompting. The overrides are NOT plumbed through
- * to `promptGlobalConfig` in this wave — the global wizard collects
- * tags / naming prefix which have no matching CLI flags yet — so a
- * `--yes` invocation in a non-TTY context would still block on those
- * prompts. Callers of `--global --yes` currently need to also be in a
- * TTY; a follow-up finding can expand flag coverage for the global
- * wizard.
+ * consent) rather than prompting.
  *
- * @see Story 27.5, Story e92-u.d
+ * Epic 96 Wave 2 R2 (D-02 regression fix): the overrides are now plumbed
+ * through to `promptGlobalConfig` so `--yes` / `--region` / `--auto-fix`
+ * skip their matching prompts in the global flow too — previously only
+ * the project flow honoured them, and `init --global --yes` hung on the
+ * region prompt under non-TTY stdin.
+ *
+ * @see Story 27.5, Story e92-u.d, Story e96-w2-r2
  */
 
 import * as fs from "node:fs/promises";
@@ -54,7 +54,7 @@ export async function runGlobalInit(
     // Config does not exist — proceed
   }
 
-  const config = await promptGlobalConfig();
+  const config = await promptGlobalConfig(overrides);
   if (!config) return;
 
   await fs.mkdir(configDir, { recursive: true });

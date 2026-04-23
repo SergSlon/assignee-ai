@@ -55,6 +55,23 @@ export const ErrorCode = {
 
   // ── LLM errors ──────────────────────────────────────────────
   LLM_TIMEOUT: "LLM_TIMEOUT",
+
+  // ── Command-terminal failures (Epic 96 Wave 1 B2) ───────────
+  // Emitted by the apply orchestrator when Phase 2 provisioning
+  // ends with ExecutionStatus ≠ SUCCESS. Surfaces through the
+  // CLI's `--json` error envelope so scripts can distinguish
+  // "apply failed at AWS" from generic plumbing errors.
+  APPLY_FAILED: "APPLY_FAILED",
+
+  // ── Intent-parser validation failures (Epic 96 Wave 2 R7) ────
+  // Emitted by the intent-parser when a `named <x>` span contains
+  // non-ASCII characters. Previously surfaced as the generic
+  // `PLAN_FAILED` code; A-11 asked for a stable, machine-readable
+  // classifier so scripts can distinguish "user typo in resource
+  // name" from "pipeline plumbing failure." See
+  // `packages/core/src/graph/nodes/intent-parser.ts` ::
+  // `extractResourceName` non-ASCII branch.
+  INVALID_NAME: "INVALID_NAME",
 } as const;
 
 export type ErrorCodeType = (typeof ErrorCode)[keyof typeof ErrorCode];

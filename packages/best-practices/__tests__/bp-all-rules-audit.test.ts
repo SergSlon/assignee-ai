@@ -86,11 +86,13 @@ type CheckType =
   | "less_than"
   | "contains"
   | "not_contains"
+  | "not_contains_pattern"
   | "conditional_forbidden"
   | "awareness"
   | "cross_resource_count"
   | "cross_resource_reference"
-  | "policy_antipattern";
+  | "policy_antipattern"
+  | "sg_high_risk_public_exposure";
 
 interface RuleSpec {
   id: string;
@@ -199,6 +201,29 @@ function firingState(spec: RuleSpec): Record<string, unknown> {
     case "cross_resource_reference":
       // Always fires
       return stateWith(spec.propertyPath, "any-value");
+
+    case "sg_high_risk_public_exposure": {
+      // Epic 96 W3.N2 — BP-SG-004 narrowing. expected_value grammar is
+      // "<cidr>:<p1>,<p2>,...". Fire by placing an ingress rule that
+      // opens the target CIDR to the FIRST port in the set.
+      if (typeof spec.expectedValue !== "string") {
+        return stateWith(spec.propertyPath, []);
+      }
+      const m = /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}):([\d,]+)$/.exec(
+        spec.expectedValue,
+      );
+      if (m === null) return stateWith(spec.propertyPath, []);
+      const cidr = m[1]!;
+      const firstPort = Number(m[2]!.split(",")[0]);
+      return stateWith(spec.propertyPath, [
+        {
+          IpProtocol: "tcp",
+          FromPort: firstPort,
+          ToPort: firstPort,
+          CidrIp: cidr,
+        },
+      ]);
+    }
 
     case "policy_antipattern": {
       // Build a minimal Allow statement that hits the named anti-pattern.
@@ -386,6 +411,16 @@ function passingState(spec: RuleSpec): Record<string, unknown> {
       // trust-policy rule (BP-IAM-015) targets `AssumeRolePolicyDocument`
       // which is shape-compatible; we use the same doc for both.
       return stateWith(spec.propertyPath, buildAntipatternPassingDoc());
+
+    case "sg_high_risk_public_exposure": {
+      // Passing case for BP-SG-004: an ingress rule that opens port 443
+      // to 0.0.0.0/0 — a common HTTPS pattern that is intentionally NOT
+      // in the DB/admin port set. If 443 somehow lands in the port set
+      // the test will fail loudly, which is the intended safeguard.
+      return stateWith(spec.propertyPath, [
+        { IpProtocol: "tcp", FromPort: 443, ToPort: 443, CidrIp: "0.0.0.0/0" },
+      ]);
+    }
 
     // awareness/cross_resource_count/cross_resource_reference never pass
     default:
@@ -726,11 +761,12 @@ const sgRules: RuleSpec[] = [
     expectedValue: "",
   },
   {
-    id: "BP-SG-007",
+    id: "BP-SG-004",
     resourceType: "AWS::EC2::SecurityGroup",
     propertyPath: "SecurityGroupIngress",
-    checkType: "awareness",
-    expectedValue: true,
+    checkType: "sg_high_risk_public_exposure",
+    expectedValue:
+      "0.0.0.0/0:20,21,1433,1434,1521,3306,3389,4333,5432,5439,5500,6379,9200,27017",
   },
 ];
 

@@ -381,15 +381,19 @@ describe("config constants", () => {
     expect(CHECKPOINT_DEFAULT_TTL_HOURS).toBe(72);
   });
 
-  it("SUPPORTED_TYPES_HINT includes category groupings and examples", async () => {
+  it("SUPPORTED_TYPES_HINT includes category groupings (Epic 96 B4/B5: no embedded Examples)", async () => {
     const { SUPPORTED_TYPES_HINT } = await import("../config/constants.js");
-    // New format groups by domain instead of dumping raw CFN type names
+    // New format groups by domain instead of dumping raw CFN type names.
+    // Epic 96 Wave 1 B4/B5: the hint intentionally does NOT embed its
+    // own `Examples:` block — per-command `addHelpText` wrappers carry
+    // the examples so `plan --help` / `apply --help` render a single
+    // `Examples:` heading.
     expect(SUPPORTED_TYPES_HINT).toContain("What you can create");
     expect(SUPPORTED_TYPES_HINT).toContain("Compute");
     expect(SUPPORTED_TYPES_HINT).toContain("Databases");
     expect(SUPPORTED_TYPES_HINT).toContain("Networking");
     expect(SUPPORTED_TYPES_HINT).toContain("S3 bucket");
-    expect(SUPPORTED_TYPES_HINT).toContain("Examples:");
+    expect(SUPPORTED_TYPES_HINT).not.toContain("Examples:");
   });
 
   it("AWS_REGION defaults to us-east-1", async () => {

@@ -21,7 +21,11 @@ import type { LlmPort } from "@/index.js";
 import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
 import type { AgentState } from "../../graph-state.js";
 import { invokeLlmPhase } from "./llm-plan/invoke.js";
-import { mergeElicitedOptions, stripPlaceholders } from "./llm-plan/merge.js";
+import {
+  mergeElicitedOptions,
+  mergePluginDefaults,
+  stripPlaceholders,
+} from "./llm-plan/merge.js";
 import { repairRequired, sanitizeAgainstSchema } from "./llm-plan/sanitize.js";
 import {
   postRepairPostProcess,
@@ -40,9 +44,23 @@ export async function runLlmPlan(
   const resourceType = state.resourceType ?? "";
   let desiredState = invoke.desiredState;
 
-  // Phase 2 — plugin placeholder strip + user-elicited merge.
+  // Phase 2 — plugin placeholder strip + user-elicited merge + plugin-
+  // defaults backfill. Order matters:
+  //   a) `stripPlaceholders` removes plugin-registered placeholder
+  //      sentinels the LLM parroted back ("example-value", "<YOUR-ID>").
+  //   b) `mergeElicitedOptions` spreads user wizard answers on top of
+  //      the LLM output (user assertions win over LLM guesses).
+  //   c) `mergePluginDefaults` (e96.W2.R5-part-2) fills in plugin-level
+  //      defaults for keys still missing — e.g. the EC2 plugin's
+  //      `CreditSpecification: {CPUCredits: "standard"}` default that
+  //      was missing from the plan on ~60% of LLM runs because the
+  //      LLM omitted the key entirely and no downstream step would
+  //      inject it. Compound-plan already does the analogous spread
+  //      at its top (see `compound-plan.ts:66-68`); this closes the
+  //      parity gap for the LLM path.
   desiredState = stripPlaceholders(desiredState, resourceType);
   desiredState = mergeElicitedOptions(desiredState, state);
+  desiredState = mergePluginDefaults(desiredState, resourceType);
 
   // Phase 3a — schema sanitize (strip extraneous keys + coerce types +
   // resource-aware CCAPI-shape rules from story e92.1.a). Passing
@@ -63,7 +81,12 @@ export async function runLlmPlan(
   if (preRepair.kind === "short-circuit") return preRepair.state;
   desiredState = preRepair.desiredState;
 
-  // Phase 3b — required-field repair (generic plugin-default injection).
+  // Phase 3b — required-field repair (generic plugin-default injection
+  // SPECIFIC to schema-required keys). Complementary to the broader
+  // plugin-defaults backfill in Phase 2: Phase 3b ensures the CFN
+  // schema's required keys are always populated (loud-fail sentinel if
+  // the plugin doesn't have a default), Phase 2 fills optional keys
+  // the plugin declared for UX polish.
   const repaired = repairRequired(desiredState, resourceType, requiredKeys);
   desiredState = repaired.desiredState;
 

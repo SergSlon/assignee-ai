@@ -98,7 +98,7 @@ export const configHints: ResourcePlugin["configHints"] = [
   'EC2 EBS Encryption: ALWAYS include BlockDeviceMappings with Ebs.Encrypted: true and VolumeType: "gp3". Example: BlockDeviceMappings: [{ DeviceName: "/dev/xvda", Ebs: { Encrypted: true, VolumeType: "gp3" } }]',
   "EC2 Monitoring: if Monitoring is true, include Monitoring: { Enabled: true }. If false or not set, OMIT the Monitoring property.",
   "EC2 AssociatePublicIpAddress: if true, set via NetworkInterfaces[0].AssociatePublicIpAddress. Only valid in public subnets. If false or not set, OMIT it.",
-  "EC2 CreditSpecification: only applies to burstable instance types (t3/t4g). Set CreditSpecification: { CpuCredits: 'standard' | 'unlimited' }. OMIT for non-burstable types.",
+  "EC2 CreditSpecification: only applies to burstable instance types (t3/t4g). Set CreditSpecification: { CPUCredits: 'standard' | 'unlimited' } (uppercase CPU — matches the CFN Registry schema). OMIT for non-burstable types.",
   "EC2 DisableApiTermination: ALWAYS set to true unless the user explicitly requests termination protection off. Prevents accidental instance deletion.",
   "EC2 EbsOptimized: ALWAYS set to true. All current-gen instance types support EBS optimization at no extra cost.",
 ];

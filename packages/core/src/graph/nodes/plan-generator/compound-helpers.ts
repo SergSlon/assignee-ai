@@ -6,6 +6,7 @@
  *   - `readCompoundPatternMemoryHints` → pattern-memory storage format
  *   - `injectPluginRequiredDefaults` → plugin-default safety-net policy
  *   - `postProcessEc2Compound` → EC2 SG/SSH scrub rules
+ *   - `filterElicitedForSlot` → name-field leakage across compound slots
  */
 import {
   defaultPluginRegistry,
@@ -39,7 +40,63 @@ const NAME_FIELDS: Record<string, string> = {
   [RESOURCE_TYPES.ELBV2_LOAD_BALANCER]: CfnKey.NAME,
 };
 
+/**
+ * Inverted NAME_FIELDS: CFN name property → resource type it belongs to.
+ * Extended with the additional type-specific name tokens recognised by
+ * `resolveNameField` in intent-parser.ts (ECS cluster, ECR repo, CW log
+ * group) so the filter covers every resource type whose `named <x>`
+ * assertion lands in elicitedOptions.
+ *
+ * Used by `filterElicitedForSlot` to drop foreign name fields when
+ * spreading elicitedOptions into a compound slot's desiredState —
+ * otherwise `FunctionName` (bound to AWS::Lambda::Function) would
+ * pollute the AWS::IAM::Role slot and CCAPI apply would reject with
+ * `extraneous key [FunctionName] is not permitted`. Closes e96.W1.B1
+ * (Epic 95 A-01 regression of Epic 94 R2).
+ */
+const NAME_FIELD_TO_RESOURCE_TYPE: Record<string, string> = {
+  [CfnKey.QUEUE_NAME]: RESOURCE_TYPES.SQS_QUEUE,
+  [CfnKey.TABLE_NAME]: RESOURCE_TYPES.DYNAMODB_TABLE,
+  [CfnKey.ROLE_NAME]: RESOURCE_TYPES.IAM_ROLE,
+  [CfnKey.FUNCTION_NAME]: RESOURCE_TYPES.LAMBDA_FUNCTION,
+  [CfnKey.BUCKET_NAME]: RESOURCE_TYPES.S3_BUCKET,
+  [CfnKey.TOPIC_NAME]: RESOURCE_TYPES.SNS_TOPIC,
+  ClusterName: RESOURCE_TYPES.ECS_CLUSTER,
+  RepositoryName: RESOURCE_TYPES.ECR_REPOSITORY,
+  LogGroupName: RESOURCE_TYPES.LOGS_LOG_GROUP,
+  // CfnKey.NAME ("Name") is deliberately NOT inverted: multiple unrelated
+  // resource types use a generic "Name" property (EventBridge Rule,
+  // ELBv2 LoadBalancer, VPC tag-name, etc.) so a bare "Name" key cannot
+  // be attributed to a single owner. Leaving it unmapped means the filter
+  // treats it as unscoped and passes it through — downstream CCAPI
+  // schema validation handles any mismatches.
+};
+
 type QueuedResource = NonNullable<AgentState["resourceQueue"]>[number];
+
+/**
+ * Drops keys from `elicitedOptions` that are name-fields of a different
+ * resource type than `currentResourceType`. Returns a new object — never
+ * mutates its input. A-01 regression guard: the intent-parser extracts
+ * `named <x>` into the type-specific name field (e.g. `FunctionName`),
+ * and that single extraction is shared across every slot's desiredState
+ * at compound-plan time. Without this filter, `{FunctionName: "my-fn"}`
+ * leaks into the IAM Role slot and CCAPI rejects the apply.
+ */
+export function filterElicitedForSlot(
+  elicitedOptions: Record<string, unknown>,
+  currentResourceType: string,
+): Record<string, unknown> {
+  const filtered: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(elicitedOptions)) {
+    const boundType = NAME_FIELD_TO_RESOURCE_TYPE[key];
+    if (boundType !== undefined && boundType !== currentResourceType) {
+      continue;
+    }
+    filtered[key] = value;
+  }
+  return filtered;
+}
 
 /** Injects a human-readable CFN Name (or equivalent) for compound resources. */
 export function injectCompoundResourceName(

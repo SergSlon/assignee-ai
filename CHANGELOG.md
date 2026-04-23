@@ -12,6 +12,42 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 96 — 13 stories closing 23 Epic 95 findings, all probes PASS (2026-04-23)
+
+All 3 Wave-1 BLOCKERs, 6 Wave-2 REGRESSIONs, and 4 Wave-3 NEW findings closed via the persistent `epic96-fix-team` (graph-fixer / cli-fixer / bp-fixer on disjoint file slices). Every story's probe in `PROBE_MANIFEST.yaml` flipped from FAIL → PASS; final `pre-close-probes.sh` sweep shows **18/18 PASS**.
+
+#### Fixed — Wave 1 BLOCKERs
+
+- **e96.W1.B1** — Lambda compound `FunctionName` leak into IAM Role slot (A-01 REG of Epic 94 R2). New `filterElicitedForSlot()` uses inverted `NAME_FIELD_TO_RESOURCE_TYPE` (9 bound name fields) to drop keys bound to OTHER resource types. Generic "Name" left unmapped.
+- **e96.W1.B2** (cluster with B4+B5) — apply/destroy/reconcile exit-code + envelope parity (A-02). `runCommand` silently swallowed `{success:false}`; fix: `apply.ts` captures `ApplyRunResult` and synthesises `AssigneeError(APPLY_FAILED)` → JSON envelope → exit 1. Envelope enriched with runId/arn/cost. Plus B4/B5: stripped Examples block from `buildSupportedTypesBlock()` — closes A-04/D-01/D-08 too (7 findings, one story). `KNOWN_TRIPWIRE_COMMANDS` cleared.
+- **e96.W1.B3** — region regex substring false-positive (A-03). JS `\b` treats `-` as word-boundary so `us-east-1` matched inside `my-bucket-us-east-1-fake`. Swap `\b` for whitespace/punctuation lookaround.
+
+#### Fixed — Wave 2 REGRESSIONs
+
+- **e96.W2.R2** — init `--global --yes` non-interactive (D-02). `runGlobalInit` accepted overrides but dropped before passing to `promptGlobalConfig()`. One-line plumbing fix.
+- **e96.W2.R3** — `renderSupportedTypesHintShort` → `buildSupportedTypesBlock()` migration (D-03). Error hint had hardcoded 18-type grid while header claimed "37 types". 20-LOC helper collapse.
+- **e96.W2.R4** — init `--wizard` alias registration (D-05). Mutually-exclusive with `--yes` (USAGE_ERROR if both).
+- **e96.W2.R5 part 1+2** — EC2 CreditSpecification survival (C-01). Part 1: CFN schema key is `CPUCredits` not `CpuCredits`; plugin emitted wrong casing → sanitizer correctly stripped → empty `{}`. Fixed casing in 3 plugin files. Part 2 (via instrumentation per `feedback_instrument_before_iterating`): LLM often doesn't emit the key AND `llm-plan.ts` had no analogue to `compound-plan.ts`'s plugin-defaults spread. New `mergePluginDefaults` helper, scoped to EC2 only — blanket rollout broke 7 plan-generator tests + 2 BP integration tests (would dismantle S3 PublicAccessBlockConfiguration-style safety BPs).
+- **e96.W2.R6** — CIDR validator per-field scope (B-03). Route `0.0.0.0/0` globally rejected. Fix: dispatch `EC2_ROUTE` → /0-/32, VPC/Subnet → /16-/28. Also caught latent bug: Route CIDRs stored on `CidrBlock` instead of `DestinationCidrBlock` CFN key.
+- **e96.W2.R7** — S3 unicode → `INVALID_NAME` error code (A-11). Generic `PLAN_FAILED` replaced with specific code via new `AssertionExtraction.errorCode?` plumbing.
+
+#### Fixed — Wave 3 NEW findings
+
+- **e96.W3.N1** — placeholder-guard prose scope (F-002; closes B-02/B-05/B-06). Epic 94 N6 guard caught IDs in ID-shaped fields but missed tokens in Description/Name/tag Value prose. New `PLACEHOLDER_RESOURCE_ID_EMBEDDED_REGEX` with non-alnum lookaround anchors + `isProsePath()` dispatcher. Narrower than blanket all-strings (avoids false-positives on SSM Value / UserData scripts).
+- **e96.W3.N2** — BP-SG-004/007 narrowing + escalation (B-01/B-04). Renamed BP-SG-007 → BP-SG-004 (tracker wins). `check_type: awareness` → new `sg_high_risk_public_exposure` with CIDR:port-list grammar. 14 real DB/admin ports (20/21/1433/1434/1521/3306/3389/4333/5432/5439/5500/6379/9200/27017). HTTPS 443 excluded. Severity HIGH → **CRITICAL**. Flagged ~17 other awareness-tagged rules for Epic 97 audit.
+- **e96.W3.N3** — EFS bare-intent singleton (C-02). `"Create an EFS file system"` triggered 10-resource `efs-with-vpc` compound. New `SINGLETON_OVERRIDE_CUES` entry mirrors Epic 94 N5's mount-target shape. 6 positive phrases × 16 enumerated VPC-qualifier negatives.
+- **e96.W3.N4** — JSON-mode stderr cleanup (D-04). Stdout envelope clean but stderr leaked `[ERROR]/[CONTEXT]/[FIX]` blocks. New `installJsonStderrFilter()` intercepts `process.stderr.write`, strips ANSI, drops `renderError` prefix matches, passes structured JSON logs verbatim. Installed on apply/destroy/reconcile/plan. Core `renderError` untouched (30+ callers).
+
+#### Methodology working
+
+Epic 92 shipped 107 "closed" → Epic 93 found 11 regressions + 28 new. Epic 94 shipped 52 "closed" → Epic 95 found 12 regressions + 15 new. Both ~25-35% partial-landing. **Epic 96 introduces the M1 gate** (probe-lib + pre-close-probes + shipped-wired contracts + pre-commit hook) + **rejection of "unit tests pass → closed"** as sole closure criterion. R5-part-2 demonstrated the value: casing-fix unit tests PASSED but the integration probe still tripped because the LLM-path merge was broken — NOT the sanitizer. Instrumentation found it in one pass. Without the gate it would have shipped inert again.
+
+#### Test totals
+
+8881 → **9004 passing** (+123), 154 skipped (RUN_E2E=1 gated). `packages/core` 6314 → 6364. `packages/best-practices` 639 → 670. `apps/cli` 1316 → 1346. `apps/mcp-server` 624 unchanged.
+
+Full gate run green: `pnpm lint / check-types / lint:barrels / lint:shims / doc-lint / citation-lint / audit --prod / build / -r test:coverage`. `pre-close-probes.sh` full suite: **18/18 PASS**.
+
 ### Epic 96 M1 — methodology gate: dogfood probe-lib + pre-close-probes + shipped-wired contracts (2026-04-23)
 
 **Why**: three consecutive epics (92 / 94 / 95-recon) shipped at ~25-35% partial-landing rate. Unit tests pass. Superficial CLI probes (`jq -e .`) pass. But deep integration breaks at apply-time, or the module lands without being wired into the graph, or help-text regenerates without deduplicating emit points. Root cause: weak closure criterion — stories marked closed based on unit-tests + `jq -e`. M1 replaces that with a stronger gate that catches 6 documented classes of partial-landing.

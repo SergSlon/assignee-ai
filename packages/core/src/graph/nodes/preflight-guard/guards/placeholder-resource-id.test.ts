@@ -16,8 +16,11 @@
 import { describe, it, expect } from "vitest";
 import {
   detectPlaceholderResourceId,
+  findEmbeddedPlaceholderResourceId,
   isPlaceholderResourceId,
+  PLACEHOLDER_RESOURCE_ID_EMBEDDED_REGEX,
   PLACEHOLDER_RESOURCE_ID_PREFIXES,
+  PLACEHOLDER_RESOURCE_ID_PROSE_FIELDS,
   PLACEHOLDER_RESOURCE_ID_REGEX,
   placeholderResourceIdGuard,
 } from "./placeholder-resource-id.js";
@@ -270,5 +273,182 @@ describe("placeholderResourceIdGuard.run", () => {
       expect(result.errorMessage).toContain("VpcId");
       expect(result.errorMessage).not.toContain("Subnets[0]");
     }
+  });
+});
+
+describe("e96.W3.N1 — prose-scope extension (Description / Name / Comment / tag Value)", () => {
+  describe("PLACEHOLDER_RESOURCE_ID_PROSE_FIELDS", () => {
+    it("covers Description / Name / Comment", () => {
+      expect(PLACEHOLDER_RESOURCE_ID_PROSE_FIELDS).toContain("Description");
+      expect(PLACEHOLDER_RESOURCE_ID_PROSE_FIELDS).toContain("Name");
+      expect(PLACEHOLDER_RESOURCE_ID_PROSE_FIELDS).toContain("Comment");
+    });
+  });
+
+  describe("findEmbeddedPlaceholderResourceId", () => {
+    it("extracts subnet-<hex> embedded in prose", () => {
+      expect(
+        findEmbeddedPlaceholderResourceId(
+          "Public subnet (subnet-<hex>) in us-east-1a",
+        ),
+      ).toBe("subnet-<hex>");
+    });
+
+    it("extracts vpc-12345678 embedded in parentheses", () => {
+      expect(
+        findEmbeddedPlaceholderResourceId("Main VPC (vpc-12345678) — shared"),
+      ).toBe("vpc-12345678");
+    });
+
+    it("extracts placeholder surrounded by punctuation", () => {
+      expect(
+        findEmbeddedPlaceholderResourceId("routes via: rtb-abc12345."),
+      ).toBe("rtb-abc12345");
+    });
+
+    it("returns undefined when no placeholder is present", () => {
+      expect(
+        findEmbeddedPlaceholderResourceId("Generic production subnet"),
+      ).toBeUndefined();
+      expect(
+        findEmbeddedPlaceholderResourceId(
+          "VPC vpc-0a1b2c3d4e5f67890 in us-east-1",
+        ),
+      ).toBeUndefined(); // real customer ID, not a placeholder
+    });
+
+    it("handles non-string / empty inputs safely", () => {
+      expect(findEmbeddedPlaceholderResourceId(undefined)).toBeUndefined();
+      expect(findEmbeddedPlaceholderResourceId(null)).toBeUndefined();
+      expect(findEmbeddedPlaceholderResourceId(42)).toBeUndefined();
+      expect(findEmbeddedPlaceholderResourceId("")).toBeUndefined();
+    });
+  });
+
+  describe("detectPlaceholderResourceId — prose fields", () => {
+    it("flags subnet-<hex> inside a Description", () => {
+      const hit = detectPlaceholderResourceId({
+        CidrBlock: "10.0.1.0/24",
+        Description: "Public subnet (subnet-<hex>) in us-east-1a",
+      });
+      expect(hit).toEqual({
+        field: "Description",
+        value: "subnet-<hex>",
+      });
+    });
+
+    it("flags a tag Value containing a placeholder ID (contextual Value)", () => {
+      const hit = detectPlaceholderResourceId({
+        Tags: [
+          { Key: "Name", Value: "my-vpc" },
+          { Key: "ParentSubnet", Value: "See subnet-12345678" },
+        ],
+      });
+      expect(hit).toBeDefined();
+      expect(hit!.field).toBe("Tags[1].Value");
+      expect(hit!.value).toBe("subnet-12345678");
+    });
+
+    it("does NOT flag a non-tag `Value` key (SSM parameter Value)", () => {
+      // The SSM Parameter Value field is not prose. Without parent-
+      // context scoping, a user-asserted SSM Value containing the
+      // substring `subnet-12345678` would surprise-fail preflight.
+      const hit = detectPlaceholderResourceId({
+        Type: "String",
+        // Pathological but legal: an SSM parameter whose text happens
+        // to mention a subnet ID literal. Parent key isn't a tag
+        // array, so prose scanning doesn't apply.
+        Value: "See subnet-12345678 in the runbook",
+      });
+      expect(hit).toBeUndefined();
+    });
+
+    it("flags placeholder in nested Description (DistributionConfig.Comment)", () => {
+      const hit = detectPlaceholderResourceId({
+        DistributionConfig: {
+          Enabled: true,
+          Comment: "Origin backed by bucket (subnet-abc12345)",
+        },
+      });
+      expect(hit).toBeDefined();
+      expect(hit!.field).toBe("DistributionConfig.Comment");
+      expect(hit!.value).toBe("subnet-abc12345");
+    });
+
+    it("prefers ID-shaped whole-string hits over prose hits when both present (walker order)", () => {
+      // Description comes before SubnetId in insertion order — the
+      // walker flags the first hit. Deliberate: ID-shaped fields and
+      // prose fields both use the short-circuit pattern. This test
+      // documents the contract rather than elevating prose severity.
+      const hit = detectPlaceholderResourceId({
+        Description: "Subnet backed by subnet-12345678",
+        SubnetId: "subnet-<hex>",
+      });
+      expect(hit).toBeDefined();
+      expect(hit!.field).toBe("Description");
+    });
+
+    it("returns undefined when Description contains a real customer ID", () => {
+      // Real hex-random IDs are rejected by the placeholder regex —
+      // even when embedded. The guard must not flag a Description
+      // that references an honest customer resource.
+      expect(
+        detectPlaceholderResourceId({
+          Description: "Subnet routes via vpc-0a1b2c3d4e5f67890 (prod)",
+        }),
+      ).toBeUndefined();
+    });
+
+    it("returns undefined when prose contains no placeholder at all", () => {
+      expect(
+        detectPlaceholderResourceId({
+          Description: "General-purpose subnet, public route",
+          Name: "web-tier",
+        }),
+      ).toBeUndefined();
+    });
+  });
+
+  describe("placeholderResourceIdGuard.run — prose scope", () => {
+    it("fails with actionable error when Description embeds subnet-<hex>", async () => {
+      const result = await placeholderResourceIdGuard.run(
+        ctx({
+          CidrBlock: "10.0.0.0/24",
+          Description: "Public subnet (subnet-<hex>) in us-east-1a",
+        }),
+      );
+      expect(result.kind).toBe("fail");
+      if (result.kind === "fail") {
+        expect(result.errorMessage).toContain('Field "Description"');
+        expect(result.errorMessage).toContain("subnet-<hex>");
+      }
+    });
+  });
+
+  describe("PLACEHOLDER_RESOURCE_ID_EMBEDDED_REGEX — anchor correctness", () => {
+    it("does NOT false-positive when `-` is the boundary on both sides", () => {
+      // `my-vpc-12345678-x` — `vpc-12345678` is bracketed by `-`
+      // characters. `-` is a non-alnum so the embedded regex WOULD
+      // match it. This test documents that choice and locks in the
+      // prose-scope's blast radius: we DO flag placeholder tokens
+      // that sit between hyphens in prose ("the-vpc-12345678-one"
+      // is a weird Description but the LLM shouldn't ship it). If
+      // this ever creates a false-positive in real dogfood output,
+      // flip to word-boundary anchors that treat `-` as part of the
+      // word.
+      const re = new RegExp(PLACEHOLDER_RESOURCE_ID_EMBEDDED_REGEX.source, "i");
+      expect(re.test("my-vpc-12345678-x")).toBe(true);
+    });
+
+    it("does match at start and end of string", () => {
+      const re = new RegExp(PLACEHOLDER_RESOURCE_ID_EMBEDDED_REGEX.source, "i");
+      expect(re.test("subnet-<hex> is a placeholder")).toBe(true);
+      expect(re.test("something references subnet-12345678")).toBe(true);
+    });
+
+    it("is case-insensitive", () => {
+      const re = new RegExp(PLACEHOLDER_RESOURCE_ID_EMBEDDED_REGEX.source, "i");
+      expect(re.test("See VPC-12345678 for details")).toBe(true);
+    });
   });
 });

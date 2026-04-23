@@ -38,6 +38,7 @@ import {
   readCompoundPatternMemoryHints,
   injectPluginRequiredDefaults,
   postProcessEc2Compound,
+  filterElicitedForSlot,
 } from "./compound-helpers.js";
 
 /** Entrypoint for the compound path. Returns a partial AgentState. */
@@ -57,7 +58,15 @@ export async function runCompoundPlan(
     (state.resourcePattern!.defaultOptions[currentResource.resourceId] as
       | Record<string, unknown>
       | undefined) ?? {};
-  const rawOptions = state.elicitedOptions ?? {};
+  // e96.W1.B1 — drop name-fields bound to a different resource type before
+  // spreading into the slot's desiredState. Without this, a user-asserted
+  // `FunctionName` (extracted by intent-parser because the primary resource
+  // is Lambda) leaks into the IAM Role slot and CCAPI rejects the apply
+  // with `extraneous key [FunctionName] is not permitted`.
+  const rawOptions = filterElicitedForSlot(
+    state.elicitedOptions ?? {},
+    currentResource.resourceType,
+  );
   const transformedOptions = applyToCfnTransforms(
     rawOptions,
     currentResource.resourceType,

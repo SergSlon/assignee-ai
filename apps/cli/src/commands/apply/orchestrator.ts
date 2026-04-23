@@ -2,6 +2,17 @@
  * Apply orchestrator — wires Phase 1 → gate → Phase 2 provisioning.
  *
  * Called from the `run` callback handed to runCommand().
+ *
+ * Epic 96 Wave 1 B2 (A-02): when Phase 2 provisioning ends with
+ * `success=false` (ExecutionStatus FAILED / unexpected non-SUCCESS),
+ * the orchestrator THROWS an `AssigneeError` so the outer CLI wrapper
+ * emits `{ok:false}` + exits non-zero. Prior behaviour quietly returned
+ * `{success:false}` and `runCommand` in turn returned normally — the
+ * JSON envelope then flipped to `{ok:true}` despite the failure.
+ * Phase-1-only terminal paths (CANCELLED / FAILED / bp-blocked) keep
+ * the existing Phase1Gate semantics: those return `{success}` through
+ * the gate result and the CLI wrapper is responsible for mapping the
+ * `success=false` short-circuits to `{ok:false}` via the same throw.
  */
 
 import { stopSpinner } from "../../utils/display.js";
@@ -15,6 +26,7 @@ import {
 } from "../../config/org-policy-cache.js";
 import type { PlanCheckpoint } from "@assignee/core";
 import type { CommandContext } from "../../utils/command-runner.js";
+import type { AgentState } from "../../services/graph.js";
 import { runPhase1, type Phase1Deps } from "./phase1-planner.js";
 import { handlePhase1Outcome } from "./phase1-gate.js";
 import type { ApplyOpts } from "./arg-parser.js";
@@ -31,13 +43,34 @@ export interface OrchestratorArgs {
 }
 
 /**
+ * Optional envelope-enrichment fields surfaced alongside `success`. The
+ * CLI wrapper reads these in `--json` mode to populate the success
+ * envelope with runId / arn / cost (BLOCKER A-02 mandated stub).
+ * All fields are optional because Phase-1 terminal paths do not have
+ * a final provisioning state.
+ */
+export interface ApplyRunResult {
+  success: boolean;
+  runId?: string;
+  arn?: string;
+  cost?: string;
+}
+
+/**
  * End-to-end apply run: load user/org config, run Phase 1, handle the
  * outcome (early-exit or continue), then run Phase 2 provisioning loop.
+ *
+ * Throws `AssigneeError("APPLY_FAILED")` when Phase 2 ends with
+ * `success=false` so the CLI wrapper's error path emits `{ok:false}`
+ * + exits non-zero. Phase-1 early-exits still return `{success:false}`
+ * without throwing; the wrapper inspects the boolean and rewrites to
+ * a thrown AssigneeError when it needs to signal exit 1 through the
+ * JSON envelope.
  */
 export async function runApply(
   ctx: OrchestratorCtx,
   args: OrchestratorArgs,
-): Promise<{ success: boolean }> {
+): Promise<ApplyRunResult> {
   // Story 7.2: load user config + org policy before graph invocation
   const [userConfig, authToken] = await Promise.all([
     loadUserConfig(),
@@ -75,7 +108,12 @@ export async function runApply(
     phase1State,
     args.effectiveIntent,
   );
-  if (gate.kind === "done") return gate.result;
+  if (gate.kind === "done") {
+    // Phase 1 terminal: CANCELLED (success=true) / FAILED / bp-blocked
+    // (success=false). Surface runId so the CLI wrapper can emit it on
+    // either path; arn/cost are not yet populated at Phase 1.
+    return { ...gate.result, runId: ctx.runId };
+  }
 
   // ── Phase 2: provision all resources ──────────────────────────────
   const { finalState, success } = await runProvisioningLoop(
@@ -93,5 +131,25 @@ export async function runApply(
     result: finalState.executionStatus,
   });
 
-  return { success };
+  // Epic 96 Wave 1 B2: return the enriched result WITHOUT throwing.
+  // The outer CLI wrapper inspects `result.success` and converts a
+  // Phase-2 failure into a thrown AssigneeError AFTER `runCommand`
+  // returns. Throwing here would route the failure through
+  // `runCommand`'s catch which re-renders the human error block that
+  // `runProvisioningLoop` already wrote to stderr.
+  return enrichResult(finalState, success, ctx.runId);
+}
+
+/** Extract runId / arn / cost from the final state for envelope enrichment. */
+function enrichResult(
+  finalState: AgentState,
+  success: boolean,
+  fallbackRunId: string,
+): ApplyRunResult {
+  return {
+    success,
+    runId: finalState.runId ?? fallbackRunId,
+    arn: finalState.resourceArn,
+    cost: finalState.estimatedMonthlyCost,
+  };
 }
