@@ -22,16 +22,21 @@ describe("startup budget CI guard", () => {
   });
 
   it("budget check produces clear failure message when exceeded", () => {
+    // Epic 98 e98.W5.P2 (B-16) raised MCP_TOTAL_PLAN budget 3000→5000ms.
+    // Synthesise an over-budget reading at 6200ms (was 4200ms pre-W5.P2)
+    // so the test still exercises the FAIL path — the message format
+    // assertion is what this case guards against, not the specific
+    // threshold number.
     const result = checkBudget(
       STARTUP_BUDGETS.MCP_TOTAL_PLAN.label,
-      4200,
+      6200,
       STARTUP_BUDGETS.MCP_TOTAL_PLAN.budgetMs,
       1.0,
     );
 
     expect(result.passed).toBe(false);
     expect(result.message).toBe(
-      "BUDGET EXCEEDED: MCP startup (plan) took 4200ms (budget: 3000ms)",
+      "BUDGET EXCEEDED: MCP startup (plan) took 6200ms (budget: 5000ms)",
     );
   });
 

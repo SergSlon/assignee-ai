@@ -181,10 +181,14 @@ async function sweepStaleResources(): Promise<void> {
     const s3 = new S3Client({ region, credentials: operatorCreds() });
     const { Buckets } = await s3.send(new ListBucketsCommand({}));
     for (const b of Buckets ?? []) {
-      if (
-        b.Name &&
-        (b.Name.startsWith("e2e-") || b.Name.startsWith("poc-apply-test-"))
-      ) {
+      // Epic 98 e98.W5.P2 (D-10): sweep every e2e-authored bucket
+      // prefix. Prior to W5.P2 only `e2e-` + `poc-apply-test-` were
+      // swept; the `assignee-e2e-*` family (used by the Slice A
+      // matrix at apps/cli/src/e2e/e2e-plan.test.ts:1057+) leaked
+      // across runs whenever per-test cleanup crashed. Added
+      // `assignee-e2e-`, `assignee-e2e-s3-`, `assignee-e2e-epic35-`
+      // to cover the full e2e corpus.
+      if (b.Name && isE2eBucketName(b.Name)) {
         try {
           await s3.send(new DeleteBucketCommand({ Bucket: b.Name }));
           console.log(`E2E pre-sweep: deleted stale bucket ${b.Name}`);
@@ -196,6 +200,28 @@ async function sweepStaleResources(): Promise<void> {
   } catch {
     // S3 cleanup best-effort
   }
+}
+
+/**
+ * Epic 98 e98.W5.P2 (D-10): single-source-of-truth predicate for
+ * "is this bucket name one of ours?" across BOTH the pre-sweep and
+ * the afterAll global sweeper. Prefixes match the e2e corpus:
+ *
+ *   - `e2e-`                  generic (oldest tests)
+ *   - `poc-apply-test-`       legacy apply-test fixtures
+ *   - `assignee-e2e-`         Slice A matrix (S3/IAM/SQS/DDB/etc.)
+ *   - `assignee-e2e-s3-`      narrow S3 lanes
+ *   - `assignee-e2e-epic35-`  Epic 35 static-site / storybook tests
+ *
+ * Kept intentionally conservative — extending the match set is a
+ * one-line change, narrowing it is a test-integrity decision.
+ */
+export function isE2eBucketName(name: string): boolean {
+  return (
+    name.startsWith("e2e-") ||
+    name.startsWith("poc-apply-test-") ||
+    name.startsWith("assignee-e2e-")
+  );
 }
 
 beforeAll(async () => {
@@ -313,6 +339,31 @@ afterAll(async () => {
       }
     } catch {
       // ECS cleanup is best-effort
+    }
+
+    // Epic 98 e98.W5.P2 (D-10): afterAll S3 bucket sweep. Previously
+    // S3 buckets only got cleaned in `sweepStaleResources` at
+    // beforeAll — so a crash between beforeAll and afterAll left the
+    // bucket alive until the NEXT run's beforeAll. Mirror the bucket
+    // sweep here so every afterAll also closes the leak window for
+    // the run that just completed.
+    try {
+      const { S3Client, ListBucketsCommand, DeleteBucketCommand } =
+        await import("@aws-sdk/client-s3");
+      const s3 = new S3Client({ region, credentials: operatorCreds() });
+      const { Buckets } = await s3.send(new ListBucketsCommand({}));
+      for (const b of Buckets ?? []) {
+        if (b.Name && isE2eBucketName(b.Name)) {
+          try {
+            await s3.send(new DeleteBucketCommand({ Bucket: b.Name }));
+            console.log(`E2E post-sweep: deleted stale bucket ${b.Name}`);
+          } catch {
+            // bucket may still have objects; per-test cleanup owns those
+          }
+        }
+      }
+    } catch {
+      // S3 post-sweep is best-effort
     }
   } catch (err) {
     console.warn("E2E sweeper error (non-fatal):", err);

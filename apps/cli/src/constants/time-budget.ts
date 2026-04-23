@@ -29,7 +29,16 @@ export interface BudgetCheckResult {
 export const CLI_PARSE_MS = 50;
 export const CREDENTIAL_CHECK_MS = 200;
 export const MCP_STARTUP_PER_SERVER_MS = 1000;
-export const MCP_STARTUP_TOTAL_MS = 3000;
+/**
+ * MCP startup budget — total across all required servers on the cold-
+ * path for `plan` / `apply`. Raised from 3000ms → 5000ms in Epic 98
+ * e98.W5.P2 (Epic 97 B-16): the 3000ms threshold fired on nearly every
+ * cold plan run (observed 3108-9967ms on dogfood probes), so the
+ * WARNING was noise rather than signal. 5000ms keeps the gate tight
+ * enough to catch genuine regressions (e.g. a 10x MCP spawn cost)
+ * while staying above the realistic cold-start floor.
+ */
+export const MCP_STARTUP_TOTAL_MS = 5000;
 export const FIRST_LLM_CALL_MS = 5000;
 export const TOTAL_COLD_START_MS = 10000;
 /**
@@ -44,6 +53,25 @@ export const TOTAL_COLD_START_MS = 10000;
  * failure, which matches the NFR rubric (soft QoS budget, not a gate).
  */
 export const COMMAND_TOTAL_MS = 60000;
+
+/**
+ * Epic 98 e98.W5.P2 (Epic 97 A-03 + A-07): per-resource-type override
+ * for the `total` command budget. Some CloudControl creation paths are
+ * inherently slower than the 60s rule because AWS itself imposes a
+ * longer eventual-consistency window; warning on them is noise.
+ *
+ * - SQS: AWS's queue-name-reuse rule holds a `QueueUrl` for 60s after
+ *   delete and a fresh create races the release. Observed wall clock
+ *   73-74s on every `assignee apply` of a standard queue (dogfood
+ *   slice A). 90s gives ~20% headroom over worst-case observation.
+ *
+ * Callers set the context via `timing.setApplyBudgetContext()` when
+ * they know the terminal resourceType (post-Phase-1 in apply). When
+ * unset, `total` falls back to `COMMAND_TOTAL_MS`.
+ */
+export const APPLY_TOTAL_OVERRIDES_MS: Readonly<Record<string, number>> = {
+  "AWS::SQS::Queue": 90000,
+};
 
 /** Per-phase startup time budgets. */
 export const STARTUP_BUDGETS = {

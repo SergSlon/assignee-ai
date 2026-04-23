@@ -10,7 +10,11 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { STARTUP_BUDGETS, checkBudget } from "../constants/time-budget.js";
+import {
+  STARTUP_BUDGETS,
+  APPLY_TOTAL_OVERRIDES_MS,
+  checkBudget,
+} from "../constants/time-budget.js";
 import { EnvVar } from "../constants/env-vars.js";
 import { ASSIGNEE_DIR } from "../config/constants.js";
 
@@ -136,16 +140,60 @@ const LABEL_TO_BUDGET: Record<string, { label: string; budgetMs: number }> = {
 };
 
 /**
+ * Epic 98 e98.W5.P2 (Epic 97 A-03 + A-07): per-apply resource-type
+ * context used to swap the `total` budget for resource types with
+ * inherently longer CCAPI completion windows (currently SQS — see
+ * `APPLY_TOTAL_OVERRIDES_MS`).
+ *
+ * Set by the apply orchestrator after Phase 1 resolves the terminal
+ * `resourceType`; read by `checkTimingsAgainstBudgets` on persist.
+ * Undefined on non-apply commands / pre-Phase-1 exits → default
+ * COMMAND_TOTAL_MS stays in force. Cleared by `resetTimings()` so
+ * tests don't leak context between runs.
+ */
+let applyResourceType: string | undefined;
+
+/**
+ * Set the resource-type context for the `total`-budget override. Call
+ * this once per apply run, after the graph resolves the terminal
+ * resourceType and before `persistTimings` fires.
+ */
+export function setApplyBudgetContext(resourceType: string | undefined): void {
+  applyResourceType = resourceType;
+}
+
+/**
+ * Return the effective `total` budget for the current run, consulting
+ * the per-resource-type override map when an apply context has been
+ * set. Pure-function surface so the check is easy to unit-test.
+ */
+function effectiveTotalBudgetMs(): number {
+  if (applyResourceType !== undefined) {
+    const override = APPLY_TOTAL_OVERRIDES_MS[applyResourceType];
+    if (override !== undefined) return override;
+  }
+  return STARTUP_BUDGETS.COMMAND_TOTAL.budgetMs;
+}
+
+/**
  * Check completed timings against budgets and emit warnings to stderr
  * for any phase that exceeds its budget. Called automatically after
  * persisting timings.
+ *
+ * Epic 98 e98.W5.P2: the `total` budget consults
+ * `effectiveTotalBudgetMs()` so resource-types with AWS-inherent
+ * long completion windows (e.g. SQS apply at 73-74s) don't trip the
+ * 60s rule. Other phases (mcp-startup, cli-parse, etc.) are
+ * unchanged — they measure CLI cold-start, not AWS-side latency.
  */
 export function checkTimingsAgainstBudgets(): void {
   for (const [timerLabel, budget] of Object.entries(LABEL_TO_BUDGET)) {
     const actualMs = completed.get(timerLabel);
     if (actualMs === undefined) continue;
 
-    const result = checkBudget(budget.label, actualMs, budget.budgetMs);
+    const effectiveBudget =
+      timerLabel === "total" ? effectiveTotalBudgetMs() : budget.budgetMs;
+    const result = checkBudget(budget.label, actualMs, effectiveBudget);
     if (!result.passed) {
       process.stderr.write(`[assignee] WARNING: ${result.message}\n`);
     }
@@ -225,9 +273,16 @@ export function persistTimings(runId: string, homeDir?: string): void {
 }
 
 /**
- * Reset all in-memory state. Intended for tests only.
+ * Reset all in-memory state. Called at the start of every runCommand
+ * invocation (so timers from one command don't bleed into the next)
+ * AND directly by tests that want a clean slate.
+ *
+ * Epic 98 e98.W5.P2: also clears the apply resource-type budget
+ * context so a prior SQS apply's 90s override doesn't leak into a
+ * subsequent plan / doctor run.
  */
 export function resetTimings(): void {
   pending.clear();
   completed.clear();
+  applyResourceType = undefined;
 }

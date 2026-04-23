@@ -27,8 +27,14 @@ describe("time-budget", () => {
       expect(MCP_STARTUP_PER_SERVER_MS).toBe(1000);
     });
 
-    it("exports MCP_STARTUP_TOTAL_MS = 3000", () => {
-      expect(MCP_STARTUP_TOTAL_MS).toBe(3000);
+    it("exports MCP_STARTUP_TOTAL_MS = 5000 (raised from 3000 in Epic 98 W5.P2 / B-16)", () => {
+      // Pre-W5.P2 this was 3000ms but fired on nearly every cold plan
+      // run (observed 3108-9967ms during dogfood probes), so the
+      // WARNING was noise rather than signal. 5000ms keeps the gate
+      // tight enough to catch genuine regressions while staying above
+      // the realistic cold-start floor. See apps/cli/src/constants/
+      // time-budget.ts for the B-16 reference.
+      expect(MCP_STARTUP_TOTAL_MS).toBe(5000);
     });
 
     it("exports FIRST_LLM_CALL_MS = 5000", () => {
@@ -58,8 +64,8 @@ describe("time-budget", () => {
       expect(STARTUP_BUDGETS.MCP_PER_SERVER.budgetMs).toBe(1000);
     });
 
-    it("defines MCP_TOTAL_PLAN budget at 3000ms", () => {
-      expect(STARTUP_BUDGETS.MCP_TOTAL_PLAN.budgetMs).toBe(3000);
+    it("defines MCP_TOTAL_PLAN budget at 5000ms (W5.P2 / B-16)", () => {
+      expect(STARTUP_BUDGETS.MCP_TOTAL_PLAN.budgetMs).toBe(5000);
     });
 
     it("defines LLM_FIRST_CALL budget at 5000ms", () => {
