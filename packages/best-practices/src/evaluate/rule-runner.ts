@@ -8,6 +8,7 @@
 
 import {
   inspectPolicyDocument,
+  isAbsenceAntipattern,
   type PolicyAntipattern,
 } from "../policy-inspector.js";
 import { isAwarenessCheck } from "./awareness-filter.js";
@@ -269,11 +270,26 @@ export function checkPasses(
       // + Zod schema validation should catch typos before they reach
       // production manifests.
       //
-      // Missing fieldValue (no policy document at the property path)
-      // also passes — a rule that needs to enforce presence of the
-      // policy itself should use `exists` as a second rule.
+      // Presence-pattern missing-fieldValue semantics (default):
+      //   no policy document at the property path → rule PASSES.
+      //   A rule that needs to enforce presence of the policy itself
+      //   should use `exists` as a second rule.
+      //
+      // Absence-pattern missing-fieldValue semantics (Epic 98 W4.B4+):
+      //   no policy document means the desired Deny statement is
+      //   definitely absent, so the rule FAILS (fires). Routed through
+      //   the inspector's absence branch which is tolerant of
+      //   undefined/null/malformed documents.
+      const patternName =
+        typeof expectedValue === "string"
+          ? (expectedValue as PolicyAntipattern)
+          : undefined;
+      if (patternName !== undefined && isAbsenceAntipattern(patternName)) {
+        const result = inspectPolicyDocument(fieldValue, patternName);
+        return !result.matched;
+      }
       if (fieldValue === undefined || fieldValue === null) return true;
-      const patternName = expectedValue as PolicyAntipattern;
+      if (patternName === undefined) return true;
       const result = inspectPolicyDocument(fieldValue, patternName);
       return !result.matched;
     }
