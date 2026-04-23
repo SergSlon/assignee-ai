@@ -18,6 +18,7 @@
 import { stopSpinner } from "../../utils/display.js";
 import { log, LOG_ACTIONS } from "../../utils/logger.js";
 import { runProvisioningLoop } from "../../utils/command-runner.js";
+import { setApplyBudgetContext } from "../../telemetry/timing.js";
 import { loadUserConfig } from "../../config/user-config-loader.js";
 import { loadGlobalConfig } from "../../config/load-global-config.js";
 import {
@@ -146,6 +147,14 @@ export async function runApply(
     graphConfig,
     gate.phase1State,
   );
+
+  // Epic 98 e98.W5.P2 (Epic 97 A-03 + A-07): inform the timing layer
+  // which resourceType this apply targeted so the `total` budget can
+  // be overridden for types with AWS-inherent long completion windows
+  // (SQS is currently 73-74s vs the 60s rule). Runs BEFORE
+  // `persistTimings` fires at the outer runCommand finally, so the
+  // budget check sees the override.
+  setApplyBudgetContext(finalState.resourceType);
 
   log({
     ts: new Date().toISOString(),

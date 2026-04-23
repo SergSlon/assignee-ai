@@ -9,6 +9,7 @@ import {
   persistTimings,
   resetTimings,
   checkTimingsAgainstBudgets,
+  setApplyBudgetContext,
 } from "./timing.js";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -306,6 +307,187 @@ describe("timing", () => {
       const llmWarnings = warnings.filter((w) => w.includes("First LLM call"));
       // Sub-ms duration is well under the 5 s budget → no warning fires.
       expect(llmWarnings).toHaveLength(0);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Epic 98 e98.W5.P2 (Epic 97 A-03 + A-07): per-resource-type override
+  // for the `total` budget. SQS apply consistently takes 73-74s due to
+  // AWS-inherent CCAPI latency (queue-name-reuse window). Without the
+  // override every SQS apply would fire a spurious BUDGET EXCEEDED
+  // warning. The override bumps SQS's total budget to 90 s; other
+  // resource-types stay at the 60 s rule.
+  // ─────────────────────────────────────────────────────────────────────────
+  describe("W5.P2 — per-resource-type total-budget override", () => {
+    const realWrite = process.stderr.write.bind(process.stderr);
+    let warnings: string[] = [];
+
+    beforeEach(() => {
+      warnings = [];
+      process.stderr.write = vi.fn((chunk: unknown) => {
+        warnings.push(String(chunk));
+        return true;
+      }) as unknown as typeof process.stderr.write;
+    });
+
+    afterEach(() => {
+      process.stderr.write = realWrite;
+    });
+
+    /**
+     * Force the "total" timer to a synthetic elapsed value by stubbing
+     * hrtime. Returns zero-arg helpers so each test can land its own
+     * elapsed-ms number without copy-pasting the stub scaffolding.
+     */
+    function synthesiseTotalMs(elapsedMs: number): void {
+      const hrtimeSpy = vi
+        .spyOn(process.hrtime, "bigint")
+        .mockReturnValueOnce(0n)
+        .mockReturnValueOnce(BigInt(elapsedMs) * 1_000_000n);
+      startTimer("total");
+      endTimer("total");
+      hrtimeSpy.mockRestore();
+    }
+
+    it("SQS apply at 75s does NOT fire a warning (override raises budget to 90s)", () => {
+      synthesiseTotalMs(75_000);
+      setApplyBudgetContext("AWS::SQS::Queue");
+
+      checkTimingsAgainstBudgets();
+
+      const totalWarnings = warnings.filter((w) =>
+        w.includes("Total command runtime"),
+      );
+      expect(totalWarnings).toHaveLength(0);
+    });
+
+    it("SQS apply at 95s DOES fire a warning (exceeds the 90s override)", () => {
+      synthesiseTotalMs(95_000);
+      setApplyBudgetContext("AWS::SQS::Queue");
+
+      checkTimingsAgainstBudgets();
+
+      const totalWarnings = warnings.filter((w) =>
+        w.includes("Total command runtime"),
+      );
+      expect(totalWarnings).toHaveLength(1);
+      expect(totalWarnings[0]).toContain("budget: 90000ms");
+    });
+
+    it("S3 apply at 75s DOES fire a warning (no override for S3 — stays at 60s rule)", () => {
+      // Regression guard: the override must NOT leak to every type.
+      // Only the types listed in APPLY_TOTAL_OVERRIDES_MS get a raised
+      // budget; everything else stays at COMMAND_TOTAL_MS (60 s).
+      synthesiseTotalMs(75_000);
+      setApplyBudgetContext("AWS::S3::Bucket");
+
+      checkTimingsAgainstBudgets();
+
+      const totalWarnings = warnings.filter((w) =>
+        w.includes("Total command runtime"),
+      );
+      expect(totalWarnings).toHaveLength(1);
+      expect(totalWarnings[0]).toContain("budget: 60000ms");
+    });
+
+    it("no apply context set → total budget falls back to COMMAND_TOTAL_MS (60s)", () => {
+      // Non-apply commands (plan / doctor / list) never call
+      // setApplyBudgetContext. They must not accidentally get the
+      // SQS override.
+      synthesiseTotalMs(75_000);
+      // Deliberately DON'T call setApplyBudgetContext — simulates plan.
+
+      checkTimingsAgainstBudgets();
+
+      const totalWarnings = warnings.filter((w) =>
+        w.includes("Total command runtime"),
+      );
+      expect(totalWarnings).toHaveLength(1);
+      expect(totalWarnings[0]).toContain("budget: 60000ms");
+    });
+
+    it("resetTimings() clears the apply context (no leak between runs)", () => {
+      // A prior SQS apply sets context → 90 s budget. A subsequent
+      // plan run must see the budget reset to 60 s. `resetTimings()`
+      // is called at the top of every runCommand invocation.
+      setApplyBudgetContext("AWS::SQS::Queue");
+      resetTimings();
+      synthesiseTotalMs(75_000);
+
+      checkTimingsAgainstBudgets();
+
+      const totalWarnings = warnings.filter((w) =>
+        w.includes("Total command runtime"),
+      );
+      expect(totalWarnings).toHaveLength(1);
+      expect(totalWarnings[0]).toContain("budget: 60000ms");
+    });
+
+    it("setApplyBudgetContext(undefined) clears context (defensive call from test / mock)", () => {
+      setApplyBudgetContext("AWS::SQS::Queue");
+      setApplyBudgetContext(undefined);
+      synthesiseTotalMs(75_000);
+
+      checkTimingsAgainstBudgets();
+
+      const totalWarnings = warnings.filter((w) =>
+        w.includes("Total command runtime"),
+      );
+      expect(totalWarnings).toHaveLength(1);
+      expect(totalWarnings[0]).toContain("budget: 60000ms");
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Epic 98 e98.W5.P2 (Epic 97 B-16): raise MCP startup budget from 3s → 5s.
+  // ─────────────────────────────────────────────────────────────────────────
+  describe("W5.P2 — MCP startup budget raised to 5 s (B-16)", () => {
+    const realWrite = process.stderr.write.bind(process.stderr);
+    let warnings: string[] = [];
+
+    beforeEach(() => {
+      warnings = [];
+      process.stderr.write = vi.fn((chunk: unknown) => {
+        warnings.push(String(chunk));
+        return true;
+      }) as unknown as typeof process.stderr.write;
+    });
+
+    afterEach(() => {
+      process.stderr.write = realWrite;
+    });
+
+    it("mcp-startup at 4s does NOT fire a warning (below the new 5s budget)", () => {
+      const hrtimeSpy = vi
+        .spyOn(process.hrtime, "bigint")
+        .mockReturnValueOnce(0n)
+        .mockReturnValueOnce(4_000_000_000n);
+      startTimer("mcp-startup");
+      endTimer("mcp-startup");
+      hrtimeSpy.mockRestore();
+
+      checkTimingsAgainstBudgets();
+
+      const mcpWarnings = warnings.filter((w) => w.includes("MCP startup"));
+      // Pre-W5.P2 with 3 s budget, 4 s would have fired. Post-W5.P2
+      // the 5 s budget absorbs realistic cold-start headroom.
+      expect(mcpWarnings).toHaveLength(0);
+    });
+
+    it("mcp-startup at 6s DOES fire a warning (exceeds the new 5s budget)", () => {
+      const hrtimeSpy = vi
+        .spyOn(process.hrtime, "bigint")
+        .mockReturnValueOnce(0n)
+        .mockReturnValueOnce(6_000_000_000n);
+      startTimer("mcp-startup");
+      endTimer("mcp-startup");
+      hrtimeSpy.mockRestore();
+
+      checkTimingsAgainstBudgets();
+
+      const mcpWarnings = warnings.filter((w) => w.includes("MCP startup"));
+      expect(mcpWarnings).toHaveLength(1);
+      expect(mcpWarnings[0]).toContain("budget: 5000ms");
     });
   });
 });

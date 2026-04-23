@@ -2427,3 +2427,154 @@ probes:
         $PROBE_CLI_BIN plan \
           "Create a t3.micro EC2 instance" \
           --json
+  - story: e98.W5.P2
+    name: w5-p2-budget-policy
+    description: |
+      e98.W5.P2 cli-portion (Epic 97 A-03 + A-07 + B-16 promoted from
+      Epic 95 deferred backlog).
+
+      - **A-03 + A-07 (MED NEW)**: SQS apply consistently runs 73-74s
+        because AWS's queue-name-reuse window holds a QueueUrl for ~60s
+        after delete and a fresh create races the release. Every SQS
+        apply tripped the 60s COMMAND_TOTAL rule — noise, not signal.
+        Fix: per-resource-type override map
+        (`APPLY_TOTAL_OVERRIDES_MS`) that bumps SQS's total budget to
+        90s. Other types unchanged.
+      - **B-16 (LOW PRE)**: MCP startup budget at 3000ms fired on
+        nearly every cold plan run (observed 3108-9967ms). Fix: raise
+        `MCP_STARTUP_TOTAL_MS` to 5000ms. Keeps the gate tight enough
+        to catch genuine regressions while staying above the real-
+        world cold-start floor.
+
+      Probe is library-level: exercises `checkTimingsAgainstBudgets`
+      and `setApplyBudgetContext` from the compiled
+      apps/cli/dist/telemetry/timing.js directly. No live AWS.
+    must_fail_pre_fix: false
+    variations:
+      - cmd: 'SQS apply at 75s total → NO budget warning (override 90s lifts the 60s rule)'
+        assertions: "A-03/A-07 closure — resource-type-aware total-budget override prevents spurious WARNING on SQS apply"
+      - cmd: 'S3 apply at 75s total → WARNING fires (60s rule still holds for non-SQS types)'
+        assertions: "Override is narrow — only listed types in APPLY_TOTAL_OVERRIDES_MS get raised budget; S3/EC2/Lambda stay at 60s"
+      - cmd: 'MCP startup at 4000ms → NO warning (was WARNING under pre-W5.P2 3000ms budget)'
+        assertions: "B-16 closure — MCP_STARTUP_TOTAL_MS raised 3000→5000; cold-start noise suppressed"
+      - cmd: 'MCP startup at 6000ms → WARNING fires at new 5000ms budget'
+        assertions: "Gate still tight — catches genuine regressions above realistic cold-start floor"
+      - cmd: 'APPLY_TOTAL_OVERRIDES_MS + MCP_STARTUP_TOTAL_MS constants at expected values'
+        assertions: "Constant-export sanity: MCP=5000, SQS override=90000 — guards against silent drift"
+    known_tripwires: []
+    probe: |
+      # Hermetic library-level test — drives the compiled
+      # apps/cli/dist/telemetry/timing.js + constants/time-budget.js
+      # directly. Exercises both the A-03/A-07 per-resource-type
+      # override and the B-16 budget raise.
+      output="$(node -e "
+        const repo = process.env.PROBE_REPO_ROOT;
+        (async () => {
+          const timing = await import(repo + '/apps/cli/dist/telemetry/timing.js');
+          const budgets = await import(repo + '/apps/cli/dist/constants/time-budget.js');
+
+          // Collect stderr writes during budget checks.
+          const origWrite = process.stderr.write.bind(process.stderr);
+          const warnings = [];
+          process.stderr.write = ((chunk) => {
+            warnings.push(String(chunk));
+            return true;
+          });
+
+          // Helper: synthesise a completed timer at ms for label
+          // via hrtime stub (startTimer hits it once, endTimer once).
+          const stubTimer = (label, ms) => {
+            const orig = process.hrtime.bigint;
+            let call = 0;
+            process.hrtime.bigint = () => {
+              call++;
+              return call === 1 ? 0n : BigInt(ms) * 1000000n;
+            };
+            timing.startTimer(label);
+            timing.endTimer(label);
+            process.hrtime.bigint = orig;
+          };
+
+          const results = {};
+
+          // Variation 1: SQS apply at 75s → no warning (90s override).
+          timing.resetTimings();
+          stubTimer('total', 75000);
+          timing.setApplyBudgetContext('AWS::SQS::Queue');
+          warnings.length = 0;
+          timing.checkTimingsAgainstBudgets();
+          results.sqs_75s_under_90 = warnings.filter(w => w.includes('Total command runtime')).length;
+
+          // Variation 2: S3 apply at 75s → warning (no override).
+          timing.resetTimings();
+          stubTimer('total', 75000);
+          timing.setApplyBudgetContext('AWS::S3::Bucket');
+          warnings.length = 0;
+          timing.checkTimingsAgainstBudgets();
+          results.s3_75s_over_60 = warnings.filter(w => w.includes('Total command runtime')).length;
+          results.s3_warning_msg = warnings.find(w => w.includes('Total command runtime')) || '';
+
+          // Variation 3: MCP at 4s → no warning (under new 5s budget).
+          timing.resetTimings();
+          stubTimer('mcp-startup', 4000);
+          warnings.length = 0;
+          timing.checkTimingsAgainstBudgets();
+          results.mcp_4s_under_5 = warnings.filter(w => w.includes('MCP startup')).length;
+
+          // Variation 4: MCP at 6s → warning (over new 5s budget).
+          timing.resetTimings();
+          stubTimer('mcp-startup', 6000);
+          warnings.length = 0;
+          timing.checkTimingsAgainstBudgets();
+          results.mcp_6s_over_5 = warnings.filter(w => w.includes('MCP startup')).length;
+          results.mcp_warning_msg = warnings.find(w => w.includes('MCP startup')) || '';
+
+          // Constant exports sanity-check.
+          results.mcp_budget = budgets.MCP_STARTUP_TOTAL_MS;
+          results.sqs_override = budgets.APPLY_TOTAL_OVERRIDES_MS['AWS::SQS::Queue'];
+
+          process.stderr.write = origWrite;
+          process.stdout.write(JSON.stringify(results));
+        })().catch(err => { console.error(err.message); process.exit(1); });
+      ")"
+
+      # Variation 1: SQS apply 75s → zero warnings.
+      if ! printf '%s' "$output" | jq -e '.sqs_75s_under_90 == 0' >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] SQS apply at 75s fired a warning (A-03/A-07 override broken)" >&2
+        printf '%s' "$output" | jq '.' >&2
+        exit 1
+      fi
+
+      # Variation 2: S3 apply 75s → 1 warning, cites 60000ms budget.
+      if ! printf '%s' "$output" | jq -e '
+        .s3_75s_over_60 == 1 and (.s3_warning_msg | test("budget: 60000ms"))
+      ' >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] S3 apply at 75s did not fire expected 60000ms warning (override leaked to non-SQS types)" >&2
+        printf '%s' "$output" | jq '{s3_75s_over_60, s3_warning_msg}' >&2
+        exit 1
+      fi
+
+      # Variation 3: MCP 4s → zero warnings (B-16 closure).
+      if ! printf '%s' "$output" | jq -e '.mcp_4s_under_5 == 0' >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] MCP startup at 4s fired a warning (B-16 budget raise broken)" >&2
+        printf '%s' "$output" | jq '.' >&2
+        exit 1
+      fi
+
+      # Variation 4: MCP 6s → 1 warning, cites 5000ms budget.
+      if ! printf '%s' "$output" | jq -e '
+        .mcp_6s_over_5 == 1 and (.mcp_warning_msg | test("budget: 5000ms"))
+      ' >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] MCP startup at 6s did not fire 5000ms warning (budget gate not enforced)" >&2
+        printf '%s' "$output" | jq '{mcp_6s_over_5, mcp_warning_msg}' >&2
+        exit 1
+      fi
+
+      # Variation 5 (regression baseline): constant exports pinned.
+      if ! printf '%s' "$output" | jq -e '
+        .mcp_budget == 5000 and .sqs_override == 90000
+      ' >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] time-budget.ts constants drifted (B-16 / A-03)" >&2
+        printf '%s' "$output" | jq '{mcp_budget, sqs_override}' >&2
+        exit 1
+      fi
