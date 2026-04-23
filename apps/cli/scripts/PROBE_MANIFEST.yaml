@@ -1709,3 +1709,110 @@ probes:
         })
         .catch(err => { console.error("[PROBE-FAIL] " + err.message); process.exit(1); });
       '
+  - story: e98.W5.N2
+    name: w5-n2-intent-silent-override
+    description: |
+      Epic 98 Wave 5 N2 — intent silent-override suite. Closes Epic 97
+      D-13 (HIGH SNS Subscription Protocol inference) + D-17 (HIGH
+      CloudWatch Alarm metric inference) + C-P4 (LOW RDS phrasing —
+      closed implicitly by W3.A1).
+
+      Three user-visible behaviours changed:
+        1. SNS Subscription: E.164 phone (`+15551234567`) now classifies
+           as Protocol=sms; Lambda / Firehose ARNs classify as their own
+           Protocol values. The unsafe `sqs` plugin default was removed
+           so elicitation fires when inference can't determine a safe
+           value rather than silently dispatching to the wrong consumer.
+        2. CloudWatch Alarm: service-keyword phrases ("s3 bucket-size",
+           "sqs dlq depth", "lambda errors", "rds cpu", etc.) infer
+           `(Namespace, MetricName)` into the plan instead of falling
+           through to the plugin's AWS/EC2 + CPUUtilization initialValues.
+        3. CW Alarm Namespace enum grew to 8 options (+ AWS/S3,
+           + AWS/DynamoDB) so the intent-parser inference has valid
+           targets.
+
+      Probe loads compiled intent-parser directly and asserts each of
+      the 5 dispatch-brief variations + extra coverage. Hermetic — no
+      CLI spawn, no STS required.
+    must_fail_pre_fix: false
+    variations:
+      - cmd: 'extractAssertedValues("SNS subscription to +15551234567", SNS_SUBSCRIPTION) → Protocol=sms'
+        assertions: "D-13: E.164 phone → Protocol=sms, Endpoint compacted"
+      - cmd: 'extractAssertedValues("SNS to arn:aws:lambda:us-east-1:210987654321:function:x", SNS_SUBSCRIPTION) → Protocol=lambda'
+        assertions: "D-13: Lambda ARN → Protocol=lambda (retrofit lock)"
+      - cmd: 'extractAssertedValues("Create an SNS subscription", SNS_SUBSCRIPTION) → Protocol unset'
+        assertions: "D-13: ambiguous intent leaves Protocol unset — elicitation path owned"
+      - cmd: 'extractAssertedValues("alarm on S3 bucket size", CLOUDWATCH_ALARM) → AWS/S3 + BucketSizeBytes'
+        assertions: "D-17: S3 bucket-size keyword → correct namespace + metric"
+      - cmd: 'extractAssertedValues("alarm on SQS DLQ depth", CLOUDWATCH_ALARM) → AWS/SQS + ApproximateNumberOfMessagesVisible'
+        assertions: "D-17: SQS DLQ keyword → canonical DLQ-depth metric"
+    known_tripwires: []
+    probe: |
+      node -e '
+        const repo = process.env.PROBE_REPO_ROOT;
+        Promise.all([
+          import(repo + "/packages/core/dist/graph/nodes/intent-parser.js"),
+          import(repo + "/packages/core/dist/config/resource-types/named.js"),
+        ]).then(([ip, rt]) => {
+          const R = rt.RESOURCE_TYPES;
+          const expect = (label, got, pred) => {
+            if (!pred(got)) {
+              console.error(
+                "[PROBE-FAIL] " + label + " got " + JSON.stringify(got)
+              );
+              process.exit(1);
+            }
+          };
+
+          // D-13 Variation 1 — E.164 phone → sms.
+          const sms = ip.extractAssertedValues(
+            "SNS subscription to +15551234567 for alerts",
+            R.SNS_SUBSCRIPTION
+          );
+          expect("SMS Protocol", sms.elicited.Protocol, (v) => v === "sms");
+          expect("SMS Endpoint", sms.elicited.Endpoint, (v) => v === "+15551234567");
+
+          // D-13 Variation 2 — Lambda ARN → lambda.
+          const lambda = ip.extractAssertedValues(
+            "SNS subscription to arn:aws:lambda:us-east-1:210987654321:function:my-fn",
+            R.SNS_SUBSCRIPTION
+          );
+          expect("Lambda Protocol", lambda.elicited.Protocol, (v) => v === "lambda");
+
+          // D-13 Variation 3 — ambiguous intent.
+          const ambiguous = ip.extractAssertedValues(
+            "Create an SNS subscription",
+            R.SNS_SUBSCRIPTION
+          );
+          expect("Ambiguous Protocol unset", ambiguous.elicited.Protocol, (v) => v === undefined);
+
+          // D-17 Variation 4 — S3 bucket size.
+          const s3 = ip.extractAssertedValues(
+            "Create an alarm on S3 bucket size over 10GB",
+            R.CLOUDWATCH_ALARM
+          );
+          expect("S3 Namespace", s3.elicited.Namespace, (v) => v === "AWS/S3");
+          expect("S3 MetricName", s3.elicited.MetricName, (v) => v === "BucketSizeBytes");
+
+          // D-17 Variation 5 — SQS DLQ depth.
+          const dlq = ip.extractAssertedValues(
+            "Create an alarm on SQS DLQ depth greater than 0",
+            R.CLOUDWATCH_ALARM
+          );
+          expect("SQS DLQ Namespace", dlq.elicited.Namespace, (v) => v === "AWS/SQS");
+          expect(
+            "SQS DLQ MetricName",
+            dlq.elicited.MetricName,
+            (v) => v === "ApproximateNumberOfMessagesVisible"
+          );
+
+          // Negative — bare CW intent leaves both fields unset.
+          const bare = ip.extractAssertedValues(
+            "Create a CloudWatch alarm",
+            R.CLOUDWATCH_ALARM
+          );
+          expect("Bare CW Namespace unset", bare.elicited.Namespace, (v) => v === undefined);
+          expect("Bare CW MetricName unset", bare.elicited.MetricName, (v) => v === undefined);
+        })
+        .catch(err => { console.error("[PROBE-FAIL] " + err.message); process.exit(1); });
+      '

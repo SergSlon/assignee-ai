@@ -57,18 +57,26 @@ describe("cloudWatchAlarmPlugin", () => {
       (f) => f.name === "Namespace",
     )!;
 
-    it("has 6 options including common AWS namespaces and Custom", () => {
-      expect(field.question.options).toHaveLength(6);
+    it("has 8 options including the W5.N2 additions (AWS/S3, AWS/DynamoDB) + Custom", () => {
+      // e98.W5.N2 (D-17) — AWS/S3 + AWS/DynamoDB added so the
+      // intent-parser's service-keyword inference has valid enum
+      // entries to write. See intent-parser.ts
+      // extractCloudWatchAlarmMetric.
+      expect(field.question.options).toHaveLength(8);
     });
 
-    it("includes AWS/EC2, AWS/RDS, AWS/Lambda, AWS/SQS, AWS/ApplicationELB", () => {
+    it("includes every namespace the intent-parser infers", () => {
       const values = field.question.options!.map((o) => o.value);
+      // Pre-existing 5 AWS namespaces + Custom.
       expect(values).toContain("AWS/EC2");
       expect(values).toContain("AWS/RDS");
       expect(values).toContain("AWS/Lambda");
       expect(values).toContain("AWS/SQS");
       expect(values).toContain("AWS/ApplicationELB");
       expect(values).toContain("Custom");
+      // W5.N2 additions.
+      expect(values).toContain("AWS/S3");
+      expect(values).toContain("AWS/DynamoDB");
     });
   });
 
