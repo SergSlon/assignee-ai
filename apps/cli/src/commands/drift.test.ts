@@ -255,13 +255,27 @@ describe("drift command", () => {
       expect(detailed).toBeDefined();
     });
 
-    it("registers --output-file (not --output) for the JSON report path", () => {
+    it("registers --output-file for the JSON report file path", () => {
       const outputFile = driftCommand.options.find(
         (o) => o.long === "--output-file",
       );
-      const output = driftCommand.options.find((o) => o.long === "--output");
       expect(outputFile).toBeDefined();
-      expect(output).toBeUndefined();
+    });
+
+    // Epic 98 e98.W5.N3 (B-07 / D-16): uniform `-o, --output <format>`
+    // across every command. Previously drift deliberately omitted
+    // `--output` to avoid collision with the earlier `--output <file>`
+    // flag (now renamed to `--output-file`). After the rename the slot
+    // is free, and surface parity with plan/apply/destroy/reconcile
+    // makes it the canonical format selector; `--json` stays as the
+    // shorthand. The two flags have DISTINCT semantics:
+    //   -o, --output <format>  — enum (json|text)
+    //   --output-file <file>   — filesystem path for the JSON report
+    it("registers -o, --output <format> for the format selector", () => {
+      const output = driftCommand.options.find((o) => o.long === "--output");
+      expect(output).toBeDefined();
+      expect(output?.short).toBe("-o");
+      expect(output!.description).toBe("Output format (json|text)");
     });
   });
 });

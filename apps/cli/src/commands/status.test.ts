@@ -159,6 +159,12 @@ describe("status command", () => {
   });
 
   it("empty state renders 'No resources managed' message", async () => {
+    // Commander caches `_optionValues` on the singleton `statusCommand`.
+    // A prior `--json` run sticks `output: "json"` into the cache, so
+    // the text-mode assertion here needs a fresh module import to
+    // reset the Commander instance. Same pattern as
+    // apply-destroy-reconcile-json.test.ts "text-mode success" test.
+    vi.resetModules();
     const { fetchManagedResources } =
       await import("../services/list-resources.js");
     const { statusCommand } = await import("./status.js");
@@ -177,6 +183,10 @@ describe("status command", () => {
   });
 
   it("error state renders error with helpful message", async () => {
+    // Same Commander-instance-reset rationale as the empty-state test
+    // above — guards against `output: "json"` leaking in from a prior
+    // parseAsync on the same singleton.
+    vi.resetModules();
     const { fetchManagedResources } =
       await import("../services/list-resources.js");
     const { statusCommand } = await import("./status.js");
@@ -240,7 +250,21 @@ describe("status command options registration", () => {
       (opt) => opt.long === "--json",
     );
     expect(jsonOption?.long).toBe("--json");
-    expect(jsonOption!.description).toBe("Output status data as JSON");
+    // Epic 98 e98.W5.N3 (B-07 / D-16): `--json` is now the shorthand
+    // for `--output json` on every command (same help text as
+    // plan/apply/destroy/reconcile). The previous narrow description
+    // "Output status data as JSON" predates the unified flag contract.
+    expect(jsonOption!.description).toBe("Shorthand for --output json");
+  });
+
+  it("has -o, --output <format> option registered (B-07 / D-16 closure)", async () => {
+    const { statusCommand } = await import("./status.js");
+    const outputOption = statusCommand.options.find(
+      (opt) => opt.long === "--output",
+    );
+    expect(outputOption?.long).toBe("--output");
+    expect(outputOption?.short).toBe("-o");
+    expect(outputOption!.description).toBe("Output format (json|text)");
   });
 
   it("parses --region value correctly", async () => {

@@ -24,6 +24,8 @@ import { Command } from "commander";
 import { runBaselineAdopt } from "./drift/baseline-adopt.js";
 import { runDrift } from "./drift/orchestrator.js";
 import type { DriftOpts } from "./drift/types.js";
+import { installJsonStderrFilter } from "./json-stderr-filter.js";
+import { resolveJsonMode } from "./output-format.js";
 
 export const driftCommand = new Command("drift")
   .description("Check managed resources for configuration drift")
@@ -39,7 +41,12 @@ export const driftCommand = new Command("drift")
     "--baseline",
     "Adopt the given [resource-id] into drift tracking by snapshotting its live CCAPI state as a baseline",
   )
-  .option("--json", "Output as JSON")
+  // Epic 98 e98.W5.N3 (B-07 / D-16): uniform `--json` + `-o, --output
+  // <format>` surface across every command. Note: `--output-file <file>`
+  // is distinct (kept for backward compat) and writes the JSON report
+  // to a file; `-o, --output <format>` enumerates the format (json|text).
+  .option("-o, --output <format>", "Output format (json|text)", "text")
+  .option("--json", "Shorthand for --output json")
   .option("--output-file <file>", "Write JSON report to file (requires --json)")
   .option("--concurrency <n>", "Max parallel drift checks (default 10, max 50)")
   .option("--detailed", "Show all fields including matching ones")
@@ -73,9 +80,20 @@ to disable ANSI colour or enable structured diagnostic logs.
 `,
   )
   .action(async (resourceId: string | undefined, opts: DriftOpts) => {
-    if (opts.baseline) {
-      await runBaselineAdopt(resourceId);
-      return;
+    // Epic 98 e98.W5.N3: normalise `--json` + `--output json` into one
+    // jsonMode boolean, install stderr filter under JSON mode. Opts
+    // mutation keeps downstream branches (runDrift reads `opts.json`)
+    // byte-identical.
+    const jsonMode = resolveJsonMode(opts);
+    opts.json = jsonMode || opts.json;
+    const stderrFilter = installJsonStderrFilter(jsonMode);
+    try {
+      if (opts.baseline) {
+        await runBaselineAdopt(resourceId);
+        return;
+      }
+      await runDrift(resourceId, opts);
+    } finally {
+      stderrFilter.restore();
     }
-    await runDrift(resourceId, opts);
   });

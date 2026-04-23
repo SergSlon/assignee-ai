@@ -52,6 +52,8 @@ import { ProcessExitCode } from "../constants/errors.js";
 import { EnvVar } from "../constants/env-vars.js";
 import { STS_TIMEOUT_MS } from "../config/constants/timeouts.js";
 import { renderReport, runDoctor } from "./doctor/index.js";
+import { installJsonStderrFilter } from "./json-stderr-filter.js";
+import { resolveJsonMode } from "./output-format.js";
 
 // Re-export the public surface so existing imports
 // (`from "./doctor.js"`) keep working — primarily used by
@@ -237,7 +239,10 @@ export async function runShortDoctor(
 
 export const doctorCommand = new Command(CommandName.DOCTOR)
   .description(CommandDescription.DOCTOR)
-  .option("--json", "Emit the report as JSON instead of formatted text")
+  // Epic 98 e98.W5.N3 (B-07 / D-16): uniform `--json` + `-o, --output
+  // <format>` across every command.
+  .option("-o, --output <format>", "Output format (json|text)", "text")
+  .option("--json", "Shorthand for --output json")
   .option("--skip-bedrock", "Skip the Bedrock LLM invoke check")
   .option("--skip-mcp", "Skip the MCP server launch probe")
   .option(
@@ -263,32 +268,42 @@ doctor is read-only — it never mutates AWS state, so no --yes is needed.
   .action(
     async (opts: {
       json?: boolean;
+      output?: string;
       skipBedrock?: boolean;
       skipMcp?: boolean;
       short?: boolean;
     }) => {
-      if (opts.short) {
-        const code = await runShortDoctor();
-        if (code !== ProcessExitCode.SUCCESS) {
-          process.exitCode = code;
+      // Epic 98 e98.W5.N3: normalise `--json` + `--output json` and
+      // install the stderr filter for the duration of the command.
+      const jsonMode = resolveJsonMode(opts);
+      opts.json = jsonMode || opts.json;
+      const stderrFilter = installJsonStderrFilter(jsonMode);
+      try {
+        if (opts.short) {
+          const code = await runShortDoctor();
+          if (code !== ProcessExitCode.SUCCESS) {
+            process.exitCode = code;
+          }
+          return;
         }
-        return;
-      }
 
-      const report = await runDoctor({
-        version: readPackageVersion(),
-        ...(opts.skipBedrock ? { skipBedrock: true } : {}),
-        ...(opts.skipMcp ? { skipMcp: true } : {}),
-      });
+        const report = await runDoctor({
+          version: readPackageVersion(),
+          ...(opts.skipBedrock ? { skipBedrock: true } : {}),
+          ...(opts.skipMcp ? { skipMcp: true } : {}),
+        });
 
-      if (opts.json) {
-        process.stdout.write(JSON.stringify(report, null, 2) + "\n");
-      } else {
-        process.stdout.write(renderReport(report));
-      }
+        if (opts.json) {
+          process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+        } else {
+          process.stdout.write(renderReport(report));
+        }
 
-      if (report.exitCode !== ProcessExitCode.SUCCESS) {
-        process.exitCode = report.exitCode;
+        if (report.exitCode !== ProcessExitCode.SUCCESS) {
+          process.exitCode = report.exitCode;
+        }
+      } finally {
+        stderrFilter.restore();
       }
     },
   );

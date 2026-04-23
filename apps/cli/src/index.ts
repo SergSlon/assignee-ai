@@ -246,7 +246,29 @@ program.parseAsync(process.argv).catch((err) => {
     err !== null &&
     typeof err === "object" &&
     (err as { alreadyRendered?: unknown }).alreadyRendered === true;
-  if (!alreadyRendered) {
+  // Epic 98 e98.W5.N3 (D-01 closure): under `--json` / `--output json`,
+  // the per-command JSON wrapper has already emitted the error as a
+  // structured envelope on stdout. The top-level `Error: ...` stderr
+  // write would duplicate that message into a `jq | tee stderr.log`
+  // pipeline as human-formatted prose — exactly the leak D-01 flagged
+  // (e.g. `plan "" --json` leaking `Error: Missing intent...`).
+  // Detect JSON mode from argv because the filter this catch lives
+  // outside of the command action, so the per-action
+  // `installJsonStderrFilter` has already been torn down by the time
+  // we get here. argv parsing is cheap and correct: Commander expands
+  // nothing before the parseAsync promise settles, so the raw flags
+  // are authoritative for the just-failed invocation.
+  const argv = process.argv;
+  const jsonMode =
+    argv.includes("--json") ||
+    (() => {
+      const idx = argv.indexOf("--output");
+      if (idx >= 0 && argv[idx + 1] === "json") return true;
+      const short = argv.indexOf("-o");
+      if (short >= 0 && argv[short + 1] === "json") return true;
+      return false;
+    })();
+  if (!alreadyRendered && !jsonMode) {
     process.stderr.write(
       `Error: ${err instanceof Error ? err.message : String(err)}\n`,
     );

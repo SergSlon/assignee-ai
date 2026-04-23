@@ -33,25 +33,25 @@ _assignee_completions() {
       COMPREPLY=( $(compgen -W "--yes --pending-window-in-days --recovery-window-in-days --force-delete-without-recovery --output --json" -- "${cur}") )
       ;;
     drift)
-      COMPREPLY=( $(compgen -W "--resource --region --status --exclude --baseline --json --output-file --concurrency --detailed --yes" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--resource --region --status --exclude --baseline --output --json --output-file --concurrency --detailed --yes" -- "${cur}") )
       ;;
     optimize)
-      COMPREPLY=( $(compgen -W "--region --json --min-savings" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--region --output --json --min-savings" -- "${cur}") )
       ;;
     list)
-      COMPREPLY=( $(compgen -W "--json --region --resource-type --total-cost" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--output --json --region --resource-type --total-cost" -- "${cur}") )
       ;;
     setup)
       COMPREPLY=( $(compgen -W "--profile --yes --enable-llm-logging --disable-llm-logging --dry-run" -- "${cur}") )
       ;;
     status)
-      COMPREPLY=( $(compgen -W "--json --region --resource-type --bp-coverage --gaps-only --include-structural-gaps" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--output --json --region --resource-type --bp-coverage --gaps-only --include-structural-gaps" -- "${cur}") )
       ;;
     reconcile)
       COMPREPLY=( $(compgen -W "--resource --dry-run --yes --auto-reconcile --output --json" -- "${cur}") )
       ;;
     doctor)
-      COMPREPLY=( $(compgen -W "--json --skip-bedrock --skip-mcp --short" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--output --json --skip-bedrock --skip-mcp --short" -- "${cur}") )
       ;;
     version)
       COMPREPLY=( $(compgen -W "" -- "${cur}") )
