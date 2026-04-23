@@ -508,15 +508,11 @@ probes:
         assertions: "t3.medium: CreditSpecification survives sanitizer with CPUCredits set"
       - cmd: 'plan "Create a t3.small EC2 instance with CPUCredits unlimited" --json'
         assertions: "user-stated CPUCredits unlimited wins over plugin default"
-    known_tripwires:
-      # C-R1 reproducer (deterministic): grep merge.ts for the unfixed
-      # skip-condition `result[key] !== undefined` (line 155 at time of
-      # Epic 97). Presence of that token proves the bug is live. Once
-      # Wave 2 e98.W2.R2 replaces it with `!isEmptyLeaf(result[key])`,
-      # the grep misses and the tripwire flips to PASS → FORCING-FLIP.
-      - cmd: 'if grep -q "result\[key\] !== undefined" "$PROBE_REPO_ROOT/packages/core/src/graph/nodes/plan-generator/llm-plan/merge.ts"; then echo "C-R1 LIVE: merge-skip still on undefined-check (line 155)" >&2; exit 1; else exit 0; fi'
-        expected_exit: "non-zero"
-        expected_fail_anchor: "C-R1 LIVE"
+    # e98.W2.R2 removed the `result[key] !== undefined` tripwire after
+    # landing `isEmptyLeaf` + deep-merge backfill in merge.ts. The
+    # invariant is now enforced by the `w2-r2-plugin-default-empty-leaf`
+    # probe below plus merge-empty-leaf.test.ts.
+    known_tripwires: []
     probe: |
       # Runs a plain EC2 t3.micro plan and asserts the sanitised
       # desiredState carries a non-empty CreditSpecification with the
@@ -1138,3 +1134,156 @@ probes:
         $PROBE_CLI_BIN plan \
           "Create an ECS task with env LOG_LEVEL=debug" \
           --json
+
+  - story: e98.W5.N1
+    name: apply-envelope-arn-vs-primary-identifier
+    description: |
+      e98.W5.N1 (Epic 97 A-01 + B-01 HIGH × 2): the apply JSON
+      envelope's `arn` field shipped a bare CCAPI primary identifier
+      for Lambda (compound) and for non-taggable CFN constructs
+      (AWS::EC2::Route / AWS::EC2::SubnetRouteTableAssociation /
+      AWS::EC2::VPCGatewayAttachment), while S3 / DDB / SNS / SQS
+      returned a proper `arn:aws:...` form. Automation piping
+      `jq .arn | xargs destroy` broke on the bare-identifier types.
+
+      Fix: `buildApplyEnvelopeArn(resourceType, identifier)` — the
+      single chokepoint both the CLI orchestrator (apps/cli/src/
+      commands/apply/orchestrator.ts) and the MCP apply-plan
+      `shapeTerminalState` (apps/mcp-server/src/tools/apply-plan/
+      graph-executor.ts) call to project the terminal state into
+      the envelope. Non-taggable types → `arn: null` +
+      `primaryIdentifier: "<bare id>"`. ARN-addressable types →
+      full ARN synthesised via resolveResourceArn (with bare-ident
+      fallback when STS is unavailable, for CI-safety).
+
+      Probe exercises the compiled core helper directly — hermetic,
+      no live AWS, no STS:
+        - Non-taggable variations (Route / SRTA / VPCGW) hit the
+          `isNonTaggableConstruct` classifier short-circuit
+          BEFORE resolveResourceArn is invoked, so no STS lookup
+          is attempted at all.
+        - ARN-addressable variations (Lambda, DDB) feed in inputs
+          that are ALREADY ARNs, so resolveResourceArn's `isArn()`
+          short-circuit returns the identifier unchanged and STS
+          is skipped.
+      Five variations cover Lambda (A-01 closure), Route + SRTA +
+      VPCGW (B-01 closure family), plus DDB as regression baseline
+      guarding against the new branching accidentally nulling ARNs
+      for types that already worked pre-fix.
+    must_fail_pre_fix: false
+    variations:
+      - cmd: 'buildApplyEnvelopeArn(Lambda, arn:aws:lambda:...:function:dogfood-e97-a-fn-1776953643) → full ARN preserved, primaryIdentifier null'
+        assertions: "A-01 Lambda closure — envelope.arn is arn:aws:lambda:..., primaryIdentifier omitted"
+      - cmd: 'buildApplyEnvelopeArn(AWS::EC2::Route, rtb-016d13dcc6076462d|0.0.0.0/0) → arn:null + primaryIdentifier rtb|cidr'
+        assertions: "B-01 Route closure — non-taggable short-circuit, no STS contact, primaryIdentifier carries bare id"
+      - cmd: 'buildApplyEnvelopeArn(AWS::EC2::SubnetRouteTableAssociation, rtbassoc-0b2bb97aacd090704) → arn:null + primaryIdentifier rtbassoc-XXX'
+        assertions: "B-01 SRTA closure — non-taggable passthrough"
+      - cmd: 'buildApplyEnvelopeArn(AWS::EC2::VPCGatewayAttachment, igw-0abc12345|vpc-0def67890) → arn:null + primaryIdentifier igw|vpc'
+        assertions: "B-01 VPCGatewayAttachment closure — non-taggable passthrough with pipe-delimited composite id"
+      - cmd: 'buildApplyEnvelopeArn(AWS::DynamoDB::Table, arn:aws:dynamodb:...:table/dogfood-e97-a-ddb-1776953700) → full ARN preserved'
+        assertions: "Regression baseline — ARN-addressable types still return full ARN in envelope.arn with primaryIdentifier null (guard against the non-taggable branching accidentally nulling ARNs for already-working types)"
+    known_tripwires: []
+    probe: |
+      # Library-level probe: exercise the compiled core helper
+      # (packages/core/dist/graph/nodes/result-formatter/envelope-arn.js)
+      # via a node harness. Hermetic — no real AWS creds, no network:
+      #   - Non-taggable constructs (Route/SRTA/VPCGW) don't go
+      #     through resolveResourceArn at all — the helper
+      #     short-circuits on the isNonTaggableConstruct classifier.
+      #   - ARN-addressable types (Lambda/DDB) are fed with inputs
+      #     that are ALREADY full ARNs, so resolveResourceArn's
+      #     `isArn()` short-circuit fires before STS is contacted.
+      # This validates the projection semantics without needing
+      # live AWS creds or STS mocking.
+      output="$(node -e "
+        const repo = process.env.PROBE_REPO_ROOT;
+        (async () => {
+          const mod = await import(repo + '/packages/core/dist/graph/nodes/result-formatter/envelope-arn.js');
+          const results = {
+            lambda: await mod.buildApplyEnvelopeArn(
+              'AWS::Lambda::Function',
+              'arn:aws:lambda:us-east-1:210987654321:function:dogfood-e97-a-fn-1776953643',
+            ),
+            route: await mod.buildApplyEnvelopeArn(
+              'AWS::EC2::Route',
+              'rtb-016d13dcc6076462d|0.0.0.0/0',
+            ),
+            srta: await mod.buildApplyEnvelopeArn(
+              'AWS::EC2::SubnetRouteTableAssociation',
+              'rtbassoc-0b2bb97aacd090704',
+            ),
+            vpcgw: await mod.buildApplyEnvelopeArn(
+              'AWS::EC2::VPCGatewayAttachment',
+              'igw-0abc12345|vpc-0def67890',
+            ),
+            ddb: await mod.buildApplyEnvelopeArn(
+              'AWS::DynamoDB::Table',
+              'arn:aws:dynamodb:us-east-1:210987654321:table/dogfood-e97-a-ddb-1776953700',
+            ),
+          };
+          process.stdout.write(JSON.stringify(results));
+        })().catch(err => { console.error(err.message); process.exit(1); });
+      ")"
+
+      # Variation 1: Lambda — full function ARN preserved verbatim
+      # via the isArn() short-circuit. A-01 closure: envelope.arn
+      # is the full ARN, primaryIdentifier is null (not the other
+      # way around — that's the bug we just fixed).
+      if ! printf '%s' "$output" | jq -e '
+        .lambda.arn == "arn:aws:lambda:us-east-1:210987654321:function:dogfood-e97-a-fn-1776953643"
+        and .lambda.primaryIdentifier == null
+      ' >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] Lambda envelope projection wrong (variation 1 / A-01)" >&2
+        printf '%s' "$output" | jq '.lambda' >&2 || echo "$output" >&2
+        exit 1
+      fi
+
+      # Variation 2: Route — arn:null + primaryIdentifier rtb|cidr.
+      # The isNonTaggableConstruct classifier short-circuits BEFORE
+      # resolveResourceArn. Non-taggable means AWS has no standalone
+      # ARN; primaryIdentifier carries the bare CCAPI id that W1.B1
+      # destroy-path resolution keys on.
+      if ! printf '%s' "$output" | jq -e '
+        .route.arn == null
+        and .route.primaryIdentifier == "rtb-016d13dcc6076462d|0.0.0.0/0"
+      ' >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] Route envelope projection wrong (variation 2 / B-01)" >&2
+        printf '%s' "$output" | jq '.route' >&2
+        exit 1
+      fi
+
+      # Variation 3: SRTA — arn:null + primaryIdentifier rtbassoc-XXX.
+      if ! printf '%s' "$output" | jq -e '
+        .srta.arn == null
+        and .srta.primaryIdentifier == "rtbassoc-0b2bb97aacd090704"
+      ' >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] SRTA envelope projection wrong (variation 3 / B-01)" >&2
+        printf '%s' "$output" | jq '.srta' >&2
+        exit 1
+      fi
+
+      # Variation 4: VPCGatewayAttachment — arn:null + primaryIdentifier
+      # with pipe-delimited composite id (igw-<id>|vpc-<id>).
+      if ! printf '%s' "$output" | jq -e '
+        .vpcgw.arn == null
+        and .vpcgw.primaryIdentifier == "igw-0abc12345|vpc-0def67890"
+      ' >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] VPCGatewayAttachment envelope projection wrong (variation 4 / B-01)" >&2
+        printf '%s' "$output" | jq '.vpcgw' >&2
+        exit 1
+      fi
+
+      # Variation 5: DDB regression baseline. ARN-addressable types
+      # must still return full ARN in envelope.arn with
+      # primaryIdentifier null. Guards against the new non-taggable
+      # branching accidentally nulling ARNs for the
+      # already-working S3 / DDB / SNS / SQS / VPC / Subnet / SG
+      # class. Uses an already-ARN input to avoid STS in the probe.
+      if ! printf '%s' "$output" | jq -e '
+        .ddb.arn == "arn:aws:dynamodb:us-east-1:210987654321:table/dogfood-e97-a-ddb-1776953700"
+        and .ddb.primaryIdentifier == null
+      ' >/dev/null 2>&1; then
+        echo "[PROBE-FAIL] DDB regression baseline broken (variation 5)" >&2
+        printf '%s' "$output" | jq '.ddb' >&2
+        exit 1
+      fi
