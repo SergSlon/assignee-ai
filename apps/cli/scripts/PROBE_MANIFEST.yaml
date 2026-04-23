@@ -1816,3 +1816,195 @@ probes:
         })
         .catch(err => { console.error("[PROBE-FAIL] " + err.message); process.exit(1); });
       '
+  - story: e98.W5.P2
+    name: sns-plan-has-kms-default
+    description: |
+      Epic 98 Wave 5 P2 (A-08) — slice-A probe-narrowness close. SNS
+      was absent from PROBE_MANIFEST.yaml pre-close; this probe seeds
+      coverage for the SNS plan-default-survival invariant that
+      e98.W3.A1 landed: every SNS::Topic plan carries
+      `KmsMasterKeyId: "alias/aws/sns"` via the plugin default +
+      mergePluginDefaults allowlist. Named `sns-plan-has-kms-default`
+      per the A-08 fix_hint.
+    must_fail_pre_fix: false
+    variations:
+      - cmd: 'mergePluginDefaults({}, SNS_TOPIC) → KmsMasterKeyId=alias/aws/sns'
+        assertions: "bare SNS intent gets KmsMasterKeyId default"
+      - cmd: 'mergePluginDefaults({KmsMasterKeyId: ""}, SNS_TOPIC) → default restored'
+        assertions: "empty-string leaf restored to default (W2.R2 invariant)"
+      - cmd: 'mergePluginDefaults({KmsMasterKeyId: "alias/my-cmk"}, SNS_TOPIC) → user value kept'
+        assertions: "non-empty user override wins over plugin default"
+    known_tripwires: []
+    probe: |
+      node -e '
+        const repo = process.env.PROBE_REPO_ROOT;
+        Promise.all([
+          import(repo + "/packages/core/dist/graph/nodes/plan-generator/llm-plan/merge.js"),
+          import(repo + "/packages/core/dist/config/resource-types/named.js"),
+        ]).then(([merge, rt]) => {
+          const R = rt.RESOURCE_TYPES;
+          const expect = (label, got, pred) => {
+            if (!pred(got)) {
+              console.error("[PROBE-FAIL] " + label + " got " + JSON.stringify(got));
+              process.exit(1);
+            }
+          };
+          // Variation 1 — bare intent → KmsMasterKeyId default.
+          const bare = merge.mergePluginDefaults({}, R.SNS_TOPIC);
+          expect("SNS bare KmsMasterKeyId", bare.KmsMasterKeyId, (v) => v === "alias/aws/sns");
+          // Variation 2 — empty-string leaf → default restored.
+          const leaf = merge.mergePluginDefaults({ KmsMasterKeyId: "" }, R.SNS_TOPIC);
+          expect("SNS empty-leaf KmsMasterKeyId restored", leaf.KmsMasterKeyId, (v) => v === "alias/aws/sns");
+          // Variation 3 — user override kept.
+          const override = merge.mergePluginDefaults({ KmsMasterKeyId: "alias/my-cmk" }, R.SNS_TOPIC);
+          expect("SNS user KmsMasterKeyId kept", override.KmsMasterKeyId, (v) => v === "alias/my-cmk");
+        })
+        .catch(err => { console.error("[PROBE-FAIL] " + err.message); process.exit(1); });
+      '
+  - story: e98.W5.P2
+    name: sqs-plan-has-sse-default
+    description: |
+      Epic 98 Wave 5 P2 (A-08) — slice-A probe-narrowness close. SQS
+      was absent from PROBE_MANIFEST.yaml pre-close; this probe seeds
+      coverage for the SQS plan-default-survival invariant (BP-SQS-001
+      promoted in W3.A1). Every SQS::Queue plan carries
+      `SqsManagedSseEnabled: true` via the plugin default +
+      mergePluginDefaults allowlist. Named `sqs-plan-has-sse-default`
+      per the A-08 fix_hint.
+    must_fail_pre_fix: false
+    variations:
+      - cmd: 'mergePluginDefaults({}, SQS_QUEUE) → SqsManagedSseEnabled=true, VisibilityTimeout=30'
+        assertions: "bare SQS intent gets SSE + visibility-timeout defaults"
+      - cmd: 'mergePluginDefaults({SqsManagedSseEnabled: null}, SQS_QUEUE) → default restored'
+        assertions: "null leaf restored to true (W2.R2 invariant)"
+      - cmd: 'mergePluginDefaults({SqsManagedSseEnabled: false}, SQS_QUEUE) → user false kept'
+        assertions: "explicit user false (non-empty-leaf boolean) wins over plugin default"
+    known_tripwires: []
+    probe: |
+      node -e '
+        const repo = process.env.PROBE_REPO_ROOT;
+        Promise.all([
+          import(repo + "/packages/core/dist/graph/nodes/plan-generator/llm-plan/merge.js"),
+          import(repo + "/packages/core/dist/config/resource-types/named.js"),
+        ]).then(([merge, rt]) => {
+          const R = rt.RESOURCE_TYPES;
+          const expect = (label, got, pred) => {
+            if (!pred(got)) {
+              console.error("[PROBE-FAIL] " + label + " got " + JSON.stringify(got));
+              process.exit(1);
+            }
+          };
+          // Variation 1 — bare intent.
+          const bare = merge.mergePluginDefaults({}, R.SQS_QUEUE);
+          expect("SQS bare SqsManagedSseEnabled", bare.SqsManagedSseEnabled, (v) => v === true);
+          expect("SQS bare VisibilityTimeout", bare.VisibilityTimeout, (v) => v === 30);
+          // Variation 2 — null leaf → default restored.
+          const leaf = merge.mergePluginDefaults({ SqsManagedSseEnabled: null }, R.SQS_QUEUE);
+          expect("SQS null-leaf SSE restored", leaf.SqsManagedSseEnabled, (v) => v === true);
+          // Variation 3 — user false kept. `false` is a non-empty leaf.
+          const userFalse = merge.mergePluginDefaults({ SqsManagedSseEnabled: false }, R.SQS_QUEUE);
+          expect("SQS user false SSE kept", userFalse.SqsManagedSseEnabled, (v) => v === false);
+        })
+        .catch(err => { console.error("[PROBE-FAIL] " + err.message); process.exit(1); });
+      '
+  - story: e98.W5.P2
+    name: ddb-plan-pricing-matches-line-items
+    description: |
+      Epic 98 Wave 5 P2 (A-08) — slice-A probe-narrowness close.
+      DynamoDB was absent from PROBE_MANIFEST.yaml pre-close; this
+      probe seeds coverage for the DDB pricing decomposer's
+      invariants. Named `ddb-plan-pricing-matches-line-items` per the
+      A-08 fix_hint. Three axes exercised:
+
+        1. Pay-per-request: decomposer emits storage + request-metered
+           items, no provisioned-throughput items.
+        2. Provisioned: decomposer emits RCU + WCU + storage items.
+        3. Encryption billing: SSE-enabled table does NOT add a KMS
+           per-request line item unless user opted into SSE=KMS (the
+           default SSE=AWS-managed is free).
+
+      DDB is intentionally NOT on the W3.A1 mergePluginDefaults
+      allowlist (BP tests rely on LLM-emission shape), so this probe
+      exercises the decomposer directly against realistic plan
+      inputs.
+    must_fail_pre_fix: false
+    variations:
+      - cmd: 'decompose(PayPerRequest table) → storage + request items; no RCU/WCU'
+        assertions: "PAY_PER_REQUEST billing mode: line items bill only storage + request"
+      - cmd: 'decompose(Provisioned table, RCU=5, WCU=5) → RCU + WCU + storage items'
+        assertions: "PROVISIONED billing mode: line items include provisioned capacity"
+      - cmd: 'decompose(SSE=AWS) does NOT add a KMS line item'
+        assertions: "default SSE is free, no KMS line item"
+    known_tripwires: []
+    probe: |
+      node -e '
+        const repo = process.env.PROBE_REPO_ROOT;
+        import(repo + "/packages/core/dist/pricing/decomposers/dynamodb.js").then(m => {
+          const decomposer = m.dynamodbPricingDecomposer;
+          if (!decomposer || typeof decomposer.decompose !== "function") {
+            console.error("[PROBE-FAIL] dynamodbPricingDecomposer not exported");
+            process.exit(1);
+          }
+
+          const expect = (label, got, pred) => {
+            if (!pred(got)) {
+              console.error("[PROBE-FAIL] " + label + " got " + JSON.stringify(got));
+              process.exit(1);
+            }
+          };
+
+          // Variation 1 — Pay-per-request: storage + request items, no
+          // provisioned-throughput items.
+          const ppr = decomposer.decompose({
+            TableName: "probe-ppr",
+            BillingMode: "PAY_PER_REQUEST",
+            SSESpecification: { SSEEnabled: true },
+          });
+          expect(
+            "PAY_PER_REQUEST returns line items",
+            ppr,
+            (v) => Array.isArray(v) && v.length > 0
+          );
+          const pprLabels = ppr.map((li) => String(li.label || "")).join("|");
+          expect(
+            "PAY_PER_REQUEST has no RCU/WCU line item",
+            pprLabels,
+            (v) => !/ReadCapacity|WriteCapacity|RCU|WCU/i.test(v)
+          );
+
+          // Variation 2 — Provisioned: RCU + WCU + storage.
+          const prov = decomposer.decompose({
+            TableName: "probe-prov",
+            BillingMode: "PROVISIONED",
+            ProvisionedThroughput: {
+              ReadCapacityUnits: 5,
+              WriteCapacityUnits: 5,
+            },
+            SSESpecification: { SSEEnabled: true },
+          });
+          expect(
+            "PROVISIONED returns >= 2 line items (RCU + WCU min)",
+            prov,
+            (v) => Array.isArray(v) && v.length >= 2
+          );
+          const provLabels = prov.map((li) => String(li.label || "")).join("|");
+          expect(
+            "PROVISIONED labels reference capacity",
+            provLabels,
+            (v) => /ReadCapacity|WriteCapacity|Capacity/i.test(v)
+          );
+
+          // Variation 3 — default SSE (AWS-managed) does NOT add a KMS
+          // per-request line item. KMS is only billed when the user
+          // opts into SSEType=KMS with a CMK key.
+          const sseLabels = ppr
+            .map((li) => String(li.label || ""))
+            .join("|");
+          expect(
+            "default SSE is free (no KMS line item)",
+            sseLabels,
+            (v) => !/KMS|kms-key-requests/i.test(v)
+          );
+        })
+        .catch(err => { console.error("[PROBE-FAIL] " + err.message); process.exit(1); });
+      '
