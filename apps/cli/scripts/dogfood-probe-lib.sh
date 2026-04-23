@@ -32,6 +32,15 @@ unset ASSIGNEE_VERBOSITY
 unset ASSIGNEE_LOG_LEVEL
 unset ASSIGNEE_LOG_LEVEL_STREAM
 
+# strip_env_leaks — callable wrapper so probe bodies / runners can re-apply
+# the sanitization after sourcing third-party shell state. Epic 98 M2 wires
+# this into pre-close-probes.sh before every probe call.
+strip_env_leaks() {
+  unset ASSIGNEE_VERBOSITY
+  unset ASSIGNEE_LOG_LEVEL
+  unset ASSIGNEE_LOG_LEVEL_STREAM
+}
+
 # ---------------------------------------------------------------------------
 # Internal helpers (not exported as probes).
 # ---------------------------------------------------------------------------
@@ -532,6 +541,165 @@ assert_bp_finding_id_present() {
     return 1
   fi
   return 0
+}
+
+# ---------------------------------------------------------------------------
+# Probe 14 — assert_across_intents: run a helper fn against N intent variants
+# ---------------------------------------------------------------------------
+# Epic 98 M2: every closure must assert ≥ 3 intent variations. This iterator
+# takes a shell callable and a list of intents, runs the callable per intent,
+# and stops on the FIRST failure reporting the failing variant verbatim. That
+# surface is what distinguishes Epic 98 probes from Epic 96's narrow ones —
+# when the driver prints `variation 3/5 failed on: '<intent>'`, the author
+# knows exactly which adjacent phrasing the fix missed, instead of seeing the
+# probe flip green for the one phrasing Epic 96 tested.
+#
+# Args: ASSERTION_FN INTENT_1 [INTENT_2 ...]
+#
+# Contract:
+#   - ASSERTION_FN is a defined shell function that takes a single arg
+#     (the intent string) and exits 0 = PASS, non-zero = FAIL.
+#   - Iterates intents left-to-right; first failure aborts with rc 1 and
+#     prints the failing variant + its 1-based index + total count.
+#   - All variants pass => rc 0.
+assert_across_intents() {
+  local name="assert_across_intents"
+  local fn="${1:-}"
+  shift || true
+  if [[ -z "$fn" ]]; then
+    _probe_setup_fail "$name" "no ASSERTION_FN provided"
+    return 2
+  fi
+  if ! declare -f "$fn" >/dev/null 2>&1; then
+    _probe_setup_fail "$name" "ASSERTION_FN '$fn' is not a defined shell function"
+    return 2
+  fi
+  if [[ $# -eq 0 ]]; then
+    _probe_setup_fail "$name" "no intent variants provided"
+    return 2
+  fi
+  local total=$#
+  local idx=0
+  local variant
+  for variant in "$@"; do
+    idx=$((idx + 1))
+    if ! "$fn" "$variant"; then
+      _probe_fail "$name" "variation $idx/$total failed on: '$variant'"
+      return 1
+    fi
+  done
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# Probe 15 — assert_json_path_equals: exact-equal on a jq-extracted path
+# ---------------------------------------------------------------------------
+# Epic 98 M2: closes the B-10 gap ("probes only assert exit code, never the
+# actual value"). Runs CMD, extracts the stdout JSON envelope, evaluates
+# JQ_PATH against it, and asserts strict equality with EXPECTED. Numbers and
+# booleans are compared as their JSON form (jq -r stringifies them, which is
+# the intended interop with shell `[[ $a == $b ]]`).
+#
+# Args: JQ_PATH EXPECTED CMD...
+assert_json_path_equals() {
+  local name="assert_json_path_equals"
+  local jq_path="${1:-}"
+  local expected="${2:-}"
+  shift 2 || true
+  if [[ -z "$jq_path" ]]; then
+    _probe_setup_fail "$name" "no JQ_PATH provided"
+    return 2
+  fi
+  if [[ $# -eq 0 ]]; then
+    _probe_setup_fail "$name" "no CMD provided"
+    return 2
+  fi
+  _probe_require_jq "$name" || return 2
+  local stdout envelope
+  stdout="$("$@" 2>/dev/null || true)"
+  envelope="$(printf '%s' "$stdout" | awk '/^\{/{block=$0; capture=1; next} capture{block=block"\n"$0} END{print block}')"
+  if [[ -z "$envelope" ]] || ! printf '%s' "$envelope" | jq . >/dev/null 2>&1; then
+    _probe_fail "$name" "no JSON envelope on stdout for path '$jq_path'"
+    return 1
+  fi
+  local actual
+  actual="$(printf '%s' "$envelope" | jq -r "$jq_path" 2>/dev/null || true)"
+  if [[ "$actual" != "$expected" ]]; then
+    _probe_fail "$name" "path '$jq_path' expected '$expected', got '$actual'"
+    return 1
+  fi
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# Probe 16 — assert_no_empty_leaf: reject `{}`, `[]`, `""`, null at jq path
+# ---------------------------------------------------------------------------
+# Epic 98 M2: closes the C-R1 gap where `mergePluginDefaults` fell through on
+# `result[key] !== undefined` so an LLM-emitted `{}` shell survived as an
+# empty leaf. The probe asserts the resolved value is a meaningful leaf.
+#
+# Args: JQ_PATH CMD...
+# Fails on: empty string, null, empty object {}, empty array [].
+assert_no_empty_leaf() {
+  local name="assert_no_empty_leaf"
+  local jq_path="${1:-}"
+  shift || true
+  if [[ -z "$jq_path" ]]; then
+    _probe_setup_fail "$name" "no JQ_PATH provided"
+    return 2
+  fi
+  if [[ $# -eq 0 ]]; then
+    _probe_setup_fail "$name" "no CMD provided"
+    return 2
+  fi
+  _probe_require_jq "$name" || return 2
+  local stdout envelope
+  stdout="$("$@" 2>/dev/null || true)"
+  envelope="$(printf '%s' "$stdout" | awk '/^\{/{block=$0; capture=1; next} capture{block=block"\n"$0} END{print block}')"
+  if [[ -z "$envelope" ]] || ! printf '%s' "$envelope" | jq . >/dev/null 2>&1; then
+    _probe_fail "$name" "no JSON envelope on stdout for path '$jq_path'"
+    return 1
+  fi
+  # Expression returns a non-empty-leaf predicate. Any match => PASS.
+  # `type == "object" and length > 0` catches {}; same idea for arrays and strings.
+  local predicate
+  predicate="($jq_path) as \$v
+    | (\$v != null)
+      and ((\$v | type) != \"object\"  or (\$v | length) > 0)
+      and ((\$v | type) != \"array\"   or (\$v | length) > 0)
+      and ((\$v | type) != \"string\"  or (\$v | length) > 0)"
+  if ! printf '%s' "$envelope" | jq -e "$predicate" >/dev/null 2>&1; then
+    local actual
+    actual="$(printf '%s' "$envelope" | jq -c "$jq_path" 2>/dev/null || echo "<jq-error>")"
+    _probe_fail "$name" "path '$jq_path' resolved to empty leaf: $actual"
+    return 1
+  fi
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# Probe 17 — assert_plan_region_equals: W1.B3-specific wrapper
+# ---------------------------------------------------------------------------
+# Epic 98 M2: W1.B3 canonical assertion. Plans may surface the region as
+# `.plan.region`, `.plans[0].region`, or at root `.region`. The wrapper
+# extracts the first non-null candidate and asserts equality with EXPECTED.
+#
+# Args: EXPECTED CMD...
+assert_plan_region_equals() {
+  local name="assert_plan_region_equals"
+  local expected="${1:-}"
+  shift || true
+  if [[ -z "$expected" ]]; then
+    _probe_setup_fail "$name" "no EXPECTED region provided"
+    return 2
+  fi
+  if [[ $# -eq 0 ]]; then
+    _probe_setup_fail "$name" "no CMD provided"
+    return 2
+  fi
+  # jq path: first non-null of the candidate fields.
+  local jq_path='[.region, .plan?.region, (.plans // [])[0]?.region] | map(select(. != null)) | .[0] // empty'
+  assert_json_path_equals "$jq_path" "$expected" "$@"
 }
 
 # End of probe library.
