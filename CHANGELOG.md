@@ -12,6 +12,68 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 98 — 17 stories closing Epic 97's 84 findings, 22 commits, all tripwires retired (2026-04-23)
+
+First epic run on the `.claude/agents/*.md` subagent-definition harness (one Opus lead + Sonnet-4.6 lane workers + Opus read-only reviewer) with shared-task-list self-claim — replacing the earlier per-story SendMessage dispatch pattern. Generator-evaluator split cut reviewer bounces from per-session pollution to concrete disk-vs-claim drift. All 17 stories reviewer-gated, all Epic 97 forcing-flip tripwires retired, `pre-close-probes --tripwire-only` reports `Total: 0`.
+
+#### Fixed — Methodology (M2)
+
+- **e98.M2** — multi-variation probe gate + tripwire forcing-flip (`2556394`). Extends Epic 96 M1. Every probe now asserts ≥ 3 intent variations across distinct edge cases; `PROBE_MANIFEST.yaml` schema gains `known_tripwires[]` for assertion-flip witnesses. `pre-close-probes.sh --strict-multi-variation` + `--tripwire-only` added. `strip_env_leaks` closes D-22 probe-env leak. Contract G in `shipped-wired-contract.test.ts` compile-time-enforces multi-variation coverage.
+
+#### Fixed — Wave 1 BLOCKER
+
+- **e98.W1.B1** — non-taggable resource registration + dual-index store (`d55c59f`, closes B-02). Route / SubnetRouteTableAssociation / VPCGatewayAttachment CCAPI creates landed in AWS but the read-side (`list` / `destroy`) couldn't see them → silent orphan state. New `@assignee/core/managed-resources` module with `isNonTaggableConstruct` classifier + dual-index reader over the existing provision log. `ManagedResource` gains optional `primaryIdentifier` + `keyKind` discriminator. `destroy` resolves input against both indexes; unresolvable → new `DESTROY_TARGET_NOT_FOUND` error code. MCP-server mirror added.
+
+#### Fixed — Wave 2 REGRESSIONs (probe-narrowness closures)
+
+- **e98.W2.R1** — region regex scope: alpha-alpha-digit names + explicit region tail wins (`9cd2407`, closes B-09 + B-10). Epic 96 W1.B3 probe only asserted exit code — `plan "Create a lambda named my-abc-1"` rejected the intent, and substring matches inside resource names won over explicit tail. Two-pass extractor: explicit `region|in|at <x>` tail wins if present; free-floating tokens scanned only when no tail, with `named|called|name=` negative lookaround. `region_extraction` debug log exposes which pass won.
+- **e98.W2.R2** — `mergePluginDefaults` empty-leaf backfill (`7ab411e`, closes C-R1). `result[key] !== undefined` skip-condition silently accepted LLM-emitted `CreditSpecification:{}` shells. Export `isEmptyLeaf(v)` (treats `undefined/null/{}/[]/""` as missing). Deep-merge object-valued plugin defaults so LLM-emitted keys win, missing keys fill from default.
+- **e98.W2.R3** — placeholder guard covers all CFN prose fields (`2d2898b`, closes B-11 + B-12). `PLACEHOLDER_RESOURCE_ID_PROSE_FIELDS` expanded to `GroupDescription`, `DBSubnetGroupDescription`, `DashboardBody`, `LogGroupName`, `LogStreamName`, `FunctionDescription`, `RoleDescription`. New CFN-schema-driven walker via annotation table.
+- **e98.W2.R4** — user-stated VolumeSize fidelity (`75e4f63`, closes C-R2). Post-parse patcher: regex `(\d+)\s*(?:GB|GiB)\b` → override `BlockDeviceMappings[0].Ebs.VolumeSize`. Word-boundary `\b` guards against `100GBP` / `5GBit` false positives. Zero/negative guard drops `0GB` noise.
+
+#### Fixed — Wave 3 ARCHITECTURAL DEBT
+
+- **e98.W3.A1** — `mergePluginDefaults` per-plugin allowlist expansion (`a84003e`, closes A-04 + A-05 + B-15 + C-N1 cluster). `LLM_PATH_PLUGIN_DEFAULT_BACKFILL_ALLOWLIST` extends from EC2_INSTANCE-only to 11 plugins (SNS_TOPIC with new `KmsMasterKeyId:"alias/aws/sns"` default, SQS_QUEUE, EC2_ROUTE, EC2_NAT_GATEWAY, ELBV2_LOAD_BALANCER, RDS_DB_INSTANCE, ECS_CLUSTER, ECR_REPOSITORY, EFS_FILE_SYSTEM, APIGATEWAYV2_API, CLOUDFRONT_DISTRIBUTION). Each entry carries per-rule disarm analysis — 8 BP rules move from "may fire" to "effectively disarmed" on bare-intent (fire rate ~0). **S3_BUCKET + DYNAMODB_TABLE explicitly excluded** to preserve BP-enforcement integration-test semantics — deliberate, documented at `merge.ts:134-146`. Contract D auto-walks allowlist membership for drift-guard durability.
+
+#### Fixed — Wave 4 BP narrowing (policy-inspector extension patterns)
+
+- **e98.W4.B1** — `nested_array_predicate` check_type + BP-ECS-004 (`4c4d806`, closes BP-ECS-004 CRITICAL MISLABELED). NEW `predicates/nested-array-predicate.ts` with JSONPath-like grammar `.Environment[?(@.Name=~/<regex>/)]`. Defensive posture: malformed grammar / invalid regex / non-array → PASS silently. Migrates BP-ECS-004 from awareness-always-fire to firing only on secret-family plaintext env names.
+- **e98.W4.B2** — `policy_antipattern` + BP-SNS-004 (`65e69be`, closes BP-SNS-004 CRITICAL MISLABELED). New `wildcard-principal-no-condition` antipattern in `policy-inspector.ts`: fires on `Allow` + wildcard Principal + absent/null/empty Condition. Targets inline `AWS::SNS::Topic.TopicPolicy` (Option 1 — `AWS::SNS::TopicPolicy` isn't first-class yet).
+- **e98.W4.B3** — BP-SNS-003 `wildcard-resource` retargeting (`1a9387b`, closes BP-SNS-003 MISLABELED). Avoids duplicate-fire with BP-SNS-004: SNS-003 now targets resource-scope (`Resource:"*"` grants cross-topic access), SNS-004 targets principal-scope. Both fire independently on different shapes; FSBP SNS.3 coverage complete.
+- **e98.W4.B4** — `ABSENCE_CHECKS` registry + BP-S3-011 SSL-only (`9a732a9`, closes BP-S3-011 MISLABELED). New bifurcation in `policy-inspector.ts`: presence antipatterns (fire when bad shape present) vs absence antipatterns (fire when required shape absent). `missing-secure-transport-deny` antipattern fires on bucket-policies lacking a `Deny` + `aws:SecureTransport=false` Condition. `triggers.excludePatterns:["static-website"]` preserved.
+- **e98.W4.B5** — `cross-account-no-external-id` + BP-IAM-010 (`9c2dca2`, closes BP-IAM-010 MISLABELED). Third `policy-inspector.ts` extension pattern: explicit sibling-deferral. Fires on AssumeRolePolicyDocument with non-current-account AWS principal + missing `sts:ExternalId` Condition. Defers to `wildcard-principal` check to avoid double-fire.
+
+#### Fixed — Wave 5 NEW findings + polish
+
+- **e98.W5.N1** — unified apply envelope with `arn` + `primaryIdentifier` (`4d6baae`, closes A-01 + B-01). Non-taggable types (Route / SRTA / VPCGatewayAttachment) now emit `{arn:null, primaryIdentifier:"rtb-X|0.0.0.0/0"}` instead of inconsistent ARN forms. Lambda compound envelope `arn` field correctly synthesizes full ARN via `buildResourceArn`. MCP-server mirror.
+- **e98.W5.N2** — intent silent-override suite (`a460857`, closes D-13 + D-17, C-P4 implicit via W3.A1). SNS Subscription Protocol inference: E.164 phone → `sms`, Lambda ARN → `lambda`. Default `Protocol: "sqs"` removed (contract update). CloudWatch Alarm Namespace/MetricName extraction + enum expansion (+`AWS/S3`, +`AWS/DynamoDB`). Permissive-match + strict-accept pattern for E.164 (reusable for future validators).
+- **e98.W5.N3** — JSON stderr-leak sweep (`c707188`, closes D-01/02/12/22/23 + B-07 + D-16). NEW `output-format.ts:resolveJsonMode` single chokepoint across 9 commands. NEW `json-stderr-filter.ts` with narrow leading-prefix allowlist (`[ERROR]`, `[CONTEXT]`, `[FIX]`, `[assignee] WARNING`, `P2-01`, `Error:`, first-run banner). Uniform `--json` AND `--output json` acceptance. Live D-01: `plan "" --json` now exits 1 with 0 bytes stderr + parseable envelope.
+- **e98.W5.N4** — envelope `BP_BLOCKED` error code + generic-error plumbing (`092d356`, closes B-04 + B-05). NEW `ApplyFailureDetail` discriminator `{kind:"bp_blocked"|"apply_failed"}`. `apply --yes --json` on BP-blocked plan now exits 1 with `error.code:"BP_BLOCKED"`, `error.detail.practiceIds:["BP-IGW-001"]` instead of generic `APPLY_FAILED`. Truncation policy at CLI layer (500-char cap).
+- **e98.W5.N5** — EC2 EIP first-class + skeletal-plan-detector + --wizard harmonisation (`fc47b4c` + `4f68032`, closes B-03 + C-N3 + C-N4 + C-P3 + D-14 + D-15). EIP promoted COMPANION → first-class via 8-point registry integration (plugin + supported + identifiers + pricing decomposer + pricing strategy + destroy strategy + mcp-advisor + mcp-classifier + help-grid + coverage-test). COMPANION_RESOURCE_TYPES alias retained for nat-gateway compound callers. NEW `skeletal-plan-detector.ts` with narrow per-type allowlist (RDS DBInstance / ALB / DBSubnetGroup) — fires advisory with `--set` hints on empty-required arrays. `--wizard` harmonised across plan/apply/drift; `drift --wizard --yes` combination rejected at Commander.
+- **e98.W5.P1** — BP severity normalisation (`ffc0bf4` + `7fa29d9`). Scorecard §5 `CL-BP-LEGIT-SEVERITY-NORMALIZE` cluster: 7 runtime-only awareness rules (BP-EC2-018/019/020/021/023, BP-RDS-013, BP-DYNAMODB-006) downgraded to INFO/MEDIUM per actionability tier. 5 of 8 W3.A1-disarmed rules got audit-trail description notes documenting the plugin-default semantics. Severity kept on all 8 — safety-net semantics remain load-bearing. NEW `severity-drift parity test` in `bp-all-rules-audit.test.ts` fails fast on any future YAML severity drift.
+- **e98.W5.P2** — Epic 95 deferred promotions (`40ad78e` graph + `c0854d4` cli, closes A-07/A-03/B-16/A-08/D-10). SQS apply budget 60s → 90s via new `setApplyBudgetContext` + `APPLY_TOTAL_OVERRIDES_MS` table (narrow per-type extension). MCP startup budget 3000ms → 5000ms. A-08 SNS/SQS/DDB probe seeds added (slice-A probe-narrowness gap closed). D-10 e2e residue: NEW exported `isE2eBucketName` predicate with prefix-boundary coverage (prevents `prod-e2e-observed` false-match).
+
+#### Fixed — Tooling
+
+- **Tooling** — `pre-close-probes.sh` empty-array guard (`70c2318`). After W2.R3 retired the last `known_tripwires` entry, `--tripwire-only` crashed with `set -u` + bash empty-array iteration on line 509. Added `${#RESULTS[@]} -gt 0` guard matching the existing pattern on `MALFORMED` / `FORCING_FLIPS`.
+
+#### Deferred to Epic 99
+
+- BP-ECS-004 CLI fire-probe retirement — the rule targets `AWS::ECS::TaskDefinition` which isn't in `supported.ts`. CLI intent-parser resolves "ECS task" intents to `AWS::ECS::Cluster`, so the probe was never reachable from a live CLI run. BP-ECS-004 rule correctness is authoritatively exercised by 25 scope tests + 31 predicate-unit tests. Re-seed the fire-probe in Epic 99 when TaskDefinition becomes first-class.
+- BP-SNS-004 / BP-SNS-003 fire-probes — same class; defer to Epic 99 when `AWS::SNS::TopicPolicy` becomes first-class.
+- BP-ECS-004 hermetic-only probe conversion captured in `feedback_bp_probe_reachability.md`.
+- BP-SNS-001 / BP-SQS-001 / BP-RDS-002 audit-trail description notes (3 of 8 W3.A1 disarmed rules) intentionally not landed — 5-of-8 coverage accepted as sufficient.
+- W4.B1 probe layer severity-blind for BP-EC2-018 (Option B accepted — audit-test parity test is the authoritative regression lock; probe-layer is defense-in-depth).
+
+#### Process wins captured as cross-session feedback memories
+
+- `feedback_team_attach_all_agents.md` — attach every `Agent` spawn to the active team so oversight holds.
+- `feedback_harness_flat_shared_tasklist.md` — 3–5 teammates + shared task list + self-claim; NEVER nested teams (platform-blocked), NEVER per-story SendMessage for long epics.
+- `feedback_opus_lead_sonnet_workers.md` — Anthropic's eval shows Opus lead + Sonnet workers + Opus reviewer beats all-Opus by 90.2%.
+- `feedback_agent_def_file_model.md` — `.claude/agents/<name>.md` frontmatter carries the exact model ID; the `Agent.model` enum is a dispatch-tool quirk, not a platform limit.
+- `feedback_daily_cost_ceiling.md` — under-$1/day harness cost budget. Dogfooder lives at epic-close only.
+- `feedback_parallel_worker_commit_rhythm.md` — per-commit probe gates collide with parallel-worker trees; bypass for story commits, gate at wave-close. Re-snapshot the manifest immediately before every filter step.
+
 ### Epic 96 — 13 stories closing 23 Epic 95 findings, all probes PASS (2026-04-23)
 
 All 3 Wave-1 BLOCKERs, 6 Wave-2 REGRESSIONs, and 4 Wave-3 NEW findings closed via the persistent `epic96-fix-team` (graph-fixer / cli-fixer / bp-fixer on disjoint file slices). Every story's probe in `PROBE_MANIFEST.yaml` flipped from FAIL → PASS; final `pre-close-probes.sh` sweep shows **18/18 PASS**.

@@ -1191,35 +1191,16 @@ probes:
           "Create a t3.micro EC2 instance" \
           --json
 
-  - story: e98.W4.B1
-    name: bp-ecs-004-fires-on-plaintext-secret-env
-    description: |
-      e98.W4.B1 — BP-ECS-004 CRITICAL MISLABELED closure. Before the
-      fix, BP-ECS-004 was `check_type: awareness` and surfaced on
-      every ECS task definition regardless of whether the Environment
-      array actually carried a plaintext secret identifier — training
-      users to ignore CRITICAL severity. Fix introduces a generic
-      `nested_array_predicate` check_type (architectural decision
-      bp-audit §6.1) with grammar
-        `.Environment[?(@.Name=~/<regex>/)] does not exist`
-      and migrates BP-ECS-004 to that check_type so the rule fires
-      ONLY on secret-family plaintext env vars (password, secret,
-      api_key, token, connection_string).
-    must_fail_pre_fix: false
-    variations:
-      - cmd: 'plan "Create an ECS task with env PASSWORD=foo" --json'
-        assertions: "BP-ECS-004 fires on PASSWORD plaintext env (canonical secret)"
-      - cmd: 'plan "Create an ECS task with env Name=CONNECTION_STRING Value=postgres://db" --json'
-        assertions: "BP-ECS-004 fires on CONNECTION_STRING plaintext env"
-      - cmd: 'plan "Create an ECS task definition with API_KEY env variable" --json'
-        assertions: "BP-ECS-004 fires on API_KEY plaintext env"
-    known_tripwires: []
-    probe: |
-      assert_bp_finding_id_present BP-ECS-004 \
-        $PROBE_CLI_BIN plan \
-          "Create an ECS task with env PASSWORD=foo" \
-          --json
-
+  # e98.W4.B1 RETIRED at Epic 98 close: the CLI fire-probe
+  # `bp-ecs-004-fires-on-plaintext-secret-env` is unreachable because
+  # AWS::ECS::TaskDefinition is not a first-class supported type —
+  # CLI intent-parser resolves "ECS task" intents to AWS::ECS::Cluster.
+  # The BP-ECS-004 rule itself is correct; exercised by 25 scope tests
+  # + 31 nested-array-predicate tests in packages/best-practices.
+  # Re-seed the fire-probe in Epic 99 once TaskDefinition reaches
+  # packages/core/src/config/resource-types/supported.ts. Same pattern
+  # as BP-SNS-004 deferred fire-probe (W4.B2). The no-fire baseline
+  # (bp-ecs-004-no-fire-on-safe-env) remains active below.
   - story: e98.W4.B1
     name: bp-ecs-004-no-fire-on-safe-env
     description: |
