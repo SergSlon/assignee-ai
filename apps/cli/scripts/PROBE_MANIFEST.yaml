@@ -814,16 +814,11 @@ probes:
         assertions: "DBSubnetGroupDescription (RDS prose) detects placeholder"
       - cmd: 'detectPlaceholderResourceId({DashboardBody: "Contains sg-<YOUR-SG>"})'
         assertions: "DashboardBody (CloudWatch prose) detects placeholder"
-    known_tripwires:
-      # B-11 reproducer (deterministic): the PLACEHOLDER_RESOURCE_ID_PROSE_FIELDS
-      # allowlist at line 141 of placeholder-resource-id.ts currently holds
-      # only Description / Name / Comment, so GroupDescription + other CFN
-      # prose fields are not scanned — B-11 live. Once Wave 2 e98.W2.R3
-      # adds GroupDescription to the allowlist, the grep fires and the
-      # tripwire flips to PASS → FORCING-FLIP.
-      - cmd: 'if ! grep -q "\"GroupDescription\"" "$PROBE_REPO_ROOT/packages/core/src/graph/nodes/preflight-guard/guards/placeholder-resource-id.ts"; then echo "B-11 LIVE: GroupDescription missing from placeholder-guard allowlist" >&2; exit 1; else exit 0; fi'
-        expected_exit: "non-zero"
-        expected_fail_anchor: "B-11 LIVE"
+    # e98.W2.R3 removed the B-11 tripwire after landing the prose-field
+    # allowlist expansion in placeholder-resource-id.ts. The invariant
+    # is now enforced by the `w2-r3-placeholder-prose-fields` probe
+    # below plus placeholder-guard-prose-variations.test.ts.
+    known_tripwires: []
     probe: |
       node -e '
         const repo = process.env.PROBE_REPO_ROOT;
@@ -1182,6 +1177,56 @@ probes:
       assert_no_bp_finding_id BP-ECS-004 \
         $PROBE_CLI_BIN plan \
           "Create an ECS task with env LOG_LEVEL=debug" \
+          --json
+
+  - story: e98.W4.B2
+    name: bp-sns-004-no-fire-on-plain-topic
+    description: |
+      e98.W4.B2 — BP-SNS-004 CRITICAL MISLABELED closure (no-fire
+      baseline / false-positive catcher). Before the fix, the rule
+      was `check_type: awareness` on `AWS::SNS::Topic` and fired
+      on every SNS topic plan regardless of whether the inline
+      TopicPolicy granted public access — the highest trust-
+      eroding rule in the catalogue. Fix migrates BP-SNS-004 to
+      `check_type: policy_antipattern` with new expected_value
+      `wildcard-principal-no-condition` (see
+      `packages/best-practices/src/policy-inspector.ts`).
+      resource_type stays `AWS::SNS::Topic` and property_path
+      stays `TopicPolicy` — the inline TopicPolicy field IS the
+      policy document, and targeting the standalone
+      `AWS::SNS::TopicPolicy` resource would make the rule
+      unreachable on today's plan output (that type is not first-
+      class in `packages/core/src/config/resource-types/supported.ts`
+      yet). Condition-guarded wildcards (canonical cross-account
+      trust shape: `Principal:"*"` + `Condition.StringEquals."aws:SourceAccount"`
+      or `Condition.ArnEquals."aws:SourceArn"`) are intentionally
+      NOT flagged. Unit coverage in the scope test
+      `packages/best-practices/__tests__/bp-sns-004-scope.test.ts`
+      exercises the fire + no-fire + mixed-doc branches against
+      real-shaped TopicPolicy documents; this probe locks the
+      runtime plan-time no-fire behaviour.
+
+      DEFERRED (Epic 99 backlog): once `AWS::SNS::TopicPolicy`
+      reaches `supported.ts` as a first-class promoted type, add a
+      companion fire-probe that creates an SNS topic with a
+      wildcard-Principal inline TopicPolicy and asserts
+      `assert_bp_finding_id_present BP-SNS-004`. Today the CLI
+      does not emit wildcard-Principal TopicPolicy content on any
+      supported plan surface, so the fire-path has no CLI probe
+      surface. Reviewer-accepted concession for W4.B2.
+    must_fail_pre_fix: false
+    variations:
+      - cmd: 'plan "Create an SNS topic named notifications" --json'
+        assertions: "BP-SNS-004 does NOT fire on a plain SNS topic (no public policy, no-fire baseline)"
+      - cmd: 'plan "Create an SNS topic for order-events with KMS encryption" --json'
+        assertions: "BP-SNS-004 does NOT fire on an encrypted SNS topic"
+      - cmd: 'plan "Create an SNS topic for internal service alerts" --json'
+        assertions: "BP-SNS-004 does NOT fire on an internal SNS topic"
+    known_tripwires: []
+    probe: |
+      assert_no_bp_finding_id BP-SNS-004 \
+        $PROBE_CLI_BIN plan \
+          "Create an SNS topic named notifications" \
           --json
 
   - story: e98.W5.N1

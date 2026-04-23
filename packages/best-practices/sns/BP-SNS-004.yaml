@@ -1,14 +1,14 @@
 id: BP-SNS-004
-title: "SNS topic should not allow public access"
+title: "SNS topic policy must not allow unconditional public access"
 severity: CRITICAL
 resource_type: "AWS::SNS::Topic"
 property_path: "TopicPolicy"
-check_type: "awareness"
-expected_value: true
+check_type: "policy_antipattern"
+expected_value: "wildcard-principal-no-condition"
 source: "FSBP"
 source_id: "SNS.2"
-description: "SNS topic access policies should not allow public access (Principal: '*' without conditions). Public topics can be subscribed to by any AWS account, causing data leakage."
-remediation: "Review the SNS topic policy and restrict Principal to specific AWS accounts or IAM entities. Add conditions to limit access by source account or VPC endpoint."
-consequence: "Any AWS account can subscribe and receive all messages — sensitive notification data leaks to unauthorized third parties."
+description: "An SNS topic's inline TopicPolicy must not grant public access without a Condition clause. A statement with `Principal: '*'` (or `Principal: { AWS: '*' }`) and no Condition trusts every AWS account and every anonymous caller — any party can subscribe to the topic and exfiltrate every message, or flood publishers. Condition-guarded wildcards (e.g. `Principal: '*'` + `Condition: { StringEquals: { 'aws:SourceAccount': '...' } }` or `'aws:SourceArn'`) are the canonical cross-account / cross-service trust shape and are NOT flagged."
+remediation: "List specific account / service / IAM principals under Principal, or keep `Principal: '*'` and add a Condition that constrains access by `aws:SourceAccount`, `aws:SourceArn`, `aws:SourceOrgID`, VPC endpoint, or similar source-identity attribute. Never publish a topic policy with wildcard Principal and no Condition."
+consequence: "Any AWS account or anonymous caller can subscribe to the topic and receive every message published — notification data leaks and attackers can publish spam into your consumer pipeline."
 category: security
-lastVerified: "2026-03-24"
+lastVerified: "2026-04-23"

@@ -46,6 +46,19 @@ export const POLICY_ANTIPATTERNS = [
   "wildcard-action",
   /** `Principal: "*"` or `Principal: { AWS: "*" }` on an Allow statement. */
   "wildcard-principal",
+  /**
+   * Stricter sibling of `wildcard-principal`: fires only when the
+   * statement has a wildcard Principal AND no `Condition` clause.
+   * Epic 98 W4.B2 — BP-SNS-004 narrowing. A condition-guarded wildcard
+   * (e.g. `Principal: "*"` + `Condition: { StringEquals: { aws:SourceAccount: "..." } }`)
+   * is the canonical cross-account / cross-service trust shape, so the
+   * plain `wildcard-principal` check would false-positive on it. This
+   * variant treats an absent/null/empty-object `Condition` as the
+   * "actually public" signal — keeping the rule CRITICAL while
+   * eliminating the trust-erosion class the awareness-always-fire
+   * baseline produced.
+   */
+  "wildcard-principal-no-condition",
   /** `Allow` + `NotAction` — the "deny all but X" silent-privilege trap. */
   "allow-plus-not-action",
   /** `Allow` + `NotResource` — same inversion on resources. */
@@ -54,6 +67,27 @@ export const POLICY_ANTIPATTERNS = [
   "allow-plus-not-principal",
   /** `iam:PassRole` with `Resource: "*"` — direct privilege-escalation vector. */
   "passrole-wildcard-resource",
+  /**
+   * ABSENCE check (inverse semantics): fires when the BucketPolicy
+   * document does NOT contain a statement that denies non-SSL access.
+   * Epic 98 W4.B4 — BP-S3-011 SSL-only closure.
+   *
+   * The canonical FSBP S3.5 mitigation is a Deny statement shaped like:
+   *   { Effect: "Deny", Principal: "*", Action: "s3:*",
+   *     Resource: [<bucket>, <bucket>/*],
+   *     Condition: { Bool: { "aws:SecureTransport": "false" } } }
+   *
+   * This antipattern matches if NO statement satisfies that shape.
+   * Unlike the other presence-based antipatterns, `matched: true`
+   * here means "the required Deny is missing" (which still means
+   * the rule-runner's `!matched` invert logic fires the finding
+   * correctly — absence of the good statement IS the bad signal).
+   *
+   * Unique among the catalogue in that it checks for the absence of
+   * a desired statement rather than the presence of a bad one.
+   * Uses a dedicated absence-check branch in `inspectPolicyDocument`.
+   */
+  "missing-secure-transport-deny",
 ] as const;
 
 export type PolicyAntipattern = (typeof POLICY_ANTIPATTERNS)[number];
@@ -206,6 +240,28 @@ const CHECKS: Record<PolicyAntipattern, StatementCheck> = {
     return principalIsWildcard(stmt.Principal);
   },
 
+  "wildcard-principal-no-condition": (stmt) => {
+    // Epic 98 W4.B2 — BP-SNS-004 closure. Fires only when the Allow
+    // statement carries a wildcard Principal AND has no Condition
+    // clause. Condition-guarded wildcards
+    // (`Principal: "*"` + `Condition: { StringEquals: { ... } }`)
+    // are the canonical cross-account / CloudFront-OAI / S3-Bucket-
+    // public-OAC trust shape and must NOT fire — the plain
+    // `wildcard-principal` check already covers the no-nuance
+    // "anything public" signal. An absent, null, or empty-object
+    // Condition is treated as "no condition"; any non-empty object
+    // (even one that is semantically permissive) suppresses the
+    // finding — semantic analysis of Condition shapes is out of
+    // scope for this pass.
+    if (!isAllow(stmt)) return false;
+    if (!principalIsWildcard(stmt.Principal)) return false;
+    const condition = stmt["Condition"];
+    if (condition === undefined || condition === null) return true;
+    if (typeof condition !== "object") return true;
+    if (Array.isArray(condition)) return condition.length === 0;
+    return Object.keys(condition as Record<string, unknown>).length === 0;
+  },
+
   "allow-plus-not-action": (stmt) => {
     if (!isAllow(stmt)) return false;
     // NotAction only has meaning on Allow statements. Presence is the
@@ -239,7 +295,90 @@ const CHECKS: Record<PolicyAntipattern, StatementCheck> = {
     if (!grantsPassRole) return false;
     return containsStarLiteral(toStringArray(stmt.Resource));
   },
+
+  // Epic 98 W4.B4 — absence check dispatched separately below.
+  // This entry lives in CHECKS so the exhaustiveness assertion
+  // (`every PolicyAntipattern has a CHECKS entry`) still passes;
+  // the per-statement predicate intentionally never matches —
+  // the real logic lives in `satisfiesSecureTransportDeny` +
+  // the absence branch in `inspectPolicyDocument`.
+  "missing-secure-transport-deny": (_stmt) => false,
 };
+
+/* ------------------------------------------------------------------ */
+/*  Desired-statement helpers (absence checks)                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * True when the given statement is a canonical "deny non-SSL access"
+ * clause. Tolerates the three legal forms the Condition values take:
+ *   - `"false"`                 ← FSBP doc string form
+ *   - `false`                   ← CloudFormation sometimes emits bool
+ *   - `["false"]` / `[false]`   ← array-of-values form
+ *
+ * Action must cover S3 actions (`"s3:*"`, `["s3:*"]`, or `"*"`).
+ * Principal must be wildcard (`"*"` or `{AWS:"*"}`) — the Deny is
+ * meant to apply to every caller.
+ *
+ * Does NOT validate Resource shape: operators routinely scope the
+ * Deny to the bucket + bucket/* ARNs, but the YAML-author pattern
+ * we want to encourage allows either a specific pair or `"*"`. A
+ * stricter Resource check would reject legitimate configurations.
+ */
+function satisfiesSecureTransportDeny(stmt: PolicyStatement): boolean {
+  if (stmt.Effect !== "Deny") return false;
+  // Principal check — wildcard only. A Deny against a specific
+  // principal doesn't protect the bucket from other callers.
+  if (!principalIsWildcard(stmt.Principal)) return false;
+  // Action must cover S3.
+  const actions = toStringArray(stmt.Action);
+  const coversS3 = actions.some(
+    (a) => a === "s3:*" || a === "*" || /^s3:[A-Za-z*]+$/.test(a),
+  );
+  if (!coversS3) return false;
+  // Condition.Bool["aws:SecureTransport"] must be the false signal.
+  const condition = stmt["Condition"];
+  if (condition === null || typeof condition !== "object") return false;
+  if (Array.isArray(condition)) return false;
+  const boolCond = (condition as Record<string, unknown>)["Bool"];
+  if (boolCond === null || typeof boolCond !== "object") return false;
+  if (Array.isArray(boolCond)) return false;
+  const secureTransport = (boolCond as Record<string, unknown>)[
+    "aws:SecureTransport"
+  ];
+  return (
+    secureTransport === "false" ||
+    secureTransport === false ||
+    (Array.isArray(secureTransport) &&
+      secureTransport.some((v) => v === "false" || v === false))
+  );
+}
+
+/**
+ * Registry of absence-check predicates. Each entry returns true when
+ * the document is MISSING the desired statement — triggering the
+ * rule-runner's `!matched` inversion to fire the finding.
+ *
+ * Separate from `CHECKS` because the semantics are inverted: here we
+ * scan every statement looking for ONE that satisfies the required
+ * shape, and fire the antipattern if none is found.
+ */
+const ABSENCE_CHECKS: Partial<
+  Record<PolicyAntipattern, (stmt: PolicyStatement) => boolean>
+> = {
+  "missing-secure-transport-deny": satisfiesSecureTransportDeny,
+};
+
+/**
+ * True when the given antipattern uses absence-check semantics (fires
+ * when the desired statement is MISSING rather than when a bad pattern
+ * is present). Exported so the rule-runner can short-circuit the
+ * usual "missing fieldValue → rule passes" branch for these patterns:
+ * a missing policy document IS the failure signal here.
+ */
+export function isAbsenceAntipattern(pattern: string): boolean {
+  return pattern in ABSENCE_CHECKS;
+}
 
 /* ------------------------------------------------------------------ */
 /*  Public entry point                                                  */
@@ -263,6 +402,32 @@ export function inspectPolicyDocument(
   doc: unknown,
   pattern: PolicyAntipattern,
 ): PolicyInspectionResult {
+  // Absence checks (Epic 98 W4.B4+) have inverted semantics — they
+  // fire when the desired statement is MISSING, so a null/malformed
+  // document or an empty Statement array ALSO counts as missing.
+  // Route those patterns through the dedicated absence branch before
+  // the presence-pattern short-circuit.
+  const absenceCheck = ABSENCE_CHECKS[pattern];
+  if (absenceCheck !== undefined) {
+    const statements = extractStatements(doc);
+    if (statements === null || statements.length === 0) {
+      // No statements at all → desired Deny is definitely missing.
+      // Note: a completely missing BucketPolicy (undefined fieldValue)
+      // is handled at the rule-runner level, not here; this branch
+      // covers the case where the BucketPolicy object exists but its
+      // Statement array is empty or malformed.
+      return { matched: true };
+    }
+    for (let i = 0; i < statements.length; i++) {
+      if (absenceCheck(statements[i]!)) {
+        // Desired statement found → antipattern does NOT match.
+        return { matched: false };
+      }
+    }
+    // Walked every statement and none satisfied the desired shape.
+    return { matched: true };
+  }
+
   const statements = extractStatements(doc);
   if (statements === null) return { matched: false };
 

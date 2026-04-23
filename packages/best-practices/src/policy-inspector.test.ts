@@ -275,6 +275,205 @@ describe("inspectPolicyDocument", () => {
     });
   });
 
+  describe("wildcard-principal-no-condition (Epic 98 W4.B2)", () => {
+    // Epic 98 W4.B2 fixtures — real-shaped SNS topic policies. The
+    // account id is the reserved-test value per the no-real-ids rule.
+    const SNS_WILDCARD_NO_CONDITION = {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Sid: "OpenSubscribe",
+          Effect: "Allow",
+          Principal: "*",
+          Action: "sns:Subscribe",
+          Resource: "arn:aws:sns:us-east-1:210987654321:notifications",
+        },
+      ],
+    };
+
+    const SNS_WILDCARD_AWS_NO_CONDITION = {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Principal: { AWS: "*" },
+          Action: "sns:Publish",
+          Resource: "arn:aws:sns:us-east-1:210987654321:notifications",
+        },
+      ],
+    };
+
+    const SNS_WILDCARD_WITH_SOURCE_ACCOUNT = {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Sid: "CrossAccountPublish",
+          Effect: "Allow",
+          Principal: "*",
+          Action: "sns:Publish",
+          Resource: "arn:aws:sns:us-east-1:210987654321:notifications",
+          Condition: {
+            StringEquals: { "aws:SourceAccount": "210987654321" },
+          },
+        },
+      ],
+    };
+
+    const SNS_WILDCARD_WITH_SOURCE_ARN = {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Principal: "*",
+          Action: "sns:Publish",
+          Resource: "arn:aws:sns:us-east-1:210987654321:notifications",
+          Condition: {
+            ArnEquals: {
+              "aws:SourceArn": "arn:aws:s3:::appdata-210987654321-us-east-1",
+            },
+          },
+        },
+      ],
+    };
+
+    const SNS_WILDCARD_EMPTY_CONDITION = {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Principal: "*",
+          Action: "sns:Subscribe",
+          Resource: "arn:aws:sns:us-east-1:210987654321:notifications",
+          Condition: {},
+        },
+      ],
+    };
+
+    it("matches wildcard Principal without any Condition clause", () => {
+      expect(
+        inspectPolicyDocument(
+          SNS_WILDCARD_NO_CONDITION,
+          "wildcard-principal-no-condition",
+        ),
+      ).toEqual({ matched: true, offendingStatementIndex: 0 });
+    });
+
+    it("matches wildcard { AWS: '*' } without Condition", () => {
+      expect(
+        inspectPolicyDocument(
+          SNS_WILDCARD_AWS_NO_CONDITION,
+          "wildcard-principal-no-condition",
+        ),
+      ).toEqual({ matched: true, offendingStatementIndex: 0 });
+    });
+
+    it("matches wildcard Principal with an empty Condition object ({} treated as absent)", () => {
+      expect(
+        inspectPolicyDocument(
+          SNS_WILDCARD_EMPTY_CONDITION,
+          "wildcard-principal-no-condition",
+        ),
+      ).toEqual({ matched: true, offendingStatementIndex: 0 });
+    });
+
+    it("does NOT match wildcard Principal + aws:SourceAccount Condition (canonical cross-account trust)", () => {
+      expect(
+        inspectPolicyDocument(
+          SNS_WILDCARD_WITH_SOURCE_ACCOUNT,
+          "wildcard-principal-no-condition",
+        ),
+      ).toEqual({ matched: false });
+    });
+
+    it("does NOT match wildcard Principal + aws:SourceArn Condition (CloudFront/S3 trust shape)", () => {
+      expect(
+        inspectPolicyDocument(
+          SNS_WILDCARD_WITH_SOURCE_ARN,
+          "wildcard-principal-no-condition",
+        ),
+      ).toEqual({ matched: false });
+    });
+
+    it("does NOT match a Service-principal policy (no wildcard)", () => {
+      expect(
+        inspectPolicyDocument(
+          SERVICE_PRINCIPAL_OK,
+          "wildcard-principal-no-condition",
+        ),
+      ).toEqual({ matched: false });
+    });
+
+    it("does NOT match a narrow-ARN Allow (no wildcard)", () => {
+      expect(
+        inspectPolicyDocument(
+          NARROW_S3_READ,
+          "wildcard-principal-no-condition",
+        ),
+      ).toEqual({ matched: false });
+    });
+
+    it("does NOT match Deny + wildcard Principal (legitimate deny sweep)", () => {
+      expect(
+        inspectPolicyDocument(DENY_STAR_OK, "wildcard-principal-no-condition"),
+      ).toEqual({ matched: false });
+    });
+
+    it("matches when one of multiple statements carries a bare wildcard (mixed doc)", () => {
+      const MIXED_CONDITIONED_AND_BARE = {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Sid: "ConditionedOK",
+            Effect: "Allow",
+            Principal: "*",
+            Action: "sns:Publish",
+            Resource: "arn:aws:sns:us-east-1:210987654321:notifications",
+            Condition: {
+              StringEquals: { "aws:SourceAccount": "210987654321" },
+            },
+          },
+          {
+            Sid: "BareWildcardLeaky",
+            Effect: "Allow",
+            Principal: "*",
+            Action: "sns:Subscribe",
+            Resource: "arn:aws:sns:us-east-1:210987654321:notifications",
+          },
+        ],
+      };
+      expect(
+        inspectPolicyDocument(
+          MIXED_CONDITIONED_AND_BARE,
+          "wildcard-principal-no-condition",
+        ),
+      ).toEqual({ matched: true, offendingStatementIndex: 1 });
+    });
+
+    it("matches when Condition is null (treated-as-absent semantics)", () => {
+      // Author-error: explicit Condition: null. Treated as "no
+      // condition" and the rule SHOULD fire — guards against YAML
+      // authors using null instead of {} to signal "empty".
+      const NULL_CONDITION = {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: "*",
+            Action: "sns:Subscribe",
+            Resource: "arn:aws:sns:us-east-1:210987654321:notifications",
+            Condition: null,
+          },
+        ],
+      };
+      expect(
+        inspectPolicyDocument(
+          NULL_CONDITION,
+          "wildcard-principal-no-condition",
+        ),
+      ).toEqual({ matched: true, offendingStatementIndex: 0 });
+    });
+  });
+
   describe("allow-plus-not-action", () => {
     it("matches Allow + NotAction presence", () => {
       expect(
@@ -459,18 +658,20 @@ describe("inspectPolicyDocument", () => {
   });
 
   describe("POLICY_ANTIPATTERNS catalogue", () => {
-    it("contains exactly the seven patterns we enforce", () => {
+    it("contains exactly the nine patterns we enforce (Epic 98 W4.B4 added missing-secure-transport-deny)", () => {
       // If this count changes, update the gap-analysis memo in
       // docs/bp-cfn-guard-gap-analysis-2026-04-08.md too.
-      expect(POLICY_ANTIPATTERNS).toHaveLength(7);
+      expect(POLICY_ANTIPATTERNS).toHaveLength(9);
       expect([...POLICY_ANTIPATTERNS].sort()).toEqual(
         [
           "allow-plus-not-action",
           "allow-plus-not-principal",
           "allow-plus-not-resource",
+          "missing-secure-transport-deny",
           "passrole-wildcard-resource",
           "wildcard-action",
           "wildcard-principal",
+          "wildcard-principal-no-condition",
           "wildcard-resource",
         ].sort(),
       );
