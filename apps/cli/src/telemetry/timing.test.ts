@@ -328,10 +328,16 @@ describe("timing", () => {
         warnings.push(String(chunk));
         return true;
       }) as unknown as typeof process.stderr.write;
+      // Neutralise the 1.5× CI multiplier in checkBudget
+      // (time-budget.ts:118) so the threshold logic we care about here
+      // — "95s > 90s override fires a warning" — is exercised
+      // independent of whether the test runs under `CI=true`.
+      vi.stubEnv("CI", "");
     });
 
     afterEach(() => {
       process.stderr.write = realWrite;
+      vi.unstubAllEnvs();
     });
 
     /**
@@ -451,10 +457,14 @@ describe("timing", () => {
         warnings.push(String(chunk));
         return true;
       }) as unknown as typeof process.stderr.write;
+      // See sibling describe for rationale — CI=true would multiply
+      // the 5s MCP budget to 7500ms and mask the 6s-over-budget case.
+      vi.stubEnv("CI", "");
     });
 
     afterEach(() => {
       process.stderr.write = realWrite;
+      vi.unstubAllEnvs();
     });
 
     it("mcp-startup at 4s does NOT fire a warning (below the new 5s budget)", () => {
