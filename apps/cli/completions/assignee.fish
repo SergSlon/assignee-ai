@@ -67,6 +67,7 @@ complete -c assignee -n "__fish_seen_subcommand_from drift" -l json -d 'Shorthan
 complete -c assignee -n "__fish_seen_subcommand_from drift" -l output-file -r -d 'Write JSON report to file (requires --json)'
 complete -c assignee -n "__fish_seen_subcommand_from drift" -l concurrency -r -d 'Max parallel drift checks (default 10, max 50)'
 complete -c assignee -n "__fish_seen_subcommand_from drift" -l detailed -d 'Show all fields including matching ones'
+complete -c assignee -n "__fish_seen_subcommand_from drift" -l wizard -d 'Run interactive configuration wizard (drift is read-only; aliased to --detailed to show every field).'
 
 # Options for 'optimize'
 complete -c assignee -n "__fish_seen_subcommand_from optimize" -l region -r -d 'AWS region to scan (defaults to AWS_REGION env var)'

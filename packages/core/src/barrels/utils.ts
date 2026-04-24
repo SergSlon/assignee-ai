@@ -293,6 +293,7 @@ export {
   writeFailureRecord,
   clearFailureHistory,
   upsertPatternRecord,
+  appendDestroyedArn,
 } from "../utils/memory-recorder.js";
 
 // Utils — Post-provision security posture check (Story 50-4 Wave 5 Pass H)

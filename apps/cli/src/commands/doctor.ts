@@ -294,7 +294,9 @@ doctor is read-only — it never mutates AWS state, so no --yes is needed.
         });
 
         if (opts.json) {
-          process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+          process.stdout.write(
+            JSON.stringify({ ok: true, ...report }, null, 2) + "\n",
+          );
         } else {
           process.stdout.write(renderReport(report));
         }

@@ -16,6 +16,7 @@ import {
 } from "@aws-sdk/client-resource-groups-tagging-api";
 import type { StructuredTool } from "@langchain/core/tools";
 import {
+  defaultMemoryService,
   fetchManagedResources as coreFetchManagedResources,
   type ManagedResource,
   type RgtaMapping,
@@ -92,5 +93,6 @@ export async function fetchManagedResources(
       : {}),
     createdDateFallback: "na",
     useFreeTierFallback: true,
+    getDestroyedArns: () => defaultMemoryService.readDestroyedArns(),
   });
 }

@@ -13,6 +13,9 @@ import {
   CostEstimateLabel,
   findProvisionRecord,
   isNonTaggableConstruct,
+  extractIdentifierFromArn,
+  arnToResourceType,
+  appendDestroyedArn,
 } from "@assignee/core";
 import { getCostSavingsEstimate } from "../../services/billing.js";
 import { getBillingMcpToolsAsync } from "../../services/mcp-client.js";
@@ -58,29 +61,54 @@ export async function singleDestroyAction(
 
   stopSpinner();
 
-  // ── Non-taggable fallback (Epic 98 e98.W1.B1 / B-02) ────────────
-  // RGTA-based resolveResource never returns AWS::EC2::Route,
-  // SubnetRouteTableAssociation or VPCGatewayAttachment because AWS
-  // doesn't tag those. Before failing, look up the provision log by
-  // primaryIdentifier and synthesize a ResolvedResource so the rest of
-  // the flow (confirm / delete / render) works uniformly. The provision
-  // log was written by writeProvisionRecord at apply time.
+  // ── Provision-log fallback ───────────────────────────────────────
+  // RGTA misses two classes of managed resources:
+  //   1. Non-taggable constructs (Route / SubnetRouteTableAssociation /
+  //      VPCGatewayAttachment) — keyed by primaryIdentifier in the log.
+  //   2. Taggable resources whose ARN format RGTA does not index (EIP:
+  //      arn:…:elastic-ip/eipalloc-xxx). RGTA returns EIP tags but does
+  //      NOT enumerate them under the elastic-ip ARN prefix; the destroy
+  //      command got DESTROY_TARGET_NOT_FOUND even though the ARN was
+  //      legitimately in the provision log (BUG-5 hotfix).
+  // In both cases, fall through to the provision log before failing.
   let resolved: ResolvedResource;
   if (!resolution) {
-    const nonTaggable = await findProvisionRecord(resource);
-    if (!nonTaggable || !isNonTaggableConstruct(nonTaggable.resourceType)) {
+    const provRecord = await findProvisionRecord(resource);
+    if (!provRecord) {
       throw new AssigneeError(
         `No managed resource found matching "${resource}". Run 'assignee list' to see managed resources.`,
         ErrorCode.DESTROY_TARGET_NOT_FOUND,
       );
     }
-    resolved = {
-      arn: "",
-      resourceType: nonTaggable.resourceType,
-      region: nonTaggable.region || awsConfig.region || AWS_REGION,
-      tags: {},
-      identifier: nonTaggable.key,
-    };
+    if (provRecord.keyKind === "primaryIdentifier") {
+      // Non-taggable construct: identifier IS the CCAPI primaryIdentifier.
+      if (!isNonTaggableConstruct(provRecord.resourceType)) {
+        throw new AssigneeError(
+          `No managed resource found matching "${resource}". Run 'assignee list' to see managed resources.`,
+          ErrorCode.DESTROY_TARGET_NOT_FOUND,
+        );
+      }
+      resolved = {
+        arn: "",
+        resourceType: provRecord.resourceType,
+        region: provRecord.region || awsConfig.region || AWS_REGION,
+        tags: {},
+        identifier: provRecord.key,
+      };
+    } else {
+      // ARN-keyed record: RGTA didn't enumerate this resource (e.g. EIP).
+      // Synthesize a ResolvedResource from the provision log. The identifier
+      // is extracted from the ARN (elastic-ip/eipalloc-xxx → eipalloc-xxx).
+      const resolvedType =
+        arnToResourceType(provRecord.key) ?? provRecord.resourceType;
+      resolved = {
+        arn: provRecord.key,
+        resourceType: resolvedType,
+        region: provRecord.region || awsConfig.region || AWS_REGION,
+        tags: {},
+        identifier: extractIdentifierFromArn(provRecord.key),
+      };
+    }
   } else {
     // Story 48.6: multi-match disambiguation — user picks one, or --yes /
     // non-TTY stdin fails fast with an actionable error. Zero AWS mutation
@@ -156,6 +184,10 @@ export async function singleDestroyAction(
       ErrorCode.DESTROY_ERROR,
     );
   }
+
+  // Record destroyed ARN so list filters it while AWS keeps the resource
+  // in INACTIVE state (ECS clusters linger ~1h after deletion, BUG-9).
+  await appendDestroyedArn("", result.arn);
 
   renderDestroySuccess(estimatedMonthlyCost);
 }

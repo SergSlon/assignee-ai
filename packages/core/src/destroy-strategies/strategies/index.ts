@@ -14,6 +14,7 @@ export { ec2InternetGatewayStrategy } from "./ec2-internetgateway.js";
 export { ec2RouteTableStrategy } from "./ec2-routetable.js";
 export { efsFileSystemStrategy } from "./efs-filesystem.js";
 export { elbv2LoadBalancerStrategy } from "./elbv2-loadbalancer.js";
+export { lambdaFunctionStrategy } from "./lambda-function.js";
 export { s3BucketStrategy } from "./s3-bucket.js";
 export { cloudfrontDistributionStrategy } from "./cloudfront-distribution.js";
 export { sqsQueueStrategy } from "./sqs-queue.js";

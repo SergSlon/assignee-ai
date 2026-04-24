@@ -116,6 +116,43 @@ describe("buildApplyEnvelopeArn — ARN-addressable types", () => {
   });
 });
 
+describe("buildApplyEnvelopeArn — EIP composite identifier (BUG-5)", () => {
+  it("strips <PublicIp>| prefix from CCAPI composite and emits real ARN", async () => {
+    // CCAPI returns `<PublicIp>|<AllocationId>` for AWS::EC2::EIP.
+    // resolveResourceArn / arn-templates.ts strips the prefix and builds
+    // the canonical arn:…:elastic-ip/<AllocationId>.
+    mockResolveResourceArn.mockResolvedValueOnce(
+      "arn:aws:ec2:us-east-1:210987654321:elastic-ip/eipalloc-0a4b5c6d7e8f90123",
+    );
+    const result = await buildApplyEnvelopeArn(
+      "AWS::EC2::EIP",
+      "34.193.143.180|eipalloc-0a4b5c6d7e8f90123",
+    );
+    expect(result.arn).toBe(
+      "arn:aws:ec2:us-east-1:210987654321:elastic-ip/eipalloc-0a4b5c6d7e8f90123",
+    );
+    expect(result.primaryIdentifier).toBeNull();
+    expect(mockResolveResourceArn).toHaveBeenCalledWith({
+      resourceType: "AWS::EC2::EIP",
+      identifier: "34.193.143.180|eipalloc-0a4b5c6d7e8f90123",
+    });
+  });
+
+  it("bare AllocationId (no composite pipe) also produces correct ARN", async () => {
+    mockResolveResourceArn.mockResolvedValueOnce(
+      "arn:aws:ec2:us-east-1:210987654321:elastic-ip/eipalloc-0a4b5c6d7e8f90123",
+    );
+    const result = await buildApplyEnvelopeArn(
+      "AWS::EC2::EIP",
+      "eipalloc-0a4b5c6d7e8f90123",
+    );
+    expect(result.arn).toBe(
+      "arn:aws:ec2:us-east-1:210987654321:elastic-ip/eipalloc-0a4b5c6d7e8f90123",
+    );
+    expect(result.primaryIdentifier).toBeNull();
+  });
+});
+
 describe("buildApplyEnvelopeArn — non-taggable CFN constructs (B-01 closure)", () => {
   it("AWS::EC2::Route → arn:null + primaryIdentifier carrying rtb|cidr", async () => {
     const result = await buildApplyEnvelopeArn(

@@ -30,21 +30,51 @@ export async function gatherRecommendations(
 ): Promise<GatherResult> {
   const allRecommendations: CostOptRecommendation[] = [];
   let analyzed = 0;
+  const total = targets.length;
+
+  // Emit a progress line every ~5 seconds or every 10% of resources,
+  // whichever fires first. Filtered from stderr under --json (W5.N3).
+  let lastProgressMs = Date.now();
+  const PROGRESS_INTERVAL_MS = 5_000;
+  const progressStep = Math.max(1, Math.ceil(total / 10));
+
+  const emitProgress = (done: number): void => {
+    const eta =
+      done > 0
+        ? Math.round(
+            (((Date.now() - lastProgressMs) / done) * (total - done)) / 1000,
+          )
+        : "?";
+    process.stderr.write(
+      `[INFO] Scanning ${total} resources (${done} done, ETA ${eta}s)\n`,
+    );
+    lastProgressMs = Date.now();
+  };
 
   // Per-resource analyzer. Resources without a checkpoint are silently
   // skipped — optimize cannot make a meaningful recommendation without
   // knowing what the user intended to deploy. Track scanned vs analyzed
   // separately so the summary can distinguish the two.
-  for (const resource of targets) {
+  for (let i = 0; i < targets.length; i++) {
+    const resource = targets[i]!;
     const desiredState = await resolveDesiredState(resource.arn);
     if (!desiredState) continue;
     analyzed++;
     const recommendation = await analyzeResource(
-      { arn: resource.arn, resourceType: resource.resourceType },
+      { arn: resource.arn, resourceType: resource.resourceType! },
       desiredState,
       tools,
     );
     if (recommendation) allRecommendations.push(recommendation);
+
+    const done = i + 1;
+    const nowMs = Date.now();
+    if (
+      done % progressStep === 0 ||
+      nowMs - lastProgressMs >= PROGRESS_INTERVAL_MS
+    ) {
+      emitProgress(done);
+    }
   }
 
   // Billing MCP augmentation — parallel, non-blocking. compute-optimizer

@@ -146,6 +146,22 @@ export const arnTemplateRegistry: Record<string, ArnTemplate> = {
     accountId,
     identifier,
   }) => `arn:${partition}:ec2:${region}:${accountId}:natgateway/${identifier}`,
+  // BUG-5 hotfix (DEMO-CRITICAL): EIP CCAPI primaryIdentifier is the
+  // composite `<PublicIp>|<AllocationId>` (e.g. `34.193.143.180|eipalloc-0a4...`).
+  // Without this template the apply-envelope returned the composite as
+  // the addressable identifier, but destroy expected a real ARN OR
+  // bare AllocationId, so apply→destroy round-trip leaked EIPs (~$3.60/mo
+  // each). Strip the public-IP prefix, keep the AllocationId, synthesize
+  // the canonical EIP ARN. Bare-AllocationId callers (no `|`) pass
+  // through unchanged into the same ARN format.
+  [RESOURCE_TYPES.EC2_EIP]: ({ partition, region, accountId, identifier }) => {
+    // Composite shape `<PublicIp>|<AllocationId>` → take the right
+    // segment. CCAPI is documented to use this composite for EIP.
+    const allocationId = identifier.includes("|")
+      ? identifier.split("|")[1]!
+      : identifier;
+    return `arn:${partition}:ec2:${region}:${accountId}:elastic-ip/${allocationId}`;
+  },
   [RESOURCE_TYPES.ECR_REPOSITORY]: ({
     partition,
     region,

@@ -65,6 +65,7 @@ export async function runOptimize(
     process.stdout.write(
       JSON.stringify(
         {
+          ok: true,
           scanned: targets.length,
           analyzed,
           skippedMissingCheckpoint: targets.length - analyzed,

@@ -124,6 +124,33 @@ export async function clearFailureHistory(
 }
 
 /**
+ * Records a successfully-destroyed ARN so `fetchManagedResources` can
+ * filter it from list output while the AWS resource lingers in INACTIVE
+ * state (e.g. ECS clusters stay tagged for ~1h after deletion).
+ * Fire-and-forget: failures are logged but never block the destroy result.
+ */
+export async function appendDestroyedArn(
+  runId: string,
+  arn: string,
+): Promise<void> {
+  if (!arn) return;
+  try {
+    await defaultMemoryService.appendDestroyedArn(arn);
+  } catch (err) {
+    log({
+      ts: new Date().toISOString(),
+      runId,
+      level: "warn",
+      action: LOG_ACTIONS.MEMORY_WRITE_FAILED,
+      extras: {
+        memoryWriteError: "Failed to record destroyed ARN",
+        error: err instanceof Error ? err.message : String(err),
+      },
+    });
+  }
+}
+
+/**
  * Upserts a compound pattern record in memory (Story 19.5).
  * Fire-and-forget: failures are logged but never block results.
  */

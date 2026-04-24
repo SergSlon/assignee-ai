@@ -50,6 +50,18 @@ export const driftCommand = new Command("drift")
   .option("--output-file <file>", "Write JSON report to file (requires --json)")
   .option("--concurrency <n>", "Max parallel drift checks (default 10, max 50)")
   .option("--detailed", "Show all fields including matching ones")
+  // Epic 98 HOTFIX BUG-8 (W5.N5 regression): `--wizard` flag added
+  // for surface parity with plan.ts + apply.ts. drift is read-only
+  // and has no provisioning wizard in the plan/apply sense; here it
+  // behaves as an alias for `--detailed` (the closest analogue — show
+  // every field, including matching ones, so the user sees the full
+  // picture as the interactive wizard would). Pre-hotfix, `drift
+  // --wizard` exited with `unknown option '--wizard'`, breaking the
+  // W5.N5 (D-14) harmonisation promise across plan/apply/drift.
+  .option(
+    "--wizard",
+    "Run interactive configuration wizard (drift is read-only; aliased to --detailed to show every field).",
+  )
   // Epic 98 e98.W5.N5 (Epic 97 D-15): `-y, --yes` DROPPED. Pre-fix the
   // flag was registered "for CI wrapper compatibility" but the help
   // footer contradictedly said "No --yes flag is needed". The reader
@@ -84,6 +96,16 @@ to disable ANSI colour or enable structured diagnostic logs.
 `,
   )
   .action(async (resourceId: string | undefined, opts: DriftOpts) => {
+    // Epic 98 HOTFIX BUG-8: normalise --wizard → --detailed before
+    // any downstream logic reads opts. drift has no wizard mode
+    // per se; the flag is accepted for surface parity with
+    // plan/apply and mapped to --detailed (the closest analogue).
+    if (
+      (opts as DriftOpts & { wizard?: boolean }).wizard === true &&
+      !opts.detailed
+    ) {
+      opts.detailed = true;
+    }
     // Epic 98 e98.W5.N3: normalise `--json` + `--output json` into one
     // jsonMode boolean, install stderr filter under JSON mode. Opts
     // mutation keeps downstream branches (runDrift reads `opts.json`)

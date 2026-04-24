@@ -27,6 +27,7 @@ export {
   ec2RouteTableStrategy,
   efsFileSystemStrategy,
   elbv2LoadBalancerStrategy,
+  lambdaFunctionStrategy,
   s3BucketStrategy,
   cloudfrontDistributionStrategy,
   sqsQueueStrategy,

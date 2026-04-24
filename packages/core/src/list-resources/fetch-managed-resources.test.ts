@@ -410,3 +410,61 @@ describe("fetchManagedResources — billing enrichment", () => {
     expect(result[0]!.estimatedMonthlyCost).toBe("N/A");
   });
 });
+
+describe("fetchManagedResources — destroyed-ARN filter (BUG-9)", () => {
+  beforeEach(() => {
+    vi.mocked(provisionLog.loadProvisionData).mockReturnValue(emptyLookup);
+  });
+
+  const ecsArn = "arn:aws:ecs:us-east-1:210987654321:cluster/my-cluster";
+  const s3Arn = "arn:aws:s3:::my-bucket";
+
+  const mappings: RgtaMapping[] = [
+    {
+      ResourceARN: ecsArn,
+      Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+    },
+    {
+      ResourceARN: s3Arn,
+      Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+    },
+  ];
+
+  it("filters out a destroyed ECS cluster ARN from RGTA output", async () => {
+    const result = await fetchManagedResources({
+      region: "us-east-1",
+      fetchRgtaResources: async () => mappings,
+      getDestroyedArns: async () => new Set([ecsArn]),
+    });
+    expect(result.map((r) => r.arn)).not.toContain(ecsArn);
+    expect(result.map((r) => r.arn)).toContain(s3Arn);
+  });
+
+  it("shows all resources when getDestroyedArns returns empty set", async () => {
+    const result = await fetchManagedResources({
+      region: "us-east-1",
+      fetchRgtaResources: async () => mappings,
+      getDestroyedArns: async () => new Set(),
+    });
+    expect(result).toHaveLength(2);
+  });
+
+  it("shows all resources when getDestroyedArns is not injected", async () => {
+    const result = await fetchManagedResources({
+      region: "us-east-1",
+      fetchRgtaResources: async () => mappings,
+    });
+    expect(result).toHaveLength(2);
+  });
+
+  it("gracefully degrades when getDestroyedArns throws", async () => {
+    const result = await fetchManagedResources({
+      region: "us-east-1",
+      fetchRgtaResources: async () => mappings,
+      getDestroyedArns: async () => {
+        throw new Error("disk full");
+      },
+    });
+    expect(result).toHaveLength(2);
+  });
+});

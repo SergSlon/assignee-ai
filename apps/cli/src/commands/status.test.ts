@@ -149,8 +149,9 @@ describe("status command", () => {
     }
 
     const output = stdoutSpy.mock.calls.map((c: unknown[]) => c[0]).join("");
-    const parsed = JSON.parse(output) as StatusData;
+    const parsed = JSON.parse(output) as StatusData & { ok: boolean };
 
+    expect(parsed.ok).toBe(true);
     expect(parsed.totalResources).toBe(2);
     expect(parsed.totalEstimatedMonthlyCost).toBe("$15.00/month");
     expect(parsed.byType).toHaveLength(2);
@@ -571,7 +572,7 @@ describe("status --bp-coverage uses status-factory for DI", () => {
     expect(getBpDir).toHaveBeenCalled();
     expect(computeBPCoverage).toHaveBeenCalledWith("/virtual/bp-fixture-json");
     const output = stdoutSpy.mock.calls.map((c: unknown[]) => c[0]).join("");
-    expect(JSON.parse(output)).toEqual(payload);
+    expect(JSON.parse(output)).toEqual({ ok: true, ...payload });
   });
 });
 

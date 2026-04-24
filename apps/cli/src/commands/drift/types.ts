@@ -36,4 +36,12 @@ export interface DriftOpts {
   outputFile?: string;
   concurrency?: string;
   detailed?: boolean;
+  /**
+   * Epic 98 HOTFIX BUG-8 (W5.N5 regression): `--wizard` accepted for
+   * surface parity with plan.ts + apply.ts. drift is read-only and
+   * has no provisioning wizard; the action normalises
+   * `opts.wizard === true` → `opts.detailed = true` before any
+   * downstream logic reads opts.
+   */
+  wizard?: boolean;
 }

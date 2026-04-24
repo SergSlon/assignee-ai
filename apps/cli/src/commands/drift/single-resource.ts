@@ -59,7 +59,9 @@ export async function runSingleResourceDetail(
   );
 
   if (opts.json) {
-    process.stdout.write(JSON.stringify(driftResult, null, 2) + "\n");
+    process.stdout.write(
+      JSON.stringify({ ok: true, ...driftResult }, null, 2) + "\n",
+    );
     return true;
   }
 
