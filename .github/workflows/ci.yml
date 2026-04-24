@@ -22,11 +22,20 @@ permissions:
   contents: read
 
 jobs:
+  ubuntu-node20:
+    name: ci (ubuntu-latest / node 20)
+    uses: ./.github/workflows/ci-core.yml
+    with:
+      os: ubuntu-latest
+      node: "20"
+      publish-coverage: false
+    secrets: inherit
+
   ubuntu-node22:
     name: ci (ubuntu-latest / node 22)
     uses: ./.github/workflows/ci-core.yml
     with:
       os: ubuntu-latest
-      node: 22
+      node: "22"
       publish-coverage: true
     secrets: inherit

@@ -82,6 +82,18 @@ jobs:
       - name: Type-check
         run: pnpm check-types
 
+      - name: Lint barrels
+        run: pnpm lint:barrels
+
+      - name: Lint shims
+        run: pnpm lint:shims
+
+      - name: Doc lint
+        run: pnpm doc-lint
+
+      - name: Citation lint
+        run: pnpm citation-lint
+
       - name: Build all packages
         run: npx turbo build
 

@@ -327,7 +327,37 @@ export function checkPasses(
       return true;
     }
 
-    default:
-      return true;
+    default: {
+      // Epic 99 Wave 2 W-004 (HIGH): unknown check_type must never silently
+      // pass. A typo in a rule YAML (e.g. `check_type: "equls"`) would
+      // previously create a no-op rule — the BP appeared to evaluate but
+      // always passed, hiding the misconfiguration from YAML authors and
+      // consumers.
+      //
+      // Throwing forces the YAML author to either fix the typo or register
+      // the new check_type in the dispatch switch above. The error message
+      // includes the rule id and the full list of valid check_types so the
+      // author can self-serve without reading source code.
+      const validTypes = [
+        "equals",
+        "not_equals",
+        "exists",
+        "not_exists",
+        "greater_than",
+        "less_than",
+        "contains",
+        "not_contains",
+        "not_contains_pattern",
+        "conditional_forbidden",
+        "policy_antipattern",
+        "nested_array_predicate",
+        "sg_high_risk_public_exposure",
+      ];
+      throw new Error(
+        `Unknown check_type "${checkType}" encountered in rule-runner. ` +
+          `Valid check_types: ${validTypes.join(", ")}. ` +
+          `Check the rule YAML for a typo or register the new check_type in rule-runner.ts.`,
+      );
+    }
   }
 }

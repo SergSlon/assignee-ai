@@ -20,6 +20,7 @@
  */
 
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { ErrorCode } from "../../constants/errors.js";
 import { AssigneeError } from "../../errors.js";
 import { ExecutionStatus } from "../../schema/graph-state.js";
 import type { AgentState } from "../graph-state.js";
@@ -29,8 +30,12 @@ import type { AgentState } from "../graph-state.js";
  * fails. Surfaces through the CLI's `--output json` envelope as
  * `error.code === "INVALID_DESIRED_STATE"` so CI/automation can detect
  * plan-time validation failures without string-matching the human message.
+ *
+ * @deprecated Use `ErrorCode.INVALID_DESIRED_STATE` from
+ * `@assignee/core/constants/errors` instead. This re-export is kept for
+ * backwards-compatibility with existing tests that import it by name.
  */
-export const INVALID_DESIRED_STATE_CODE = "INVALID_DESIRED_STATE";
+export const INVALID_DESIRED_STATE_CODE = ErrorCode.INVALID_DESIRED_STATE;
 
 // ---------------------------------------------------------------------------
 // Types

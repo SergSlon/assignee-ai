@@ -90,6 +90,19 @@ export const ErrorCode = {
   // `packages/core/src/graph/nodes/intent-parser.ts` ::
   // `extractResourceName` non-ASCII branch.
   INVALID_NAME: "INVALID_NAME",
+
+  // ── Desired-state validation failures (Epic 92 e92.u.c.1) ───
+  // Emitted by `validateDesiredStateNode` when plan-time field
+  // validation rejects a desired-state value before CloudControl
+  // sees it (e.g. invalid S3 BucketName format, SQS queue-name
+  // length). Surfaces through the CLI `--output json` envelope as
+  // `error.code: "INVALID_DESIRED_STATE"` so CI/automation can
+  // distinguish "user config typo caught early" from runtime AWS
+  // rejections (`APPLY_FAILED`). Callers that want to branch on
+  // validation failures (re-prompt the user, adjust the intent)
+  // should match against this code rather than string-matching
+  // the human error message.
+  INVALID_DESIRED_STATE: "INVALID_DESIRED_STATE",
 } as const;
 
 export type ErrorCodeType = (typeof ErrorCode)[keyof typeof ErrorCode];

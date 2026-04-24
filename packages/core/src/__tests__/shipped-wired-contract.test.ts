@@ -772,3 +772,260 @@ describe("shipped-wired contract G — probe variation coverage (Epic 98 M2)", (
     ).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// H. Contract H — probe-reachability (Epic 99 Wave 2 Lane 2b)
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse PROBE_MANIFEST.yaml into an extended list of probe entries that
+ * includes the probe body text (for BP rule ID extraction) and the
+ * parent_reachable / parent_reachable_rationale fields.
+ *
+ * Extended record shape:
+ *   { story, name, lineNumber, probeBody, parentReachable, parentReachableRationale }
+ */
+function parseManifestEntriesExtended(): Array<{
+  story: string;
+  name: string;
+  lineNumber: number;
+  probeBody: string;
+  parentReachable: boolean;
+  parentReachableRationale: string;
+}> {
+  const text = readProbeManifestText();
+  if (!text) return [];
+  const lines = text.split(/\r?\n/);
+  const entries: Array<{
+    story: string;
+    name: string;
+    lineNumber: number;
+    probeBody: string;
+    parentReachable: boolean;
+    parentReachableRationale: string;
+  }> = [];
+  let current: {
+    story: string;
+    name: string;
+    lineNumber: number;
+    probeBody: string;
+    parentReachable: boolean;
+    parentReachableRationale: string;
+  } | null = null;
+  let inProbeBody = false;
+  let probeIndent = 0;
+
+  const flush = () => {
+    if (current) entries.push(current);
+  };
+
+  for (let idx = 0; idx < lines.length; idx += 1) {
+    const line = lines[idx] ?? "";
+
+    // Detect new probe entry start.
+    const storyMatch = line.match(/^\s{2,4}-\s+story:\s*(\S.*)$/);
+    if (storyMatch) {
+      flush();
+      current = {
+        story: storyMatch[1]!.trim(),
+        name: "",
+        lineNumber: idx + 1,
+        probeBody: "",
+        parentReachable: false,
+        parentReachableRationale: "",
+      };
+      inProbeBody = false;
+      probeIndent = 0;
+      continue;
+    }
+
+    if (!current) continue;
+
+    // Collect probe body lines (block scalar).
+    if (inProbeBody) {
+      const leading = line.match(/^(\s*)/)?.[1]?.length ?? 0;
+      if (line.trim() === "") {
+        // blank line — end of block scalar (could be between probes)
+        inProbeBody = false;
+        continue;
+      }
+      if (leading >= probeIndent) {
+        current.probeBody += line.slice(probeIndent) + "\n";
+        continue;
+      }
+      inProbeBody = false;
+      // Fall through to key detection.
+    }
+
+    // name:
+    const nameMatch = line.match(/^\s{4}name:\s*(\S.*)$/);
+    if (nameMatch) {
+      current.name = nameMatch[1]!.trim();
+      continue;
+    }
+
+    // parent_reachable:
+    if (/^\s{4}parent_reachable:\s*true/.test(line)) {
+      current.parentReachable = true;
+      continue;
+    }
+
+    // parent_reachable_rationale:
+    const rationaleMatch = line.match(
+      /^\s{4}parent_reachable_rationale:\s*"(.*)"\s*$/,
+    );
+    if (rationaleMatch) {
+      current.parentReachableRationale = rationaleMatch[1]!.trim();
+      continue;
+    }
+
+    // probe: | — start of block scalar.
+    if (/^\s{4}probe:\s*\|\s*$/.test(line)) {
+      // Peek at next line to determine probe body indent.
+      const next = lines[idx + 1] ?? "";
+      probeIndent = next.match(/^(\s*)/)?.[1]?.length ?? 6;
+      inProbeBody = true;
+      // Don't skip — the next iteration will capture the body.
+      continue;
+    }
+  }
+  flush();
+  return entries;
+}
+
+/**
+ * Load all BP rule resource_types from packages/best-practices, keyed by
+ * rule ID (e.g. "BP-S3-011" → "AWS::S3::BucketPolicy"). Reads YAML files
+ * directly via regex since adding a js-yaml or yaml dep is outside the
+ * contract test's scope. The `id:` and `resource_type:` fields are always
+ * on their own lines in every BP rule YAML file.
+ */
+function loadBpRuleResourceTypes(): Map<string, string> {
+  const map = new Map<string, string>();
+  const BP_DIR = resolve(REPO_ROOT, "packages/best-practices");
+  if (!existsSync(BP_DIR)) return map;
+
+  // Skip directories that are not service rule directories.
+  const skipDirs = new Set([
+    "src",
+    "dist",
+    "node_modules",
+    "__tests__",
+    "coverage",
+  ]);
+
+  for (const svcDir of readdirSync(BP_DIR)) {
+    if (svcDir.startsWith(".") || skipDirs.has(svcDir)) continue;
+    const svcPath = join(BP_DIR, svcDir);
+    let st;
+    try {
+      st = statSync(svcPath);
+    } catch {
+      continue;
+    }
+    if (!st.isDirectory()) continue;
+
+    for (const file of readdirSync(svcPath)) {
+      if (!file.endsWith(".yaml") && !file.endsWith(".yml")) continue;
+      const filePath = join(svcPath, file);
+      let yaml: string;
+      try {
+        yaml = readFileSync(filePath, "utf8");
+      } catch {
+        continue;
+      }
+      const idMatch = yaml.match(/^id:\s*(\S+)/m);
+      const rtMatch = yaml.match(/^resource_type:\s*"?([^"\n]+)"?/m);
+      if (idMatch && rtMatch) {
+        map.set(idMatch[1]!.trim(), rtMatch[1]!.trim());
+      }
+    }
+  }
+  return map;
+}
+
+describe("shipped-wired contract H — probe-reachability (Epic 99 Wave 2)", () => {
+  /**
+   * For every probe that references a BP rule ID in its probe body (via
+   * `assert_bp_finding_id_present BP-XXX-NNN` or
+   * `assert_no_bp_finding_id BP-XXX-NNN`), the rule's `resource_type`
+   * MUST either:
+   *   (a) be a member of SUPPORTED_TYPES_ARRAY, OR
+   *   (b) the probe declares `parent_reachable: true` with a non-empty
+   *       `parent_reachable_rationale` string.
+   *
+   * Without one of these conditions, the probe targets a type the CLI
+   * intent-parser never produces, meaning any fire-probe can never observe
+   * the rule firing at plan-time. Non-opt-in + unreachable = silent dead probe.
+   */
+  it("every probe referencing a BP rule has a reachable resource_type or opts into parent_reachable", () => {
+    const probeEntries = parseManifestEntriesExtended();
+    const bpRuleTypes = loadBpRuleResourceTypes();
+    const supportedSet = new Set<string>(SUPPORTED_TYPES_ARRAY);
+
+    // BP rule ID pattern used in probe bodies (assert helpers).
+    const bpIdRe = /\bBP-[A-Z0-9]+-[0-9]+\b/g;
+
+    const violations: string[] = [];
+
+    for (const entry of probeEntries) {
+      const referencedIds = new Set<string>();
+      let m: RegExpExecArray | null;
+      // Reset lastIndex (global regex stateful).
+      bpIdRe.lastIndex = 0;
+      while ((m = bpIdRe.exec(entry.probeBody)) !== null) {
+        referencedIds.add(m[0]!);
+      }
+
+      for (const ruleId of referencedIds) {
+        const resourceType = bpRuleTypes.get(ruleId);
+        if (!resourceType) {
+          // Rule YAML not found — report as unknown (not a hard violation,
+          // since some rules may have been retired or moved). Warn only.
+          continue;
+        }
+        if (supportedSet.has(resourceType)) {
+          // (a) type is supported — reachable.
+          continue;
+        }
+        // Not in SUPPORTED_TYPES_ARRAY. Check opt-in.
+        if (
+          entry.parentReachable &&
+          entry.parentReachableRationale.trim().length > 0
+        ) {
+          // (b) probe opted in with documented rationale — accepted.
+          continue;
+        }
+        // Violation: unreachable type, no opt-in.
+        violations.push(
+          `probe ${entry.story} :: ${entry.name} (line ${entry.lineNumber}) ` +
+            `references ${ruleId} which targets ${resourceType} — ` +
+            `${resourceType} is NOT in SUPPORTED_TYPES_ARRAY. ` +
+            `Either add ${resourceType} to supported.ts or set ` +
+            `parent_reachable: true with parent_reachable_rationale on this probe.`,
+        );
+      }
+    }
+
+    expect(
+      violations,
+      `Contract H violations — probe-reachability:\n  ${violations.join("\n  ")}`,
+    ).toEqual([]);
+  });
+
+  it("loadBpRuleResourceTypes returns at least 50 entries (sanity guard)", () => {
+    const map = loadBpRuleResourceTypes();
+    expect(
+      map.size,
+      `loadBpRuleResourceTypes returned only ${map.size} entries — check BP_DIR path`,
+    ).toBeGreaterThanOrEqual(50);
+  });
+
+  it("parseManifestEntriesExtended returns at least 40 probes (sanity guard)", () => {
+    const entries = parseManifestEntriesExtended();
+    expect(
+      entries.length,
+      `parseManifestEntriesExtended returned only ${entries.length} entries`,
+    ).toBeGreaterThanOrEqual(40);
+  });
+});

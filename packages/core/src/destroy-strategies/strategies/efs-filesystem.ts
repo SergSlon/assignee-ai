@@ -35,40 +35,44 @@ export const efsFileSystemStrategy: DestroyStrategy = {
         region: awsConfig.region ?? DEFAULT_AWS_REGION,
         credentials: requireAssigneeCredentials("operator"),
       });
-      const desc = await efs.send(
-        new DescribeMountTargetsCommand({
-          FileSystemId: resource.identifier,
-        }),
-      );
-      const mountTargets = desc.MountTargets ?? [];
-      for (const mt of mountTargets) {
-        if (mt.MountTargetId) {
-          try {
-            await efs.send(
-              new DeleteMountTargetCommand({
-                MountTargetId: mt.MountTargetId,
-              }),
-            );
-          } catch (mtErr) {
-            warnDestroy("efs_mount_target_delete_failed", {
-              fileSystemId: resource.identifier,
-              mountTargetId: mt.MountTargetId,
-              error: mtErr instanceof Error ? mtErr.message : String(mtErr),
-            });
+      try {
+        const desc = await efs.send(
+          new DescribeMountTargetsCommand({
+            FileSystemId: resource.identifier,
+          }),
+        );
+        const mountTargets = desc.MountTargets ?? [];
+        for (const mt of mountTargets) {
+          if (mt.MountTargetId) {
+            try {
+              await efs.send(
+                new DeleteMountTargetCommand({
+                  MountTargetId: mt.MountTargetId,
+                }),
+              );
+            } catch (mtErr) {
+              warnDestroy("efs_mount_target_delete_failed", {
+                fileSystemId: resource.identifier,
+                mountTargetId: mt.MountTargetId,
+                error: mtErr instanceof Error ? mtErr.message : String(mtErr),
+              });
+            }
           }
         }
-      }
-      // Mount target deletion is async — poll until all are gone (max 60s)
-      if (mountTargets.length > 0) {
-        for (let attempt = 0; attempt < EFS_MT_POLL_MAX_ATTEMPTS; attempt++) {
-          const check = await efs.send(
-            new DescribeMountTargetsCommand({
-              FileSystemId: resource.identifier,
-            }),
-          );
-          if (!check.MountTargets || check.MountTargets.length === 0) break;
-          await new Promise((r) => setTimeout(r, EFS_MT_POLL_INTERVAL_MS));
+        // Mount target deletion is async — poll until all are gone (max 60s)
+        if (mountTargets.length > 0) {
+          for (let attempt = 0; attempt < EFS_MT_POLL_MAX_ATTEMPTS; attempt++) {
+            const check = await efs.send(
+              new DescribeMountTargetsCommand({
+                FileSystemId: resource.identifier,
+              }),
+            );
+            if (!check.MountTargets || check.MountTargets.length === 0) break;
+            await new Promise((r) => setTimeout(r, EFS_MT_POLL_INTERVAL_MS));
+          }
         }
+      } finally {
+        efs.destroy();
       }
     } catch (err) {
       warnDestroy("efs_mount_target_cleanup_failed", {
