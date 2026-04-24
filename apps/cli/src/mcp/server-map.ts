@@ -13,17 +13,25 @@ import { McpServerName, type McpServerNameType } from "../constants/mcp.js";
 /**
  * Maps each CLI command name to the MCP server names it requires.
  *
- * - Core servers (KNOWLEDGE, PRICING, DOCS) are started per command need.
+ * - Core servers (PRICING, DOCS) are started per command need.
  * - Optional servers (IAM, WELL_ARCHITECTED_SECURITY, BILLING) are listed
  *   where needed; the MCP client handles their graceful degradation.
  *
  * Drift/reconcile commands use direct SDK (no MCP servers needed).
  * Optimize command (Epic 32) is deferred to Phase 3.
+ *
+ * NOTE: McpServerName.KNOWLEDGE was previously included in plan/apply.
+ * The remote knowledge MCP was REMOVED per acquisition-DD L4-S01 (2026-04-24)
+ * because its spawn path (`uvx fastmcp run <URL>`) executed unpinned remote
+ * Python with operator privileges — RCE-as-a-feature-flag. Kept out of the
+ * map here as a second guardrail: even if a future change re-adds it to
+ * mcp-servers.ts, it will not be requested by any command without an
+ * explicit decision to re-wire.
  */
 export const COMMAND_SERVER_MAP: Record<string, McpServerNameType[]> = {
-  // plan + apply need pricing, knowledge, and docs for schema/cost/documentation lookups
-  plan: [McpServerName.PRICING, McpServerName.KNOWLEDGE, McpServerName.DOCS],
-  apply: [McpServerName.PRICING, McpServerName.KNOWLEDGE, McpServerName.DOCS],
+  // plan + apply need pricing + docs for schema/cost/documentation lookups
+  plan: [McpServerName.PRICING, McpServerName.DOCS],
+  apply: [McpServerName.PRICING, McpServerName.DOCS],
 
   // status uses billing + optional intelligence servers (direct SDK, no core MCP)
   status: [

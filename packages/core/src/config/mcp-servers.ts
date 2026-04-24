@@ -24,14 +24,17 @@
  *   use `@latest`: it opens the door to silent upstream compromise on every CLI
  *   invocation. Bump these deliberately after reviewing upstream release notes.
  *
- *   The remote `knowledge-mcp.global.api.aws` server executes code fetched over
- *   the network at runtime. It is gated behind ASSIGNEE_ENABLE_REMOTE_MCP=1 and
- *   is OFF by default. Users must explicitly opt in.
+ *   HISTORICAL: a remote `knowledge-mcp.global.api.aws` server was previously
+ *   opt-in via ASSIGNEE_ENABLE_REMOTE_MCP=1. It fetched and executed unpinned
+ *   remote Python via `uvx fastmcp run <URL>`, i.e. RCE-as-a-feature-flag.
+ *   REMOVED per acquisition-DD 2026-04-24 finding L4-S01 (HARD_NO sign-gate):
+ *   opt-in was a social control, not a technical one, and the opt-in surface
+ *   was itself the vulnerability. Any future knowledge MCP must spawn from a
+ *   pinned, SBOM-tracked, SHA-verified local artefact.
  *
  * @see architecture.md — MCP Servers Catalog section
  */
 import { McpServerName, McpCommand } from "../constants/mcp.js";
-import { EnvVar } from "../constants/env-vars.js";
 import { DEFAULT_AWS_REGION } from "./config-schema.js";
 import {
   requireAssigneeCredentials,
@@ -54,9 +57,6 @@ export const MCP_PINS = {
   // operation parameter replaces separate get_cost_and_usage/get_cost_forecast.
   AWS_COST_MANAGEMENT: "awslabs.billing-cost-management-mcp-server@0.0.17",
 } as const;
-
-/** Env var that must be set to `1` to enable the remote knowledge MCP server. */
-const ENABLE_REMOTE_MCP_VAR = EnvVar.ASSIGNEE_ENABLE_REMOTE_MCP;
 
 export interface McpServerConfig {
   /** The command to execute (e.g. 'uvx', 'npx') */
@@ -167,14 +167,12 @@ export function getMcpServerConfigs(): Record<string, McpServerConfig> {
 export function getOptionalMcpServerConfigs(): Record<string, McpServerConfig> {
   const configs: Record<string, McpServerConfig> = {};
 
-  // Knowledge server: REMOTE API — executes code fetched over the network.
-  // OFF by default; opt-in via ASSIGNEE_ENABLE_REMOTE_MCP=1.
-  if (process.env[ENABLE_REMOTE_MCP_VAR] === "1") {
-    configs[McpServerName.KNOWLEDGE] = {
-      command: McpCommand.UVX,
-      args: ["fastmcp", "run", "https://knowledge-mcp.global.api.aws"],
-    };
-  }
+  // Remote knowledge server REMOVED per acquisition-DD L4-S01 (2026-04-24):
+  // `uvx fastmcp run https://knowledge-mcp.global.api.aws` executed unpinned
+  // remote Python with operator shell privileges. Opt-in env var was a social
+  // control, not a technical one; the opt-in surface was itself the vuln. The
+  // `ASSIGNEE_ENABLE_REMOTE_MCP` flag has been retired (see env-vars.ts). Any
+  // future knowledge MCP must come from a pinned, SHA-verified local artefact.
 
   // Auditor-scoped servers: skip gracefully if ASSIGNEE_AUDITOR_* unset.
   // These are optional by design — missing credentials must NOT crash the

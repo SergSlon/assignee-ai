@@ -198,10 +198,10 @@ describe("createMcpClient — lazy loading (Story 29.3)", () => {
         },
       })),
       getOptionalMcpServerConfigs: vi.fn(() => ({
-        "aws-knowledge-mcp-server": {
-          command: "uvx",
-          args: ["fastmcp", "run", "https://knowledge-mcp.global.api.aws"],
-        },
+        // aws-knowledge-mcp-server REMOVED per acquisition-DD L4-S01 (2026-04-24)
+        // — the prior entry was an unpinned `uvx fastmcp run https://…` fetch-exec
+        // of remote Python. Mock updated to match real factory behaviour per the
+        // "mocks must use real data" rule.
         "iam-mcp-server": {
           command: "uvx",
           args: [MCP_PINS.AWS_IAM, "--readonly"],
@@ -227,10 +227,7 @@ describe("createMcpClient — lazy loading (Story 29.3)", () => {
     // Optional client created (2nd call) with all optional servers
     expect(MockMultiServerMCPClient).toHaveBeenCalledTimes(2);
     const optionalConfig = MockMultiServerMCPClient.mock.calls[1]?.[0];
-    expect(Object.keys(optionalConfig.mcpServers)).toEqual([
-      "aws-knowledge-mcp-server",
-      "iam-mcp-server",
-    ]);
+    expect(Object.keys(optionalConfig.mcpServers)).toEqual(["iam-mcp-server"]);
   });
 
   it("undefined requiredServers starts all servers (legacy behavior)", async () => {

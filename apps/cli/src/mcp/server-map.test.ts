@@ -9,20 +9,23 @@ import { McpServerName } from "../constants/mcp.js";
 import { getRequiredServers, COMMAND_SERVER_MAP } from "./server-map.js";
 
 describe("COMMAND_SERVER_MAP", () => {
-  it("plan command maps to exactly 3 servers (pricing, knowledge, docs)", () => {
+  // Post acquisition-DD L4-S01 (2026-04-24): KNOWLEDGE removed from plan/apply
+  // because the remote knowledge MCP server spawn path was RCE-as-feature-flag.
+  // See apps/cli/src/mcp/server-map.ts header for rationale.
+  it("plan command maps to exactly 2 servers (pricing, docs)", () => {
     const servers = COMMAND_SERVER_MAP["plan"]!;
-    expect(servers).toHaveLength(3);
+    expect(servers).toHaveLength(2);
     expect(servers).toContain(McpServerName.PRICING);
-    expect(servers).toContain(McpServerName.KNOWLEDGE);
     expect(servers).toContain(McpServerName.DOCS);
+    expect(servers).not.toContain(McpServerName.KNOWLEDGE);
   });
 
-  it("apply command maps to the same 3 servers as plan", () => {
+  it("apply command maps to the same 2 servers as plan", () => {
     const servers = COMMAND_SERVER_MAP["apply"]!;
-    expect(servers).toHaveLength(3);
+    expect(servers).toHaveLength(2);
     expect(servers).toContain(McpServerName.PRICING);
-    expect(servers).toContain(McpServerName.KNOWLEDGE);
     expect(servers).toContain(McpServerName.DOCS);
+    expect(servers).not.toContain(McpServerName.KNOWLEDGE);
   });
 
   it("status command maps to billing + intelligence servers", () => {
@@ -62,7 +65,7 @@ describe("getRequiredServers", () => {
   it("returns server list for known command (plan)", () => {
     const result = getRequiredServers("plan");
     expect(result).not.toBeNull();
-    expect(result).toHaveLength(3);
+    expect(result).toHaveLength(2);
     expect(result).toContain(McpServerName.PRICING);
   });
 
@@ -82,18 +85,19 @@ describe("getRequiredServers", () => {
   });
 
   describe("startup reduction validation", () => {
-    const ALL_CORE_SERVERS = 4; // IAC, KNOWLEDGE, PRICING, DOCS
+    // KNOWLEDGE dropped per L4-S01 (2026-04-24). Core server count now 2.
+    const ALL_CORE_SERVERS = 2; // PRICING, DOCS
     const ALL_OPTIONAL_SERVERS = 3; // IAM, WELL_ARCHITECTED_SECURITY, BILLING
-    const TOTAL_SERVERS = ALL_CORE_SERVERS + ALL_OPTIONAL_SERVERS; // 7
+    const TOTAL_SERVERS = ALL_CORE_SERVERS + ALL_OPTIONAL_SERVERS; // 5
 
-    it("plan command starts 3/7 servers (57% reduction)", () => {
+    it("plan command starts 2/5 servers (60% reduction)", () => {
       const servers = getRequiredServers("plan")!;
       const reduction =
         ((TOTAL_SERVERS - servers.length) / TOTAL_SERVERS) * 100;
       expect(reduction).toBeGreaterThanOrEqual(40);
     });
 
-    it("list command starts 0/7 servers (100% reduction)", () => {
+    it("list command starts 0/5 servers (100% reduction)", () => {
       const servers = getRequiredServers("list")!;
       expect(servers).toHaveLength(0);
       const reduction =
@@ -101,12 +105,12 @@ describe("getRequiredServers", () => {
       expect(reduction).toBe(100);
     });
 
-    it("destroy command starts 0/7 servers (100% reduction)", () => {
+    it("destroy command starts 0/5 servers (100% reduction)", () => {
       const servers = getRequiredServers("destroy")!;
       expect(servers).toHaveLength(0);
     });
 
-    it("status command starts 3/7 servers (57% reduction)", () => {
+    it("status command starts 3/5 servers (40% reduction)", () => {
       const servers = getRequiredServers("status")!;
       const reduction =
         ((TOTAL_SERVERS - servers.length) / TOTAL_SERVERS) * 100;
