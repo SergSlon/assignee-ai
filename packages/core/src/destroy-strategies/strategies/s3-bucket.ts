@@ -47,60 +47,66 @@ export const s3BucketStrategy: DestroyStrategy = {
         region: awsConfig.region ?? DEFAULT_AWS_REGION,
         credentials: requireAssigneeCredentials("operator"),
       });
-
-      // Delete all object versions and delete markers (paginated)
-      let isTruncated = true;
-      let batch = 0;
-      let keyMarker: string | undefined;
-      let versionIdMarker: string | undefined;
-      while (isTruncated) {
-        batch++;
-        onProgress?.(`Emptying S3 bucket (batch ${batch})...`);
-        const versions = await s3.send(
-          new ListObjectVersionsCommand({
-            Bucket: resource.identifier,
-            KeyMarker: keyMarker,
-            VersionIdMarker: versionIdMarker,
-          }),
-        );
-        const objects = [
-          ...(versions.Versions ?? []).map((v) => ({
-            Key: v.Key!,
-            VersionId: v.VersionId,
-          })),
-          ...(versions.DeleteMarkers ?? []).map((m) => ({
-            Key: m.Key!,
-            VersionId: m.VersionId,
-          })),
-        ].filter((o) => o.Key);
-
-        // Chunk: DeleteObjects accepts at most 1000 keys per request.
-        for (
-          let off = 0;
-          off < objects.length;
-          off += S3_DELETE_OBJECTS_CHUNK_SIZE
-        ) {
-          const chunk = objects.slice(off, off + S3_DELETE_OBJECTS_CHUNK_SIZE);
-          await s3.send(
-            new DeleteObjectsCommand({
+      try {
+        // Delete all object versions and delete markers (paginated)
+        let isTruncated = true;
+        let batch = 0;
+        let keyMarker: string | undefined;
+        let versionIdMarker: string | undefined;
+        while (isTruncated) {
+          batch++;
+          onProgress?.(`Emptying S3 bucket (batch ${batch})...`);
+          const versions = await s3.send(
+            new ListObjectVersionsCommand({
               Bucket: resource.identifier,
-              Delete: { Objects: chunk },
+              KeyMarker: keyMarker,
+              VersionIdMarker: versionIdMarker,
             }),
           );
+          const objects = [
+            ...(versions.Versions ?? []).map((v) => ({
+              Key: v.Key!,
+              VersionId: v.VersionId,
+            })),
+            ...(versions.DeleteMarkers ?? []).map((m) => ({
+              Key: m.Key!,
+              VersionId: m.VersionId,
+            })),
+          ].filter((o) => o.Key);
+
+          // Chunk: DeleteObjects accepts at most 1000 keys per request.
+          for (
+            let off = 0;
+            off < objects.length;
+            off += S3_DELETE_OBJECTS_CHUNK_SIZE
+          ) {
+            const chunk = objects.slice(
+              off,
+              off + S3_DELETE_OBJECTS_CHUNK_SIZE,
+            );
+            await s3.send(
+              new DeleteObjectsCommand({
+                Bucket: resource.identifier,
+                Delete: { Objects: chunk },
+              }),
+            );
+          }
+          isTruncated = versions.IsTruncated ?? false;
+          keyMarker = versions.NextKeyMarker;
+          versionIdMarker = versions.NextVersionIdMarker;
+          // V1 N5: paranoid guard against infinite loop if AWS sets
+          // IsTruncated=true but omits both next markers. Break out so
+          // destroy fails fast.
+          if (isTruncated && !keyMarker && !versionIdMarker) {
+            warnDestroy("s3_list_versions_truncated_without_marker", {
+              identifier: resource.identifier,
+              batch,
+            });
+            break;
+          }
         }
-        isTruncated = versions.IsTruncated ?? false;
-        keyMarker = versions.NextKeyMarker;
-        versionIdMarker = versions.NextVersionIdMarker;
-        // V1 N5: paranoid guard against infinite loop if AWS sets
-        // IsTruncated=true but omits both next markers. Break out so
-        // destroy fails fast.
-        if (isTruncated && !keyMarker && !versionIdMarker) {
-          warnDestroy("s3_list_versions_truncated_without_marker", {
-            identifier: resource.identifier,
-            batch,
-          });
-          break;
-        }
+      } finally {
+        s3.destroy();
       }
     } catch (err) {
       if (err instanceof MissingAssigneeCredentialsError) {

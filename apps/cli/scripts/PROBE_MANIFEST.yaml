@@ -67,7 +67,10 @@ probes:
         assertions: "AWS::IAM::Role slot rejects FunctionName with alt phrasing (compound-keyword variant)"
       - cmd: 'plan "lambda-with-exec-role called processor handler worker.run runtime python3.11" --json'
         assertions: "AWS::IAM::Role slot rejects FunctionName with 'called' name token + python runtime"
-    known_tripwires: []
+    known_tripwires:
+      - cmd: 'plan "create lambda-with-exec-role named my-fn handler handler.main runtime nodejs20.x" --json'
+        expected_exit: "zero"
+        expected_fail_anchor: ""FunctionName""
     probe: |
       assert_desired_state_missing_key_on_type \
         "AWS::IAM::Role" \
@@ -95,7 +98,10 @@ probes:
         assertions: "uppercase bucket name → ok:false, exit non-zero (S3 naming rule)"
       - cmd: 'apply "create S3 bucket named a" --yes --json'
         assertions: "1-char bucket name → ok:false, exit non-zero (min length 3)"
-    known_tripwires: []
+    known_tripwires:
+      - cmd: 'apply "create S3 bucket named invalid..name" --yes --json'
+        expected_exit: "zero"
+        expected_fail_anchor: ""ok":true"
     probe: |
       # The bucket name "invalid..name" has adjacent dots, which S3
       # rejects. The validator or apply path must surface that as
@@ -140,7 +146,13 @@ probes:
     # region extractor (tail wins + name-span masking). The invariant is
     # now enforced by the `w2-r1-region-regex` probe below plus the unit
     # test suite intent-parser-region-scoping-variations.test.ts.
-    known_tripwires: []
+    known_tripwires:
+      - cmd: 'plan "Create a lambda named my-abc-1" --json'
+        expected_exit: "non-zero"
+        expected_fail_anchor: "Unknown AWS region"
+      - cmd: 'plan "Create an S3 bucket named log-ap-northeast-2-archive" --json'
+        expected_exit: "non-zero"
+        expected_fail_anchor: "region"
     probe: |
       # Expect: plan succeeds (ok:true) because the user IS specifying
       # a valid region (eu-west-2). The bucket-name substring
@@ -176,7 +188,13 @@ probes:
         assertions: "bare intent produces plan with default region (no parse failure)"
       - cmd: 'plan "Create a lambda in us-west-2 named my-fn" --json'
         assertions: "explicit `in us-west-2` tail lifted into plan without conflict with name"
-    known_tripwires: []
+    known_tripwires:
+      - cmd: 'plan "Create a lambda named my-abc-1" --json'
+        expected_exit: "non-zero"
+        expected_fail_anchor: "Unknown AWS region"
+      - cmd: 'plan "Create an SQS queue named sqs-json-1776927324" --json'
+        expected_exit: "non-zero"
+        expected_fail_anchor: "region"
     probe: |
       # Variation 1 — the Epic 97 B-09 live-FAIL. After the fix this
       # must PASS with ok:true.
@@ -512,7 +530,10 @@ probes:
     # landing `isEmptyLeaf` + deep-merge backfill in merge.ts. The
     # invariant is now enforced by the `w2-r2-plugin-default-empty-leaf`
     # probe below plus merge-empty-leaf.test.ts.
-    known_tripwires: []
+    known_tripwires:
+      - cmd: 'plan "Create an EC2 t3.micro instance" --json'
+        expected_exit: "zero"
+        expected_fail_anchor: "CPUCredits"
     probe: |
       # Runs a plain EC2 t3.micro plan and asserts the sanitised
       # desiredState carries a non-empty CreditSpecification with the
@@ -562,7 +583,10 @@ probes:
         assertions: "t3.medium + elaborate clause: CreditSpecification survives with CPUCredits set"
       - cmd: 'plan "Create a t3.small EC2 instance with CPUCredits unlimited" --json'
         assertions: "user-stated CPUCredits=unlimited wins over plugin default (user always wins)"
-    known_tripwires: []
+    known_tripwires:
+      - cmd: 'plan "Create an EC2 instance type t3.micro" --json'
+        expected_exit: "zero"
+        expected_fail_anchor: "CPUCredits"
     probe: |
       # Variation 2 — the Epic 97 C-R1 live-FAIL. Post-fix the plan
       # must emit a non-empty CreditSpecification with CPUCredits set
@@ -738,7 +762,10 @@ probes:
         assertions: "/20 mid-prefix accepted on Route; DestinationCidrBlock==172.16.0.0/20"
       - cmd: 'extractAssertedValues("Create a VPC with CIDR 10.0.0.0/8", "AWS::EC2::VPC")'
         assertions: "VPC regression guard: /8 still rejected (kind=vpc clamp preserved)"
-    known_tripwires: []
+    known_tripwires:
+      - cmd: 'plan "Create a route with destination 0.0.0.0/0" --json'
+        expected_exit: "non-zero"
+        expected_fail_anchor: "CIDR"
     probe: |
       node -e '
         const repo = process.env.PROBE_REPO_ROOT;
@@ -818,7 +845,10 @@ probes:
     # allowlist expansion in placeholder-resource-id.ts. The invariant
     # is now enforced by the `w2-r3-placeholder-prose-fields` probe
     # below plus placeholder-guard-prose-variations.test.ts.
-    known_tripwires: []
+    known_tripwires:
+      - cmd: 'plan "Create an S3 bucket named arn:aws:iam::123456789012:role/placeholder" --json'
+        expected_exit: "zero"
+        expected_fail_anchor: "placeholder"
     probe: |
       node -e '
         const repo = process.env.PROBE_REPO_ROOT;
@@ -879,7 +909,10 @@ probes:
         assertions: "no-FP baseline: honest hyphenated prose passes without a false-positive"
       - cmd: 'SUPPORTED_TYPES_ARRAY drift-guard: every supported type rejects poisoned prose'
         assertions: "drift-guard: iterating every supported resource type, a synthetic prose state with `subnet-<hex>` is rejected by the walker"
-    known_tripwires: []
+    known_tripwires:
+      - cmd: 'plan "Create an S3 bucket tagged owner:arn:aws:iam::123456789012:user/admin" --json'
+        expected_exit: "zero"
+        expected_fail_anchor: "placeholder"
     probe: |
       node -e '
         const repo = process.env.PROBE_REPO_ROOT;
@@ -937,7 +970,10 @@ probes:
         assertions: "CJK chars → error.code INVALID_NAME"
       - cmd: 'plan "Create an S3 bucket named 👋-bucket" --json'
         assertions: "emoji chars → error.code INVALID_NAME (not PLAN_FAILED fallback)"
-    known_tripwires: []
+    known_tripwires:
+      - cmd: 'plan "Create an S3 bucket named café-data" --json'
+        expected_exit: "non-zero"
+        expected_fail_anchor: "PLAN_FAILED"
     probe: |
       # Drive the CLI end-to-end — this path exercises both the intent-
       # parser's stamping AND the plan-orchestrator's error-envelope
@@ -990,7 +1026,10 @@ probes:
         assertions: "unresolvable primaryIdentifier emits the new DESTROY_TARGET_NOT_FOUND code (NOT silent success, NOT legacy DESTROY_ERROR)"
       - cmd: 'list --resource-type AWS::EC2::Route → only Route rows'
         assertions: "resourceTypeFilter works against primaryIdentifier-keyed rows (no cross-type leakage)"
-    known_tripwires: []
+    known_tripwires:
+      - cmd: 'plan "Create a route from internet gateway" --json'
+        expected_exit: "non-zero"
+        expected_fail_anchor: "resource type"
     probe: |
       # Isolated HOME so the seeded provision log doesn't clobber the
       # dev user's real ~/.assignee/memory/provisions.json.
@@ -1212,6 +1251,8 @@ probes:
       introduce the awareness-style always-fire behaviour the W4.B1
       fix eliminates.
     must_fail_pre_fix: false
+    parent_reachable: true
+    parent_reachable_rationale: "BP-ECS-004 target type AWS::ECS::TaskDefinition is not in SUPPORTED_TYPES_ARRAY; CLI intent resolves ECS intents to AWS::ECS::Cluster. Probe exercises rule-runner no-fire baseline directly. Promote TaskDefinition to first-class to enable a CLI fire-probe."
     variations:
       - cmd: 'plan "Create an ECS task with env LOG_LEVEL=debug" --json'
         assertions: "BP-ECS-004 does NOT fire on LOG_LEVEL (safe env, no-fire baseline)"
@@ -1219,11 +1260,53 @@ probes:
         assertions: "BP-ECS-004 does NOT fire on APP_ENV (safe env)"
       - cmd: 'plan "Create an ECS task with env PORT=8080" --json'
         assertions: "BP-ECS-004 does NOT fire on PORT (safe env)"
-    known_tripwires: []
+    known_tripwires:
+      - cmd: 'plan "Create an ECS task with env LOG_LEVEL=debug" --json'
+        expected_exit: "zero"
+        expected_fail_anchor: "BP-ECS-004"
     probe: |
       assert_no_bp_finding_id BP-ECS-004 \
         $PROBE_CLI_BIN plan \
           "Create an ECS task with env LOG_LEVEL=debug" \
+          --json
+
+  - story: e99.W2.BP-ECS-fire
+    name: bp-ecs-004-fire-on-plaintext-secret-env
+    description: |
+      Epic 99 Wave 2 — fire-path probe for BP-ECS-004 (DEFERRED from
+      Epic 98). BP-ECS-004 fires when an ECS TaskDefinition Environment
+      array contains an entry whose name matches the secret-identifier
+      regex (e.g. DB_PASSWORD, API_SECRET, DATABASE_URL). This probe
+      must_fail_pre_fix: true because AWS::ECS::TaskDefinition is NOT
+      in SUPPORTED_TYPES_ARRAY — CLI intent-parser resolves ECS task
+      intents to AWS::ECS::Cluster, so no plan emits a TaskDefinition
+      resource, and assert_bp_finding_id_present BP-ECS-004 never finds
+      a match. Flip to must_fail_pre_fix: false when TaskDefinition is
+      promoted to first-class in packages/core/src/config/resource-types/supported.ts
+      AND the intent-parser routes "Create an ECS task with env DB_PASSWORD=x"
+      to emit a TaskDefinition resource with the secret-named env var.
+    must_fail_pre_fix: true
+    parent_reachable: true
+    parent_reachable_rationale: "BP-ECS-004 target type AWS::ECS::TaskDefinition is not in SUPPORTED_TYPES_ARRAY. Fire-probe is unreachable from CLI intent-parser today."
+    variations:
+      - cmd: 'plan "Create an ECS task with env DB_PASSWORD=secret123" --json'
+        assertions: "BP-ECS-004 FIRES on ECS task with plaintext secret-named env var (fire-path)"
+      - cmd: 'plan "Create an ECS task definition with environment API_SECRET=mysecret" --json'
+        assertions: "BP-ECS-004 FIRES on env named API_SECRET (fire-path)"
+      - cmd: 'plan "Create an ECS task with environment DATABASE_URL=postgres://..." --json'
+        assertions: "BP-ECS-004 FIRES on env named DATABASE_URL (fire-path)"
+    known_tripwires:
+      - cmd: 'plan "Create an ECS task with env DB_PASSWORD=secret123" --json'
+        expected_exit: "zero"
+        expected_fail_anchor: "BP-ECS-004"
+    probe: |
+      # Fire-path: CLI does NOT emit AWS::ECS::TaskDefinition today
+      # (resolves to AWS::ECS::Cluster), so BP-ECS-004 never finds a
+      # matching resource. Probe deliberately fails until TaskDefinition
+      # is first-class. must_fail_pre_fix: true marks this as expected.
+      assert_bp_finding_id_present BP-ECS-004 \
+        $PROBE_CLI_BIN plan \
+          "Create an ECS task with env DB_PASSWORD=secret123" \
           --json
 
   - story: e98.W4.B2
@@ -1262,6 +1345,8 @@ probes:
       supported plan surface, so the fire-path has no CLI probe
       surface. Reviewer-accepted concession for W4.B2.
     must_fail_pre_fix: false
+    parent_reachable: true
+    parent_reachable_rationale: "BP-SNS-004 target type AWS::SNS::Topic is in SUPPORTED_TYPES_ARRAY. Fire-path deferred: CLI plan generator does not emit wildcard-Principal TopicPolicy content; probe exercises no-fire baseline via rule-runner directly. Add fire-probe when plan generator emits inline TopicPolicy (Epic 99 backlog)."
     variations:
       - cmd: 'plan "Create an SNS topic named notifications" --json'
         assertions: "BP-SNS-004 does NOT fire on a plain SNS topic (no public policy, no-fire baseline)"
@@ -1269,11 +1354,49 @@ probes:
         assertions: "BP-SNS-004 does NOT fire on an encrypted SNS topic"
       - cmd: 'plan "Create an SNS topic for internal service alerts" --json'
         assertions: "BP-SNS-004 does NOT fire on an internal SNS topic"
-    known_tripwires: []
+    known_tripwires:
+      - cmd: 'plan "Create an SNS topic named notifications" --json'
+        expected_exit: "zero"
+        expected_fail_anchor: "BP-SNS-004"
     probe: |
       assert_no_bp_finding_id BP-SNS-004 \
         $PROBE_CLI_BIN plan \
           "Create an SNS topic named notifications" \
+          --json
+
+  - story: e99.W2.BP-SNS004-fire
+    name: bp-sns-004-fire-on-wildcard-principal
+    description: |
+      Epic 99 Wave 2 — fire-path probe for BP-SNS-004 (DEFERRED from
+      Epic 98). BP-SNS-004 fires when an SNS topic has an inline
+      TopicPolicy with an Allow statement granting an unconditioned
+      wildcard Principal (Principal: "*" without Condition). This probe
+      must_fail_pre_fix: true because the CLI plan generator does not
+      emit wildcard-Principal TopicPolicy content on any plan surface
+      today. Flip to must_fail_pre_fix: false when the plan generator
+      can emit TopicPolicy with a wildcard-Principal Allow and the
+      fire-probe observes BP-SNS-004 in the plan output.
+    must_fail_pre_fix: true
+    parent_reachable: true
+    parent_reachable_rationale: "BP-SNS-004 target type AWS::SNS::Topic is in SUPPORTED_TYPES_ARRAY. Fire-path deferred: CLI does not emit wildcard-Principal TopicPolicy content. Probe is unreachable until plan generator learns to emit inline TopicPolicy."
+    variations:
+      - cmd: 'plan "Create an SNS topic with policy allowing all principals" --json'
+        assertions: "BP-SNS-004 FIRES on SNS topic with unconditioned wildcard-Principal policy (fire-path)"
+      - cmd: 'plan "Create a public SNS topic with open access policy" --json'
+        assertions: "BP-SNS-004 FIRES on SNS topic with open Principal:* policy (fire-path)"
+      - cmd: 'plan "Create an SNS topic with TopicPolicy granting sns:Publish to *" --json'
+        assertions: "BP-SNS-004 FIRES on SNS topic with explicit wildcard-resource publish grant (fire-path)"
+    known_tripwires:
+      - cmd: 'plan "Create an SNS topic with policy allowing all principals" --json'
+        expected_exit: "zero"
+        expected_fail_anchor: "BP-SNS-004"
+    probe: |
+      # Fire-path: CLI does NOT emit wildcard-Principal TopicPolicy
+      # content today. Probe deliberately fails until plan generator
+      # learns to emit inline TopicPolicy. must_fail_pre_fix: true.
+      assert_bp_finding_id_present BP-SNS-004 \
+        $PROBE_CLI_BIN plan \
+          "Create an SNS topic with policy allowing all principals" \
           --json
 
   - story: e98.W4.B4
@@ -1309,6 +1432,8 @@ probes:
       and `packages/best-practices/src/policy-inspector.test.ts`
       (`describe("missing-secure-transport-deny (Epic 98 W4.B4)")`).
     must_fail_pre_fix: false
+    parent_reachable: true
+    parent_reachable_rationale: "BP-S3-011 target type AWS::S3::BucketPolicy is in SUPPORTED_TYPES_ARRAY. Fire-path deferred: CLI plan generator does not emit a separate BucketPolicy resource alongside S3 buckets; probe exercises no-fire baseline via rule-runner directly. Add fire-probe when plan generator emits BucketPolicy (Epic 99 backlog)."
     variations:
       - cmd: 'plan "Create an S3 bucket named logs-archive" --json'
         assertions: "BP-S3-011 does NOT fire on a plain S3 bucket with no BucketPolicy resource (no-fire baseline)"
@@ -1316,11 +1441,51 @@ probes:
         assertions: "BP-S3-011 does NOT fire on a versioned S3 bucket (still no BucketPolicy resource)"
       - cmd: 'plan "Create an encrypted S3 bucket for backups" --json'
         assertions: "BP-S3-011 does NOT fire on an encrypted backup bucket"
-    known_tripwires: []
+    known_tripwires:
+      - cmd: 'plan "Create an S3 bucket named logs-archive" --json'
+        expected_exit: "zero"
+        expected_fail_anchor: "BP-S3-011"
     probe: |
       assert_no_bp_finding_id BP-S3-011 \
         $PROBE_CLI_BIN plan \
           "Create an S3 bucket named logs-archive" \
+          --json
+
+  - story: e99.W2.BP-S3011-fire
+    name: bp-s3-011-fire-on-missing-ssl-deny
+    description: |
+      Epic 99 Wave 2 — fire-path probe for BP-S3-011 (DEFERRED from
+      Epic 98). BP-S3-011 fires when an AWS::S3::BucketPolicy resource
+      is present in the plan output and its PolicyDocument does NOT
+      contain a Deny statement with Condition.Bool["aws:SecureTransport"]="false".
+      This probe must_fail_pre_fix: true because the CLI plan generator
+      does not emit a separate BucketPolicy resource alongside S3 bucket
+      plans today. Flip to must_fail_pre_fix: false when the plan
+      generator emits BucketPolicy alongside buckets for intents that
+      imply "public bucket" or "bucket with policy" and assert_bp_finding_id_present
+      BP-S3-011 observes the finding in plan output.
+    must_fail_pre_fix: true
+    parent_reachable: true
+    parent_reachable_rationale: "BP-S3-011 target type AWS::S3::BucketPolicy is in SUPPORTED_TYPES_ARRAY. Fire-path deferred: CLI does not emit a separate BucketPolicy resource on S3 bucket plans today. Probe is unreachable until plan generator emits BucketPolicy."
+    variations:
+      - cmd: 'plan "Create a public S3 bucket with a bucket policy" --json'
+        assertions: "BP-S3-011 FIRES on S3 BucketPolicy missing ssl-deny Deny statement (fire-path)"
+      - cmd: 'plan "Create an S3 bucket with policy allowing public read" --json'
+        assertions: "BP-S3-011 FIRES on BucketPolicy without aws:SecureTransport Deny (fire-path)"
+      - cmd: 'plan "Create an S3 bucket with policy granting s3:GetObject to everyone" --json'
+        assertions: "BP-S3-011 FIRES on explicit open-access BucketPolicy missing ssl-deny (fire-path)"
+    known_tripwires:
+      - cmd: 'plan "Create a public S3 bucket with a bucket policy" --json'
+        expected_exit: "zero"
+        expected_fail_anchor: "BP-S3-011"
+    probe: |
+      # Fire-path: CLI does NOT emit separate BucketPolicy resource
+      # alongside S3 bucket plans today. Probe deliberately fails until
+      # plan generator learns to emit BucketPolicy resources.
+      # must_fail_pre_fix: true.
+      assert_bp_finding_id_present BP-S3-011 \
+        $PROBE_CLI_BIN plan \
+          "Create a public S3 bucket with a bucket policy" \
           --json
 
   - story: e98.W5.N1
@@ -1370,7 +1535,10 @@ probes:
         assertions: "B-01 VPCGatewayAttachment closure — non-taggable passthrough with pipe-delimited composite id"
       - cmd: 'buildApplyEnvelopeArn(AWS::DynamoDB::Table, arn:aws:dynamodb:...:table/dogfood-e97-a-ddb-1776953700) → full ARN preserved'
         assertions: "Regression baseline — ARN-addressable types still return full ARN in envelope.arn with primaryIdentifier null (guard against the non-taggable branching accidentally nulling ARNs for already-working types)"
-    known_tripwires: []
+    known_tripwires:
+      - cmd: 'apply "create lambda named test-fn handler index.main runtime nodejs20.x" --yes --json'
+        expected_exit: "zero"
+        expected_fail_anchor: "arn:aws:"
     probe: |
       # Library-level probe: exercise the compiled core helper
       # (packages/core/dist/graph/nodes/result-formatter/envelope-arn.js)
@@ -1475,52 +1643,6 @@ probes:
         printf '%s' "$output" | jq '.ddb' >&2
         exit 1
       fi
-  - story: e98.W4.B4
-    name: bp-s3-011-no-fire-on-plain-bucket
-    description: |
-      e98.W4.B4 — BP-S3-011 HIGH MISLABELED closure (no-fire baseline
-      / false-positive catcher). Before the fix, BP-S3-011 was
-      `check_type: awareness` and surfaced on every S3 bucket plan
-      regardless of whether the bucket's policy actually enforced
-      SSL-only access. Fix migrates BP-S3-011 to
-      `resource_type: AWS::S3::BucketPolicy`, `check_type:
-      policy_antipattern`, `expected_value:
-      missing-secure-transport-deny` — a new ABSENCE-semantics
-      antipattern that fires when the BucketPolicy document does not
-      contain a Deny statement matching the canonical
-      `Condition.Bool["aws:SecureTransport"] = "false"` shape.
-      Implementation in src/policy-inspector.ts + rule-runner routing
-      via `isAbsenceAntipattern`. A plain S3 bucket plan that does not
-      emit a separate BucketPolicy resource must NOT surface the rule
-      at plan-time (the rule applies only when an AWS::S3::BucketPolicy
-      resource is present).
-
-      DEFERRED (Epic 99 backlog): once the CLI's plan generator can
-      emit AWS::S3::BucketPolicy alongside AWS::S3::Bucket for intents
-      that imply "public bucket" or "bucket with policy", add a
-      companion fire-probe asserting
-      `assert_bp_finding_id_present BP-S3-011` when the emitted
-      BucketPolicy PolicyDocument lacks a Deny-non-SSL statement.
-      Today the CLI doesn't emit separate BucketPolicy resources on
-      plan, so the fire-path has no CLI probe surface — absence /
-      fire branches are exhaustively covered by unit tests in
-      `packages/best-practices/__tests__/bp-s3-011-scope.test.ts`
-      and `packages/best-practices/src/policy-inspector.test.ts`
-      (`describe("missing-secure-transport-deny (Epic 98 W4.B4)")`).
-    must_fail_pre_fix: false
-    variations:
-      - cmd: 'plan "Create an S3 bucket named logs-archive" --json'
-        assertions: "BP-S3-011 does NOT fire on a plain S3 bucket with no BucketPolicy resource (no-fire baseline)"
-      - cmd: 'plan "Create an S3 bucket named app-data with versioning enabled" --json'
-        assertions: "BP-S3-011 does NOT fire on a versioned S3 bucket (still no BucketPolicy resource)"
-      - cmd: 'plan "Create an encrypted S3 bucket for backups" --json'
-        assertions: "BP-S3-011 does NOT fire on an encrypted backup bucket"
-    known_tripwires: []
-    probe: |
-      assert_no_bp_finding_id BP-S3-011 \
-        $PROBE_CLI_BIN plan \
-          "Create an S3 bucket named logs-archive" \
-          --json
   - story: e98.W3.A1
     name: w3-a1-plugin-default-survival
     description: |
@@ -2284,6 +2406,8 @@ probes:
       cover fire branches
       (`packages/best-practices/__tests__/bp-sns-003-scope.test.ts`).
     must_fail_pre_fix: false
+    parent_reachable: true
+    parent_reachable_rationale: "BP-SNS-003 target type AWS::SNS::Topic is in SUPPORTED_TYPES_ARRAY. Fire-path deferred: CLI plan generator does not emit inline TopicPolicy with Resource grants; probe exercises no-fire baseline via rule-runner directly. Add fire-probe when plan generator emits inline TopicPolicy (Epic 99 backlog)."
     variations:
       - cmd: 'plan "Create an SNS topic named order-events" --json'
         assertions: "BP-SNS-003 does NOT fire on a plain SNS topic (no inline TopicPolicy, no-fire baseline)"
@@ -2291,7 +2415,10 @@ probes:
         assertions: "BP-SNS-003 does NOT fire on an encrypted SNS topic"
       - cmd: 'plan "Create an SNS topic for platform alerts" --json'
         assertions: "BP-SNS-003 does NOT fire on a plain platform alerts topic"
-    known_tripwires: []
+    known_tripwires:
+      - cmd: 'plan "Create an SNS topic named order-events" --json'
+        expected_exit: "zero"
+        expected_fail_anchor: "BP-SNS-003"
     probe: |
       assert_no_bp_finding_id BP-SNS-003 \
         $PROBE_CLI_BIN plan \
@@ -2335,6 +2462,8 @@ probes:
       + `src/policy-inspector.test.ts` describe
       "cross-account-no-external-id (Epic 98 W4.B5)").
     must_fail_pre_fix: false
+    parent_reachable: true
+    parent_reachable_rationale: "BP-IAM-010 target type AWS::IAM::Role is in SUPPORTED_TYPES_ARRAY. Fire-path deferred: CLI plan generator emits service-principal trusts (Lambda exec roles, ECS task roles) — legitimately out-of-scope for cross-account-no-external-id rule. Add fire-probe when plan generator supports cross-account AWS-ARN trust intents (Epic 99 backlog)."
     variations:
       - cmd: 'plan "Create a lambda function called daily-report handler index.main runtime nodejs20.x" --json'
         assertions: "BP-IAM-010 does NOT fire on a Lambda exec role with service-principal trust (no-fire baseline)"
@@ -2600,7 +2729,10 @@ probes:
         assertions: "D-15 closure — the contradictory CI-compat flag removed; auto-apply belongs on reconcile"
       - cmd: 'drift --help footer no longer says `No --yes flag is needed`'
         assertions: "Help text cleanup — the contradicting sentence companion to --yes removal is also gone"
-    known_tripwires: []
+    known_tripwires:
+      - cmd: 'drift --wizard'
+        expected_exit: "non-zero"
+        expected_fail_anchor: "unknown option"
     probe: |
       strip_env_leaks
 

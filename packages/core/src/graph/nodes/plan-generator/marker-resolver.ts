@@ -64,12 +64,16 @@ export function defaultAccountIdLookup(region: string): AccountIdLookup {
       );
     }
     const sts = new STSClient({ region, credentials: creds });
-    const res = await sts.send(new GetCallerIdentityCommand({}));
-    if (!res.Account) {
-      throw new Error("STS GetCallerIdentity returned no Account.");
+    try {
+      const res = await sts.send(new GetCallerIdentityCommand({}));
+      if (!res.Account) {
+        throw new Error("STS GetCallerIdentity returned no Account.");
+      }
+      ACCOUNT_ID_CACHE = res.Account;
+      return res.Account;
+    } finally {
+      sts.destroy();
     }
-    ACCOUNT_ID_CACHE = res.Account;
-    return res.Account;
   };
 }
 

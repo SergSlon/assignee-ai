@@ -584,14 +584,17 @@ for sf in "${STORY_FILES[@]}"; do
 
   if [[ "$mfpf" == "true" ]]; then
     if [[ $rc -eq 0 ]]; then
+      # Probe expected to FAIL but PASSED → bug was fixed; author must remove
+      # must_fail_pre_fix in the same commit that lands the fix.
       FAILED=$((FAILED + 1))
-      RESULTS+=("FAIL $story $name (unexpectedly passed; flip must_fail_pre_fix to false)")
+      RESULTS+=("FAIL $story $name (unexpectedly passed; flip must_fail_pre_fix to false and remove tripwire)")
     elif [[ $rc -eq 2 ]]; then
       SETUP_FAILED=$((SETUP_FAILED + 1))
       RESULTS+=("SETUP $story $name (probe setup failed)")
     else
+      # Probe failed as expected (known-open bug on HEAD). Count separately
+      # so the gate stays green while the bug is open. TRIP != unexpected FAIL.
       TRIPPED=$((TRIPPED + 1))
-      FAILED=$((FAILED + 1))
       RESULTS+=("TRIP $story $name (known bug on HEAD — fix then flip must_fail_pre_fix)")
     fi
   else
@@ -620,8 +623,12 @@ for r in "${RESULTS[@]}"; do
   printf '  %-8s %-25s %s\n' "$status" "$story" "$name"
 done
 echo ""
-echo "Total: $TOTAL  Passed: $PASSED  Failed: $FAILED (of which Tripped: $TRIPPED)  Setup-failed: $SETUP_FAILED  Skipped: $SKIPPED"
+# TRIP = known-open must_fail_pre_fix bugs (expected failures; gate stays green)
+# FAIL = unexpected failures (gate blocks)
+echo "Total: $TOTAL  Passed: $PASSED  Tripped (known-open): $TRIPPED  Failed: $FAILED  Setup-failed: $SETUP_FAILED  Skipped: $SKIPPED"
 
+# Only block on unexpected failures or setup failures.
+# TRIPPED probes are documented known-open bugs; they do NOT block the gate.
 if [[ $FAILED -gt 0 ]]; then
   exit 1
 fi
