@@ -35,7 +35,10 @@ Things that could still embarrass during a live demo are in §4 (known issues). 
 
 ### Demo-hotfixes (landed after Epic 98 close, pre-vacation)
 
-To be filled in by the closing commit block. Grep `git log --oneline origin/main` for commit subjects starting `fix(epic-98-hotfix-*)`.
+| SHA       | Subject                                                                  | BUGs closed        |
+| --------- | ------------------------------------------------------------------------ | ------------------ |
+| `b799af3` | fix(epic-98-hotfix): demo-readiness — 7 live-fire bugs from dogfood      | BUG-2/5/6/7/8/9/10 |
+| `5617856` | docs(epic-98-close): VACATION_HANDOFF.md + daily GH Actions quality gate | (docs only)        |
 
 ---
 
@@ -93,7 +96,7 @@ node apps/cli/dist/index.js destroy --yes <arn-from-apply-output>
 node apps/cli/dist/index.js plan "Create a Lambda function named demo-fn"
 node apps/cli/dist/index.js apply --yes "Create a Lambda function named demo-fn"
 node apps/cli/dist/index.js destroy --yes <arn-from-apply-output>
-# The auto-created IAM exec role needs to be cleaned up separately if BUG-10 not fixed.
+# BUG-10 fixed in b799af3: Lambda IAM exec-role is auto-destroyed with the function.
 ```
 
 ### SNS topic with secure-by-default (2 sec plan, 3 sec apply)
@@ -129,20 +132,21 @@ node apps/mcp-server/dist/index.js  # stdio MCP; connect from Claude Code or sim
 
 Demo-critical items are fixed in hotfix commits. These are items that might still cause friction:
 
-### Fixed in hotfix wave (see CHANGELOG)
+### Fixed in hotfix wave (`b799af3`)
 
-- BUG-5 EIP round-trip
-- BUG-10 Lambda IAM cascade
-- BUG-9 ECS list filter
-- BUG-8 drift --wizard
-- BUG-6 envelope.ok uniformity
+- BUG-2 — account-ID redaction env var shipped (`ASSIGNEE_DEMO_REDACT_ACCOUNT`). **Default OFF** — set `=1` before demo to redact real 12-digit IDs in CLI output; state files keep real ARNs. Current state is surfaced in `assignee doctor --short` and top-level `--help`.
+- BUG-5 — EIP apply→destroy round-trip (was leaking $3.60/mo per orphan)
+- BUG-6 — envelope.ok uniformity across all commands
+- BUG-7 — `optimize` / `reconcile` 60s+ latency (fixed; demo on small account as a precaution)
+- BUG-8 — drift --wizard flag handling
+- BUG-9 — ECS list filter
+- BUG-10 — Lambda IAM exec-role cascade
 
-### Deferred to Epic 99 (mentioned during demo as "planned")
+### Deferred to Epic 99 (mention during demo as "planned")
 
-- BUG-2 — account ID redaction mode. Workaround: set `ASSIGNEE_DEMO_REDACT_ACCOUNT=1` if hotfix landed.
 - BUG-4 — DDB pricing breakdown shows "unavailable" (summary works). Mention: "breakdown is a display issue, summary is authoritative."
-- BUG-7 — `optimize` / `reconcile` can take 60s+ on large accounts. Workaround: demo on a small account, or run in background pre-demo and show pre-canned output.
-- BP-ECS-004 fire-probe unreachable until `AWS::ECS::TaskDefinition` reaches supported.ts. Same for BP-SNS-004 / BP-SNS-003 fire-probes.
+- BP-ECS-004 fire-probe unreachable until `AWS::ECS::TaskDefinition` reaches supported.ts.
+- BP-SNS-004 / BP-SNS-003 fire-probes unreachable until topic-policy type is promoted.
 
 ### LLM non-determinism (can't fully eliminate)
 

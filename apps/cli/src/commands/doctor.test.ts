@@ -748,6 +748,8 @@ describe("runShortDoctor", () => {
     expect(out).toContain("User ARN: arn:aws:iam::111111111111:user/alice");
     expect(out).toMatch(/Region: /);
     expect(out).toContain("Role:     operator");
+    expect(out).toContain("Redact:");
+    expect(out).toContain("ASSIGNEE_DEMO_REDACT_ACCOUNT");
     expect(out).toContain("For full diagnostics");
   });
 

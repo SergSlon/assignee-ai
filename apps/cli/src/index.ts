@@ -76,7 +76,7 @@ program
   .configureHelp({ showGlobalOptions: true })
   .addHelpText(
     "after",
-    `\n${SUPPORTED_TYPES_HINT}\n\n${PATTERNS_HINT}\n\n${EXAMPLES_HINT}`,
+    `\n${SUPPORTED_TYPES_HINT}\n\n${PATTERNS_HINT}\n\n${EXAMPLES_HINT}\n\nDemo / screenshot env vars:\n  ASSIGNEE_DEMO_REDACT_ACCOUNT=1   Redact account IDs in all output (for demos / screenshots)`,
   );
 
 // Propagate the global --verbose flag into ASSIGNEE_LOG_LEVEL so downstream

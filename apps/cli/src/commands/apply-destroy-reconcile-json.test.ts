@@ -382,8 +382,8 @@ describe("applyCommand — --json envelope (Epic 94 N4 / A-14)", () => {
 
   // Epic 98 e98.W5.N4 (Epic 97 B-05): bp_blocked terminal has its own
   // envelope code + detail.practiceIds[]. Pre-N4 this collapsed into
-  // generic APPLY_FAILED; automation couldn't tell "add --force-unsafe"
-  // from "retry with different intent". The typed envelope unlocks
+  // generic APPLY_FAILED; automation couldn't distinguish "rephrase intent"
+  // from "retry as compound plan". The typed envelope unlocks
   // machine-readable branching.
   it("success=false with bp_blocked detail emits BP_BLOCKED code + practiceIds[] (B-05)", async () => {
     mockRunApply.mockResolvedValueOnce({
@@ -408,7 +408,7 @@ describe("applyCommand — --json envelope (Epic 94 N4 / A-14)", () => {
     expect(parsed.ok).toBe(false);
     expect(parsed.error.code).toBe("BP_BLOCKED");
     expect(parsed.error.message).toBe(
-      "Apply blocked by best-practice findings: BP-IGW-001.",
+      "Apply blocked by best-practice findings: BP-IGW-001.\n→ Run `assignee plan --wizard` to remediate interactively, or re-phrase your intent to avoid the violation.\n→ See docs/best-practices.md for rule details.",
     );
     expect(parsed.error.detail.practiceIds).toEqual(["BP-IGW-001"]);
   });
