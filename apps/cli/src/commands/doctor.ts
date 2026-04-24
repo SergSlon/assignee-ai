@@ -222,12 +222,19 @@ export async function runShortDoctor(
   const configPath = findProjectConfig(cwd());
   const configLine = configPath ? `${configPath} (loaded)` : "(none in cwd)";
 
+  const demoRedact = process.env["ASSIGNEE_DEMO_REDACT_ACCOUNT"];
+  const redactLine =
+    demoRedact === "1"
+      ? `ASSIGNEE_DEMO_REDACT_ACCOUNT=1  (demo redaction ACTIVE)`
+      : `ASSIGNEE_DEMO_REDACT_ACCOUNT=<unset>  (demo redaction OFF — real account IDs will appear in output)`;
+
   const lines = [
     `Account:  ${account}`,
     `User ARN: ${arn}`,
     `Region:   ${region}`,
     `Role:     operator (${EnvVar.OPERATOR_ACCESS_KEY})`,
     `Config:   ${configLine}`,
+    `Redact:   ${redactLine}`,
     "",
     "For full diagnostics, run `assignee doctor`.",
     "",

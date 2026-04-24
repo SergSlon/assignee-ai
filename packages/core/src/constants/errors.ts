@@ -74,8 +74,9 @@ export const ErrorCode = {
   // Emitted by the apply orchestrator when the Phase-1 BP gate
   // rejects the plan (blocking-severity findings remain after
   // any interactive fix pass). Distinct from APPLY_FAILED so
-  // automation can decide whether to (a) add `--force-unsafe`,
-  // (b) rephrase the intent, or (c) retry as a compound plan —
+  // automation can decide whether to (a) rephrase the intent,
+  // (b) retry as a compound plan, or (c) run `assignee plan
+  // --wizard` for interactive remediation —
   // the `error.detail.practiceIds[]` carries the specific
   // practice IDs (e.g. `BP-IGW-001`) that blocked.
   BP_BLOCKED: "BP_BLOCKED",

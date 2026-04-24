@@ -61,7 +61,7 @@ export async function handleBpBlocked(
     // `error.detail.practiceIds[]`. Without this, the envelope
     // collapses into the generic APPLY_FAILED with a message that
     // strips the practice IDs — automation can't distinguish
-    // "add --force-unsafe" from "retry with different intent".
+    // "rephrase intent" from "retry as compound plan".
     const blockingIds = residualFindings
       .filter((f) => f.blocking)
       .map((f) => f.practiceId);

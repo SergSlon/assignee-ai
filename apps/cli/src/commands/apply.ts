@@ -205,7 +205,7 @@ function synthesiseFailureError(result: ApplyRunResult): AssigneeError {
         ? failure.practiceIds.join(", ")
         : "an unspecified blocking finding";
     return new AssigneeError(
-      `Apply blocked by best-practice findings: ${idsSummary}.`,
+      `Apply blocked by best-practice findings: ${idsSummary}.\n→ Run \`assignee plan --wizard\` to remediate interactively, or re-phrase your intent to avoid the violation.\n→ See docs/best-practices.md for rule details.`,
       ErrorCode.BP_BLOCKED,
       { alreadyRendered: true },
     );
