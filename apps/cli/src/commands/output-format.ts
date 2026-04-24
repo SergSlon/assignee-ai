@@ -24,6 +24,16 @@ export interface JsonFlagOptions {
 }
 
 /**
+ * When ASSIGNEE_DEMO_REDACT_ACCOUNT=1, replace every 12-digit AWS account ID
+ * that appears in an ARN-like position (followed by ":") with "************".
+ * Only affects CLI display output — state files and provision logs keep real ARNs.
+ */
+export function redactAccountIdIfDemoMode(text: string): string {
+  if (process.env["ASSIGNEE_DEMO_REDACT_ACCOUNT"] !== "1") return text;
+  return text.replace(/\d{12}(?=:)/g, "************");
+}
+
+/**
  * Collapse `--json` + `-o, --output <format>` into a single
  * jsonMode boolean. Mutates the passed options object so
  * `opts.output` reflects the normalised value ("json" when jsonMode,

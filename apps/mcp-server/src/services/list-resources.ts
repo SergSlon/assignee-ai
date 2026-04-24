@@ -26,6 +26,7 @@ import {
 import {
   AssigneeTag,
   DEFAULT_AWS_REGION,
+  defaultMemoryService,
   fetchManagedResources as coreFetchManagedResources,
   requireAssigneeCredentials,
   type ManagedIamRole,
@@ -153,6 +154,7 @@ export async function fetchManagedResources(
       ...(resourceType ? { resourceTypeFilter: resourceType } : {}),
       createdDateFallback: "run-id-tag",
       useFreeTierFallback: false,
+      getDestroyedArns: () => defaultMemoryService.readDestroyedArns(),
       onIamRoleEnumerationError: () => {
         // Long-running MCP: swallow silently (structured log at the
         // tool-handler layer captures the failure). This matches the

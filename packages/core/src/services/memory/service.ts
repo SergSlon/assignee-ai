@@ -185,6 +185,37 @@ export class MemoryService extends FileStore {
     }
   }
 
+  // --- Destroyed ARNs (append-only set, for post-destroy list filtering) ---
+
+  async readDestroyedArns(): Promise<Set<string>> {
+    const [err, raw] = await safeTry(
+      fs.readFile(this.filePath(FileName.DESTROYED_ARNS), "utf-8"),
+    );
+    if (err) return new Set();
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return new Set(parsed as string[]);
+      return new Set();
+    } catch {
+      return new Set();
+    }
+  }
+
+  async appendDestroyedArn(arn: string): Promise<void> {
+    if (!arn) return;
+    await this.ensureDir();
+    const target = this.filePath(FileName.DESTROYED_ARNS);
+    const acquired = await this.acquireLock(target);
+    if (!acquired) return;
+    try {
+      const existing = await this.readDestroyedArns();
+      existing.add(arn);
+      await this.atomicWrite(target, JSON.stringify([...existing], null, 2));
+    } finally {
+      await this.releaseLock(target);
+    }
+  }
+
   // --- Rotation ---
 
   async rotateProvisions(

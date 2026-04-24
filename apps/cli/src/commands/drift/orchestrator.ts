@@ -104,7 +104,7 @@ export async function runDrift(
       region: opts.region,
       checkDurationMs,
     });
-    const jsonOutput = JSON.stringify(report, null, 2) + "\n";
+    const jsonOutput = JSON.stringify({ ok: true, ...report }, null, 2) + "\n";
 
     if (opts.outputFile) {
       await fs.writeFile(opts.outputFile, jsonOutput, "utf-8");

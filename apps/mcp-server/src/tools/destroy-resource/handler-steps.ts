@@ -32,6 +32,7 @@ import {
   MissingAssigneeCredentialsError,
   findProvisionRecord,
   isNonTaggableConstruct,
+  appendDestroyedArn,
   type ExplicitAwsCredentials,
 } from "@assignee/core";
 import {
@@ -297,7 +298,7 @@ export async function dispatchDeleteAndPoll(
 
   // Story 50-5 H-3: persistent audit record for the success path.
   await logDestroyAudit(resolved, { kind: "success" });
-  return successResponse(resolved, "destroyed successfully");
+  return await successResponse(resolved, "destroyed successfully");
 }
 
 /**
@@ -347,14 +348,17 @@ async function handleNotFoundShortCircuit(
     );
   }
   await logDestroyAudit(resolved, { kind: "success" });
-  return successResponse(resolved, "was already deleted (NotFound)");
+  return await successResponse(resolved, "was already deleted (NotFound)");
 }
 
 /** Standard SUCCESS response — used by both the happy path and the NotFound short-circuit. */
-function successResponse(
+async function successResponse(
   resolved: ResolvedResource,
   verb: string,
-): McpToolResponse {
+): Promise<McpToolResponse> {
+  // Record the ARN so fetchManagedResources filters it from list output
+  // while AWS keeps the resource in INACTIVE state (BUG-9).
+  await appendDestroyedArn("", resolved.arn);
   return buildSuccessResponse({
     status: "SUCCESS",
     message: `Resource ${resolved.arn} ${verb}.`,

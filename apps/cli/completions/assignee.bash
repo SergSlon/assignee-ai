@@ -33,7 +33,7 @@ _assignee_completions() {
       COMPREPLY=( $(compgen -W "--yes --pending-window-in-days --recovery-window-in-days --force-delete-without-recovery --output --json" -- "${cur}") )
       ;;
     drift)
-      COMPREPLY=( $(compgen -W "--resource --region --status --exclude --baseline --output --json --output-file --concurrency --detailed" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--resource --region --status --exclude --baseline --output --json --output-file --concurrency --detailed --wizard" -- "${cur}") )
       ;;
     optimize)
       COMPREPLY=( $(compgen -W "--region --output --json --min-savings" -- "${cur}") )

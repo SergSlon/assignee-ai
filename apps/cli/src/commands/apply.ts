@@ -62,6 +62,7 @@ import { resolveIntroContext, formatIntroContext } from "./init.js";
 import { resolveApplyArgs, type ApplyOpts } from "./apply/arg-parser.js";
 import { runApply, type ApplyRunResult } from "./apply/orchestrator.js";
 import { installJsonStderrFilter } from "./json-stderr-filter.js";
+import { redactAccountIdIfDemoMode } from "./output-format.js";
 
 /**
  * Buffering stdout suppressor used when `--output json` is active.
@@ -151,14 +152,18 @@ function installJsonStdoutSuppressor(enabled: boolean): {
   return {
     flushSuccess: (envelope) => {
       restore();
-      const payload = JSON.stringify(envelope, null, 2) + "\n";
+      const payload = redactAccountIdIfDemoMode(
+        JSON.stringify(envelope, null, 2) + "\n",
+      );
       originalWrite.call(process.stdout, payload);
     },
     flushError: (code, message, hint, detail) => {
       restore();
       originalWrite.call(
         process.stdout,
-        serializeErrorEnvelope(code, message, hint, detail),
+        redactAccountIdIfDemoMode(
+          serializeErrorEnvelope(code, message, hint, detail),
+        ),
       );
     },
     restore,

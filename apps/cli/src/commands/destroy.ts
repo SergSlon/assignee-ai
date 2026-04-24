@@ -82,6 +82,7 @@ import {
 import { pickFromMatches } from "./destroy/multi-match-prompt.js";
 import { startSpinner, stopSpinner } from "../utils/display.js";
 import { installJsonStderrFilter } from "./json-stderr-filter.js";
+import { redactAccountIdIfDemoMode } from "./output-format.js";
 
 // ── Re-exports for back-compat (tests + external callers) ─────────────
 export { resourceConfirmationToken } from "./destroy/typed-confirm.js";
@@ -591,14 +592,14 @@ function installJsonStdoutSuppressor(enabled: boolean): {
       restore();
       originalWrite.call(
         process.stdout,
-        JSON.stringify(envelope, null, 2) + "\n",
+        redactAccountIdIfDemoMode(JSON.stringify(envelope, null, 2) + "\n"),
       );
     },
     flushError: (code, message, hint) => {
       restore();
       originalWrite.call(
         process.stdout,
-        serializeErrorEnvelope(code, message, hint),
+        redactAccountIdIfDemoMode(serializeErrorEnvelope(code, message, hint)),
       );
     },
     restore,

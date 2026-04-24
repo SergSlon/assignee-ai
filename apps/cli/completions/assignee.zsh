@@ -86,7 +86,8 @@ _assignee() {
             '--json[Shorthand for --output json]' \
             '--output-file[Write JSON report to file (requires --json)]:file:' \
             '--concurrency[Max parallel drift checks (default 10, max 50)]:n:' \
-            '--detailed[Show all fields including matching ones]'
+            '--detailed[Show all fields including matching ones]' \
+            '--wizard[Run interactive configuration wizard (drift is read-only; aliased to --detailed to show every field).]'
           ;;
         optimize)
           _arguments \

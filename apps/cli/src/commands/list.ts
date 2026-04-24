@@ -30,7 +30,7 @@ import {
   INVALID_RESOURCE_TYPE_CODE,
 } from "./resource-type-filter.js";
 import { installJsonStderrFilter } from "./json-stderr-filter.js";
-import { resolveJsonMode } from "./output-format.js";
+import { resolveJsonMode, redactAccountIdIfDemoMode } from "./output-format.js";
 
 /**
  * Epic 92 Wave 2.c (D-30): emit a single JSON error envelope to stdout
@@ -43,7 +43,9 @@ function writeJsonErrorEnvelope(
   message: string,
   hint?: string,
 ): void {
-  process.stdout.write(serializeErrorEnvelope(code, message, hint));
+  process.stdout.write(
+    redactAccountIdIfDemoMode(serializeErrorEnvelope(code, message, hint)),
+  );
 }
 
 /**
@@ -229,7 +231,11 @@ No --yes flag is required.
               count: resources.length,
               region: resolvedRegion,
             };
-            process.stdout.write(JSON.stringify(envelope, null, 2) + "\n");
+            process.stdout.write(
+              redactAccountIdIfDemoMode(
+                JSON.stringify(envelope, null, 2) + "\n",
+              ),
+            );
             return;
           }
 

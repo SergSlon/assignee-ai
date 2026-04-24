@@ -239,7 +239,7 @@ async function runStatusBody(opts: {
           : filterActionableGaps(data.gaps);
         if (opts.json) {
           process.stdout.write(
-            JSON.stringify({ gaps: reportedGaps }, null, 2) + "\n",
+            JSON.stringify({ ok: true, gaps: reportedGaps }, null, 2) + "\n",
           );
         } else {
           renderBPCoverageGaps(reportedGaps);
@@ -251,7 +251,9 @@ async function runStatusBody(opts: {
       }
 
       if (opts.json) {
-        process.stdout.write(JSON.stringify(data, null, 2) + "\n");
+        process.stdout.write(
+          JSON.stringify({ ok: true, ...data }, null, 2) + "\n",
+        );
         return;
       }
 
@@ -320,6 +322,7 @@ async function runStatusBody(opts: {
       process.stdout.write(
         JSON.stringify(
           {
+            ok: true,
             ...statusData,
             ...(anomalies.length > 0 ? { costAnomalies: anomalies } : {}),
           },

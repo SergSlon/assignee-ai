@@ -59,6 +59,7 @@ import { resolvePlanArgs, type PlanOpts } from "./plan/arg-parser.js";
 import { renderDiscoveryBlock } from "./plan/discovery.js";
 import { runPlan } from "./plan/orchestrator.js";
 import { installJsonStderrFilter } from "./json-stderr-filter.js";
+import { redactAccountIdIfDemoMode } from "./output-format.js";
 
 /**
  * Buffering stdout interceptor used when `--output json` is active.
@@ -136,15 +137,20 @@ function installJsonStdoutInterceptor(enabled: boolean): {
         // JSON value on stdout.
         originalWrite.call(
           process.stdout,
-          serializeErrorEnvelope(
-            "PLAN_FAILED",
-            "Plan generation did not produce any output.",
-            "See stderr for the human-readable error message, or run `assignee --verbose plan <intent>` to trace.",
+          redactAccountIdIfDemoMode(
+            serializeErrorEnvelope(
+              "PLAN_FAILED",
+              "Plan generation did not produce any output.",
+              "See stderr for the human-readable error message, or run `assignee --verbose plan <intent>` to trace.",
+            ),
           ),
         );
         return;
       }
-      originalWrite.call(process.stdout, serializePlanEnvelope(payloads));
+      originalWrite.call(
+        process.stdout,
+        redactAccountIdIfDemoMode(serializePlanEnvelope(payloads)),
+      );
     },
     flushError: (code, message, hint) => {
       // On error the user may or may not have also produced plan
@@ -155,7 +161,7 @@ function installJsonStdoutInterceptor(enabled: boolean): {
       restore();
       originalWrite.call(
         process.stdout,
-        serializeErrorEnvelope(code, message, hint),
+        redactAccountIdIfDemoMode(serializeErrorEnvelope(code, message, hint)),
       );
     },
     restore,

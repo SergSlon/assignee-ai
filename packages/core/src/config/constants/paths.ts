@@ -23,6 +23,7 @@ export const FileName = {
   PROVISIONS: "provisions.json",
   FAILURES: "failures.json",
   PATTERNS: "patterns.json",
+  DESTROYED_ARNS: "destroyed-arns.json",
   CONFIG: "config.yaml",
   ORG_POLICY: "org-policy.yaml",
 } as const;

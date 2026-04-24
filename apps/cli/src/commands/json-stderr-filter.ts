@@ -76,6 +76,9 @@ const HUMAN_ERROR_PREFIXES: readonly string[] = [
   // D-12: Ambiguous-shorthand WARN emitted by
   // `apps/cli/src/commands/resource-type-filter.ts`.
   'Shorthand "',
+  // Progress lines emitted every ~5 s during long scans. Human-readable
+  // only; JSON mode must stay stdout-only (W5.N3 contract).
+  "[INFO] ",
 ];
 
 /**

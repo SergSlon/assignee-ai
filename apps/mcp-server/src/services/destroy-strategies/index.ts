@@ -18,6 +18,7 @@ import {
   slowDeleteStrategies,
   ec2InternetGatewayStrategy,
   ec2RouteTableStrategy,
+  lambdaFunctionStrategy,
   sqsQueueStrategy,
   dynamodbTableStrategy,
 } from "@assignee/core";
@@ -33,6 +34,7 @@ export function createDestroyRegistry(): DestroyStrategyRegistry {
   // Custom-logic strategies — now sourced from @assignee/core (Story 50-4).
   registry.register(ec2InternetGatewayStrategy);
   registry.register(ec2RouteTableStrategy);
+  registry.register(lambdaFunctionStrategy);
   registry.register(sqsQueueStrategy);
   registry.register(dynamodbTableStrategy);
 

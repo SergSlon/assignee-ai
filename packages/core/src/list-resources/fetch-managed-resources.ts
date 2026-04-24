@@ -87,6 +87,14 @@ export interface FetchManagedResourcesOptions {
    */
   useFreeTierFallback?: boolean;
   /**
+   * Returns the set of ARNs that have been successfully destroyed.
+   * Resources in this set are filtered from list output while AWS
+   * keeps them in INACTIVE state (e.g. ECS clusters linger ~1h after
+   * deletion). Injected by callers so core does not depend on the
+   * MemoryService directly.
+   */
+  getDestroyedArns?: () => Promise<Set<string>>;
+  /**
    * Called when IAM-role enumeration throws. CLI writes a stderr
    * warning; MCP logs via its structured logger. Defaults to a
    * stderr write for parity with the original CLI behavior.
@@ -118,6 +126,7 @@ export async function fetchManagedResources(
     createdDateFallback = "na",
     useFreeTierFallback = false,
     onIamRoleEnumerationError,
+    getDestroyedArns,
   } = opts;
 
   const { costMap, timestampMap } = loadProvisionData();
@@ -251,7 +260,24 @@ export async function fetchManagedResources(
     }
   }
 
-  return resourceTypeFilter
-    ? resources.filter((r) => r.resourceType === resourceTypeFilter)
+  // ── Destroyed-ARN filter (BUG-9: ECS INACTIVE ~1h post-delete) ────
+  // AWS keeps the managed-by tag on deleted resources for up to ~1h,
+  // so RGTA still returns them. Filter any ARN that the destroy path
+  // recorded as successfully deleted.
+  let destroyedArns: Set<string> = new Set();
+  if (getDestroyedArns) {
+    try {
+      destroyedArns = await getDestroyedArns();
+    } catch {
+      // Degraded: destroyed-arns.json unreadable — show everything.
+    }
+  }
+
+  const visible = destroyedArns.size
+    ? resources.filter((r) => !r.arn || !destroyedArns.has(r.arn))
     : resources;
+
+  return resourceTypeFilter
+    ? visible.filter((r) => r.resourceType === resourceTypeFilter)
+    : visible;
 }

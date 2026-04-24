@@ -53,7 +53,13 @@ export async function runReconcile(opts: ReconcileOpts): Promise<void> {
 
   // Run drift detection with resolved desiredState (same as drift.ts)
   const results: DriftResult[] = [];
-  for (const provision of filtered) {
+  const total = filtered.length;
+  let lastProgressMs = Date.now();
+  const PROGRESS_INTERVAL_MS = 5_000;
+  const progressStep = Math.max(1, Math.ceil(total / 10));
+
+  for (let i = 0; i < filtered.length; i++) {
+    const provision = filtered[i]!;
     const desiredState = await resolveDesiredState(provision.resourceArn);
     const driftResult = await detector.checkResource(
       provision.resourceType,
@@ -61,6 +67,24 @@ export async function runReconcile(opts: ReconcileOpts): Promise<void> {
       desiredState,
     );
     results.push(driftResult);
+
+    const done = i + 1;
+    const nowMs = Date.now();
+    if (
+      done % progressStep === 0 ||
+      nowMs - lastProgressMs >= PROGRESS_INTERVAL_MS
+    ) {
+      const eta =
+        done > 0
+          ? Math.round(
+              (((nowMs - lastProgressMs) / done) * (total - done)) / 1000,
+            )
+          : "?";
+      process.stderr.write(
+        `[INFO] Scanning ${total} resources (${done} done, ETA ${eta}s)\n`,
+      );
+      lastProgressMs = Date.now();
+    }
   }
 
   const drifted = results.filter((r) => r.status === DriftStatus.DRIFTED);
