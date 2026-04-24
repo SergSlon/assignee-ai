@@ -12,6 +12,174 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 99 — whole-project cross-expert review remediation (2026-04-24)
+
+Six-lane exhaustive cross-expert review of the project at HEAD `6fca42e`
+(Epic 98 + demo-hotfix + pre-demo polish + CI unblock already landed).
+Reviewers (all Opus-4-7[1M]): Mary analyst, Winston architect, Quinn QA,
+Murat TEA, Paige tech-writer, Bob SM — returning 200 findings across
+6 lanes, 4 remediation waves, 7 commits on main, and Contract H + Contract I
+landing as compile-time parity guards for probe-reachability and
+first-class-promotion coverage.
+
+**Scope closed**: ~95 findings (all BLOCKER + all HIGH + ~33 pivotal MED);
+~105 remaining (LOWs + non-pivotal MEDs) deferred to
+`_bmad-output/planning-artifacts/deferred-backlog.md` Epic 100+ bucket with
+explicit rationale per cluster.
+
+#### W1 — BLOCKER wave (`e5906d4`)
+
+Four parallel Sonnet lanes + straggler + coverage-patch. 22 files, +407 / -189.
+Closes: 4 BLOCKER count-drift (13 nodes → 14, 37 types → 38, 10 patterns → 11,
+186 BP rules → 185 normalized across every docs site); BLOCKER ghost commands
+(`assignee cost` / `destroy --all` / `--include-iam` / `--dry-run` / `--resources` /
+`--force-unsafe` stripped from 6 docs); BLOCKER MCP-server `npx -y` ghost-install
+replaced with source-checkout pre-release notice; account-ID hardening
+(VACATION_HANDOFF.md scrubbed, `runShortDoctor` wired through
+`redactAccountIdIfDemoMode`, `.husky/pre-commit` grep guard with
+self-match protection); sprint-status hygiene sweep (Epic 48 closed,
+Epic 21 `skipped` added, Epic 99 block added, `deferred-intentional`
+status introduced); 11 missing CHANGELOG Epic subsections backfilled
+(49 / 50 / 68-72 / 89 / 93 / 95 / 97).
+
+#### W2 — HIGH wave (`fa3f69d`) + citation-lint hotfix (`a96f69a`)
+
+Five parallel Sonnet lanes + coordinator VACATION_HANDOFF.md removal. 16 files
++976 / -543, 1 deletion, 2 new test files.
+
+**CI gate expansion**: 4 pre-push lints now run in CI (`lint:barrels` /
+`lint:shims` / `doc-lint` / `citation-lint`) — closes the `--no-verify`
+bypass class. Node matrix expanded to Node 20 + Node 22 — first time
+`engines.node >= 20.11` is CI-verified.
+
+**Probe integrity + Contract H**: 22 `known_tripwires` entries seeded
+(41 → 23 empty blocks), 3 `must_fail_pre_fix: true` fire-probe stubs,
+duplicate BP-S3-011 deleted, 8 `parent_reachable: true` opt-ins with
+non-empty rationale, **Contract H (probe-reachability)** added in
+`shipped-wired-contract.test.ts` enforcing every probe's BP rule
+target-type is in `SUPPORTED_TYPES_ARRAY` or explicitly opts out. Harness
+tweak: TRIP separate from FAIL.
+
+**AWS SDK client lifecycle**: 5 leak sites fixed (CloudFront / DynamoDB /
+EFS / S3 destroy strategies + `marker-resolver.ts` STSClient). Brief had
+wrong file list; Lane 2c caught it, fixed the real leaks.
+
+**ErrorCode + rule-runner**: `ErrorCode.INVALID_DESIRED_STATE` enum
+member + `rule-runner.ts` default branch now throws on unknown check_type
+(was silent no-op). 2 new test files pin the drift-guards.
+
+**Deferred-backlog SSO**: NEW
+`_bmad-output/planning-artifacts/deferred-backlog.md` (180 lines, 6 buckets,
+50+ entries) replaces the 6 scattered homes for deferred items.
+
+**VACATION_HANDOFF.md removal**: archived to `_bmad-output/_archive/
+reports/VACATION_HANDOFF-2026-04-24.md` + `git rm`.
+
+Hotfix `a96f69a`: W2a's new CI citation-lint step caught 14 pre-existing
+broken citations reaching outside the repo (`../wiki/competitors/*` +
+`_bmad-output/.../L10-moat.md`). 3 docs rewritten to strip
+`[label](path)` markdown-link syntax that climbed past repo root.
+Validates `feedback_citation_lint_guardrail`'s warning about the
+`--no-verify` bypass class.
+
+#### W3 — MED methodology wave (`93a78ad`)
+
+Five parallel Sonnet lanes. 31 files +1665 / -75, 9 new files.
+
+**NFR floors**: NEW `startup-percentile.test.ts` + `memory-baseline.test.ts`
+under `RUN_PERF=1` gate. Startup p50=838ms / p95=854ms / p99=868ms locally;
+thresholds p95 < 1300ms / p99 < 1400ms carry 1.5× headroom for CI.
+Memory heap stability: ±20% bound across 10 synthetic invocations.
+
+**Flake policy**: `retry: 1` in all 4 `vitest.config.ts`. NEW
+`docs/explanation/flake-policy.md` (125 lines) — ≤ 0.1% flake-rate SLO,
+quarantine process, `feedback_never_weaken_tests` invariant reinforced.
+
+**checkBudget rename + CI-multiplier guard**: disambiguated two
+`checkBudget` functions — `time-budget.ts#checkBudget` →
+`checkTimingBudget`, `budget-guard.ts#checkBudget` →
+`checkMonthlyCostBudget`. NEW `apps/cli/scripts/lint-ci-multiplier.mjs`
+fails any test importing `checkTimingBudget`/`checkTimingsAgainstBudgets`
+without `vi.stubEnv("CI")` — wired into pre-push + CI.
+
+**Diátaxis scaffolding**: 4 quadrant README indexes
+(`docs/tutorials/` + `docs/reference/` + `docs/how-to/` +
+`docs/explanation/`). Existing doc-moves deferred to Epic 100+ as a
+dedicated citation-lint-gated subwave.
+
+**PolicyContext discriminator**: NEW
+`packages/best-practices/src/evaluate/policy-context.ts` with 3-kind
+discriminator (trust / identity / resource) + `derivePolicyContext()` for
+20+ AWS resource-policy types. `wildcard-principal-no-condition` now
+rejects trivially-permissive conditions like
+`Condition:{StringLike:{aws:SourceAccount:"*"}}` via
+`hasMeaningfulConditionKey()` with `MEANINGFUL_CONDITION_KEYS` allowlist;
+`cross-account-no-external-id` gated to trust-context only (no more
+spurious fires on resource policies). +40 tests.
+
+#### W4 — MED structural wave (`dcccfc7`)
+
+Three parallel Sonnet lanes + DDB regex reviewer follow-up. 16 files
++2618 / -35, 3 new files.
+
+**Plan-time validators × 8**: NEW
+`packages/core/src/graph/nodes/validate-desired-state/name-validators.ts`
+(+ 9th for KMS alias ready for future promotion): Lambda / DynamoDB /
+SecurityGroup / IAM-Role / RDS / SQS / SNS / KMS-alias / ECR. 116 new
+integration-style tests invoking `validateDesiredStateNode` end-to-end.
+Registry dispatch pattern — new types just register.
+
+**Partition-aware managed-policy ARNs**: `awsManagedPolicyArn(partition, path)`
+helper with `/^aws(?:-[a-z]+)*$/` validation. NEW
+`rewriteManagedPolicyArnsForPartition()` in `compound-helpers.ts` runs in
+`compound-plan.ts` before CCAPI dispatch. 5 pattern templates migrated to
+`_PATH` suffix constants + runtime rewrite — GovCloud / China / ISO
+partitions now work end-to-end. Legacy full-ARN constants retained with
+`@deprecated` JSDoc.
+
+**Contract I — first-class-promotion 8-point parity**: added to
+`shipped-wired-contract.test.ts`. Iterates `SUPPORTED_TYPES_ARRAY` × 4
+audit surfaces (bp-all-rules / bp-auto-fix / compound-provisioning /
+apply-mode). First-run 95-type gap inventory: 6 + 21 + 32 + 36 missing
+— all opt-outed with 4-category rationale + 5 deferred-backlog rows
+(V1-16..V1-20). From here forward, unchecked coverage gaps are impossible:
+stale-entry guard enforces the ratchet.
+
+Reviewer follow-up: DDB validator regex
+`/^[a-zA-Z0-9_.\\-]+$/` → `/^[a-zA-Z0-9_.-]+$/` (first `\\` allowed
+literal backslash through the character class).
+
+#### Cumulative impact
+
+- 7 main-branch commits (`72777fe` → `dcccfc7`).
+- ~95 findings closed across BLOCKER / HIGH / MED tiers.
+- 3 new compile-time parity guards: **Contract H** (probe-reachability),
+  **Contract I** (first-class-promotion), completing the A-I set in
+  `shipped-wired-contract.test.ts`.
+- CI now Node 20 + 22 matrix with 5-lint chain (barrels + shims + doc-lint +
+  citation-lint + ci-multiplier).
+- NFR floor installed (p95/p99/memory) under `RUN_PERF=1`.
+- `retry: 1` flake quarantine discipline across all 4 packages.
+- ~105 findings deferred to `deferred-backlog.md` Epic 100+ bucket with
+  per-cluster rationale.
+- Zero real-account-ID leaks in tracked files (pre-commit grep guard).
+
+#### Review methodology
+
+Followed CLAUDE.md §"Review loop: collect all, then plan" —
+COLLECT → SYNTHESIZE → PLAN → FIX → REVIEW → OTHER-CHECKS. 6 Opus
+reviewers collecting 200 findings exhaustively, zero top-N filtering;
+synthesizer produced `epic-99-scorecard.md` + `findings.yaml` + `plan.md` +
+6 lane reports; planner clustered into 5 waves with explicit
+deferred-backlog; parallel Sonnet fix workers with exclusive file
+ownership; Opus adversarial reviewer at each wave-close. Model cascade
+validated: Opus lead + Sonnet workers + Opus reviewer.
+
+See `_bmad-output/planning-artifacts/epic-99-{scorecard,plan,findings.yaml}.md`
+
+- `epic-99-lane-reports/{mary,winston,quinn,murat,paige,bob}.md` for the
+  full review record.
+
 ### Epic 98 — 17 stories closing Epic 97's 84 findings, 22 commits, all tripwires retired (2026-04-23)
 
 First epic run on the `.claude/agents/*.md` subagent-definition harness (one Opus lead + Sonnet-4.6 lane workers + Opus read-only reviewer) with shared-task-list self-claim — replacing the earlier per-story SendMessage dispatch pattern. Generator-evaluator split cut reviewer bounces from per-session pollution to concrete disk-vs-claim drift. All 17 stories reviewer-gated, all Epic 97 forcing-flip tripwires retired, `pre-close-probes --tripwire-only` reports `Total: 0`.
