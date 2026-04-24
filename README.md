@@ -147,7 +147,7 @@ See [docs/aws-bootstrap.md](docs/aws-bootstrap.md) for the IAM policy setup (ope
 
 - **Not multi-cloud.** AWS-only by design (Epic 13 deferred; see [project status](#project-status)).
 - **Not a Terraform replacement for platform teams.** If you already run Terraform with Spacelift/env0/HCP and want an AI layer, use their native MCP/NL tooling — Assignee is for the operator who does not want to own Terraform state at all.
-- **Not a Kubernetes operator.** See [kagent](../wiki/competitors/kagent.md) for K8s day-2 ops.
+- **Not a Kubernetes operator.** See the local `wiki/competitors/kagent.md` notes (not in this repo) for K8s day-2 ops.
 - **Not for HCL-fluent platform engineers** who already love Cursor + the Terraform MCP.
 
 ## Who this is for — "Mara, the solo / small-team AWS operator"
@@ -238,17 +238,17 @@ Discovery shortcuts live under `plan --help`: supported resource types, compound
 
 > Reads top-down: the upper rows (code artifact, BP rules on free path) identify hard requirements — if "no code file to maintain" and "rules on the free path" are non-negotiable, Assignee is the only column that satisfies both. The lower rows (cloud coverage, runtime dependency) are the honest trade-offs — AWS-only, CLI on your own box. Pick the column whose row-by-row fit matches your constraints, not whichever shouts loudest.
 
-Nine direct / adjacent competitors — eight archived in the [workspace wiki](../wiki/competitors/) plus Crossplane (external link):
+Nine direct / adjacent competitors — eight archived in the local `wiki/competitors/` notes (not in this repo) plus Crossplane (external link):
 
-- **vs [kagent](../wiki/competitors/kagent.md)** — kagent runs day-2 operations and observability INSIDE a Kubernetes cluster (Helm-installed controller, kubectl/helm/istioctl/prometheus-query tools). It diagnoses and reconciles existing workloads; it is not an IaC provisioner. Assignee provisions AWS primitives FROM zero, no cluster required. Pick kagent for K8s reconciliation; pick Assignee for greenfield AWS.
-- **vs [Pulumi AI / Neo](../wiki/competitors/pulumi-ai.md)** — Pulumi Neo writes Pulumi code in your language of choice; you still maintain a stack and a state file (local or Pulumi Cloud). Neo ships in the Team tier ($40/mo per seat at time of writing); CrossGuard policy-as-code is a separate SKU. Assignee writes nothing — resources live in your AWS account, tagged, with no source file to keep in sync, and all 185 BP rules ship on the free path.
-- **vs [Terraform + Claude/Cursor](../wiki/competitors/claude-writes-terraform.md)** — for the HCL-fluent engineer who already loves the Terraform MCP + Cursor, that combo is excellent and Assignee does not compete. Assignee targets the engineer who does not want to own HCL.
-- **vs [Terraform AI (HCP + AI)](../wiki/competitors/terraform-ai.md)** — HCP Terraform's AI features (Copilot, plan explain) still produce HCL and a state file on the backend. Sentinel policy is a paid tier. Assignee bundles 185 BP rules on the free path.
-- **vs [CDK + Amazon Q](../wiki/competitors/cdk-ai.md)** — Q Developer's Console-to-Code generates CDK; you still do `cdk bootstrap` and `cdk deploy` and maintain TypeScript or Python. cdk-nag (an open-source AWS-maintained add-on) brings rulesets (AWS Solutions, HIPAA, NIST, PCI) but must be wired in separately and operates on synthesized templates, not on an intent. Different modality.
+- **vs kagent** (`wiki/competitors/kagent.md` in the workspace wiki) — kagent runs day-2 operations and observability INSIDE a Kubernetes cluster (Helm-installed controller, kubectl/helm/istioctl/prometheus-query tools). It diagnoses and reconciles existing workloads; it is not an IaC provisioner. Assignee provisions AWS primitives FROM zero, no cluster required. Pick kagent for K8s reconciliation; pick Assignee for greenfield AWS.
+- **vs Pulumi AI / Neo** (`wiki/competitors/pulumi-ai.md` in the workspace wiki) — Pulumi Neo writes Pulumi code in your language of choice; you still maintain a stack and a state file (local or Pulumi Cloud). Neo ships in the Team tier ($40/mo per seat at time of writing); CrossGuard policy-as-code is a separate SKU. Assignee writes nothing — resources live in your AWS account, tagged, with no source file to keep in sync, and all 185 BP rules ship on the free path.
+- **vs Terraform + Claude/Cursor** (`wiki/competitors/claude-writes-terraform.md` in the workspace wiki) — for the HCL-fluent engineer who already loves the Terraform MCP + Cursor, that combo is excellent and Assignee does not compete. Assignee targets the engineer who does not want to own HCL.
+- **vs Terraform AI (HCP + AI)** (`wiki/competitors/terraform-ai.md` in the workspace wiki) — HCP Terraform's AI features (Copilot, plan explain) still produce HCL and a state file on the backend. Sentinel policy is a paid tier. Assignee bundles 185 BP rules on the free path.
+- **vs CDK + Amazon Q** (`wiki/competitors/cdk-ai.md` in the workspace wiki) — Q Developer's Console-to-Code generates CDK; you still do `cdk bootstrap` and `cdk deploy` and maintain TypeScript or Python. cdk-nag (an open-source AWS-maintained add-on) brings rulesets (AWS Solutions, HIPAA, NIST, PCI) but must be wired in separately and operates on synthesized templates, not on an intent. Different modality.
 - **vs [Crossplane](https://www.crossplane.io/)** — Crossplane is a Kubernetes control plane: you run a cluster, install provider CRDs (AWS, GCP, Azure), and author Compositions / Claims in YAML. Excellent for platform teams who already run K8s and want a control-loop for infrastructure. Assignee requires no cluster and targets operators who do not want one.
-- **vs [SST Ion](../wiki/competitors/sst.md)** — SST is TypeScript infrastructure-as-code for serverless app developers. Assignee is intent-as-infrastructure for operators — different category, different audience.
-- **vs [Nitric](../wiki/competitors/nitric.md)** — Nitric is code-defines-infra (TypeScript/Python), multi-cloud target. Assignee is English-defines-provisioning, AWS-only, with no code artifact.
-- **vs [Wing](../wiki/competitors/wing.md)** — Wing (shut down April 9, 2025) was a new IaC language. Included here for completeness; no current comparison.
+- **vs SST Ion** (`wiki/competitors/sst.md` in the workspace wiki) — SST is TypeScript infrastructure-as-code for serverless app developers. Assignee is intent-as-infrastructure for operators — different category, different audience.
+- **vs Nitric** (`wiki/competitors/nitric.md` in the workspace wiki) — Nitric is code-defines-infra (TypeScript/Python), multi-cloud target. Assignee is English-defines-provisioning, AWS-only, with no code artifact.
+- **vs Wing** (`wiki/competitors/wing.md` in the workspace wiki) — Wing (shut down April 9, 2025) was a new IaC language. Included here for completeness; no current comparison.
 
 Short answer: if you want a file to commit, pick any of the above. If you want a running AWS resource and a memory record, pick Assignee.
 

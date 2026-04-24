@@ -151,8 +151,8 @@ re-tags a resource, or IAM permissions get rotated. Drift detection
 (compare live state against the desired-state hash in the provision
 record) + continuous reconciliation (auto-revert or alert) is a
 per-resource-hour billable service. It's also the primary answer to
-kagent's day-2 operational story (see the
-[L10 review § Kagent delta](../../../_bmad-output/planning-artifacts/_archive/research/epic-50/L10-moat.md)).
+kagent's day-2 operational story (see the Epic 50 L10 moat analysis at
+`_bmad-output/planning-artifacts/_archive/research/epic-50/L10-moat.md` in the workspace planning archive).
 
 ### Private BP-rule libraries
 
@@ -199,5 +199,5 @@ Two reasons:
   that unlocks the data-moat SaaS bet.
 - [`contributing-a-bp-rule.md`](./contributing-a-bp-rule.md) — the
   contribution on-ramp that community-rule network effects depend on.
-- [Epic 50 L10 review](../../../_bmad-output/planning-artifacts/_archive/research/epic-50/L10-moat.md)
+- Epic 50 L10 review (at `_bmad-output/planning-artifacts/_archive/research/epic-50/L10-moat.md` in the workspace planning archive)
   — the strategic analysis this split implements.
