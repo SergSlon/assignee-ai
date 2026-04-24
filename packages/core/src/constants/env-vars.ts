@@ -87,14 +87,9 @@ export const EnvVar = {
    */
   ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS: "ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS",
 
-  // ── Remote MCP opt-in (supply-chain gate) ────────────────────
-  /**
-   * When set to exactly `"1"`, the CLI adds the remote
-   * `knowledge-mcp.global.api.aws` server to the MCP config at
-   * startup. The remote server executes code fetched over the
-   * network at runtime, so it is OFF by default and users must
-   * explicitly opt in. Any value other than `"1"` leaves it
-   * disabled. @see config/mcp-servers.ts
-   */
-  ASSIGNEE_ENABLE_REMOTE_MCP: "ASSIGNEE_ENABLE_REMOTE_MCP",
+  // `ASSIGNEE_ENABLE_REMOTE_MCP` was previously defined here to gate the
+  // opt-in remote knowledge MCP server. REMOVED per acquisition-DD L4-S01
+  // (2026-04-24): fetch-and-execute of unpinned remote Python was
+  // RCE-as-a-feature-flag; the opt-in surface itself was the vulnerability.
+  // @see config/mcp-servers.ts for the removal rationale.
 } as const;

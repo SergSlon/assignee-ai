@@ -303,24 +303,50 @@ describe("getOptionalMcpServerConfigs", () => {
     expect(Object.keys(configs)).toHaveLength(0);
   });
 
-  // ── Remote knowledge MCP server opt-in (H2) ─────────────────────────────
+  // ── Remote knowledge MCP server retired (acquisition-DD L4-S01) ─────────
+  // The previously opt-in remote `knowledge-mcp.global.api.aws` server was
+  // REMOVED on 2026-04-24 because the opt-in surface itself was the vuln
+  // (RCE via unpinned remote Python fetch-and-execute). These tests lock in
+  // the removal — the env var must now be a no-op regardless of its value.
+
   it("does NOT include the remote knowledge server by default", () => {
     const configs = getOptionalMcpServerConfigs();
     expect(configs[McpServerName.KNOWLEDGE]).toBeUndefined();
   });
 
-  it("includes the remote knowledge server only when ASSIGNEE_ENABLE_REMOTE_MCP=1", () => {
-    // Tier C: dropped redundant toBeDefined() — the args.join check
-    // fails naturally if undefined
+  it("IGNORES ASSIGNEE_ENABLE_REMOTE_MCP=1 (remote knowledge server removed per L4-S01)", () => {
+    // Regression guard for the acquisition-DD fix. Setting the retired
+    // env var must NOT re-enable the remote fetch-and-execute path.
     process.env["ASSIGNEE_ENABLE_REMOTE_MCP"] = "1";
     const configs = getOptionalMcpServerConfigs();
-    const knowledge = configs[McpServerName.KNOWLEDGE]!;
-    expect(knowledge.args.join(" ")).toContain("knowledge-mcp.global.api.aws");
+    expect(configs[McpServerName.KNOWLEDGE]).toBeUndefined();
   });
 
-  it("does NOT include the remote knowledge server when ASSIGNEE_ENABLE_REMOTE_MCP is a value other than '1'", () => {
+  it("IGNORES ASSIGNEE_ENABLE_REMOTE_MCP with any other value", () => {
     process.env["ASSIGNEE_ENABLE_REMOTE_MCP"] = "true"; // NOT "1"
     const configs = getOptionalMcpServerConfigs();
     expect(configs[McpServerName.KNOWLEDGE]).toBeUndefined();
+  });
+
+  it("NEVER emits a remote URL to an MCP server args array (no fetch-exec surface)", () => {
+    // Belt-and-braces: even if a future change re-introduces a knowledge
+    // server, this asserts nothing in the spawned config args contains the
+    // old remote-execution endpoint. Catches accidental reintroduction.
+    for (const envValue of ["1", "true", "yes", undefined] as const) {
+      if (envValue === undefined)
+        delete process.env["ASSIGNEE_ENABLE_REMOTE_MCP"];
+      else process.env["ASSIGNEE_ENABLE_REMOTE_MCP"] = envValue;
+      setReaderEnv();
+      setAuditorEnv();
+      const configs = {
+        ...getMcpServerConfigs(),
+        ...getOptionalMcpServerConfigs(),
+      };
+      for (const config of Object.values(configs)) {
+        expect(config.args.join(" ")).not.toContain(
+          "knowledge-mcp.global.api.aws",
+        );
+      }
+    }
   });
 });
