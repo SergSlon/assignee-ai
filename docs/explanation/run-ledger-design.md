@@ -56,11 +56,11 @@ get-resources --tag-filters Key=assignee-run-id,Values=<uuid>`). No
   migrate to Terraform or Pulumi in a single
   `aws resourcegroupstaggingapi` call, without exporting a proprietary
   state file. This is explicitly a positive trust signal, documented in
-  the [Epic 50 L10 review](../../../_bmad-output/planning-artifacts/_archive/research/epic-50/L10-moat.md).
+  the Epic 50 L10 review (at `_bmad-output/planning-artifacts/_archive/research/epic-50/L10-moat.md` in the workspace planning archive).
 
 ### Workflow-stickiness goals
 
-The [L10 moat review](../../../_bmad-output/planning-artifacts/_archive/research/epic-50/L10-moat.md)
+The L10 moat review (at `_bmad-output/planning-artifacts/_archive/research/epic-50/L10-moat.md` in the workspace planning archive)
 identifies the flip side: near-zero switching cost is fatal for
 retention. The run-ledger is the one piece of infrastructure that
 creates _workflow_ stickiness without _data_ stickiness — the user
