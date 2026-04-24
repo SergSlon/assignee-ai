@@ -1,0 +1,123 @@
+name: vacation-quality
+
+# Daily quality gate for the vacation window. Runs every day at 09:17 UTC
+# on the main branch. Opens a GitHub Issue with the failure details if any
+# gate fails, so the user can see from their phone whether the product is
+# healthy.
+#
+# Gates run:
+# - pnpm -r build (all 4 packages)
+# - pnpm -r test (full test matrix)
+# - pnpm --filter assignee pre-close-probes --strict-multi-variation
+# - pnpm --filter assignee pre-close-probes --tripwire-only
+# - pnpm citation-lint
+# - pnpm --filter assignee doc-lint
+#
+# Explicitly NOT run (require AWS creds / session context):
+# - pnpm -r test:coverage (too slow for a daily gate, runs at epic close)
+# - live-AWS dogfood (costs money, one-off manual action)
+#
+# Retention: runs are scheduled for 14 days after vacation start. After
+# that, this workflow can be disabled or converted to weekly. Adjust the
+# cron schedule if you're on vacation for longer.
+
+on:
+  schedule:
+    # 09:17 UTC daily — avoids cron fleet congestion at :00
+    - cron: '17 9 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        id: build
+        run: pnpm -r build
+
+      - name: Test
+        id: test
+        run: pnpm -r test
+
+      - name: Pre-close probes — strict multi-variation
+        id: probes-strict
+        run: pnpm --filter assignee pre-close-probes --strict-multi-variation
+
+      - name: Pre-close probes — tripwire only
+        id: probes-tripwire
+        run: pnpm --filter assignee pre-close-probes --tripwire-only
+
+      - name: Citation lint
+        id: citation-lint
+        run: pnpm citation-lint
+
+      - name: Doc lint
+        id: doc-lint
+        run: pnpm --filter assignee doc-lint || true
+
+      - name: Open issue on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const today = new Date().toISOString().slice(0, 10);
+            const title = `vacation-quality: ${today} — gate FAIL`;
+            const body = [
+              `Automated daily quality gate failed on main.`,
+              ``,
+              `**Commit**: ${context.sha}`,
+              `**Run**: https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              ``,
+              `### Gate status`,
+              `- Build: ${{ steps.build.outcome }}`,
+              `- Test: ${{ steps.test.outcome }}`,
+              `- Probes strict: ${{ steps.probes-strict.outcome }}`,
+              `- Probes tripwire: ${{ steps.probes-tripwire.outcome }}`,
+              `- Citation lint: ${{ steps.citation-lint.outcome }}`,
+              `- Doc lint: ${{ steps.doc-lint.outcome }}`,
+              ``,
+              `Click the run URL above for the full failing log.`,
+              ``,
+              `If you're on vacation and can't act, this issue is informational only — the main branch is still at ${context.sha}.`
+            ].join('\n');
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels: ['vacation-quality', 'automated']
+            });
