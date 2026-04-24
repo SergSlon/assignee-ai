@@ -25,7 +25,9 @@ import { parseMarker } from "../../config/marker-tokens.js";
 import {
   AwsServicePrincipal,
   AwsManagedPolicy,
+  awsManagedPolicyArn,
 } from "../../config/aws-arns.js";
+import { rewriteManagedPolicyArnsForPartition } from "../../graph/nodes/plan-generator/compound-helpers.js";
 
 /**
  * Build a registry in the canonical registration order defined in
@@ -127,7 +129,7 @@ describe("websocketApiPattern — structure", () => {
 describe("websocketApiPattern — marker token wiring", () => {
   const opts = websocketApiPattern.defaultOptions;
 
-  it("IAM Role uses Lambda trust policy + PowerUserAccess boundary", () => {
+  it("IAM Role uses Lambda trust policy + PowerUserAccess boundary (commercial partition)", () => {
     const role = opts[R.IAM_EXECUTION_ROLE] as Record<string, unknown>;
     const trust = role["AssumeRolePolicyDocument"] as {
       Statement: Array<{ Principal: { Service: string } }>;
@@ -136,8 +138,34 @@ describe("websocketApiPattern — marker token wiring", () => {
       AwsServicePrincipal.LAMBDA,
     );
     expect(role["PermissionsBoundary"]).toBe(
-      AwsManagedPolicy.POWER_USER_ACCESS,
+      awsManagedPolicyArn("aws", AwsManagedPolicy.POWER_USER_ACCESS_PATH),
     );
+  });
+
+  it("rewriteManagedPolicyArnsForPartition rewrites PermissionsBoundary to GovCloud partition (W-010)", () => {
+    // Clone the static defaultOptions slot so we don't mutate the shared pattern object.
+    const roleSlot = {
+      ...(opts[R.IAM_EXECUTION_ROLE] as Record<string, unknown>),
+    };
+    rewriteManagedPolicyArnsForPartition(roleSlot, "aws-us-gov");
+    expect(roleSlot["PermissionsBoundary"]).toBe(
+      awsManagedPolicyArn(
+        "aws-us-gov",
+        AwsManagedPolicy.POWER_USER_ACCESS_PATH,
+      ),
+    );
+    expect(roleSlot["PermissionsBoundary"]).toMatch(
+      /^arn:aws-us-gov:iam::aws:policy\//,
+    );
+  });
+
+  it("rewriteManagedPolicyArnsForPartition is a no-op for commercial partition (W-010)", () => {
+    const roleSlot = {
+      ...(opts[R.IAM_EXECUTION_ROLE] as Record<string, unknown>),
+    };
+    const originalBoundary = roleSlot["PermissionsBoundary"];
+    rewriteManagedPolicyArnsForPartition(roleSlot, "aws");
+    expect(roleSlot["PermissionsBoundary"]).toBe(originalBoundary);
   });
 
   it("Lambda Role field is a marker token pointing at the IAM Role's Arn", () => {

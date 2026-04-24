@@ -24,7 +24,9 @@ import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import {
   AwsServicePrincipal,
   AwsManagedPolicy,
+  awsManagedPolicyArn,
 } from "../../config/aws-arns.js";
+import { rewriteManagedPolicyArnsForPartition } from "../../graph/nodes/plan-generator/compound-helpers.js";
 
 describe("lambdaWithExecRolePattern — structure", () => {
   it("has the expected patternId from PatternId.LAMBDA_WITH_EXEC_ROLE", () => {
@@ -80,12 +82,31 @@ describe("lambdaWithExecRolePattern — structure", () => {
     );
   });
 
-  it("IAM Role default applies the PowerUserAccess permissions boundary", () => {
+  it("IAM Role default applies the PowerUserAccess permissions boundary (commercial partition)", () => {
     const role = lambdaWithExecRolePattern.defaultOptions[
       R.IAM_EXECUTION_ROLE
     ] as Record<string, unknown>;
     expect(role["PermissionsBoundary"]).toBe(
-      AwsManagedPolicy.POWER_USER_ACCESS,
+      awsManagedPolicyArn("aws", AwsManagedPolicy.POWER_USER_ACCESS_PATH),
+    );
+  });
+
+  it("rewriteManagedPolicyArnsForPartition rewrites PermissionsBoundary to GovCloud partition (W-010)", () => {
+    // Clone the static defaultOptions slot so we don't mutate the shared pattern object.
+    const roleSlot = {
+      ...(lambdaWithExecRolePattern.defaultOptions[
+        R.IAM_EXECUTION_ROLE
+      ] as Record<string, unknown>),
+    };
+    rewriteManagedPolicyArnsForPartition(roleSlot, "aws-us-gov");
+    expect(roleSlot["PermissionsBoundary"]).toBe(
+      awsManagedPolicyArn(
+        "aws-us-gov",
+        AwsManagedPolicy.POWER_USER_ACCESS_PATH,
+      ),
+    );
+    expect(roleSlot["PermissionsBoundary"]).toMatch(
+      /^arn:aws-us-gov:iam::aws:policy\//,
     );
   });
 

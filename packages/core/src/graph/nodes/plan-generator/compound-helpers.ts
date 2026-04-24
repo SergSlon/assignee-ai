@@ -3,6 +3,7 @@
  * inside the SRP size budget. Each helper has one reason to change:
  *   - `injectCompoundResourceName` → CFN naming-property map changes
  *   - `injectLambdaRoleArn` → Lambda ↔ IAM cross-reference / STS contract
+ *   - `rewriteManagedPolicyArnsForPartition` → partition-aware ARN rewrite
  *   - `readCompoundPatternMemoryHints` → pattern-memory storage format
  *   - `injectPluginRequiredDefaults` → plugin-default safety-net policy
  *   - `postProcessEc2Compound` → EC2 SG/SSH scrub rules
@@ -15,6 +16,7 @@ import {
   ResourceDefault,
   parseMarker,
   getPartitionFromRegion,
+  awsManagedPolicyArn,
 } from "@/index.js";
 import { AWS_REGION } from "@/config/constants/aws.js";
 import { defaultMemoryService } from "@/services/memory.js";
@@ -96,6 +98,72 @@ export function filterElicitedForSlot(
     filtered[key] = value;
   }
   return filtered;
+}
+
+/**
+ * Commercial-partition ARN prefix for AWS-managed policies. Pattern templates
+ * hardcode `arn:aws:iam::aws:policy/` at static definition time (because
+ * `defaultOptions` is a plain object, not a factory function). This constant
+ * is the exact prefix to detect and replace.
+ */
+const COMMERCIAL_MANAGED_POLICY_PREFIX = "arn:aws:iam::aws:policy/";
+
+/**
+ * Rewrites AWS-managed policy ARNs inside `desiredState` to use the
+ * correct partition for the deployment target.
+ *
+ * Pattern templates define `defaultOptions` as static objects seeded with
+ * commercial-partition ARNs (`arn:aws:iam::aws:policy/...`). In GovCloud
+ * (`aws-us-gov`), China (`aws-cn`), and ISO partitions the ARN prefix
+ * differs, so the static strings would cause IAM policy attachment failures.
+ *
+ * This helper scans two well-known IAM fields:
+ *   - `ManagedPolicyArns` (array of ARN strings, e.g. Lambda execution role)
+ *   - `PermissionsBoundary` (single ARN string, e.g. PowerUserAccess boundary)
+ *
+ * For every string that starts with `arn:aws:iam::aws:policy/` it strips
+ * the commercial prefix and reconstructs the ARN via `awsManagedPolicyArn`
+ * with the caller-supplied `partition`. Non-matching values are left untouched.
+ *
+ * This is a no-op when `partition === "aws"` (commercial), because the
+ * replacement produces the same string as the original.
+ *
+ * @param desiredState - Mutable CFN resource properties for the current slot.
+ * @param partition - AWS partition derived from the deployment region.
+ *
+ * @see W-010 (Winston Epic 99 Wave 4 Lane 4b) — partition-aware managed policy ARNs
+ * @see feedback_partition_aware_arn_matching (operator memory)
+ */
+export function rewriteManagedPolicyArnsForPartition(
+  desiredState: Record<string, unknown>,
+  partition: string,
+): void {
+  // Fast path: commercial partition — static ARNs are already correct.
+  if (partition === "aws") return;
+
+  /**
+   * Rewrites a single ARN string if it looks like a commercial managed-policy
+   * ARN. Returns the (possibly rewritten) string.
+   */
+  function rewriteArn(arn: string): string {
+    if (!arn.startsWith(COMMERCIAL_MANAGED_POLICY_PREFIX)) return arn;
+    const path = arn.slice(COMMERCIAL_MANAGED_POLICY_PREFIX.length);
+    return awsManagedPolicyArn(partition, path);
+  }
+
+  // Rewrite ManagedPolicyArns (array field on IAM Role / Lambda exec role).
+  const managed = desiredState["ManagedPolicyArns"];
+  if (Array.isArray(managed)) {
+    desiredState["ManagedPolicyArns"] = managed.map((entry) =>
+      typeof entry === "string" ? rewriteArn(entry) : entry,
+    );
+  }
+
+  // Rewrite PermissionsBoundary (scalar string on IAM Role).
+  const boundary = desiredState["PermissionsBoundary"];
+  if (typeof boundary === "string") {
+    desiredState["PermissionsBoundary"] = rewriteArn(boundary);
+  }
 }
 
 /** Injects a human-readable CFN Name (or equivalent) for compound resources. */

@@ -1,15 +1,24 @@
 /**
  * Unit tests for plan-generator/compound-helpers.ts.
  *
- * Focused on `filterElicitedForSlot` — the A-01 regression guard that
- * prevents type-specific name fields (FunctionName, BucketName, …) from
- * leaking across slots when the compound dispatcher spreads the single
- * shared `elicitedOptions` into each slot's desiredState. See
- * e96.W1.B1 (Epic 95 A-01 regression of Epic 94 R2).
+ * Focused on:
+ *   - `filterElicitedForSlot` — the A-01 regression guard that prevents
+ *     type-specific name fields (FunctionName, BucketName, …) from leaking
+ *     across slots. See e96.W1.B1 (Epic 95 A-01 regression of Epic 94 R2).
+ *   - `rewriteManagedPolicyArnsForPartition` — W-010 partition-aware ARN
+ *     rewrite for AWS-managed policy ARNs in compound template defaultOptions.
  */
 import { describe, it, expect } from "vitest";
-import { RESOURCE_TYPES, CfnKey } from "@/index.js";
-import { filterElicitedForSlot } from "./compound-helpers.js";
+import {
+  RESOURCE_TYPES,
+  CfnKey,
+  AwsManagedPolicy,
+  awsManagedPolicyArn,
+} from "@/index.js";
+import {
+  filterElicitedForSlot,
+  rewriteManagedPolicyArnsForPartition,
+} from "./compound-helpers.js";
 
 describe("filterElicitedForSlot", () => {
   it("drops FunctionName from a non-Lambda slot (the A-01 leak)", () => {
@@ -112,5 +121,154 @@ describe("filterElicitedForSlot", () => {
     expect(
       filterElicitedForSlot(elicited, RESOURCE_TYPES.IAM_ROLE)["Name"],
     ).toBe("shared-name");
+  });
+});
+
+/**
+ * W-010 (Epic 99 Wave 4 Lane 4b): partition-aware managed policy ARN rewrite.
+ *
+ * Pattern templates store commercial-partition ARNs (`arn:aws:iam::aws:policy/...`)
+ * in static `defaultOptions` objects. `rewriteManagedPolicyArnsForPartition`
+ * runs at compound-plan time and replaces the commercial prefix with the
+ * correct `arn:<partition>:iam::aws:policy/` for GovCloud, China, and ISO.
+ */
+describe("rewriteManagedPolicyArnsForPartition", () => {
+  const COMMERCIAL_POWER_USER = "arn:aws:iam::aws:policy/PowerUserAccess";
+  const COMMERCIAL_LAMBDA_EXEC =
+    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole";
+
+  describe("commercial partition — no-op fast path", () => {
+    it("leaves PermissionsBoundary unchanged when partition is 'aws'", () => {
+      const state = { PermissionsBoundary: COMMERCIAL_POWER_USER };
+      rewriteManagedPolicyArnsForPartition(state, "aws");
+      expect(state.PermissionsBoundary).toBe(COMMERCIAL_POWER_USER);
+    });
+
+    it("leaves ManagedPolicyArns unchanged when partition is 'aws'", () => {
+      const state = { ManagedPolicyArns: [COMMERCIAL_LAMBDA_EXEC] };
+      rewriteManagedPolicyArnsForPartition(state, "aws");
+      expect(state.ManagedPolicyArns).toEqual([COMMERCIAL_LAMBDA_EXEC]);
+    });
+  });
+
+  describe("GovCloud partition (aws-us-gov)", () => {
+    it("rewrites PermissionsBoundary to aws-us-gov prefix", () => {
+      const state: Record<string, unknown> = {
+        PermissionsBoundary: COMMERCIAL_POWER_USER,
+      };
+      rewriteManagedPolicyArnsForPartition(state, "aws-us-gov");
+      expect(state["PermissionsBoundary"]).toBe(
+        awsManagedPolicyArn(
+          "aws-us-gov",
+          AwsManagedPolicy.POWER_USER_ACCESS_PATH,
+        ),
+      );
+      expect(state["PermissionsBoundary"]).toMatch(
+        /^arn:aws-us-gov:iam::aws:policy\//,
+      );
+    });
+
+    it("rewrites ManagedPolicyArns array entries to aws-us-gov prefix", () => {
+      const state: Record<string, unknown> = {
+        ManagedPolicyArns: [COMMERCIAL_LAMBDA_EXEC],
+      };
+      rewriteManagedPolicyArnsForPartition(state, "aws-us-gov");
+      expect(state["ManagedPolicyArns"]).toEqual([
+        awsManagedPolicyArn(
+          "aws-us-gov",
+          AwsManagedPolicy.LAMBDA_BASIC_EXECUTION_PATH,
+        ),
+      ]);
+    });
+
+    it("rewrites multiple ARNs in ManagedPolicyArns", () => {
+      const state: Record<string, unknown> = {
+        ManagedPolicyArns: [COMMERCIAL_LAMBDA_EXEC, COMMERCIAL_POWER_USER],
+      };
+      rewriteManagedPolicyArnsForPartition(state, "aws-us-gov");
+      const arns = state["ManagedPolicyArns"] as string[];
+      expect(arns[0]).toBe(
+        awsManagedPolicyArn(
+          "aws-us-gov",
+          AwsManagedPolicy.LAMBDA_BASIC_EXECUTION_PATH,
+        ),
+      );
+      expect(arns[1]).toBe(
+        awsManagedPolicyArn(
+          "aws-us-gov",
+          AwsManagedPolicy.POWER_USER_ACCESS_PATH,
+        ),
+      );
+    });
+  });
+
+  describe("China partition (aws-cn)", () => {
+    it("rewrites PermissionsBoundary to aws-cn prefix", () => {
+      const state: Record<string, unknown> = {
+        PermissionsBoundary: COMMERCIAL_POWER_USER,
+      };
+      rewriteManagedPolicyArnsForPartition(state, "aws-cn");
+      expect(state["PermissionsBoundary"]).toMatch(
+        /^arn:aws-cn:iam::aws:policy\//,
+      );
+    });
+  });
+
+  describe("ISO partition (aws-iso)", () => {
+    it("rewrites PermissionsBoundary to aws-iso prefix", () => {
+      const state: Record<string, unknown> = {
+        PermissionsBoundary: COMMERCIAL_POWER_USER,
+      };
+      rewriteManagedPolicyArnsForPartition(state, "aws-iso");
+      expect(state["PermissionsBoundary"]).toMatch(
+        /^arn:aws-iso:iam::aws:policy\//,
+      );
+    });
+  });
+
+  describe("ISO-B partition (aws-iso-b)", () => {
+    it("rewrites PermissionsBoundary to aws-iso-b prefix", () => {
+      const state: Record<string, unknown> = {
+        PermissionsBoundary: COMMERCIAL_POWER_USER,
+      };
+      rewriteManagedPolicyArnsForPartition(state, "aws-iso-b");
+      expect(state["PermissionsBoundary"]).toMatch(
+        /^arn:aws-iso-b:iam::aws:policy\//,
+      );
+    });
+  });
+
+  describe("non-managed-policy ARNs are not touched", () => {
+    it("leaves non-commercial-managed-policy ARN in ManagedPolicyArns unchanged", () => {
+      const customArn = "arn:aws:iam::123456789012:policy/MyCustomPolicy";
+      const state: Record<string, unknown> = {
+        ManagedPolicyArns: [customArn],
+      };
+      rewriteManagedPolicyArnsForPartition(state, "aws-us-gov");
+      expect(state["ManagedPolicyArns"]).toEqual([customArn]);
+    });
+
+    it("leaves non-ARN values in ManagedPolicyArns unchanged", () => {
+      const nonArn = "NotAnArn";
+      const state: Record<string, unknown> = {
+        ManagedPolicyArns: [nonArn],
+      };
+      rewriteManagedPolicyArnsForPartition(state, "aws-us-gov");
+      expect(state["ManagedPolicyArns"]).toEqual([nonArn]);
+    });
+  });
+
+  describe("absent fields are not created", () => {
+    it("does not add PermissionsBoundary when absent", () => {
+      const state: Record<string, unknown> = { SomeOtherField: "value" };
+      rewriteManagedPolicyArnsForPartition(state, "aws-us-gov");
+      expect(state["PermissionsBoundary"]).toBeUndefined();
+    });
+
+    it("does not add ManagedPolicyArns when absent", () => {
+      const state: Record<string, unknown> = { SomeOtherField: "value" };
+      rewriteManagedPolicyArnsForPartition(state, "aws-us-gov");
+      expect(state["ManagedPolicyArns"]).toBeUndefined();
+    });
   });
 });

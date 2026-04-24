@@ -45,6 +45,7 @@ import { markerGetAtt, markerRef } from "../../config/marker-tokens.js";
 import { IamEffect } from "../../config/iam-effects.js";
 import {
   AwsManagedPolicy,
+  awsManagedPolicyArn,
   IamPolicy,
   AwsServicePrincipal,
 } from "../../config/aws-arns.js";
@@ -149,7 +150,12 @@ export const scheduledLambdaPattern: ArchitecturePattern = {
           },
         ],
       },
-      PermissionsBoundary: AwsManagedPolicy.POWER_USER_ACCESS,
+      // Commercial-partition ARN; rewriteManagedPolicyArnsForPartition() in
+      // compound-plan.ts rewrites this to the correct partition at apply time.
+      PermissionsBoundary: awsManagedPolicyArn(
+        "aws",
+        AwsManagedPolicy.POWER_USER_ACCESS_PATH,
+      ),
     },
     [R.LAMBDA_FN]: {
       Runtime: AwsDefault.LAMBDA_RUNTIME,
