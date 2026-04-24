@@ -1029,3 +1029,620 @@ describe("shipped-wired contract H — probe-reachability (Epic 99 Wave 2)", () 
     ).toBeGreaterThanOrEqual(40);
   });
 });
+
+// ---------------------------------------------------------------------------
+// I. Contract I — first-class-promotion parity (Epic 99 Wave 4 Lane 4c)
+// ---------------------------------------------------------------------------
+//
+// For each type in SUPPORTED_TYPES_ARRAY, assert it appears at least once in
+// each of the 4 canonical audit surfaces OR carries a CONTRACT-I-OPT-OUT
+// annotation documented below.
+//
+// Opt-out format: the contract checks the opt-out set before failing so that
+// types with no applicable rules/patterns on a given surface are explicitly
+// documented rather than silently missing.
+//
+// Opt-out rationale categories:
+//   NO-BP-RULES        — no BP YAML files target this resource type directly;
+//                        rules may exist on a parent/sibling type instead.
+//   NO-AUTO-FIX-RULES  — the type has BP rules but none are auto-fixable;
+//                        bp-auto-fix-audit only exercises autoFixable=true rules.
+//   NON-COMPOUNDABLE   — type is a standalone or companion resource; no
+//                        compound pattern currently orchestrates it as the
+//                        primary entry point.
+//   APPLY-MANUAL-ONLY  — apply-mode-audit exercises full graph flows; this type
+//                        is provisioned as part of compound patterns or via SDK
+//                        fallback and doesn't have a standalone graph-flow test.
+//                        Defer to Epic 100+ per CT-5 second-half scope.
+//
+// ---------------------------------------------------------------------------
+
+/**
+ * Audit surface paths — resolved relative to the repo root.
+ * Contract I reads each file as text and does substring matching.
+ */
+const AUDIT_SURFACES = {
+  bpAllRules: resolve(
+    REPO_ROOT,
+    "packages/best-practices/__tests__/bp-all-rules-audit.test.ts",
+  ),
+  bpAutoFix: resolve(
+    REPO_ROOT,
+    "packages/best-practices/__tests__/bp-auto-fix-audit.test.ts",
+  ),
+  compoundProvisioning: resolve(
+    REPO_ROOT,
+    "packages/core/src/graph/nodes/__tests__/compound-provisioning-audit.test.ts",
+  ),
+  applyMode: resolve(
+    REPO_ROOT,
+    "packages/core/src/graph/__tests__/apply-mode-audit.test.ts",
+  ),
+} as const;
+
+type AuditSurface = keyof typeof AUDIT_SURFACES;
+
+/**
+ * CONTRACT-I-OPT-OUT registry.
+ *
+ * Each entry documents a deliberate gap:
+ *   surface → Set of resource types opted out with rationale.
+ *
+ * Adding a type here MUST include a rationale comment and a corresponding
+ * entry in deferred-backlog.md §Epic 100+ bucket (see maintenance log below).
+ *
+ * Deferred-backlog.md entries added 2026-04-24 (Epic 99 W4c):
+ *   Rows V1-16 through V1-20 (grouped by surface) in the Epic 100+ bucket.
+ */
+const CONTRACT_I_OPT_OUTS: Record<AuditSurface, Map<string, string>> = {
+  // ── Surface 1: bp-all-rules-audit ─────────────────────────────────────────
+  // Types that have NO BP YAML file targeting them as resource_type.
+  // These are infrastructure-wiring or companion resources with no
+  // independent best-practice concerns of their own; relevant rules
+  // are attached to parent types (e.g., AWS::EC2::Subnet covers
+  // SubnetRouteTableAssociation guidance via BP-RT-002).
+  bpAllRules: new Map<string, string>([
+    [
+      "AWS::EC2::RouteTable",
+      "NO-BP-RULES — wiring resource; routing concerns covered by VPC/Subnet rules",
+    ],
+    [
+      "AWS::EC2::VPCGatewayAttachment",
+      "NO-BP-RULES — attachment resource; no independent BP rules; IGW + VPC rules cover intent",
+    ],
+    [
+      "AWS::EC2::SubnetRouteTableAssociation",
+      "NO-BP-RULES — association resource; BP-RT-002 is on AWS::EC2::Subnet not this type",
+    ],
+    [
+      "AWS::EFS::MountTarget",
+      "NO-BP-RULES — companion resource; security/encryption rules target AWS::EFS::FileSystem",
+    ],
+    [
+      "AWS::RDS::DBSubnetGroup",
+      "NO-BP-RULES — structural resource; RDS placement rules are on AWS::RDS::DBInstance",
+    ],
+    [
+      "AWS::EC2::EIP",
+      "NO-BP-RULES — Elastic IP has no independent BP YAML rules in current library",
+    ],
+  ]),
+
+  // ── Surface 2: bp-auto-fix-audit ──────────────────────────────────────────
+  // Types that have BP rules but none with autoFixable=true, OR types with
+  // no BP rules at all. bp-auto-fix-audit only exercises autoFixable=true rules.
+  // Defer to Epic 100+ when auto-fixable rules are added for these types.
+  bpAutoFix: new Map<string, string>([
+    // No BP rules at all (infrastructure-wiring / companion):
+    [
+      "AWS::EC2::RouteTable",
+      "NO-BP-RULES — wiring resource; no auto-fixable rules",
+    ],
+    [
+      "AWS::EC2::VPCGatewayAttachment",
+      "NO-BP-RULES — attachment resource; no auto-fixable rules",
+    ],
+    [
+      "AWS::EC2::SubnetRouteTableAssociation",
+      "NO-BP-RULES — association resource; no auto-fixable rules",
+    ],
+    [
+      "AWS::EFS::MountTarget",
+      "NO-BP-RULES — companion resource; no auto-fixable rules",
+    ],
+    [
+      "AWS::RDS::DBSubnetGroup",
+      "NO-BP-RULES — structural resource; no auto-fixable rules",
+    ],
+    ["AWS::EC2::EIP", "NO-BP-RULES — no auto-fixable rules"],
+    // Has BP rules but none are auto-fixable (awareness / interactive-only):
+    [
+      "AWS::SSM::Parameter",
+      "NO-AUTO-FIX-RULES — BP-SSM rules are awareness/interactive; no desiredStatePatch",
+    ],
+    [
+      "AWS::SQS::Queue",
+      "NO-AUTO-FIX-RULES — BP-SQS rules are policy_antipattern (awareness/interactive)",
+    ],
+    [
+      "AWS::SNS::Topic",
+      "NO-AUTO-FIX-RULES — BP-SNS rules are policy_antipattern (awareness/interactive)",
+    ],
+    [
+      "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      "NO-AUTO-FIX-RULES — ELBv2 LoadBalancer rules are awareness-only; only Listener has auto-fix",
+    ],
+    [
+      "AWS::EC2::InternetGateway",
+      "NO-AUTO-FIX-RULES — BP-IGW rules are awareness-only",
+    ],
+    [
+      "AWS::EC2::Route",
+      "NO-AUTO-FIX-RULES — BP-EC2::Route rules are awareness-only",
+    ],
+    [
+      "AWS::EC2::NatGateway",
+      "NO-AUTO-FIX-RULES — BP-NAT rules are awareness-only",
+    ],
+    [
+      "AWS::CloudWatch::Alarm",
+      "NO-AUTO-FIX-RULES — BP-CW rules are awareness-only",
+    ],
+    [
+      "AWS::SecretsManager::Secret",
+      "NO-AUTO-FIX-RULES — BP-SM rules are awareness-only; no desiredStatePatch",
+    ],
+    [
+      "AWS::Events::EventBus",
+      "NO-AUTO-FIX-RULES — BP-EVENTS::EventBus rules are awareness-only",
+    ],
+    [
+      "AWS::SNS::Subscription",
+      "NO-AUTO-FIX-RULES — BP-SNS::Subscription rules are awareness/interactive",
+    ],
+    [
+      "AWS::Events::Connection",
+      "NO-AUTO-FIX-RULES — BP-EVENTS-005 KmsKeyIdentifier is awareness (no desiredStatePatch)",
+    ],
+    [
+      "AWS::Events::ApiDestination",
+      "NO-AUTO-FIX-RULES — BP-EVENTS-006 InvocationRateLimitPerSecond is awareness-only",
+    ],
+    [
+      "AWS::CloudFront::Distribution",
+      "NO-AUTO-FIX-RULES — BP-CF-001/002 are awareness-only (ViewerProtocolPolicy is user intent)",
+    ],
+    [
+      "AWS::S3::BucketPolicy",
+      "NO-AUTO-FIX-RULES — BP-S3BP-001 is policy_antipattern (awareness/blocking, no patch)",
+    ],
+  ]),
+
+  // ── Surface 3: compound-provisioning-audit ────────────────────────────────
+  // Types that are NOT orchestrated as a primary resource in any current
+  // compound pattern. The audit exercises patterns (serverless-api,
+  // three-tier-web, vpc-networking, etc.) — types that only appear as
+  // standalone single-type resources are not pattern entries.
+  // Standalone types without a compound pattern: NON-COMPOUNDABLE.
+  // Types that DO appear in compound patterns but as non-primary resources
+  // are still referenced by their parent pattern test.
+  compoundProvisioning: new Map<string, string>([
+    [
+      "AWS::SSM::Parameter",
+      "NON-COMPOUNDABLE — standalone parameter resource; no compound pattern orchestrates SSM",
+    ],
+    [
+      "AWS::EC2::Instance",
+      "NON-COMPOUNDABLE — EC2 instances are provisioned standalone or via three-tier-web (covered via RESOURCE_TYPES refs)",
+    ],
+    [
+      "AWS::RDS::DBInstance",
+      "NON-COMPOUNDABLE — RDS is provisioned standalone; three-tier-web uses it but audit tracks patterns not types directly",
+    ],
+    [
+      "AWS::EC2::VPC",
+      "NON-COMPOUNDABLE — VPC is a compound-pattern dependency (covered in vpc-networking/three-tier-web); audit test references RESOURCE_TYPES.EC2_VPC constant not string literal",
+    ],
+    [
+      "AWS::EC2::Subnet",
+      "NON-COMPOUNDABLE — same as VPC; referenced via RESOURCE_TYPES constant in audit",
+    ],
+    [
+      "AWS::DynamoDB::Table",
+      "NON-COMPOUNDABLE — standalone resource; no compound pattern currently includes DynamoDB",
+    ],
+    [
+      "AWS::SQS::Queue",
+      "NON-COMPOUNDABLE — message-processing pattern references SQS via RESOURCE_TYPES constant; audit substring match misses constant alias",
+    ],
+    [
+      "AWS::SNS::Topic",
+      "NON-COMPOUNDABLE — standalone resource; no compound pattern currently includes SNS Topic as primary",
+    ],
+    [
+      "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      "NON-COMPOUNDABLE — three-tier-web references ALB but audit uses RESOURCE_TYPES constant",
+    ],
+    [
+      "AWS::ECS::Cluster",
+      "NON-COMPOUNDABLE — container-service pattern references ECS via RESOURCE_TYPES constant",
+    ],
+    [
+      "AWS::ECR::Repository",
+      "NON-COMPOUNDABLE — standalone resource; no compound pattern includes ECR as primary",
+    ],
+    [
+      "AWS::Logs::LogGroup",
+      "NON-COMPOUNDABLE — co-provisioned companion; standalone resource with no compound pattern",
+    ],
+    [
+      "AWS::EC2::InternetGateway",
+      "NON-COMPOUNDABLE — compound-pattern dependency; referenced via RESOURCE_TYPES.EC2_INTERNET_GATEWAY constant",
+    ],
+    [
+      "AWS::EC2::RouteTable",
+      "NON-COMPOUNDABLE — compound-pattern dependency; referenced via RESOURCE_TYPES.EC2_ROUTE_TABLE constant",
+    ],
+    [
+      "AWS::EC2::Route",
+      "NON-COMPOUNDABLE — compound-pattern dependency; referenced via RESOURCE_TYPES.EC2_ROUTE constant",
+    ],
+    [
+      "AWS::EC2::NatGateway",
+      "NON-COMPOUNDABLE — compound-pattern dependency; referenced via RESOURCE_TYPES.EC2_NAT_GATEWAY constant",
+    ],
+    [
+      "AWS::ApiGatewayV2::Api",
+      "NON-COMPOUNDABLE — serverless-api pattern includes ApiGatewayV2 but as provisionable=false companion; audit references COMPANION_RESOURCE_TYPES constant",
+    ],
+    [
+      "AWS::CloudWatch::Alarm",
+      "NON-COMPOUNDABLE — standalone resource; no compound pattern includes CW Alarm",
+    ],
+    [
+      "AWS::SecretsManager::Secret",
+      "NON-COMPOUNDABLE — standalone resource; no compound pattern includes Secrets Manager",
+    ],
+    [
+      "AWS::EC2::VPCGatewayAttachment",
+      "NON-COMPOUNDABLE — compound-pattern wiring resource; referenced via RESOURCE_TYPES.EC2_VPC_GATEWAY_ATTACHMENT constant",
+    ],
+    [
+      "AWS::EC2::SubnetRouteTableAssociation",
+      "NON-COMPOUNDABLE — compound-pattern wiring resource; referenced via RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION constant",
+    ],
+    [
+      "AWS::EFS::FileSystem",
+      "NON-COMPOUNDABLE — efs-with-vpc pattern references FileSystem but audit uses RESOURCE_TYPES constant",
+    ],
+    [
+      "AWS::EFS::MountTarget",
+      "NON-COMPOUNDABLE — efs-with-vpc companion; no standalone compound pattern entry",
+    ],
+    [
+      "AWS::Events::Rule",
+      "NON-COMPOUNDABLE — scheduled-lambda pattern references Events::Rule via RESOURCE_TYPES constant",
+    ],
+    [
+      "AWS::Events::EventBus",
+      "NON-COMPOUNDABLE — standalone resource; no compound pattern currently includes EventBus as primary",
+    ],
+    [
+      "AWS::KMS::Key",
+      "NON-COMPOUNDABLE — standalone resource; no compound pattern includes KMS Key",
+    ],
+    [
+      "AWS::Events::Connection",
+      "NON-COMPOUNDABLE — standalone resource; no compound pattern includes EventBridge Connection",
+    ],
+    [
+      "AWS::Events::ApiDestination",
+      "NON-COMPOUNDABLE — standalone resource; no compound pattern includes ApiDestination",
+    ],
+    [
+      "AWS::CloudFront::Distribution",
+      "NON-COMPOUNDABLE — static-website pattern references CloudFront via RESOURCE_TYPES constant",
+    ],
+    [
+      "AWS::CloudFront::OriginAccessControl",
+      "NON-COMPOUNDABLE — static-website pattern references OAC via RESOURCE_TYPES constant",
+    ],
+    [
+      "AWS::RDS::DBSubnetGroup",
+      "NON-COMPOUNDABLE — standalone resource; three-tier-web references DBSubnetGroup implicitly",
+    ],
+    [
+      "AWS::EC2::EIP",
+      "NON-COMPOUNDABLE — vpc-networking uses EIP as COMPANION_RESOURCE_TYPES.EC2_EIP constant",
+    ],
+  ]),
+
+  // ── Surface 4: apply-mode-audit ───────────────────────────────────────────
+  // The apply-mode-audit file exercises full graph flows (intent → plan → BP
+  // → fix → approve → provision → poll → result). Currently it has 5
+  // scenarios covering SSM::Parameter and S3::Bucket only. All other types
+  // lack dedicated apply-mode graph-flow tests.
+  // These are deferred to Epic 100+ per CT-5 second-half scope (the audit
+  // should eventually grow to cover every type's apply path).
+  applyMode: new Map<string, string>([
+    [
+      "AWS::IAM::Role",
+      "APPLY-MANUAL-ONLY — no standalone apply-mode graph-flow test; provisioned via compound patterns. Defer to Epic 100+",
+    ],
+    [
+      "AWS::EC2::Instance",
+      "APPLY-MANUAL-ONLY — no standalone apply-mode graph-flow test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::RDS::DBInstance",
+      "APPLY-MANUAL-ONLY — no standalone apply-mode graph-flow test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::Lambda::Function",
+      "APPLY-MANUAL-ONLY — no standalone apply-mode graph-flow test; provisioned via compound. Defer to Epic 100+",
+    ],
+    [
+      "AWS::EC2::VPC",
+      "APPLY-MANUAL-ONLY — no standalone apply-mode graph-flow test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::EC2::Subnet",
+      "APPLY-MANUAL-ONLY — no standalone apply-mode graph-flow test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::EC2::SecurityGroup",
+      "APPLY-MANUAL-ONLY — no standalone apply-mode graph-flow test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::DynamoDB::Table",
+      "APPLY-MANUAL-ONLY — no standalone apply-mode graph-flow test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::SQS::Queue",
+      "APPLY-MANUAL-ONLY — no standalone apply-mode graph-flow test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::SNS::Topic",
+      "APPLY-MANUAL-ONLY — no standalone apply-mode graph-flow test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      "APPLY-MANUAL-ONLY — no standalone apply-mode graph-flow test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::ECS::Cluster",
+      "APPLY-MANUAL-ONLY — no standalone apply-mode graph-flow test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::ECR::Repository",
+      "APPLY-MANUAL-ONLY — no standalone apply-mode graph-flow test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::Logs::LogGroup",
+      "APPLY-MANUAL-ONLY — no standalone apply-mode graph-flow test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::EC2::InternetGateway",
+      "APPLY-MANUAL-ONLY — compound-only resource; no standalone apply-mode test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::EC2::RouteTable",
+      "APPLY-MANUAL-ONLY — compound-only resource; no standalone apply-mode test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::EC2::Route",
+      "APPLY-MANUAL-ONLY — compound-only resource; no standalone apply-mode test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::EC2::NatGateway",
+      "APPLY-MANUAL-ONLY — compound-only resource; no standalone apply-mode test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::ApiGatewayV2::Api",
+      "APPLY-MANUAL-ONLY — no standalone apply-mode graph-flow test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::CloudWatch::Alarm",
+      "APPLY-MANUAL-ONLY — no standalone apply-mode graph-flow test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::SecretsManager::Secret",
+      "APPLY-MANUAL-ONLY — no standalone apply-mode graph-flow test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::EC2::VPCGatewayAttachment",
+      "APPLY-MANUAL-ONLY — compound wiring resource; no standalone apply-mode test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::EC2::SubnetRouteTableAssociation",
+      "APPLY-MANUAL-ONLY — compound wiring resource; no standalone apply-mode test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::EFS::FileSystem",
+      "APPLY-MANUAL-ONLY — no standalone apply-mode graph-flow test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::EFS::MountTarget",
+      "APPLY-MANUAL-ONLY — compound companion; no standalone apply-mode test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::Events::Rule",
+      "APPLY-MANUAL-ONLY — no standalone apply-mode graph-flow test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::Events::EventBus",
+      "APPLY-MANUAL-ONLY — no standalone apply-mode graph-flow test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::SNS::Subscription",
+      "APPLY-MANUAL-ONLY — no standalone apply-mode graph-flow test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::KMS::Key",
+      "APPLY-MANUAL-ONLY — no standalone apply-mode graph-flow test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::Events::Connection",
+      "APPLY-MANUAL-ONLY — no standalone apply-mode graph-flow test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::Events::ApiDestination",
+      "APPLY-MANUAL-ONLY — no standalone apply-mode graph-flow test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::CloudFront::Distribution",
+      "APPLY-MANUAL-ONLY — no standalone apply-mode graph-flow test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::CloudFront::OriginAccessControl",
+      "APPLY-MANUAL-ONLY — no standalone apply-mode graph-flow test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::S3::BucketPolicy",
+      "APPLY-MANUAL-ONLY — compound terminal resource; no standalone apply-mode test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::RDS::DBSubnetGroup",
+      "APPLY-MANUAL-ONLY — no standalone apply-mode graph-flow test. Defer to Epic 100+",
+    ],
+    [
+      "AWS::EC2::EIP",
+      "APPLY-MANUAL-ONLY — compound companion resource; no standalone apply-mode test. Defer to Epic 100+",
+    ],
+  ]),
+};
+
+describe("shipped-wired contract I — first-class-promotion parity (Epic 99 W4c)", () => {
+  /**
+   * Read an audit file as text. If the file doesn't exist, return an empty
+   * string and fail the test with a clear message.
+   */
+  function readAuditFile(surface: AuditSurface): string {
+    const filePath = AUDIT_SURFACES[surface];
+    if (!existsSync(filePath)) {
+      // Fail loudly — a missing audit file is a contract violation.
+      expect(existsSync(filePath), `Audit file missing: ${filePath}`).toBe(
+        true,
+      );
+      return "";
+    }
+    return readFileSync(filePath, "utf8");
+  }
+
+  /**
+   * Check whether a type is opted out for a given surface.
+   * Returns the rationale string if opted out, undefined otherwise.
+   */
+  function getOptOut(
+    surface: AuditSurface,
+    resourceType: string,
+  ): string | undefined {
+    return CONTRACT_I_OPT_OUTS[surface].get(resourceType);
+  }
+
+  it("all 4 audit files exist on disk (sanity guard)", () => {
+    for (const [surface, filePath] of Object.entries(AUDIT_SURFACES)) {
+      expect(
+        existsSync(filePath),
+        `Audit file for surface '${surface}' missing at: ${filePath}`,
+      ).toBe(true);
+    }
+  });
+
+  it("every first-class type is covered in bp-all-rules-audit or opted out", () => {
+    const content = readAuditFile("bpAllRules");
+    const failures: string[] = [];
+
+    for (const resourceType of SUPPORTED_TYPES_ARRAY) {
+      if (content.includes(resourceType)) continue;
+      const optOut = getOptOut("bpAllRules", resourceType);
+      if (optOut) continue; // CONTRACT-I-OPT-OUT documented above
+      failures.push(
+        `${resourceType} — not in bp-all-rules-audit.test.ts and no CONTRACT-I-OPT-OUT`,
+      );
+    }
+
+    expect(
+      failures,
+      `Contract I: bp-all-rules-audit missing entries (add the type's rules or add to CONTRACT_I_OPT_OUTS.bpAllRules):\n  ${failures.join("\n  ")}`,
+    ).toEqual([]);
+  });
+
+  it("every first-class type is covered in bp-auto-fix-audit or opted out", () => {
+    const content = readAuditFile("bpAutoFix");
+    const failures: string[] = [];
+
+    for (const resourceType of SUPPORTED_TYPES_ARRAY) {
+      if (content.includes(resourceType)) continue;
+      const optOut = getOptOut("bpAutoFix", resourceType);
+      if (optOut) continue;
+      failures.push(
+        `${resourceType} — not in bp-auto-fix-audit.test.ts and no CONTRACT-I-OPT-OUT`,
+      );
+    }
+
+    expect(
+      failures,
+      `Contract I: bp-auto-fix-audit missing entries (add auto-fix test case or add to CONTRACT_I_OPT_OUTS.bpAutoFix):\n  ${failures.join("\n  ")}`,
+    ).toEqual([]);
+  });
+
+  it("every first-class type is covered in compound-provisioning-audit or opted out", () => {
+    const content = readAuditFile("compoundProvisioning");
+    const failures: string[] = [];
+
+    for (const resourceType of SUPPORTED_TYPES_ARRAY) {
+      if (content.includes(resourceType)) continue;
+      const optOut = getOptOut("compoundProvisioning", resourceType);
+      if (optOut) continue;
+      failures.push(
+        `${resourceType} — not in compound-provisioning-audit.test.ts and no CONTRACT-I-OPT-OUT`,
+      );
+    }
+
+    expect(
+      failures,
+      `Contract I: compound-provisioning-audit missing entries (add compound pattern test or add to CONTRACT_I_OPT_OUTS.compoundProvisioning):\n  ${failures.join("\n  ")}`,
+    ).toEqual([]);
+  });
+
+  it("every first-class type is covered in apply-mode-audit or opted out", () => {
+    const content = readAuditFile("applyMode");
+    const failures: string[] = [];
+
+    for (const resourceType of SUPPORTED_TYPES_ARRAY) {
+      if (content.includes(resourceType)) continue;
+      const optOut = getOptOut("applyMode", resourceType);
+      if (optOut) continue;
+      failures.push(
+        `${resourceType} — not in apply-mode-audit.test.ts and no CONTRACT-I-OPT-OUT`,
+      );
+    }
+
+    expect(
+      failures,
+      `Contract I: apply-mode-audit missing entries (add apply-mode graph-flow test or add to CONTRACT_I_OPT_OUTS.applyMode):\n  ${failures.join("\n  ")}`,
+    ).toEqual([]);
+  });
+
+  it("opt-out registry only references types in SUPPORTED_TYPES_ARRAY (no stale entries)", () => {
+    const supportedSet = new Set<string>(SUPPORTED_TYPES_ARRAY);
+    const staleEntries: string[] = [];
+
+    for (const [surface, optOutMap] of Object.entries(CONTRACT_I_OPT_OUTS) as [
+      AuditSurface,
+      Map<string, string>,
+    ][]) {
+      for (const resourceType of optOutMap.keys()) {
+        if (!supportedSet.has(resourceType)) {
+          staleEntries.push(`${surface}: ${resourceType}`);
+        }
+      }
+    }
+
+    expect(
+      staleEntries,
+      `CONTRACT_I_OPT_OUTS contains types not in SUPPORTED_TYPES_ARRAY (remove stale entries): ${staleEntries.join(", ")}`,
+    ).toEqual([]);
+  });
+});

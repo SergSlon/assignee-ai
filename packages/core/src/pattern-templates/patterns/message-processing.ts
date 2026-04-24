@@ -3,6 +3,7 @@ import { AwsDefault } from "../../config/cfn-keys.js";
 import { IamEffect } from "../../config/iam-effects.js";
 import {
   AwsManagedPolicy,
+  awsManagedPolicyArn,
   IamPolicy,
   AwsServicePrincipal,
 } from "../../config/aws-arns.js";
@@ -83,7 +84,14 @@ export const messageProcessingPattern: ArchitecturePattern = {
           },
         ],
       },
-      ManagedPolicyArns: [AwsManagedPolicy.LAMBDA_BASIC_EXECUTION],
+      // Commercial-partition ARN; rewriteManagedPolicyArnsForPartition() in
+      // compound-plan.ts rewrites this to the correct partition at apply time.
+      ManagedPolicyArns: [
+        awsManagedPolicyArn(
+          "aws",
+          AwsManagedPolicy.LAMBDA_BASIC_EXECUTION_PATH,
+        ),
+      ],
     },
     [R.PROCESSOR_FN]: {
       Runtime: AwsDefault.LAMBDA_RUNTIME,

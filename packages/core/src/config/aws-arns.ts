@@ -13,35 +13,70 @@
 export const KMS_ALIAS_PREFIX = "alias/" as const;
 
 /**
- * AWS-managed policy ARNs. These are AWS's own policies; in IAM policy
- * documents they use the partition of the caller's account (which
- * CloudFormation/IAM auto-matches), but for construction we always
- * embed the literal `arn:aws:iam::aws:policy/...` form because that IS
- * the ARN AWS publishes for commercial. For GovCloud/China/ISO
- * deployments, callers constructing IAM policy documents with these
- * constants should prefer `awsManagedPolicyArn(partition, path)` below.
+ * AWS-managed policy path suffixes — the portion of the ARN after
+ * `arn:<partition>:iam::aws:policy/`. Use with `awsManagedPolicyArn()`
+ * to build partition-correct ARNs at runtime.
  *
- * These string constants are retained for backward compatibility with
- * pattern templates that hardcode the commercial partition. Consumers
- * targeting non-commercial partitions MUST use `awsManagedPolicyArn`.
+ * Naming convention: `<LOGICAL_NAME>_PATH` is the path suffix;
+ * the companion `_COMMERCIAL_ARN` field retains the historic
+ * commercial-partition full ARN string for backward-compatibility
+ * where callers already pin the commercial form in static contexts.
+ *
+ * @example
+ *   awsManagedPolicyArn("aws-us-gov", AwsManagedPolicy.LAMBDA_BASIC_EXECUTION_PATH)
+ *   // → "arn:aws-us-gov:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
  */
 export const AwsManagedPolicy = {
+  /** Path suffix for AWSLambdaBasicExecutionRole. */
+  LAMBDA_BASIC_EXECUTION_PATH:
+    "service-role/AWSLambdaBasicExecutionRole" as const,
+  /** Path suffix for PowerUserAccess. */
+  POWER_USER_ACCESS_PATH: "PowerUserAccess" as const,
+
+  /**
+   * @deprecated Use `awsManagedPolicyArn(partition, AwsManagedPolicy.LAMBDA_BASIC_EXECUTION_PATH)`.
+   * This constant is commercial-partition only and will produce incorrect ARNs
+   * in GovCloud (aws-us-gov), China (aws-cn), and ISO partitions.
+   */
   LAMBDA_BASIC_EXECUTION:
-    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-  POWER_USER_ACCESS: "arn:aws:iam::aws:policy/PowerUserAccess",
+    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole" as const,
+  /**
+   * @deprecated Use `awsManagedPolicyArn(partition, AwsManagedPolicy.POWER_USER_ACCESS_PATH)`.
+   * This constant is commercial-partition only and will produce incorrect ARNs
+   * in GovCloud (aws-us-gov), China (aws-cn), and ISO partitions.
+   */
+  POWER_USER_ACCESS: "arn:aws:iam::aws:policy/PowerUserAccess" as const,
 } as const;
 
 /**
  * Builds a partition-aware AWS-managed policy ARN.
  *
+ * Validates that `partition` conforms to the AWS partition naming scheme:
+ * starts with `aws` optionally followed by one or more `-<lowercase>` segments.
+ * Throws `RangeError` for unrecognised partition strings.
+ *
+ * @param partition - AWS partition: `aws` | `aws-us-gov` | `aws-cn` | `aws-iso` | `aws-iso-b` (etc.)
+ * @param policyPath - Path suffix after `policy/`, e.g. `"service-role/AWSLambdaBasicExecutionRole"`
+ *
  * @example
- *   awsManagedPolicyArn("aws-us-gov", "service-role/AWSLambdaBasicExecutionRole")
+ *   awsManagedPolicyArn("aws", AwsManagedPolicy.POWER_USER_ACCESS_PATH)
+ *     // → "arn:aws:iam::aws:policy/PowerUserAccess"
+ *   awsManagedPolicyArn("aws-us-gov", AwsManagedPolicy.LAMBDA_BASIC_EXECUTION_PATH)
  *     // → "arn:aws-us-gov:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+ *
+ * @see feedback_partition_aware_arn_matching (operator memory) — never use literal `"arn:aws:"`.
  */
 export function awsManagedPolicyArn(
   partition: string,
   policyPath: string,
 ): string {
+  // Must match AWS partition format: "aws" optionally followed by "-<lowercase-letters>" segments.
+  if (!/^aws(?:-[a-z]+)*$/.test(partition)) {
+    throw new RangeError(
+      `awsManagedPolicyArn: unrecognised partition "${partition}". ` +
+        `Expected one of: aws, aws-us-gov, aws-cn, aws-iso, aws-iso-b (or other aws-* partitions).`,
+    );
+  }
   return `arn:${partition}:iam::aws:policy/${policyPath}`;
 }
 

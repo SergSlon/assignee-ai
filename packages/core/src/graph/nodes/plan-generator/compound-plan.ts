@@ -20,6 +20,7 @@ import {
   ExecutionStatus,
   RESOURCE_TYPES,
   CfnKey,
+  getPartitionFromRegion,
 } from "@/index.js";
 import { AWS_REGION } from "@/config/constants/aws.js";
 import { resolveAmiFromOsName } from "@/utils/aws-resource-discovery/index.js";
@@ -35,6 +36,7 @@ import { safeCloneDesiredState } from "./safe-clone.js";
 import {
   injectCompoundResourceName,
   injectLambdaRoleArn,
+  rewriteManagedPolicyArnsForPartition,
   readCompoundPatternMemoryHints,
   injectPluginRequiredDefaults,
   postProcessEc2Compound,
@@ -77,6 +79,17 @@ export async function runCompoundPlan(
   };
 
   injectCompoundResourceName(desiredState, currentResource, state.runId);
+
+  // W-010: Rewrite AWS-managed policy ARNs to use the correct partition.
+  // Pattern `defaultOptions` are static objects seeded with commercial-
+  // partition ARNs (`arn:aws:iam::aws:policy/...`). In GovCloud, China, and
+  // ISO partitions the prefix differs; this call replaces the commercial prefix
+  // with `arn:<partition>:iam::aws:policy/` for ManagedPolicyArns + PermissionsBoundary.
+  rewriteManagedPolicyArnsForPartition(
+    desiredState,
+    getPartitionFromRegion(AWS_REGION),
+  );
+
   await injectLambdaRoleArn(desiredState, currentResource, state);
 
   // Compound marker resolution must run before CloudControl sees the

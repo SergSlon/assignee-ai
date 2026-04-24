@@ -9,9 +9,11 @@
  *     `ExecutionStatus.FAILED` with a `[ERROR] ... [FIX] ...` message on
  *     failure and passes through on success.
  *
- * Scope in this module: AWS::S3::Bucket only. The dispatcher is
- * extensible — additional resource types slot in via the
- * `DESIRED_STATE_VALIDATORS` registry below.
+ * Epic 99 W4 Lane 4a (W-006): adds plan-time name validators for 8 more
+ * resource types: Lambda, DynamoDB, EC2 SecurityGroup, IAM Role, RDS
+ * DBInstance, SQS Queue, SNS Topic, KMS Alias, and ECR Repository.
+ * Validators live in `./validate-desired-state/name-validators.ts` and
+ * are wired into the DESIRED_STATE_VALIDATORS registry below.
  *
  * Out of scope (follow-up): wiring `validateDesiredStateNode` into
  * `create-graph.ts` between PLAN_GENERATOR and ADVICE_GENERATOR (or as
@@ -24,6 +26,32 @@ import { ErrorCode } from "../../constants/errors.js";
 import { AssigneeError } from "../../errors.js";
 import { ExecutionStatus } from "../../schema/graph-state.js";
 import type { AgentState } from "../graph-state.js";
+// Re-export the W-006 per-type validators so tests and callers can import
+// them directly from the main module without reaching into the sub-module.
+export {
+  validateLambdaName,
+  validateDdbTableName,
+  validateSgName,
+  validateIamRoleName,
+  validateRdsDbIdentifier,
+  validateSqsQueueName,
+  validateSnsTopicName,
+  validateKmsAliasName,
+  validateEcrRepositoryName,
+} from "./validate-desired-state/name-validators.js";
+
+// Internal import for use in the DESIRED_STATE_VALIDATORS registry below.
+import {
+  validateLambdaName,
+  validateDdbTableName,
+  validateSgName,
+  validateIamRoleName,
+  validateRdsDbIdentifier,
+  validateSqsQueueName,
+  validateSnsTopicName,
+  validateKmsAliasName,
+  validateEcrRepositoryName,
+} from "./validate-desired-state/name-validators.js";
 
 /**
  * Machine-readable error code emitted when the `validateDesiredStateNode`
@@ -183,8 +211,9 @@ type DesiredStateValidator = (
 
 /**
  * Registry of per-resource-type validators. Extensible — add new entries
- * here as each plan-time validation lands (e.g. SQS, DynamoDB,
- * CloudFront, IAM role names).
+ * here as each plan-time validation lands.
+ *
+ * Epic 99 W4 Lane 4a (W-006): 8 new resource types wired in addition to S3.
  */
 const DESIRED_STATE_VALIDATORS: Record<string, DesiredStateValidator> = {
   [RESOURCE_TYPES.S3_BUCKET]: (desiredState) => {
@@ -192,6 +221,90 @@ const DESIRED_STATE_VALIDATORS: Record<string, DesiredStateValidator> = {
     const bucketName = desiredState["BucketName"];
     if (typeof bucketName === "string" && bucketName.length > 0) {
       results.push(validateS3BucketName(bucketName));
+    }
+    return results;
+  },
+
+  [RESOURCE_TYPES.LAMBDA_FUNCTION]: (desiredState) => {
+    const results: ValidationResult[] = [];
+    const name = desiredState["FunctionName"];
+    if (typeof name === "string" && name.length > 0) {
+      results.push(validateLambdaName(name));
+    }
+    return results;
+  },
+
+  [RESOURCE_TYPES.DYNAMODB_TABLE]: (desiredState) => {
+    const results: ValidationResult[] = [];
+    const name = desiredState["TableName"];
+    if (typeof name === "string" && name.length > 0) {
+      results.push(validateDdbTableName(name));
+    }
+    return results;
+  },
+
+  [RESOURCE_TYPES.EC2_SECURITY_GROUP]: (desiredState) => {
+    const results: ValidationResult[] = [];
+    const name = desiredState["GroupName"];
+    if (typeof name === "string" && name.length > 0) {
+      results.push(validateSgName(name));
+    }
+    return results;
+  },
+
+  [RESOURCE_TYPES.IAM_ROLE]: (desiredState) => {
+    const results: ValidationResult[] = [];
+    const name = desiredState["RoleName"];
+    if (typeof name === "string" && name.length > 0) {
+      results.push(validateIamRoleName(name));
+    }
+    return results;
+  },
+
+  [RESOURCE_TYPES.RDS_DB_INSTANCE]: (desiredState) => {
+    const results: ValidationResult[] = [];
+    const name = desiredState["DBInstanceIdentifier"];
+    if (typeof name === "string" && name.length > 0) {
+      results.push(validateRdsDbIdentifier(name));
+    }
+    return results;
+  },
+
+  [RESOURCE_TYPES.SQS_QUEUE]: (desiredState) => {
+    const results: ValidationResult[] = [];
+    const name = desiredState["QueueName"];
+    if (typeof name === "string" && name.length > 0) {
+      results.push(validateSqsQueueName(name));
+    }
+    return results;
+  },
+
+  [RESOURCE_TYPES.SNS_TOPIC]: (desiredState) => {
+    const results: ValidationResult[] = [];
+    const name = desiredState["TopicName"];
+    if (typeof name === "string" && name.length > 0) {
+      results.push(validateSnsTopicName(name));
+    }
+    return results;
+  },
+
+  // KMS::Alias — note: AWS::KMS::Alias is not yet a first-class
+  // RESOURCE_TYPES constant (only KMS_KEY is). The literal string is used
+  // here so the validator is ready when the type is promoted.
+  "AWS::KMS::Alias": (desiredState) => {
+    const results: ValidationResult[] = [];
+    const name = desiredState["AliasName"];
+    if (typeof name === "string" && name.length > 0) {
+      results.push(validateKmsAliasName(name));
+    }
+    return results;
+  },
+
+  [RESOURCE_TYPES.ECR_REPOSITORY]: (desiredState) => {
+    const results: ValidationResult[] = [];
+    const name = desiredState["RepositoryName"];
+    if (typeof name === "string" && name.length > 0) {
+      results.push(validateEcrRepositoryName(name));
     }
     return results;
   },
