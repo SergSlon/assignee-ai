@@ -10,7 +10,7 @@ Read this from top to bottom. The **TL;DR** gives you the decision in one screen
 
 ## TL;DR
 
-Epic 98 shipped 17 stories + 7 demo-hotfix bugs surfaced by live-AWS dogfood on account `112233445566`. The **core product works end-to-end on 7 of 8 representative resource types**. EIP apply→destroy round-trip and Lambda IAM exec-role cascade are the two fixes that matter for demo safety (both would leak cost if unfixed). If the hotfix commits (below) landed, **the product is demo-ready for the types listed**.
+Epic 98 shipped 17 stories + 7 demo-hotfix bugs surfaced by live-AWS dogfood on account `210987654321`. The **core product works end-to-end on 7 of 8 representative resource types**. EIP apply→destroy round-trip and Lambda IAM exec-role cascade are the two fixes that matter for demo safety (both would leak cost if unfixed). If the hotfix commits (below) landed, **the product is demo-ready for the types listed**.
 
 Things that could still embarrass during a live demo are in §4 (known issues). Read that before the demo.
 
@@ -42,7 +42,7 @@ Things that could still embarrass during a live demo are in §4 (known issues). 
 
 ---
 
-## 2. Live-AWS dogfood verification (2026-04-24, account `112233445566`)
+## 2. Live-AWS dogfood verification (2026-04-24, account `210987654321`)
 
 **Budget spent**: ~$0.01 live AWS. All test resources destroyed.
 

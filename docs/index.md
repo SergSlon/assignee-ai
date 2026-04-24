@@ -53,7 +53,7 @@ when you want to understand how assignee.ai thinks.
 | Doc                                                                            | Topic                                                                                                                                     |
 | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | [explanation/ai-architecture.md](explanation/ai-architecture.md)               | **What the AI parts actually do** — LLM callsites, MCP servers, BP engine, HITL interrupt, with code-cited accuracy + a real captured run |
-| [architecture.md](architecture.md)                                             | Monorepo layout, 13-node LangGraph pipeline, hexagonal ports                                                                              |
+| [architecture.md](architecture.md)                                             | Monorepo layout, 14-node LangGraph pipeline, hexagonal ports                                                                              |
 | [architecture-flows.md](architecture-flows.md)                                 | End-to-end flow diagrams for plan / apply / destroy / drift                                                                               |
 | [integration-architecture.md](integration-architecture.md)                     | How CLI, MCP server, and `@assignee/core` fit together                                                                                    |
 | [explanation/invariants.md](explanation/invariants.md)                         | Load-bearing rules (partition-aware ARN, CCAPI NotFound short-circuit, safety allowlist, …) — read before touching ARN/destroy/cred code  |
@@ -64,21 +64,21 @@ when you want to understand how assignee.ai thinks.
 
 ---
 
-## Key metrics (as of 2026-04-20)
+## Key metrics (as of 2026-04-24)
 
 | Metric                         | Count                                                                                                                                                     |
 | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Supported AWS resource types   | 37 (35 with dedicated plugins + 2 compound-only that fall through to the generic plugin: `EC2::VPCGatewayAttachment`, `EC2::SubnetRouteTableAssociation`) |
-| Compound architecture patterns | 10 first-class                                                                                                                                            |
-| LangGraph pipeline nodes       | 13                                                                                                                                                        |
+| Supported AWS resource types   | 38 (36 with dedicated plugins + 2 compound-only that fall through to the generic plugin: `EC2::VPCGatewayAttachment`, `EC2::SubnetRouteTableAssociation`) |
+| Compound architecture patterns | 11 first-class                                                                                                                                            |
+| LangGraph pipeline nodes       | 14                                                                                                                                                        |
 | CLI commands                   | 13                                                                                                                                                        |
 | MCP server tools               | 5                                                                                                                                                         |
-| Resource plugins               | 37 registered (35 type-specific + generic fallback; 2 compound-only types share the generic)                                                              |
+| Resource plugins               | 38 registered (36 type-specific + generic fallback; 2 compound-only types share the generic)                                                              |
 | Best practice YAML rules       | 185 (count matches `packages/best-practices/manifest.json`)                                                                                               |
-| Pricing strategies             | 37 (matches `pnpm doc-lint`)                                                                                                                              |
-| Pricing decomposers            | 37 (matches `pnpm doc-lint`)                                                                                                                              |
+| Pricing strategies             | 38 (matches `pnpm doc-lint`)                                                                                                                              |
+| Pricing decomposers            | 38 (matches `pnpm doc-lint`)                                                                                                                              |
 | Config precedence levels       | 6                                                                                                                                                         |
 | LLM providers supported        | 5                                                                                                                                                         |
 | IAM credential users           | 3                                                                                                                                                         |
 | Test files                     | across 4 packages (cli + mcp-server + core + best-practices) — run `pnpm -r test:coverage` for live counts                                                |
-| RUN_E2E compound coverage      | 9/10 first-class compounds (vpc-public-only not yet exercised)                                                                                            |
+| RUN_E2E compound coverage      | 9/11 first-class compounds (websocket-api and vpc-public-only not yet exercised end-to-end)                                                               |

@@ -7,13 +7,14 @@
 ## Table of contents
 
 - [1. What AI does in this project](#1-what-ai-does-in-this-project)
-- [2. The 13-node pipeline, at a glance](#2-the-13-node-pipeline-at-a-glance)
+- [2. The 14-node pipeline, at a glance](#2-the-14-node-pipeline-at-a-glance)
 - [3. Node classification — LLM / MCP / rule / plumbing](#3-node-classification--llm--mcp--rule--plumbing)
 - [4. The LLM layer — providers, sanitization, cost](#4-the-llm-layer--providers-sanitization-cost)
-- [5. The MCP layer — five AWS servers feeding the pipeline](#5-the-mcp-layer--five-aws-servers-feeding-the-pipeline)
+- [5. The MCP layer — five core AWS servers + one opt-in knowledge server](#5-the-mcp-layer--five-core-aws-servers--one-opt-in-knowledge-server)
 - [6. The Best Practices engine — deterministic, not AI](#6-the-best-practices-engine--deterministic-not-ai)
 - [7. Human-in-the-loop — the interrupt that gates every apply](#7-human-in-the-loop--the-interrupt-that-gates-every-apply)
 - [8. What this repo exports as MCP tools](#8-what-this-repo-exports-as-mcp-tools)
+- [8.5. Epic 88-98 architectural additions](#85-epic-88-98-architectural-additions)
 - [9. A real end-to-end run](#9-a-real-end-to-end-run)
 - [10. Design choices and tradeoffs](#10-design-choices-and-tradeoffs)
 
@@ -39,9 +40,9 @@ Everything else that _feels_ AI-ish is not:
 
 The architectural rule: **LLMs translate, MCP servers report, rules enforce, humans authorize.** A mistake in any one layer is caught by the next.
 
-## 2. The 13-node pipeline, at a glance
+## 2. The 14-node pipeline, at a glance
 
-`packages/core/src/graph/create-graph.ts` declares 13 nodes in a LangGraph `StateGraph`. Pipeline shape (abbreviated — full routing in §3):
+`packages/core/src/graph/create-graph.ts` declares 14 nodes in a LangGraph `StateGraph`. Pipeline shape (abbreviated — full routing in §3):
 
 ```
           ┌──────────────────── Phase 1: planning ─────────────────────┐
@@ -51,8 +52,10 @@ START  ▶  intent_parser  ▶  schema_fetcher  ▶  option_elicitor
                                                      │
                                             plan_generator ◀─┐
                                                      │       │
-                                            advice_generator │  (compound
+                                    validate_desired_state   │  (compound
                                                      │       │   loop)
+                                            advice_generator │
+                                                     │       │
                                               bp_evaluator   │
                                                      │       │
                                              fix_applicator  │
@@ -83,23 +86,24 @@ interruptBefore: [GraphNode.RESOURCE_PROVISIONER],
 
 Each node is classified by what it _consumes_. The point is to show that only three nodes actually make LLM calls; most of the work is either deterministic or MCP-mediated.
 
-| #   | Node                   | LLM? (callsite)            | MCP? (server)                                | Rule?                                                  | What it does                                                                                                                                                                                            |
-| --- | ---------------------- | -------------------------- | -------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | `intent_parser`        | **Yes** (intent_parser)    | —                                            | —                                                      | Classify English → `resourceType` or a compound pattern. Falls back to regex-based pattern matching if the LLM is uncertain.                                                                            |
-| 2   | `schema_fetcher`       | —                          | —                                            | —                                                      | Direct CloudFormation `DescribeType` SDK call. Pure plumbing.                                                                                                                                           |
-| 3   | `option_elicitor`      | —                          | Pricing (parallel)                           | —                                                      | Interactive wizard for field values. Fires pricing lookups in parallel so the plan box shows live cost as soon as config is decided.                                                                    |
-| 4   | `compound_dispatcher`  | —                          | —                                            | —                                                      | Pure function. Flattens a compound pattern's `resourceList` into a sequential `resourceQueue`.                                                                                                          |
-| 5   | `plan_generator`       | **Yes** (plan_generator)   | —                                            | —                                                      | LLM turns `resourceType + schema + elicitedOptions` into `desiredState` JSON. Compound patterns short-circuit the LLM call and use `defaultOptions` instead.                                            |
-| 6   | `advice_generator`     | **Yes** (advice_generator) | Documentation, Pricing, WA-Security          | Rule-based hint set (first pass)                       | Rule-based hints first (fast, deterministic), MCP-enrichment second (live data), LLM polish third (readability only).                                                                                   |
-| 7   | `preflight_guard`      | —                          | Pricing, IAM                                 | Placeholder-ARN, required-field, managed-policy guards | Parallel fan-out: pricing breakdown + IAM `simulate_principal_policy`. Fails closed if the operator can't actually perform the CloudControl action.                                                     |
-| 8   | `human_approval`       | —                          | —                                            | —                                                      | Renders the plan box (boxen on TTY, plain on pipe), reads user confirm. Sole gate on the `interruptBefore` boundary.                                                                                    |
-| 9   | `resource_provisioner` | —                          | —                                            | —                                                      | CloudControl `CreateResource`. Writes `requestToken` + `resourceArn` into state.                                                                                                                        |
-| 10  | `status_poller`        | —                          | —                                            | —                                                      | Polls CloudControl until the request is terminal. Self-loops with `POLL_INTERVAL_MS = 2_000` (see `status-poller.ts:21`). Extended timeout (`20 * 60 * 1000`) for slow resources like CloudFront / RDS. |
-| 11  | `bp_evaluator`         | —                          | Documentation, WA-Security (enrichment only) | **Yes** — 185 YAML rules                               | Evaluates 185 deterministic rules against `desiredState`. MCP enrichment adds live context (e.g., SecurityHub findings) but doesn't drive the pass/fail decision.                                       |
-| 12  | `fix_applicator`       | —                          | —                                            | —                                                      | Applies `desiredStatePatch` from auto-fixable findings; runs interactive prompts for user-gated fixes.                                                                                                  |
-| 13  | `result_formatter`     | —                          | —                                            | —                                                      | Terminal rendering. Routes to `SUCCESS` / `FAILED` / `CANCELLED` / plan-mode formatters.                                                                                                                |
+| #   | Node                     | LLM? (callsite)            | MCP? (server)                                | Rule?                                                  | What it does                                                                                                                                                                                            |
+| --- | ------------------------ | -------------------------- | -------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `intent_parser`          | **Yes** (intent_parser)    | —                                            | —                                                      | Classify English → `resourceType` or a compound pattern. Falls back to regex-based pattern matching if the LLM is uncertain.                                                                            |
+| 2   | `schema_fetcher`         | —                          | —                                            | —                                                      | Direct CloudFormation `DescribeType` SDK call. Pure plumbing.                                                                                                                                           |
+| 3   | `option_elicitor`        | —                          | Pricing (parallel)                           | —                                                      | Interactive wizard for field values. Fires pricing lookups in parallel so the plan box shows live cost as soon as config is decided.                                                                    |
+| 4   | `compound_dispatcher`    | —                          | —                                            | —                                                      | Pure function. Flattens a compound pattern's `resourceList` into a sequential `resourceQueue`.                                                                                                          |
+| 5   | `plan_generator`         | **Yes** (plan_generator)   | —                                            | —                                                      | LLM turns `resourceType + schema + elicitedOptions` into `desiredState` JSON. Compound patterns short-circuit the LLM call and use `defaultOptions` instead.                                            |
+| 6   | `validate_desired_state` | —                          | —                                            | Schema constraint checks                               | Validates the generated `desiredState` JSON against CloudFormation schema constraints before passing to the advice layer. Added in Epic 94.R1 (`GraphNode.VALIDATE_DESIRED_STATE`).                     |
+| 7   | `advice_generator`       | **Yes** (advice_generator) | Documentation, Pricing, WA-Security          | Rule-based hint set (first pass)                       | Rule-based hints first (fast, deterministic), MCP-enrichment second (live data), LLM polish third (readability only).                                                                                   |
+| 8   | `preflight_guard`        | —                          | Pricing, IAM                                 | Placeholder-ARN, required-field, managed-policy guards | Parallel fan-out: pricing breakdown + IAM `simulate_principal_policy`. Fails closed if the operator can't actually perform the CloudControl action.                                                     |
+| 9   | `human_approval`         | —                          | —                                            | —                                                      | Renders the plan box (boxen on TTY, plain on pipe), reads user confirm. Sole gate on the `interruptBefore` boundary.                                                                                    |
+| 10  | `resource_provisioner`   | —                          | —                                            | —                                                      | CloudControl `CreateResource`. Writes `requestToken` + `resourceArn` into state.                                                                                                                        |
+| 11  | `status_poller`          | —                          | —                                            | —                                                      | Polls CloudControl until the request is terminal. Self-loops with `POLL_INTERVAL_MS = 2_000` (see `status-poller.ts:21`). Extended timeout (`20 * 60 * 1000`) for slow resources like CloudFront / RDS. |
+| 12  | `bp_evaluator`           | —                          | Documentation, WA-Security (enrichment only) | **Yes** — 185 YAML rules                               | Evaluates 185 deterministic rules against `desiredState`. MCP enrichment adds live context (e.g., SecurityHub findings) but doesn't drive the pass/fail decision.                                       |
+| 13  | `fix_applicator`         | —                          | —                                            | —                                                      | Applies `desiredStatePatch` from auto-fixable findings; runs interactive prompts for user-gated fixes.                                                                                                  |
+| 14  | `result_formatter`       | —                          | —                                            | —                                                      | Terminal rendering. Routes to `SUCCESS` / `FAILED` / `CANCELLED` / plan-mode formatters. Emits `BP_BLOCKED` envelope when a blocking BP finding prevented provisioning.                                 |
 
-**Plumbing nodes** (classified neither as LLM nor MCP): `schema_fetcher`, `compound_dispatcher`, `human_approval`, `resource_provisioner`, `status_poller`, `fix_applicator`, `result_formatter`. More than half the pipeline is deterministic.
+**Plumbing nodes** (classified neither as LLM nor MCP): `schema_fetcher`, `compound_dispatcher`, `validate_desired_state`, `human_approval`, `resource_provisioner`, `status_poller`, `fix_applicator`, `result_formatter`. More than half the pipeline is deterministic.
 
 ## 4. The LLM layer — providers, sanitization, cost
 
@@ -194,7 +198,7 @@ Bedrock gets a little extra wrapping because AWS gates its models by region. `pa
 
 The adapter is constructed **lazily** — `LlmAdapter.getModel()` (adapter.ts:58-63) only instantiates the language-model client on first call, and caches the instance for the rest of the process. One adapter per `assignee` invocation, shared across the three LLM nodes.
 
-## 5. The MCP layer — five AWS servers feeding the pipeline
+## 5. The MCP layer — five core AWS servers + one opt-in knowledge server
 
 MCP (Model Context Protocol) is how the pipeline talks to AWS with structured requests instead of hand-rolled SDK calls. The project pins exact versions so supply-chain updates are explicit (`packages/core/src/config/mcp-servers.ts:46-56`):
 
@@ -303,7 +307,44 @@ So far we've talked about the MCP servers the pipeline _consumes_. The project a
 4. **`estimate_cost`** (`estimate-cost.ts:49+`) — fast-path pricing lookup via `PricingStrategyRegistry`. Doesn't run the full graph.
 5. **`destroy_resource`** (`destroy-resource.ts:15-48`) — safely deletes a resource by ARN or slug. Requires `confirmed: true`.
 
-All 5 are registered at `apps/mcp-server/src/tools/index.ts:15-21`. They go through the same 13-node graph as the CLI, which means the HITL interrupt fires _inside the MCP server call_ — an agent calling `apply_plan` without `confirmed: true` gets a rejection, not a silent provision.
+All 5 are registered at `apps/mcp-server/src/tools/index.ts:15-21`. They go through the same 14-node graph as the CLI, which means the HITL interrupt fires _inside the MCP server call_ — an agent calling `apply_plan` without `confirmed: true` gets a rejection, not a silent provision.
+
+## 8.5. Epic 88-98 architectural additions
+
+The sections above were last fully updated against Epic 84 HEAD. The following features shipped in Epics 88-98 and are architecturally significant — they affect what the AI pipeline does, how BP rules behave, and how errors are surfaced.
+
+### M1 probe-gate methodology (Epic 96, commit `14ce911`)
+
+Every story that ships a new BP rule or a new first-class type must also ship a dogfood probe in `PROBE_MANIFEST.yaml`. The M1 gate (`pnpm citation-lint` step) verifies each probe fires on the intended intent before the commit can land. This is a methodology gate on the _test surface_, not a change to the pipeline itself — but it means the AI architecture's correctness claims are now backed by a required fire-probe per story.
+
+### M2 multi-variation + tripwire forcing-flip (Epic 98, commit `2556394`)
+
+Probe entries now carry a `known_tripwires[]` array and `--strict-multi-variation` / `--tripwire-only` CLI flags. When `known_tripwires` is non-empty, the probe runner can verify that a given forcing phrase (an adversarial variation designed to trip the LLM into a wrong classification) is correctly rejected by `intent_parser`. This closes the loop between the ML classification node and the probe test surface: if a new keyword alias causes a regression, the probe manifest catches it before CI green.
+
+### `BP_BLOCKED` error envelope (Epic 98 W5.N4, commit `092d356`)
+
+`apply.ts` now emits a discriminated `ApplyFailureDetail` with `kind: "bp_blocked"` when a blocking BP finding prevents provisioning, distinct from `kind: "apply_failed"` (CCAPI error). This means:
+
+- Exit code 10 covers both, but the machine-readable `--json` output distinguishes the two causes.
+- MCP `apply_plan` callers can detect a BP block without parsing human-readable text.
+- The `result_formatter` node (now #14) emits the `BP_BLOCKED` envelope; see `packages/core/src/constants/errors.ts:82`.
+
+### 11-plugin secure-by-default allowlist (Epic 98 W3.A1, commit `a84003e`)
+
+`LLM_PATH_PLUGIN_DEFAULT_BACKFILL_ALLOWLIST` covers: `SNS_TOPIC`, `SQS_QUEUE`, `EC2_ROUTE`, `EC2_NAT_GATEWAY`, `ELBV2_LOAD_BALANCER`, `RDS_DB_INSTANCE`, `ECS_CLUSTER`, `ECR_REPOSITORY`, `EFS_FILE_SYSTEM`, `APIGATEWAYV2_API`, `CLOUDFRONT_DISTRIBUTION`. When `plan_generator` produces a `desiredState` that omits optional security fields (e.g., `MultiAZ`, `DeletionProtection`), the backfill step applies the plugin's opinionated defaults before `bp_evaluator` runs — reducing noise from fixable violations and ensuring the HITL plan box shows a more complete picture. Types not on the allowlist get no backfill (explicit opt-in required by the plugin author).
+
+### New BP `check_type` extensions (Epic 98 W4.B1-B5)
+
+The BP rule-runner dispatch table (`packages/best-practices/src/evaluate/rule-runner.ts`) now handles two additional `check_type` values beyond the original set:
+
+- **`nested_array_predicate`** — evaluates a predicate function against every element of a nested array in `desiredState` (e.g., all `Statement[]` entries in a policy document must satisfy a condition).
+- **`policy_antipattern`** — detects known dangerous IAM policy patterns (wildcard actions, overly broad resources, missing conditions) at the property-path level.
+
+These extend `ai-architecture.md §6`'s check-type table. Any BP YAML that references `nested_array_predicate` or `policy_antipattern` as `check_type` requires the updated engine; older CLI builds will fall through to the `default` branch and pass silently (a known gap — see W-004 in Epic 99 findings).
+
+### Elastic IP (EIP) first-class promotion (Epic 98 W5.N5, commit `fc47b4c`)
+
+`AWS::EC2::EIP` is now a first-class CCAPI type (type 38 in `SUPPORTED_TYPES_ARRAY`). It has a dedicated pricing decomposer and plugin, and appears as a named resource in the VPC Networking compound pattern. The `intent_parser` resolves "elastic ip", "eip", "allocate ip" to `AWS::EC2::EIP` at zero LLM latency via keyword matching.
 
 ## 9. A real end-to-end run
 
