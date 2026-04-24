@@ -109,6 +109,7 @@ User ARN: arn:aws:iam::************:user/assignee-operator
 Region:   us-east-1
 Role:     operator (ASSIGNEE_OPERATOR_ACCESS_KEY_ID)
 Config:   ./.assignee/config.yaml (loaded)
+Redact:   ASSIGNEE_DEMO_REDACT_ACCOUNT=<unset>  (demo redaction OFF — real account IDs will appear in output)
 
 For full diagnostics, run `assignee doctor`.
 ```
@@ -167,28 +168,29 @@ When Mara works alone, she runs `assignee plan` and `assignee apply` in her term
 
 ```
 intent_parser → schema_fetcher → option_elicitor → compound_dispatcher
-  → plan_generator → advice_generator → bp_evaluator → fix_applicator
+  → plan_generator → validate_desired_state → advice_generator → bp_evaluator → fix_applicator
     → preflight_guard → human_approval ─[HITL]─ → resource_provisioner
       → status_poller → result_formatter
 ```
 
-| Node                   | What it does                                                                                                                                                               |
-| :--------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `intent_parser`        | Classifies natural language into a resource type + action. Compound keywords ("create a vpc") are matched at zero LLM latency                                              |
-| `schema_fetcher`       | Fetches the CloudFormation schema for the target type via `@aws-sdk/client-cloudformation`                                                                                 |
-| `option_elicitor`      | Interactive wizard — prompts for required and optional fields with live pricing, smart defaults, and `showIf` conditionals                                                 |
-| `compound_dispatcher`  | Expands a compound pattern (e.g. VPC) into a dependency-ordered resource queue with marker-ref cross-references                                                            |
-| `plan_generator`       | LLM (Bedrock) produces a `desiredState` JSON from the schema + user answers. Validates output with Zod                                                                     |
-| `advice_generator`     | LLM-produced non-blocking advisory notes on the plan (cost shape, likely gotchas) surfaced alongside the plan box for operator context                                     |
-| `bp_evaluator`         | Evaluates 185 best-practice rules against the plan (count matches `packages/best-practices/manifest.json`). Flags violations by severity (CRITICAL / HIGH / MEDIUM / INFO) |
-| `fix_applicator`       | Auto-patches fixable violations (e.g. enables S3 encryption). Shows "Changed X → Y because BP-### (auto-fixed)" per fix                                                    |
-| `preflight_guard`      | Blocks the plan if any CRITICAL / blocking findings remain unfixed. Runs placeholder-ARN rejection + cost preflight                                                        |
-| `human_approval`       | Renders the plan box and waits for explicit user confirmation before any AWS resource is created (HITL gate)                                                               |
-| `resource_provisioner` | State Guard (read-before-write) then CloudControl API `createResource`. Tags injected automatically                                                                        |
-| `status_poller`        | Polls CloudControl until terminal state (SUCCESS / FAILED). Extended timeouts for RDS, ELBv2, NAT Gateway                                                                  |
-| `result_formatter`     | Renders success/failure output, writes provision records to memory, runs post-provision security checks                                                                    |
+| Node                     | What it does                                                                                                                                                               |
+| :----------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `intent_parser`          | Classifies natural language into a resource type + action. Compound keywords ("create a vpc") are matched at zero LLM latency                                              |
+| `schema_fetcher`         | Fetches the CloudFormation schema for the target type via `@aws-sdk/client-cloudformation`                                                                                 |
+| `option_elicitor`        | Interactive wizard — prompts for required and optional fields with live pricing, smart defaults, and `showIf` conditionals                                                 |
+| `compound_dispatcher`    | Expands a compound pattern (e.g. VPC) into a dependency-ordered resource queue with marker-ref cross-references                                                            |
+| `plan_generator`         | LLM (Bedrock) produces a `desiredState` JSON from the schema + user answers. Validates output with Zod                                                                     |
+| `advice_generator`       | LLM-produced non-blocking advisory notes on the plan (cost shape, likely gotchas) surfaced alongside the plan box for operator context                                     |
+| `bp_evaluator`           | Evaluates 185 best-practice rules against the plan (count matches `packages/best-practices/manifest.json`). Flags violations by severity (CRITICAL / HIGH / MEDIUM / INFO) |
+| `fix_applicator`         | Auto-patches fixable violations (e.g. enables S3 encryption). Shows "Changed X → Y because BP-### (auto-fixed)" per fix                                                    |
+| `validate_desired_state` | Validates the generated `desiredState` JSON against schema constraints before advice generation. Added in Epic 94.R1 (`GraphNode.VALIDATE_DESIRED_STATE`).                 |
+| `preflight_guard`        | Blocks the plan if any CRITICAL / blocking findings remain unfixed. Runs placeholder-ARN rejection + cost preflight                                                        |
+| `human_approval`         | Renders the plan box and waits for explicit user confirmation before any AWS resource is created (HITL gate)                                                               |
+| `resource_provisioner`   | State Guard (read-before-write) then CloudControl API `createResource`. Tags injected automatically                                                                        |
+| `status_poller`          | Polls CloudControl until terminal state (SUCCESS / FAILED). Extended timeouts for RDS, ELBv2, NAT Gateway                                                                  |
+| `result_formatter`       | Renders success/failure output, writes provision records to memory, runs post-provision security checks                                                                    |
 
-13 nodes. Compound patterns loop `plan_generator → result_formatter` per resource in dependency order. Source of truth: `packages/core/src/graph/create-graph.ts` (`.addNode` calls) and the node implementations under `packages/core/src/graph/nodes/`. `apps/cli/src/nodes/advice/cost-optimizer/` and `apps/cli/src/nodes/fix-applicator/orchestrator.ts` are thin re-export shims from `@assignee/core`; the rest of the `apps/cli/src/nodes/` tree is CLI-only test code.
+14 nodes. Compound patterns loop `plan_generator → result_formatter` per resource in dependency order. Source of truth: `packages/core/src/graph/create-graph.ts` (`.addNode` calls) and the node implementations under `packages/core/src/graph/nodes/`. `apps/cli/src/nodes/advice/cost-optimizer/` and `apps/cli/src/nodes/fix-applicator/orchestrator.ts` are thin re-export shims from `@assignee/core`; the rest of the `apps/cli/src/nodes/` tree is CLI-only test code.
 
 All AWS credentials stay local — they never leave your machine. Bedrock calls run against your own account.
 
@@ -286,7 +288,7 @@ The single-axis moats each have a shelf life. The compound bundle is the durable
 
 ## Supported resource types
 
-**37 first-class types** — curated coverage of the AWS core that 80% of small-team workloads need: S3, IAM, Lambda, RDS, EC2, VPC, DynamoDB, SQS, SNS, ELBv2, ECS, ECR, API Gateway v2, EventBridge, KMS, CloudFront, Secrets Manager, SSM, CloudWatch, plus 18 more. Every type flows through CloudControl API — zero direct SDK write paths. Run `assignee plan --help` for the live listing with field counts and BP rule coverage, or see [docs/resource-types.md](docs/resource-types.md) for the full reference.
+**38 first-class types** — curated coverage of the AWS core that 80% of small-team workloads need: S3, IAM, Lambda, RDS, EC2, VPC, DynamoDB, SQS, SNS, ELBv2, ECS, ECR, API Gateway v2, EventBridge, KMS, CloudFront, Secrets Manager, SSM, CloudWatch, Elastic IP (EIP), plus 18 more. Every type flows through CloudControl API — zero direct SDK write paths. Run `assignee plan --help` for the live listing with field counts and BP rule coverage, or see [docs/resource-types.md](docs/resource-types.md) for the full reference.
 
 ### Compound architecture patterns
 
@@ -310,13 +312,13 @@ Multi-resource intents are detected by keyword matching (zero LLM latency) and p
 
 ## MCP Server
 
-**MCP is not the moat — every IaC tool will have one within 12 months. The moat is that the MCP path routes through the identical 13-node graph, 185 BP rules, and HITL gate as the CLI, so an agent cannot silently bypass the approval loop the way an agent-generates-HCL-then-agent-applies-HCL pipeline can.**
+**MCP is not the moat — every IaC tool will have one within 12 months. The moat is that the MCP path routes through the identical 14-node graph, 185 BP rules, and HITL gate as the CLI, so an agent cannot silently bypass the approval loop the way an agent-generates-HCL-then-agent-applies-HCL pipeline can.**
 
 The `@assignee/mcp-server` package exposes Assignee.ai as an MCP server for AI coding agents (Claude Code, Cursor, Windsurf). It runs over **stdio transport, spawn-per-session** — the harness launches `assignee-mcp-server` as a child process on demand, no daemon required, credentials and state stay on the operator's box.
 
 Five tools are registered (see `apps/mcp-server/src/tools/index.ts`):
 
-- `plan_resource` — runs the 13-node graph up to the HITL gate and returns the plan box without provisioning
+- `plan_resource` — runs the 14-node graph up to the HITL gate and returns the plan box without provisioning
 - `apply_plan` — executes an approved plan through `resource_provisioner` → `status_poller`
 - `destroy_resource` — safe single-resource teardown using the per-type strategies under `packages/core/src/destroy-strategies/`
 - `list_managed_resources` — enumerates resources tagged with `assignee:managed=true` via the Resource Groups Tagging API, with the IAM-roles parallel listing path added in Story 52-2 (RGTA does not return IAM roles)
@@ -325,6 +327,8 @@ Five tools are registered (see `apps/mcp-server/src/tools/index.ts`):
 The CLI is one-shot per intent; the MCP server is a long-lived child the agent can call repeatedly within a session. Both surfaces import `createGraph` from `@assignee/core`, so the graph, BP rules, HITL gate, and credential separation are identical — an agent calling `apply_plan` hits the same approval boundary as a human typing `assignee apply`.
 
 Wire-up snippets for each harness live under [`apps/mcp-server/examples/`](apps/mcp-server/examples/) (`claude-code-mcp-config.json`, `cursor-mcp.json`, `windsurf-mcp-config.json`). See [docs/mcp-server.md](docs/mcp-server.md) and [apps/mcp-server/README.md](apps/mcp-server/README.md) for setup, env-var requirements, and troubleshooting.
+
+> **Pre-release:** `@assignee/mcp-server` is `private: true` — not yet on npm. Wire up via a local stdio command (`"command": "node", "args": ["/path/to/assignee-ai/apps/mcp-server/dist/index.js"]`) from a source checkout. The `npx` form targets v0.2.
 
 ---
 
@@ -387,7 +391,7 @@ packages/
 
 **Implementation stack** (choices, not moat claims — every one is swappable):
 
-- [`@langchain/langgraph`](https://langchain-ai.github.io/langgraphjs/) — agentic workflow orchestration for the 13-node pipeline
+- [`@langchain/langgraph`](https://langchain-ai.github.io/langgraphjs/) — agentic workflow orchestration for the 14-node pipeline
 - [`ai`](https://sdk.vercel.ai/) + [`@ai-sdk/amazon-bedrock`](https://sdk.vercel.ai/providers/ai-sdk-providers/amazon-bedrock) — Vercel AI SDK with multi-provider support (Bedrock, Anthropic, OpenAI, Google, Ollama)
 - [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/sdk) + [`@langchain/mcp-adapters`](https://github.com/langchain-ai/langchainjs/tree/main/libs/langchain-mcp-adapters) — MCP server integration
 - [`@clack/prompts`](https://github.com/bombshell-dev/clack) + `chalk` + `boxen` — terminal UX

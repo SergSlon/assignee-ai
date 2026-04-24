@@ -148,7 +148,7 @@ All 37 supported resource types flow through the CloudControl API (35 with dedic
 
 ### Cost
 
-Actual AWS costs for a full end-to-end run vary by region and pricing changes. Most resources are free-tier; RDS, ELB, and NAT Gateway are the usual cost drivers. Run `assignee cost` for live pricing before invoking the suite if cost visibility matters.
+Actual AWS costs for a full end-to-end run vary by region and pricing changes. Most resources are free-tier; RDS, ELB, and NAT Gateway are the usual cost drivers. Run `assignee plan <intent>` for a pre-flight cost estimate (pricing fetched live from the AWS Pricing MCP at plan time) before invoking the suite if cost visibility matters.
 
 ### Duration
 

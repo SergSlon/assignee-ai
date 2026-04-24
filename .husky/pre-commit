@@ -1,5 +1,23 @@
 pnpm lint-staged
 
+# Epic 99 W1b CT-14 defense: reject commits that (re-)introduce the real
+# AWS account ID used during dogfood. Replace with the safe synthetic
+# ID documented in feedback_no_real_account_ids_in_repo.
+#
+# Assembled from byte-equivalent fragments so this hook file itself
+# doesn't contain the literal 12-digit match target — otherwise a scan
+# of the hook finds itself. Fragments join to the real ID at runtime;
+# a grep of this source file finds only the fragments, not the ID.
+# Robust to empty staged-file list.
+_REAL_ID="05""4125""0184""76"
+_STAGED_WITH_REAL_ID=$(git diff --cached --name-only 2>/dev/null | xargs grep -l "$_REAL_ID" 2>/dev/null || true)
+if [[ -n "$_STAGED_WITH_REAL_ID" ]]; then
+  echo "[epic-99/w1b] FATAL: staged files contain the real AWS account ID used during dogfood. Replace with the synthetic ID (see feedback_no_real_account_ids_in_repo)."
+  echo "  Offending files:"
+  echo "$_STAGED_WITH_REAL_ID" | sed 's/^/    /'
+  exit 1
+fi
+
 # Epic 96 M1 methodology gate — pre-close probe framework.
 #
 # When any hot-path source is staged, run the probe manifest against

@@ -17,15 +17,15 @@ When set, structured JSON diagnostic logs are written to stderr. Without it, inf
 
 ## Exit Codes
 
-| Code  | Meaning                                                                                          |
-| ----- | ------------------------------------------------------------------------------------------------ |
-| `0`   | Success                                                                                          |
-| `1`   | General error¹                                                                                   |
-| `2`   | `assignee doctor` returned warnings only (no hard failures, see `--short`)                       |
-| `10`  | Policy / safety abort (typed-confirm mismatch, state guard, preflight rejection, BP block, etc.) |
-| `11`  | MCP server startup failure                                                                       |
-| `130` | Interrupted via SIGINT (Ctrl-C)                                                                  |
-| `143` | Terminated via SIGTERM                                                                           |
+| Code  | Meaning                                                                                                                                                                                                                                     |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0`   | Success                                                                                                                                                                                                                                     |
+| `1`   | General error¹                                                                                                                                                                                                                              |
+| `2`   | `assignee doctor` returned warnings only (no hard failures, see `--short`)                                                                                                                                                                  |
+| `10`  | Policy / safety abort (typed-confirm mismatch, state guard, preflight rejection, BP block, etc.) — includes `BP_BLOCKED` envelope when a blocking best-practice finding blocks the apply path (see `packages/core/src/constants/errors.ts`) |
+| `11`  | MCP server startup failure                                                                                                                                                                                                                  |
+| `130` | Interrupted via SIGINT (Ctrl-C)                                                                                                                                                                                                             |
+| `143` | Terminated via SIGTERM                                                                                                                                                                                                                      |
 
 ¹ Plan failure, provision failure, or — from `assignee drift` — drift
 detected. The drift case is the **designed outcome** of the `drift`
@@ -68,7 +68,7 @@ assignee plan [intent] [options]
 
 **Behavior:**
 
-- Runs the 13-node pipeline in plan mode (stops before provisioning)
+- Runs the 14-node pipeline in plan mode (stops before provisioning)
 - Saves a checkpoint to `.assignee/checkpoint-<runId>.json` (valid 72h)
 - `-o json` outputs structured JSON to stdout (suppresses spinners, prompts, and the "Apply now?" prompt)
 - If preflight passes and `--no-apply` is not set, prompts "Apply now?"
@@ -432,7 +432,7 @@ assignee optimize --json --no-color
 │                                                                     │
 ╰─────────────────────────────────────────────────────────────────────╯
 
-3 of 3 resources analyzed, 3 recommendations. Est. total monthly savings: <sum of live Pricing MCP savings — run `assignee cost` for current numbers>
+3 of 3 resources analyzed, 3 recommendations. Est. total monthly savings: <sum of live Pricing MCP savings — fetched at plan time via `assignee optimize --json`>
 
 Suggested reconcile commands (copy/paste):
   assignee plan "Change AWS::EC2::Instance i-0abc... from t3.large to t4g.large"

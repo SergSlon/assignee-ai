@@ -40,11 +40,11 @@ describe("resolveJsonMode", () => {
 // ── redactAccountIdIfDemoMode ────────────────────────────────────────────────
 
 describe("redactAccountIdIfDemoMode", () => {
-  const REAL_ACCOUNT = "054125018476";
+  const SYNTHETIC_ACCOUNT_ID = "210987654321";
   const ARN_WITH_ACCOUNT = `arn:aws:s3:::my-bucket`;
-  const ARN_ACCOUNT_BEARING = `arn:aws:iam::${REAL_ACCOUNT}:role/my-role`;
+  const ARN_ACCOUNT_BEARING = `arn:aws:iam::${SYNTHETIC_ACCOUNT_ID}:role/my-role`;
   const REDACTED_ARN = `arn:aws:iam::************:role/my-role`;
-  const MULTI_ARN = `arn:aws:iam::${REAL_ACCOUNT}:user/foo arn:aws:sts::${REAL_ACCOUNT}:assumed-role/bar`;
+  const MULTI_ARN = `arn:aws:iam::${SYNTHETIC_ACCOUNT_ID}:user/foo arn:aws:sts::${SYNTHETIC_ACCOUNT_ID}:assumed-role/bar`;
   const REDACTED_MULTI = `arn:aws:iam::************:user/foo arn:aws:sts::************:assumed-role/bar`;
 
   beforeEach(() => {
@@ -105,7 +105,7 @@ describe("redactAccountIdIfDemoMode", () => {
         ok: true,
         resources: [
           {
-            arn: `arn:aws:lambda:us-east-1:${REAL_ACCOUNT}:function:my-fn`,
+            arn: `arn:aws:lambda:us-east-1:${SYNTHETIC_ACCOUNT_ID}:function:my-fn`,
             type: "AWS::Lambda::Function",
           },
         ],
@@ -116,7 +116,7 @@ describe("redactAccountIdIfDemoMode", () => {
       2,
     );
     const result = redactAccountIdIfDemoMode(json);
-    expect(result).not.toContain(REAL_ACCOUNT);
+    expect(result).not.toContain(SYNTHETIC_ACCOUNT_ID);
     expect(result).toContain("************");
     // Non-account data is preserved
     expect(result).toContain("my-fn");
@@ -142,8 +142,8 @@ describe("redactAccountIdIfDemoMode", () => {
 
   it("redacts GovCloud and China partition ARNs (partition-aware)", () => {
     process.env["ASSIGNEE_DEMO_REDACT_ACCOUNT"] = "1";
-    const govArn = `arn:aws-us-gov:iam::${REAL_ACCOUNT}:role/r`;
-    const cnArn = `arn:aws-cn:iam::${REAL_ACCOUNT}:role/r`;
+    const govArn = `arn:aws-us-gov:iam::${SYNTHETIC_ACCOUNT_ID}:role/r`;
+    const cnArn = `arn:aws-cn:iam::${SYNTHETIC_ACCOUNT_ID}:role/r`;
     expect(redactAccountIdIfDemoMode(govArn)).toBe(
       `arn:aws-us-gov:iam::************:role/r`,
     );

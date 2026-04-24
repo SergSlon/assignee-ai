@@ -141,7 +141,7 @@ The MCP server's only workspace runtime deps are `@assignee/core` and
 was removed in Story 50-4 Wave 5 Pass I). Through `@assignee/core` the
 MCP server accesses:
 
-- `createGraph()` and every node implementation (all 13 nodes live
+- `createGraph()` and every node implementation (all 14 nodes live
   under `packages/core/src/graph/nodes/`; `apps/cli/src/nodes/` is
   shim-only)
 - `CloudControlAdapter` (Story 50-7 inlined the former SDKFallbackDispatcher redirect classifier)

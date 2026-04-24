@@ -74,6 +74,10 @@ First epic run on the `.claude/agents/*.md` subagent-definition harness (one Opu
 - `feedback_daily_cost_ceiling.md` — under-$1/day harness cost budget. Dogfooder lives at epic-close only.
 - `feedback_parallel_worker_commit_rhythm.md` — per-commit probe gates collide with parallel-worker trees; bypass for story commits, gate at wave-close. Re-snapshot the manifest immediately before every filter step.
 
+### Epic 97 — BP-awareness audit + post-Epic-96 fresh review, findings only (2026-04-23)
+
+10-lane post-Epic-96 review plus a targeted audit of the ~17 BP rules flagged in Epic 96 W3.N2 as still `check_type: awareness` despite holding CRITICAL-class exposure. Audit produced `epic-97-bp-awareness-audit.md`; review produced an 84-finding scorecard (`_archive/done-stories/epic-97-scorecard.md`) across BLOCKER / HIGH / MED / LOW waves. No implementation stories shipped from this epic — all 84 findings routed directly into Epic 98 as its input inventory.
+
 ### Epic 96 — 13 stories closing 23 Epic 95 findings, all probes PASS (2026-04-23)
 
 All 3 Wave-1 BLOCKERs, 6 Wave-2 REGRESSIONs, and 4 Wave-3 NEW findings closed via the persistent `epic96-fix-team` (graph-fixer / cli-fixer / bp-fixer on disjoint file slices). Every story's probe in `PROBE_MANIFEST.yaml` flipped from FAIL → PASS; final `pre-close-probes.sh` sweep shows **18/18 PASS**.
@@ -145,6 +149,10 @@ These are the exact 5 Epic 95 bugs Wave 1 will fix — proving the gate catches 
 
 Full gate run green: `pnpm lint / check-types / lint:barrels / lint:shims / doc-lint / citation-lint / audit --prod / build / -r test:coverage` — plus the NEW `pre-close-probes.sh` which correctly exits non-zero against the pre-fix tree.
 
+### Epic 95 — post-Epic-94 fresh review, findings only (2026-04-22)
+
+10-lane post-Epic-94 review returned 35 findings (12 regressions + 15 new + 8 preexisting). Methodology failure repeated from Epic 93: "unit tests pass → closed" still accepted by Epic 94 in places — several stories shipped inert modules that were never wired into user-visible paths. No implementation stories shipped from this epic; all 35 findings routed into Epic 96 as its input inventory. The repeat partial-landing pattern directly motivated the Epic 96 M1 methodology gate. Scorecard: `_archive/done-stories/epic-95-scorecard.md`.
+
 ### Epic 94 — Wave 2 N6 + Wave 3 + Wave 4 (2026-04-22)
 
 Closed the NEW + PREEXISTING lanes via a persistent **3-member opus-4-7[1m] team** (`epic94-fix-team`) working on disjoint file slices — graph-fixer on preflight+checkpoint, display-fixer on render+pattern, pricing-fixer on advisory-prices+cost-history. Each member processed stories serially within itself; all three in parallel across the team. No concurrent-write race (Epic 92 lesson applied: calibrated to 3 members, not 8).
@@ -210,6 +218,10 @@ After Epic 92 shipped 107 findings "closed", Epic 93's post-fix dogfood sweep fo
 8516 → **8712 passing** (+196). 103 skipped (RUN_E2E=1 gated; up from 69). `packages/core` 6037 → 6160 (+123, 239 files). `packages/best-practices` 625 → 639 (+14). `apps/cli` 1209 → 1289 (+80). `apps/mcp-server` 624 unchanged.
 
 Full gate run green: `pnpm lint / check-types / lint:barrels / lint:shims / doc-lint / citation-lint / audit --prod / build / -r test:coverage`.
+
+### Epic 93 — post-Epic-92 fresh review, findings only (2026-04-22)
+
+10-lane post-Epic-92 review found **11 REGRESSIONS + 28 NEW + 13 PREEXISTING = 52 findings**. Epic 92 had shipped 107 findings "closed" but at ~25-35% partial-landing rate — several modules were never wired into the user-visible path after being written. No implementation stories shipped from this epic; all 52 findings were routed directly into Epic 94 as a regression-first wave. Scorecard: `_archive/done-stories/epic-93-scorecard.md`.
 
 ### Epic 92 — batch 1 partial (2026-04-22)
 
@@ -329,6 +341,16 @@ Baseline 7893 → 8111 passing (+218), 63 skipped (`RUN_E2E=1`-gated round-trips
 
 Full gate run (`pnpm lint / check-types / lint:barrels / lint:shims / doc-lint / citation-lint / audit --prod / build / -r test:coverage`) green at commit time. No hardcoded prices (`feedback_no_hardcoded_prices`). No real 12-digit AWS account IDs in tracked tree (`feedback_no_real_account_ids_in_repo`). Tests not weakened (`feedback_never_weaken_tests`).
 
+### Epic 89 — checkpoint values persistence, three-attempt closure (2026-04-21 → 2026-04-22)
+
+Original scope: compound-pattern apply-resume should rehydrate `completedResources` + `currentResourceIndex` from the checkpoint file so `efs-with-vpc`, `static-website`, and `serverless-api` re-enter at the saved queue index rather than replaying from slot 0 (burning apply budget on already-provisioned resources).
+
+**First attempt — `e92.1.d` (Epic 92 Wave 1, 2026-04-21):** `PlanCheckpointSchema` gained two additive fields (`currentResourceIndex: number`, `completedResources: Array<{resourceArn, type}>`); the serializer was updated to store the fully-elicited `desiredState` per queue entry (previously hardcoded to `{}`); loader made backwards-compatible. Schema shipped with 47 new tests. Follow-up flagged immediately: downstream wiring in `apps/cli/src/commands/apply/checkpoint-state.ts` and `apps/mcp-server/src/tools/apply-plan/handler-steps.ts` still needed to propagate the new fields into graph initial state.
+
+**Second attempt — `e92.1.d-followup` (Epic 92 Wave 2, 2026-04-21):** Both CLI and MCP handler now hydrate `currentResourceIndex` + `completedResources` from the loaded checkpoint into graph initial state, zipping stored `{resourceArn, resourceType}` against queue slots `0..index-1` to recover `executionStatus: SUCCESS`. Compound resume was wired and 10 new tests confirmed the handler paths. However, a serializer overflow remained undetected: the plan-mode formatter advanced `currentResourceIndex` past `queue.length`, and the serializer wrote the overflow verbatim — so apply-resume read the overflow value and skipped the entire queue on re-entry.
+
+**Third attempt — `e94.N7` (Epic 94 Wave 3, 2026-04-22):** Three-layer fix fully closed the bug. (1) Serializer now clamps `currentResourceIndex` to `completedResources.length` on plan-mode overflow. (2) Plan formatter stashes each resource's fully-elicited `desiredState` back into `resourceQueue[i].desiredState` BEFORE advancing — the per-slot hook existed but its caller had never been populated. (3) `backfillSlotDesiredState` helper adopts top-level `state.desiredState` for the terminal queue slot when types match (final-planned resource otherwise had no chance to be stashed). Verified on a 9-resource VPC compound: `currentResourceIndex` 9→0 on reload, `desiredState` field-count 0→21 (8 of 9 slots populated; IGW slot legitimately empty). Closes sprint-status epic-89 (line 1703).
+
 ### Epic 88 — iteration 3 (2026-04-20)
 
 #### Reverted
@@ -434,16 +456,16 @@ Same pattern as Epic 84 (hero transcript fabrication): the fix is to actually wa
 
 #### Security
 
-- **Scrubbed real AWS account ID (`054125018476`) from 20 files across the tracked tree.** User flagged after noticing it in the Epic 84 hero capture. Grep found 87 occurrences total: 1 in `README.md` (Epic 84), 1 in `CHANGELOG.md` (Epic 84 entry), and **85 pre-existing** in production source JSDoc (`resolve-arn.ts`, `destroy-strategies/strategies/ec2-eip.ts`, `apps/cli/src/services/resource-resolver/sqs-url.ts`) plus test fixtures (`arn-builder.test.ts` with 29 occurrences, `resource-resolver.test.ts` with 15, `preflight-guard.test.ts` with 10, `destroy-service-single.test.ts` with 6, and 11 other test files). The leak dates back to commit `312ec5e` (months old, pre-dates this session).
-- Substitution: `054125018476` → `210987654321` (descending-digit synthetic ID — obviously not a real account, and deliberately NOT on the `PLACEHOLDER_AWS_ACCOUNT_IDS` denylist at `packages/core/src/constants/placeholder-accounts.ts` so tests that assert on a _passing_ ARN — specifically `preflight-guard.test.ts` negative-case ARNs — continue to work). AWS's canonical doc placeholders (`123456789012`, `111122223333`, etc.) would have broken those tests because preflight rejects them by design.
-- `README.md:26` hero transcript updated: `account=054125018476` → `account=************` (redaction, since the hero is user-facing and the specific number has no documentation value).
+- **Scrubbed real AWS account ID (`[scrubbed account id]`) from 20 files across the tracked tree.** User flagged after noticing it in the Epic 84 hero capture. Grep found 87 occurrences total: 1 in `README.md` (Epic 84), 1 in `CHANGELOG.md` (Epic 84 entry), and **85 pre-existing** in production source JSDoc (`resolve-arn.ts`, `destroy-strategies/strategies/ec2-eip.ts`, `apps/cli/src/services/resource-resolver/sqs-url.ts`) plus test fixtures (`arn-builder.test.ts` with 29 occurrences, `resource-resolver.test.ts` with 15, `preflight-guard.test.ts` with 10, `destroy-service-single.test.ts` with 6, and 11 other test files). The leak dates back to commit `312ec5e` (months old, pre-dates this session).
+- Substitution: `[scrubbed account id]` → `210987654321` (descending-digit synthetic ID — obviously not a real account, and deliberately NOT on the `PLACEHOLDER_AWS_ACCOUNT_IDS` denylist at `packages/core/src/constants/placeholder-accounts.ts` so tests that assert on a _passing_ ARN — specifically `preflight-guard.test.ts` negative-case ARNs — continue to work). AWS's canonical doc placeholders (`123456789012`, `111122223333`, etc.) would have broken those tests because preflight rejects them by design.
+- `README.md:26` hero transcript updated: `account=[scrubbed account id]` → `account=************` (redaction, since the hero is user-facing and the specific number has no documentation value).
 - `CHANGELOG.md:34` Epic 84 narrative: swapped the raw account for `(real AWS account, redacted — see Epic 85; …)`.
 - `_bmad-output/implementation-artifacts/sprint-status.yaml`: 3 occurrences redacted to `************` (file is workspace-root, not git-tracked, but scrubbed for hygiene).
 - Saved a cross-session feedback memory `feedback_no_real_account_ids_in_repo.md` so future sessions don't repeat the leak. Memory documents the safe substitution IDs + pre-commit grep pattern (`\b\d{12}\b`) + the git-history-scrub-is-separate posture.
 
 #### Out-of-scope for this epic (user authorization required)
 
-- Git history at commits `312ec5e`, `0d838c0`, `9f45061`, `11c4d54`, `feb12f1` still contains `054125018476`. Full remediation requires `git filter-repo` + force-push to rewrite history — destructive and not authorized. Safe interim posture: HEAD is clean from the Epic 85 commit forward, the repo is PRIVATE today, and a one-time history scrub should happen before the repo's visibility flips to public (v0.2 release). Flagged in the feedback memory as the deferred decision.
+- Git history at commits `312ec5e`, `0d838c0`, `9f45061`, `11c4d54`, `feb12f1` still contains the original real account ID (see Epic 85 scrub for the value). Full remediation requires `git filter-repo` + force-push to rewrite history — destructive and not authorized. Safe interim posture: HEAD is clean from the Epic 85 commit forward, the repo is PRIVATE today, and a one-time history scrub should happen before the repo's visibility flips to public (v0.2 release). Flagged in the feedback memory as the deferred decision.
 
 ### Epic 84 — iteration 1 (2026-04-20)
 
@@ -628,6 +650,26 @@ Together with Epic 78's `.gitattributes`, this closes the full Windows xplat job
 #### Fixed
 
 - `docs/index.md`: Pricing strategies and decomposers rows in the Key metrics table listed `23` each; live registries have `37` each (confirmed by `pnpm doc-lint`). Updated both rows to `37` and rolled the "as of" date to 2026-04-20 (closes L8 HIGH from epic-73-it1 review — stale metric drift surfaced by on-demand 7-lane review after 17 no-delta iterations).
+
+### Epic 72 — no-delta sentinel (2026-04-20)
+
+HEAD still `fcfd4f8` (same as Epic 67 close). Latest CI success confirmed on the same SHA. No-op iteration — no commits, no findings. Introduced the short-circuit rule: when HEAD is unchanged since the last scored epic, subsequent iterations skip the full gate re-run and record zero findings without a commit.
+
+### Epic 71 — HEAD-advance sentinel, short-circuit introduced (2026-04-20)
+
+HEAD still `fcfd4f8`. Short-circuit pattern formalised: no-op when HEAD is unchanged since the last scored epic. Gates are known green from Epic 70; re-running them produces no signal. No commits, zero findings.
+
+### Epic 70 — no-delta monitoring tick (2026-04-20)
+
+HEAD still `fcfd4f8`. Five quick lint gates confirmed green: `citation-lint` (29/112/0), `doc-lint` (10/37/37/37), `lint:shims` (61/61), `lint:barrels` OK, `audit` 0 moderate. Repo in steady-state. Epic 67 CI run 24642303523 SUCCESS. No commits.
+
+### Epic 69 — no-delta review, HEAD unchanged since Epic 67 (2026-04-20)
+
+Baseline still `fcfd4f8` — no commits between Epic 68 and Epic 69. Minimal gate-check confirmed: `citation-lint` 29/112/0, `doc-lint` 10/37/37/37, `audit` 0 moderate. State identical to Epic 68. Review-only, no commits.
+
+### Epic 68 — steady-state review, zero findings (2026-04-20)
+
+Combined 7-lane strict-filter review (baseline `fcfd4f8`, Epic 67 close) confirmed all 6 quality gates green: `citation-lint` (29/112/0), `doc-lint` (10/37/37/37), `pnpm audit` (0 moderate), top-file LOC <360 (max 349), CHANGELOG Epic 60-67 inline, adapter sanitize chain intact. 219 test files / 5507 tests green. Zero genuine findings — no commit needed.
 
 ### Epic 67 — iteration 1 (2026-04-20)
 
@@ -1338,6 +1380,14 @@ compose.ts`; stripped static "23 types / 6 patterns" claims and
   now states the explicit OSS-launch gate: v0.1 uses the existing
   per-resource `assignee destroy` flow; `destroy --run-id <uuid>` ships
   in v0.2. No code changes — documentation-only clarification.
+
+### Epic 50 — whole-project external review + 10-lane remediation (2026-04-17)
+
+10-lane external review (L1-L10) dispatched against the Epic 49 baseline. Aggregate score moved from 4.4/10 to 6.9/10. Five BLOCKERs + five value-unlocks identified across positioning, UX, architecture, security, testing, complexity, documentation, distribution, and moat. All 10 stories shipped in commit `9f45061`. Key outcomes: 18→13 command surface (Story 50-3 cut `destroy --all`, `clean`, `cache`, `patterns`, `types`, `whoami`, `mcp-version-check`, BP GPG signer); Wave-5 MCP→CLI dependency cycle break + destroy-strategies dedup (50-4); IAM operator scoping + checkpoint file permissions + HMAC allowlist (50-5); root legal files created (`LICENSE` MIT, `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, this `CHANGELOG.md`) as Story 50-8. Scorecard: `_bmad-output/planning-artifacts/epic-50-scorecard.md`.
+
+### Epic 49 — SOLID/DRY/coupling code-audit remediation (2026-04-16)
+
+3-agent BMAD code audit (Blind Hunter, Edge Case Hunter, QA Auditor) produced 2 Critical, 8 High, and 12 Medium findings. Eight stories shipped across 9 commits on 2026-04-16. Key moves: `DestroyStrategy` types + registry + 4 strategies extracted to `@assignee/core` (49-1); `ManagedResource` + `parseArn` + provision-log extracted to `@assignee/core` (49-2); SDK client `.destroy()` lifecycle + shared `createEC2Client` factory added to core (49-3); 35-case ARN-builder switch replaced with `arnTemplateRegistry` (49-4); `constants.ts` 107-importer coupling hub split into 9 domain sub-modules (49-5); `eip-allocator` + `promptWithHelp` decomposed into sub-modules (49-6); MCP structured logger + `fix-finding.ts` type inversion (49-7); Medium findings M5/M8/M9/M11/M12 addressed (49-8). Post-ship: 3-agent BMAD review (commit `bbfc506`) closed 3 HIGH residuals.
 
 ### Added
 

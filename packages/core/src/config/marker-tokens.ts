@@ -117,7 +117,7 @@ export function markerIdentifier(resourceId: string): string {
 
 /**
  * Builds a marker that resolves to the calling operator's AWS account ID
- * at apply time (12 digits, e.g. "054125018476"). Compound patterns need
+ * at apply time (12 digits, e.g. "210987654321"). Compound patterns need
  * this when they construct ARNs for resources whose CCAPI `identifier`
  * is NOT the full ARN — e.g. `AWS::CloudFront::Distribution` returns the
  * bare distribution ID, so to produce a valid `aws:SourceArn` condition

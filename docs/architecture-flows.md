@@ -21,7 +21,7 @@ flowchart TD
     CMD -->|"assignee init"| INIT
     CMD -->|"assignee status &lt;token&gt;"| STATUS
 
-    subgraph GRAPH["LangGraph Agent (13 Nodes)"]
+    subgraph GRAPH["LangGraph Agent (14 Nodes)"]
         direction TB
 
         subgraph PHASE1["Phase 1 — Planning"]
@@ -67,7 +67,7 @@ flowchart TD
     APPLY_MODE --> IP
     RESUME -->|"checkpoint loaded"| HA
 
-    DESTROY["DESTROY<br/>—————<br/>Single: Resolve ARN via Tags API<br/>CloudControl DeleteResource<br/>+ pre-delete hooks<br/>+ Billing MCP cost savings<br/>—————<br/>Bulk (--all): List all managed<br/>resources, tier-ordered destroy<br/>(compute → storage → network → IAM)<br/>--include-iam / --dry-run"]
+    DESTROY["DESTROY<br/>—————<br/>Single resource only (bulk removed Story 50-3)<br/>Resolve ARN via Tags API<br/>CloudControl DeleteResource<br/>+ pre-delete hooks<br/>+ Billing MCP cost savings<br/>Confirm: type resource name to proceed"]
     LIST["LIST<br/>—————<br/>Resource Groups Tagging API<br/>Filter: managed-by=assignee-ai"]
     SETUP["SETUP<br/>—————<br/>Create 3 IAM users<br/>operator / reader / auditor<br/>Least-privilege policies"]
     INIT["INIT<br/>—————<br/>Detect AWS creds/region<br/>Create .assignee/config.yaml"]
@@ -550,7 +550,7 @@ flowchart TD
     WIND --> MCP_SERVER
 
     subgraph INTERNAL["Internal: Reuses CLI Graph"]
-        GRAPH["LangGraph Agent<br/>(same 13 nodes)"]
+        GRAPH["LangGraph Agent<br/>(same 14 nodes)"]
         MCPS["Core MCP Servers<br/>(pricing, docs, knowledge)"]
         AWS["AWS CloudControl<br/>+ pre-delete hooks"]
     end

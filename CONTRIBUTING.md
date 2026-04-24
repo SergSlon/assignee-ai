@@ -11,8 +11,8 @@ focused commits over large rewrites.
 ## Quick Start
 
 ```bash
-git clone https://github.com/assignee-ai/assignee.ai.git
-cd assignee.ai
+git clone https://github.com/SergSlon/assignee-ai.git
+cd assignee-ai
 pnpm install           # pnpm >= 9, Node >= 20.11
 pnpm build             # compile all 4 packages
 pnpm test              # full unit test suite
@@ -104,13 +104,18 @@ signing or hook enforcement without a maintainer's sign-off.
 
 ## Continuous integration
 
-The repo has three workflow files under `.github/workflows/`:
+The repo has five active workflow files under `.github/workflows/` (plus two disabled for future use):
 
-| File                    | Trigger                         | Matrix                                       |
-| ----------------------- | ------------------------------- | -------------------------------------------- |
-| `ci.yml`                | every push to `main` + every PR | ubuntu-latest × node 22 only                 |
-| `ci-cross-platform.yml` | manual (button in Actions UI)   | ubuntu + macOS + windows × configurable node |
-| `ci-core.yml`           | reusable (`workflow_call` only) | whatever the caller passes in                |
+| File                        | Trigger                         | Purpose                                                                |
+| --------------------------- | ------------------------------- | ---------------------------------------------------------------------- |
+| `ci.yml`                    | every push to `main` + every PR | Default gate: ubuntu-latest × node 22 only                             |
+| `ci-cross-platform.yml`     | manual (button in Actions UI)   | On-demand: ubuntu + macOS + windows × configurable node                |
+| `ci-core.yml`               | reusable (`workflow_call` only) | Core job matrix — called by `ci.yml` and `ci-cross-platform.yml`       |
+| `mock-fixture-drift.yml`    | schedule (daily) + manual       | Detects fixture drift between captured MCP responses and live AWS data |
+| `nightly-e2e.yml`           | schedule (nightly) + manual     | Full E2E suite (`RUN_E2E=1`) against real AWS infrastructure           |
+| `vacation-quality.yml`      | schedule (daily, added Epic 98) | Demo-readiness gate: builds + short doctor + citation-lint + doc-lint  |
+| `release.yml.disabled`      | — (disabled)                    | Future: npm publish + GitHub release (pending v0.2)                    |
+| `test-actions.yml.disabled` | — (disabled)                    | Future: action-level integration tests                                 |
 
 The split exists for a billing reason: on GitHub's Free plan for
 private repos, macOS minutes are billed **10×** Linux and Windows

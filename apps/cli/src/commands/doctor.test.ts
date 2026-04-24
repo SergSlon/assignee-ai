@@ -723,10 +723,15 @@ describe("runDoctor", () => {
 // returning account + ARN + region + config path.
 
 describe("runShortDoctor", () => {
+  afterEach(() => {
+    delete process.env["ASSIGNEE_DEMO_REDACT_ACCOUNT"];
+  });
+
   it("prints account + ARN + region + config path when creds resolve", async () => {
     process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
     process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] =
       "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+    delete process.env["ASSIGNEE_DEMO_REDACT_ACCOUNT"];
 
     const stdoutCapture: string[] = [];
     const stderrCapture: string[] = [];
@@ -744,12 +749,50 @@ describe("runShortDoctor", () => {
 
     expect(code).toBe(0);
     const out = stdoutCapture.join("");
+    // When ASSIGNEE_DEMO_REDACT_ACCOUNT is unset, raw IDs appear in output.
     expect(out).toContain("Account:  111111111111");
     expect(out).toContain("User ARN: arn:aws:iam::111111111111:user/alice");
     expect(out).toMatch(/Region: /);
     expect(out).toContain("Role:     operator");
     expect(out).toContain("Redact:");
     expect(out).toContain("ASSIGNEE_DEMO_REDACT_ACCOUNT");
+    expect(out).toContain("For full diagnostics");
+  });
+
+  // M-013 / CT-15: ASSIGNEE_DEMO_REDACT_ACCOUNT=1 must redact the
+  // Account and User ARN lines in doctor --short output.
+  it("redacts account ID and ARN when ASSIGNEE_DEMO_REDACT_ACCOUNT=1", async () => {
+    process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
+    process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] =
+      "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+    process.env["ASSIGNEE_DEMO_REDACT_ACCOUNT"] = "1";
+
+    const stdoutCapture: string[] = [];
+    const send = vi.fn().mockResolvedValue({
+      Account: "111111111111",
+      Arn: "arn:aws:iam::111111111111:user/alice",
+    });
+
+    const code = await runShortDoctor({
+      stsClientFactory: () => ({ send }),
+      cwd: () => "/tmp/doctor-short-nowhere",
+      stdout: (m: string) => stdoutCapture.push(m),
+      stderr: () => {},
+    });
+
+    expect(code).toBe(0);
+    const out = stdoutCapture.join("");
+    // Raw 12-digit account ID must NOT appear in any field.
+    expect(out).not.toContain("111111111111");
+    // The Account line should show the redacted placeholder.
+    expect(out).toContain("Account:  ************");
+    // The User ARN line should have the account segment redacted.
+    expect(out).toContain("User ARN: arn:aws:iam::************:user/alice");
+    // Non-sensitive fields stay unchanged.
+    expect(out).toContain("Role:     operator");
+    expect(out).toContain(
+      "Redact:   ASSIGNEE_DEMO_REDACT_ACCOUNT=1  (demo redaction ACTIVE)",
+    );
     expect(out).toContain("For full diagnostics");
   });
 

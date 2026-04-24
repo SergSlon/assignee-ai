@@ -73,8 +73,7 @@ not match — case-insensitively, after trimming whitespace and trailing
 slashes — the command aborts without touching AWS.
 
 **Fix.** Paste the exact identifier from the preview box. Copy-pasting
-with trailing newline is fine; internal spaces are preserved. For
-`--all` the phrase is literally `destroy all`.
+with trailing newline is fine; internal spaces are preserved.
 
 ### Symptom: `Placeholder ARN rejected by preflight`
 
@@ -298,7 +297,7 @@ call.
 from last week. Expired checkpoints are rejected at load time.
 
 **Fix.** Re-run `assignee plan` to mint a fresh checkpoint, then
-apply. Checkpoints live under `.assignee/checkpoints/`.
+apply. Checkpoints live under `.assignee/checkpoint-<runId>.json`.
 
 ---
 

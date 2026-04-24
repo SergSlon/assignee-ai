@@ -7,10 +7,11 @@ Get from zero to a provisioned AWS resource in under 60 seconds.
 Both `@assignee/cli` and `@assignee/mcp-server` are currently `private` and not published to npm. Build from source locally and link the CLI into your `$PATH`:
 
 ```bash
-git clone https://github.com/assignee-ai/assignee.ai.git
-cd assignee.ai
+git clone https://github.com/SergSlon/assignee-ai.git
+cd assignee-ai
 pnpm install
 pnpm build
+pnpm setup               # one-time: writes pnpm global bin to $PATH (reload shell after)
 pnpm link --global        # adds 'assignee' to PATH
 assignee doctor --short   # verify AWS credentials + Bedrock region
 ```
@@ -70,7 +71,7 @@ The output is a plan box showing the desired state, estimated monthly cost, and 
 Pass `--quick` to `plan` or `apply` to skip every wizard prompt that has a sensible default. The CLI accepts defaults on each optional field and only asks for required fields that have no default — useful for scripted flows or one-shot provisioning where you trust the out-of-the-box settings.
 
 ```bash
-assignee plan --quick --resources 1 S3Bucket "cold-storage-backups"
+assignee plan --quick "Create an S3 bucket for cold-storage-backups"
 ```
 
 `--quick` pairs naturally with `-o json` for fully non-interactive runs, and with `--set key=value` to pin specific fields while still skipping everything else. A pre-plan summary is shown so you can confirm the defaults the wizard will accept before generation starts.

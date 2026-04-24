@@ -1,6 +1,6 @@
 # Supported Resource Types
 
-assignee.ai supports 37 AWS resource types end-to-end via the CloudFormation CloudControl API. 35 have dedicated plugins; 2 (`AWS::EC2::VPCGatewayAttachment`, `AWS::EC2::SubnetRouteTableAssociation`) are **compound-only** — they are emitted from compound patterns (vpc-networking, three-tier-web) via the marker-token resolver and never directly from a user intent, so they share the generic fallback plugin rather than getting a dedicated one. Additional auxiliary types are used in compound patterns.
+assignee.ai supports 38 AWS resource types end-to-end via the CloudFormation CloudControl API. 36 have dedicated plugins; 2 (`AWS::EC2::VPCGatewayAttachment`, `AWS::EC2::SubnetRouteTableAssociation`) are **compound-only** — they are emitted from compound patterns (vpc-networking, three-tier-web) via the marker-token resolver and never directly from a user intent, so they share the generic fallback plugin rather than getting a dedicated one. Additional auxiliary types are used in compound patterns.
 
 ## Resource Type Table
 
@@ -43,6 +43,7 @@ assignee.ai supports 37 AWS resource types end-to-end via the CloudFormation Clo
 | 35  | `AWS::CloudFront::OriginAccessControl` (Task 4b) | CloudFront OAC       | cloudfront-origin-access-control | -             |
 | 36  | `AWS::S3::BucketPolicy` (Task 4b)                | S3 Bucket Policy     | s3-bucket-policy                 | -             |
 | 37  | `AWS::RDS::DBSubnetGroup`                        | RDS DB Subnet Group  | rds-db-subnet-group              | -             |
+| 38  | `AWS::EC2::EIP`                                  | Elastic IP           | ec2-eip                          | -             |
 
 A **generic plugin** handles any resource type not covered by a dedicated plugin, using CloudFormation schema defaults.
 
@@ -66,7 +67,7 @@ Before provisioning, the resource provisioner performs a "state guard" check (Re
 
 ### Tags Format
 
-All 35 resource plugins accept tags in `Key:Value` format (comma-separated). Tags are validated at input time via a shared `TAGS_VALIDATE` function -- invalid formats (missing colon separator) are rejected with an error message:
+All 36 resource plugins accept tags in `Key:Value` format (comma-separated). Tags are validated at input time via a shared `TAGS_VALIDATE` function -- invalid formats (missing colon separator) are rejected with an error message:
 
 ```
 Invalid tag format. Use Key:Value pairs separated by commas (e.g. env:production, team:backend)
@@ -178,9 +179,32 @@ Provisioning order (6 groups):
 5. Private Route
 6. Subnet-RT Associations (parallel)
 
-Cost: dominated by the NAT Gateway hourly + data-processing fee. Run `assignee cost` for the live monthly estimate in your region.
+Cost: dominated by the NAT Gateway hourly + data-processing fee. Run `assignee plan --json "..."  | jq .estimatedMonthlyCost` for the live monthly estimate in your region.
 
-**Public-only variant**: "simple vpc", "vpc public only" -- creates 9 resources (no NAT, no private subnets). All components are free-tier (VPC, subnets, IGW, route tables); run `assignee cost` to confirm against current AWS pricing.
+**Public-only variant**: "simple vpc", "vpc public only" -- creates 9 resources (no NAT, no private subnets). All components are free-tier (VPC, subnets, IGW, route tables); run `assignee optimize` or `assignee plan --json "..."` to confirm against current AWS pricing.
+
+### WebSocket API (12 resources) — Epic 92 Wave 2.b
+
+**Trigger keywords**: "websocket api", "realtime api", "chat api", "ws api"
+
+Provisions a complete WebSocket API Gateway with Lambda backend, execution role, and log group.
+
+| Resource                       | Type                             |
+| ------------------------------ | -------------------------------- |
+| IAM Execution Role             | `AWS::IAM::Role`                 |
+| Lambda Function                | `AWS::Lambda::Function`          |
+| CloudWatch LogGroup            | `AWS::Logs::LogGroup`            |
+| API Gateway V2 WS Api          | `AWS::ApiGatewayV2::Api`         |
+| API Gateway V2 Integration     | `AWS::ApiGatewayV2::Integration` |
+| Connect Route                  | `AWS::ApiGatewayV2::Route`       |
+| Disconnect Route               | `AWS::ApiGatewayV2::Route`       |
+| Default Route                  | `AWS::ApiGatewayV2::Route`       |
+| API Gateway V2 Stage           | `AWS::ApiGatewayV2::Stage`       |
+| Lambda Permission (connect)    | `AWS::Lambda::Permission`        |
+| Lambda Permission (default)    | `AWS::Lambda::Permission`        |
+| Lambda Permission (disconnect) | `AWS::Lambda::Permission`        |
+
+The `protocolType` is `WEBSOCKET`. Clients connect via `wss://`. Lambda routes handle `$connect`, `$disconnect`, and `$default` message events. Lambda Permissions are display-only instructions (CCAPI routes `AWS::Lambda::Permission` through `AWS::Lambda::PermissionPolicy`).
 
 ### Serverless API (8 resources)
 
@@ -278,7 +302,7 @@ Provisioning order (4 groups):
 
 **Why private-only?** Public subnets + lax SGs are the canonical "open NFS to the world" misconfiguration. If you need outbound internet from the EFS-mounting workload, combine with the full `vpc-networking` pattern (`"create a vpc with EFS"` — matches vpc-networking first and EFS is added separately).
 
-Cost: the networking layer (VPC + private subnets + route tables) is free-tier. EFS storage is billed per GB-month — run `assignee cost` for the live rate from the Pricing MCP in your region.
+Cost: the networking layer (VPC + private subnets + route tables) is free-tier. EFS storage is billed per GB-month — run `assignee optimize` for the live rate from the Pricing MCP in your region.
 
 ### Static Website
 

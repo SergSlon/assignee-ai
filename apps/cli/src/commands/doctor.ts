@@ -53,7 +53,7 @@ import { EnvVar } from "../constants/env-vars.js";
 import { STS_TIMEOUT_MS } from "../config/constants/timeouts.js";
 import { renderReport, runDoctor } from "./doctor/index.js";
 import { installJsonStderrFilter } from "./json-stderr-filter.js";
-import { resolveJsonMode } from "./output-format.js";
+import { resolveJsonMode, redactAccountIdIfDemoMode } from "./output-format.js";
 
 // Re-export the public surface so existing imports
 // (`from "./doctor.js"`) keep working — primarily used by
@@ -222,15 +222,22 @@ export async function runShortDoctor(
   const configPath = findProjectConfig(cwd());
   const configLine = configPath ? `${configPath} (loaded)` : "(none in cwd)";
 
-  const demoRedact = process.env["ASSIGNEE_DEMO_REDACT_ACCOUNT"];
-  const redactLine =
-    demoRedact === "1"
-      ? `ASSIGNEE_DEMO_REDACT_ACCOUNT=1  (demo redaction ACTIVE)`
-      : `ASSIGNEE_DEMO_REDACT_ACCOUNT=<unset>  (demo redaction OFF — real account IDs will appear in output)`;
+  // M-013 / CT-15: when ASSIGNEE_DEMO_REDACT_ACCOUNT=1, redact the
+  // account ID wherever it appears in output.
+  //   - Account: line — bare 12-digit ID, not ARN-colon-delimited, so
+  //     we substitute directly rather than relying on the regex.
+  //   - User ARN: line — goes through the standard ARN-pattern redactor
+  //     which matches \d{12}(?=:) inside the ARN.
+  const isDemoRedact = process.env["ASSIGNEE_DEMO_REDACT_ACCOUNT"] === "1";
+  const redactLine = isDemoRedact
+    ? `ASSIGNEE_DEMO_REDACT_ACCOUNT=1  (demo redaction ACTIVE)`
+    : `ASSIGNEE_DEMO_REDACT_ACCOUNT=<unset>  (demo redaction OFF — real account IDs will appear in output)`;
+  const displayAccount = isDemoRedact ? "************" : account;
+  const displayArn = redactAccountIdIfDemoMode(arn);
 
   const lines = [
-    `Account:  ${account}`,
-    `User ARN: ${arn}`,
+    `Account:  ${displayAccount}`,
+    `User ARN: ${displayArn}`,
     `Region:   ${region}`,
     `Role:     operator (${EnvVar.OPERATOR_ACCESS_KEY})`,
     `Config:   ${configLine}`,
