@@ -32,7 +32,7 @@ import {
   fetchOrgPolicy,
   readAuthToken,
 } from "../../config/org-policy-cache.js";
-import { checkBudget } from "../../services/budget-guard.js";
+import { checkMonthlyCostBudget } from "../../services/budget-guard.js";
 import { askClarifyingQuestion } from "../../services/clarifier.js";
 import { writePlanCheckpoint } from "./checkpoint-writer.js";
 import { runPlanToApply } from "./apply-transition.js";
@@ -215,7 +215,7 @@ export async function runPlan(
   }
 
   // ── Budget panic limit check (FR-09) ─────────────────────────────
-  const budgetCheck = checkBudget(
+  const budgetCheck = checkMonthlyCostBudget(
     state.estimatedMonthlyCost,
     userConfig?.["budget"] as import("@assignee/core").ConfigBudget | undefined,
   );

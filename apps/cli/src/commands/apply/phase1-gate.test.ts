@@ -44,7 +44,7 @@ vi.mock("../../services/clarifier.js", () => ({
 }));
 
 vi.mock("../../services/budget-guard.js", () => ({
-  checkBudget: vi.fn().mockReturnValue({ status: "ok" }),
+  checkMonthlyCostBudget: vi.fn().mockReturnValue({ status: "ok" }),
 }));
 
 const { handlePhase1Outcome, buildContinueInvocation } =
@@ -52,7 +52,8 @@ const { handlePhase1Outcome, buildContinueInvocation } =
 const { log } = await import("../../utils/logger.js");
 const { renderError } = await import("../../utils/display.js");
 const { askClarifyingQuestion } = await import("../../services/clarifier.js");
-const { checkBudget } = await import("../../services/budget-guard.js");
+const { checkMonthlyCostBudget } =
+  await import("../../services/budget-guard.js");
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -124,7 +125,9 @@ function makeBpFinding(overrides: Partial<BPFinding> = {}): BPFinding {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(process.stderr, "write").mockImplementation(() => true);
-  (checkBudget as ReturnType<typeof vi.fn>).mockReturnValue({ status: "ok" });
+  (checkMonthlyCostBudget as ReturnType<typeof vi.fn>).mockReturnValue({
+    status: "ok",
+  });
   (askClarifyingQuestion as ReturnType<typeof vi.fn>).mockResolvedValue(null);
 });
 
@@ -450,7 +453,7 @@ describe("handlePhase1Outcome — unexpected status", () => {
 
 describe("handlePhase1Outcome — budget guard", () => {
   it("blocked budget → renders error and success=false", async () => {
-    (checkBudget as ReturnType<typeof vi.fn>).mockReturnValue({
+    (checkMonthlyCostBudget as ReturnType<typeof vi.fn>).mockReturnValue({
       status: "blocked",
       message: "Estimated $150/mo exceeds panic limit of $100/mo",
     });
@@ -471,7 +474,7 @@ describe("handlePhase1Outcome — budget guard", () => {
   });
 
   it("warning budget → writes yellow warning to stderr and continues", async () => {
-    (checkBudget as ReturnType<typeof vi.fn>).mockReturnValue({
+    (checkMonthlyCostBudget as ReturnType<typeof vi.fn>).mockReturnValue({
       status: "warning",
       message: "Nearing budget limit",
     });
@@ -491,7 +494,7 @@ describe("handlePhase1Outcome — budget guard", () => {
   });
 
   it("unparseable cost → writes warning and continues", async () => {
-    (checkBudget as ReturnType<typeof vi.fn>).mockReturnValue({
+    (checkMonthlyCostBudget as ReturnType<typeof vi.fn>).mockReturnValue({
       status: "unparseable",
       message: "Could not parse cost string",
     });

@@ -13,7 +13,7 @@ import { homedir } from "node:os";
 import {
   STARTUP_BUDGETS,
   APPLY_TOTAL_OVERRIDES_MS,
-  checkBudget,
+  checkTimingBudget,
 } from "../constants/time-budget.js";
 import { EnvVar } from "../constants/env-vars.js";
 import { ASSIGNEE_DIR } from "../config/constants.js";
@@ -193,7 +193,7 @@ export function checkTimingsAgainstBudgets(): void {
 
     const effectiveBudget =
       timerLabel === "total" ? effectiveTotalBudgetMs() : budget.budgetMs;
-    const result = checkBudget(budget.label, actualMs, effectiveBudget);
+    const result = checkTimingBudget(budget.label, actualMs, effectiveBudget);
     if (!result.passed) {
       process.stderr.write(`[assignee] WARNING: ${result.message}\n`);
     }

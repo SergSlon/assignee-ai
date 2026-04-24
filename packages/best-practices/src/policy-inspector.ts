@@ -28,7 +28,15 @@
  * Subtler policy-path analysis (e.g. condition-guarded wildcards,
  * SCPs, ABAC tag conditions) is out of scope — that's a runtime-only
  * concern and belongs on the live AWS account, not the plan.
+ *
+ * **Epic 99 W3e — PolicyContext discriminator.** `inspectPolicyDocument`
+ * now accepts an optional `policyContext` parameter (see
+ * `evaluate/policy-context.ts`). Context-sensitive predicates (e.g.
+ * `cross-account-no-external-id`) gate on the document kind; patterns
+ * that are document-kind-agnostic ignore the context.
  */
+
+import type { PolicyContext } from "./evaluate/policy-context.js";
 
 /* ------------------------------------------------------------------ */
 /*  Pattern catalogue                                                  */
@@ -298,6 +306,83 @@ function extractStatements(doc: unknown): PolicyStatement[] | null {
   return null;
 }
 
+/**
+ * Minimum-viable Condition keys that meaningfully scope a wildcard
+ * Principal statement. A Condition that contains at least one of these
+ * keys — with a non-wildcard value — is treated as a legitimate scoping
+ * mechanism and suppresses the `wildcard-principal-no-condition` finding.
+ *
+ * Keys are stored in lower-case; comparison is case-insensitive so that
+ * YAML authors who capitalise keys differently still pass the check.
+ *
+ * Epic 99 W3e (W-019 / CT-7) — replaces the plain `Object.keys().length === 0`
+ * check which treated ANY non-empty Condition (even trivially-permissive
+ * ones like `{ StringLike: { "aws:SourceAccount": "*" } }`) as scoping.
+ */
+const MEANINGFUL_CONDITION_KEYS = new Set([
+  "aws:sourceaccount",
+  "aws:sourcearn",
+  "aws:principalorgid",
+  "aws:principalaccount",
+  "aws:principalarn",
+  "aws:sourceorgid",
+  "aws:sourcevpce",
+  "aws:sourcevpc",
+  "kms:calleraccount",
+]);
+
+/**
+ * Return true when the given Condition object contains at least one
+ * key from `MEANINGFUL_CONDITION_KEYS` whose value is NOT a bare
+ * wildcard (`"*"` or an array whose only element is `"*"`).
+ *
+ * Two-level walk: Condition → { <Operator>: { <ConditionKey>: <value> } }
+ * We walk every operator block and every condition key within it.
+ *
+ * Rules:
+ *   1. The condition key (lowercased) must be in MEANINGFUL_CONDITION_KEYS.
+ *   2. The value under that key must not be the bare wildcard `"*"`.
+ *      - String `"*"` → wildcard (no meaningful scoping).
+ *      - Array `["*"]` → wildcard.
+ *      - Array `["*", "something"]` → mixed; the non-wildcard element
+ *        still constitutes scoping → meaningful (conservative).
+ *      - Anything else (specific account, ARN, OrgID, etc.) → meaningful.
+ *
+ * Returns false for null / non-object Condition shapes — those are
+ * treated the same as absent (no scoping).
+ */
+function hasMeaningfulConditionKey(condition: unknown): boolean {
+  if (condition === null || typeof condition !== "object") return false;
+  if (Array.isArray(condition)) return false;
+  const condObj = condition as Record<string, unknown>;
+  for (const opBlock of Object.values(condObj)) {
+    if (opBlock === null || typeof opBlock !== "object") continue;
+    if (Array.isArray(opBlock)) continue;
+    const opObj = opBlock as Record<string, unknown>;
+    for (const [rawKey, rawValue] of Object.entries(opObj)) {
+      if (!MEANINGFUL_CONDITION_KEYS.has(rawKey.toLowerCase())) continue;
+      // Key is in the allowlist — check that the value is not a bare wildcard.
+      if (typeof rawValue === "string") {
+        // A pure "*" value provides no scoping.
+        if (rawValue === "*") continue;
+        return true;
+      }
+      if (Array.isArray(rawValue)) {
+        // An array that consists ONLY of "*" provides no scoping.
+        // If there's at least one non-"*" element, it does scope.
+        const hasNonWildcard = rawValue.some(
+          (v) => typeof v === "string" && v !== "*",
+        );
+        if (hasNonWildcard) return true;
+        continue;
+      }
+      // Non-string, non-array value (object, number, boolean) — treat as meaningful.
+      return true;
+    }
+  }
+  return false;
+}
+
 /** `Effect` is only an anti-pattern trigger when it's "Allow". */
 function isAllow(stmt: PolicyStatement): boolean {
   // Absent Effect is treated as Allow per IAM default semantics —
@@ -331,24 +416,35 @@ const CHECKS: Record<PolicyAntipattern, StatementCheck> = {
 
   "wildcard-principal-no-condition": (stmt) => {
     // Epic 98 W4.B2 — BP-SNS-004 closure. Fires only when the Allow
-    // statement carries a wildcard Principal AND has no Condition
-    // clause. Condition-guarded wildcards
-    // (`Principal: "*"` + `Condition: { StringEquals: { ... } }`)
-    // are the canonical cross-account / CloudFront-OAI / S3-Bucket-
-    // public-OAC trust shape and must NOT fire — the plain
-    // `wildcard-principal` check already covers the no-nuance
-    // "anything public" signal. An absent, null, or empty-object
-    // Condition is treated as "no condition"; any non-empty object
-    // (even one that is semantically permissive) suppresses the
-    // finding — semantic analysis of Condition shapes is out of
-    // scope for this pass.
+    // statement carries a wildcard Principal AND has no meaningful
+    // Condition clause. Condition-guarded wildcards are the canonical
+    // cross-account / CloudFront-OAI / S3-Bucket-public-OAC trust
+    // shape and must NOT fire — the plain `wildcard-principal` check
+    // already covers the no-nuance "anything public" signal.
+    //
+    // Epic 99 W3e (W-019 / CT-7) — replaces the plain
+    // `Object.keys().length === 0` check. A non-empty Condition is no
+    // longer sufficient to suppress; the Condition must contain at
+    // least one key from MEANINGFUL_CONDITION_KEYS with a non-wildcard
+    // value. This closes the CT-7 loophole where a trivially permissive
+    // `Condition: { StringLike: { "aws:SourceAccount": "*" } }` would
+    // disarm CRITICAL findings for BP-SNS-004 + BP-IAM-010.
+    //
+    // Suppression rules:
+    //   • Absent / null Condition                      → fires (no guard)
+    //   • Non-object Condition                         → fires (malformed)
+    //   • Empty-object Condition {}                    → fires (no guard)
+    //   • Condition with a meaningful key + non-wildcard value → suppresses
+    //   • Condition with only meaningless keys          → fires
+    //   • Condition with a meaningful key but value "*" → fires
     if (!isAllow(stmt)) return false;
     if (!principalIsWildcard(stmt.Principal)) return false;
     const condition = stmt["Condition"];
     if (condition === undefined || condition === null) return true;
     if (typeof condition !== "object") return true;
-    if (Array.isArray(condition)) return condition.length === 0;
-    return Object.keys(condition as Record<string, unknown>).length === 0;
+    if (Array.isArray(condition) && condition.length === 0) return true;
+    // hasMeaningfulConditionKey handles empty-object {} and all other shapes.
+    return !hasMeaningfulConditionKey(condition);
   },
 
   "allow-plus-not-action": (stmt) => {
@@ -503,6 +599,10 @@ export function isAbsenceAntipattern(pattern: string): boolean {
  * @param doc      The policy document as it appears in `desiredState`
  *                 (usually at a `.PolicyDocument` or `.AssumeRolePolicyDocument` path).
  * @param pattern  Which anti-pattern to check for.
+ * @param context  Optional document-kind discriminator (see `evaluate/policy-context.ts`).
+ *                 When provided, context-sensitive predicates gate on the document kind:
+ *                 - `cross-account-no-external-id` only fires in `{ kind: "trust" }` context.
+ *                 When omitted, each predicate applies its own default semantics.
  * @returns        `matched: true` with `offendingStatementIndex` when
  *                 the pattern is found; `matched: false` otherwise
  *                 (including when the document is malformed — callers
@@ -512,7 +612,21 @@ export function isAbsenceAntipattern(pattern: string): boolean {
 export function inspectPolicyDocument(
   doc: unknown,
   pattern: PolicyAntipattern,
+  context?: PolicyContext,
 ): PolicyInspectionResult {
+  // Epic 99 W3e — context-sensitive gates. Patterns that only make sense
+  // in a specific document kind return "not applicable" (matched: false)
+  // when a different context is provided. This prevents spurious findings
+  // when a rule is evaluated against a resource or identity policy that
+  // happens to contain an sts:AssumeRole-like statement.
+  if (pattern === "cross-account-no-external-id" && context !== undefined) {
+    if (context.kind !== "trust") {
+      // cross-account confused-deputy attack requires a trust policy.
+      // Resource policies and identity policies that contain sts:AssumeRole
+      // actions are not vulnerable to this pattern in the same way.
+      return { matched: false };
+    }
+  }
   // Absence checks (Epic 98 W4.B4+) have inverted semantics — they
   // fire when the desired statement is MISSING, so a null/malformed
   // document or an empty Statement array ALSO counts as missing.

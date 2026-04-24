@@ -6,7 +6,7 @@
 import { type ConfigBudget } from "@assignee/core";
 import type { AgentState } from "../../../services/graph.js";
 import { renderError } from "../../../utils/display.js";
-import { checkBudget } from "../../../services/budget-guard.js";
+import { checkMonthlyCostBudget } from "../../../services/budget-guard.js";
 import type { Phase1Context, Phase1Deps } from "../phase1-planner.js";
 import { logApplyComplete } from "./log-helpers.js";
 import type { Phase1GateResult } from "./types.js";
@@ -35,7 +35,7 @@ export function runBudgetGuard(
   phase1State: AgentState,
   deps: Phase1Deps,
 ): Phase1GateResult | null {
-  const budgetCheck = checkBudget(
+  const budgetCheck = checkMonthlyCostBudget(
     phase1State.estimatedMonthlyCost as string | undefined,
     deps.userConfig?.["budget"] as ConfigBudget | undefined,
   );

@@ -10,6 +10,12 @@ export default defineConfig({
     mockReset: true,
     testTimeout: 30_000,
     hookTimeout: 30_000,
+    // Epic 99 Lane 3b: retry once on failure before reporting red.
+    // Covers timing jitter on shared CI runners without masking real bugs —
+    // a test that needs 2+ retries is unreliable by definition and must be
+    // quarantined or fixed. Never weaken assertions instead (feedback_never_weaken_tests).
+    // See docs/explanation/flake-policy.md for the full SLO and quarantine process.
+    retry: 1,
     // Story 48.8 originally set `maxConcurrency: 1` here to work around a
     // coverage-v8 ENOENT race on `coverage/.tmp/coverage-*.json` at
     // vitest@3.1.x + @vitest/coverage-v8. Removed 2026-04-18 (Wave K2) after

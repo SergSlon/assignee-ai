@@ -5,7 +5,7 @@
  * - parseMonthlyUsd: free/NA sentinels, unparseable strings, and arithmetic
  *   across all supported unit suffixes (hour/day/minute/mo/GB-month/no-unit)
  *   including thousands separators and compound multi-term expressions.
- * - checkBudget: every status branch (ok / warning / blocked / unparseable),
+ * - checkMonthlyCostBudget: every status branch (ok / warning / blocked / unparseable),
  *   including warn_only downgrade and sentinel short-circuits.
  */
 
@@ -13,7 +13,7 @@ import { describe, it, expect } from "vitest";
 import type { ConfigBudget } from "@assignee/core";
 import {
   parseMonthlyUsd,
-  checkBudget,
+  checkMonthlyCostBudget,
   FREE_OR_NA,
   UNPARSEABLE,
 } from "./budget-guard.js";
@@ -119,27 +119,27 @@ describe("parseMonthlyUsd", () => {
   });
 });
 
-describe("checkBudget", () => {
+describe("checkMonthlyCostBudget", () => {
   it("returns ok when no budget is configured (undefined budget)", () => {
-    const result = checkBudget("$50/mo", undefined);
+    const result = checkMonthlyCostBudget("$50/mo", undefined);
     expect(result.status).toBe("ok");
   });
 
   it("returns ok when monthly_limit_usd is undefined", () => {
     const budget: ConfigBudget = { warn_only: false };
-    const result = checkBudget("$50/mo", budget);
+    const result = checkMonthlyCostBudget("$50/mo", budget);
     expect(result.status).toBe("ok");
   });
 
   it("returns ok when cost is under the limit", () => {
     const budget: ConfigBudget = { monthly_limit_usd: 10 };
-    const result = checkBudget("$5/mo", budget);
+    const result = checkMonthlyCostBudget("$5/mo", budget);
     expect(result.status).toBe("ok");
   });
 
   it("returns blocked when cost exceeds the limit (warn_only=false)", () => {
     const budget: ConfigBudget = { monthly_limit_usd: 10, warn_only: false };
-    const result = checkBudget("$50/mo", budget);
+    const result = checkMonthlyCostBudget("$50/mo", budget);
     expect(result.status).toBe("blocked");
     if (result.status === "blocked") {
       expect(result.limit).toBe(10);
@@ -151,7 +151,7 @@ describe("checkBudget", () => {
 
   it("returns warning when cost exceeds the limit and warn_only=true", () => {
     const budget: ConfigBudget = { monthly_limit_usd: 10, warn_only: true };
-    const result = checkBudget("$50/mo", budget);
+    const result = checkMonthlyCostBudget("$50/mo", budget);
     expect(result.status).toBe("warning");
     if (result.status === "warning") {
       expect(result.limit).toBe(10);
@@ -163,17 +163,17 @@ describe("checkBudget", () => {
 
   it("returns ok when cost is 'Free' even with a limit", () => {
     const budget: ConfigBudget = { monthly_limit_usd: 10 };
-    expect(checkBudget("Free", budget).status).toBe("ok");
+    expect(checkMonthlyCostBudget("Free", budget).status).toBe("ok");
   });
 
   it("returns ok when cost is 'N/A' even with a limit", () => {
     const budget: ConfigBudget = { monthly_limit_usd: 10 };
-    expect(checkBudget("N/A", budget).status).toBe("ok");
+    expect(checkMonthlyCostBudget("N/A", budget).status).toBe("ok");
   });
 
   it("returns unparseable when cost is 'See pricing calculator'", () => {
     const budget: ConfigBudget = { monthly_limit_usd: 10 };
-    const result = checkBudget("See pricing calculator", budget);
+    const result = checkMonthlyCostBudget("See pricing calculator", budget);
     expect(result.status).toBe("unparseable");
     if (result.status === "unparseable") {
       expect(result.limit).toBe(10);
@@ -185,20 +185,20 @@ describe("checkBudget", () => {
 
   it("returns ok when cost is undefined (treated as FREE_OR_NA)", () => {
     const budget: ConfigBudget = { monthly_limit_usd: 10 };
-    expect(checkBudget(undefined, budget).status).toBe("ok");
+    expect(checkMonthlyCostBudget(undefined, budget).status).toBe("ok");
   });
 
   it("returns ok when a compound hourly cost sits just under the limit", () => {
     // 0.0104 × 730 = 7.592 ≤ 8
     const budget: ConfigBudget = { monthly_limit_usd: 8 };
-    const result = checkBudget("$0.0104/hour", budget);
+    const result = checkMonthlyCostBudget("$0.0104/hour", budget);
     expect(result.status).toBe("ok");
   });
 
   it("returns blocked when a compound hourly cost exceeds the limit", () => {
     // 0.0104 × 730 = 7.592 > 7
     const budget: ConfigBudget = { monthly_limit_usd: 7, warn_only: false };
-    const result = checkBudget("$0.0104/hour", budget);
+    const result = checkMonthlyCostBudget("$0.0104/hour", budget);
     expect(result.status).toBe("blocked");
     if (result.status === "blocked") {
       expect(result.estimated).toBeCloseTo(7.592, 3);
@@ -209,7 +209,7 @@ describe("checkBudget", () => {
   it("downgrades blocked to warning when warn_only=true for compound cost", () => {
     // 0.0104 × 730 = 7.592 > 5
     const budget: ConfigBudget = { monthly_limit_usd: 5, warn_only: true };
-    const result = checkBudget("$0.0104/hour", budget);
+    const result = checkMonthlyCostBudget("$0.0104/hour", budget);
     expect(result.status).toBe("warning");
     if (result.status === "warning") {
       expect(result.estimated).toBeCloseTo(7.592, 3);
