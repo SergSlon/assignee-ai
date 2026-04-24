@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { checkPasses } from "../rule-runner.js";
+import type { PolicyContext } from "../policy-context.js";
 
 /**
  * Unit tests for `checkPasses` in rule-runner.ts.
@@ -152,6 +153,128 @@ describe("checkPasses — known check_types dispatch correctly (regression guard
   it("sg_high_risk_public_exposure — passes when ingress array is empty", () => {
     expect(
       checkPasses("sg_high_risk_public_exposure", [], "0.0.0.0/0:22,3389"),
+    ).toBe(true);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  Epic 99 W3e — PolicyContext plumbing in checkPasses                */
+/* ------------------------------------------------------------------ */
+
+describe("checkPasses — policy_antipattern with PolicyContext (Epic 99 W3e)", () => {
+  // A minimal cross-account trust policy document — no ExternalId condition.
+  // Would normally fire cross-account-no-external-id in trust context.
+  const BARE_TRUST_DOC = {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Principal: { AWS: "arn:aws:iam::210987654321:root" },
+        Action: "sts:AssumeRole",
+      },
+    ],
+  };
+
+  it("W3e: policy_antipattern cross-account-no-external-id FAILS (finding fires) with no context", () => {
+    // Backward-compatible: no context → trust semantics → finding fires.
+    expect(
+      checkPasses(
+        "policy_antipattern",
+        BARE_TRUST_DOC,
+        "cross-account-no-external-id",
+      ),
+    ).toBe(false);
+  });
+
+  it("W3e: policy_antipattern cross-account-no-external-id FAILS (finding fires) with trust context", () => {
+    const ctx: PolicyContext = { kind: "trust" };
+    expect(
+      checkPasses(
+        "policy_antipattern",
+        BARE_TRUST_DOC,
+        "cross-account-no-external-id",
+        ctx,
+      ),
+    ).toBe(false);
+  });
+
+  it("W3e: policy_antipattern cross-account-no-external-id PASSES (no finding) with resource context", () => {
+    // A resource policy that happens to have sts:AssumeRole — should NOT trigger
+    // the confused-deputy check. The context gate must suppress the finding.
+    const ctx: PolicyContext = { kind: "resource" };
+    expect(
+      checkPasses(
+        "policy_antipattern",
+        BARE_TRUST_DOC,
+        "cross-account-no-external-id",
+        ctx,
+      ),
+    ).toBe(true);
+  });
+
+  it("W3e: policy_antipattern cross-account-no-external-id PASSES (no finding) with identity context", () => {
+    const ctx: PolicyContext = { kind: "identity" };
+    expect(
+      checkPasses(
+        "policy_antipattern",
+        BARE_TRUST_DOC,
+        "cross-account-no-external-id",
+        ctx,
+      ),
+    ).toBe(true);
+  });
+
+  // wildcard-principal-no-condition — W-019 fix: trivially-permissive conditions now fire.
+  const WILDCARD_TRIVIAL_CONDITION_DOC = {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Principal: "*",
+        Action: "sns:Publish",
+        Resource: "arn:aws:sns:us-east-1:210987654321:notifications",
+        Condition: {
+          // The CT-7 loophole: meaningful key but wildcard value → no real scoping.
+          StringLike: { "aws:SourceAccount": "*" },
+        },
+      },
+    ],
+  };
+
+  it("W-019: policy_antipattern wildcard-principal-no-condition FAILS on trivially-permissive Condition (wildcard key value)", () => {
+    // The finding must fire — the condition disarms nothing.
+    expect(
+      checkPasses(
+        "policy_antipattern",
+        WILDCARD_TRIVIAL_CONDITION_DOC,
+        "wildcard-principal-no-condition",
+      ),
+    ).toBe(false);
+  });
+
+  const PROPERLY_SCOPED_DOC = {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Principal: "*",
+        Action: "sns:Publish",
+        Resource: "arn:aws:sns:us-east-1:210987654321:notifications",
+        Condition: {
+          StringEquals: { "aws:SourceAccount": "210987654321" },
+        },
+      },
+    ],
+  };
+
+  it("W-019: policy_antipattern wildcard-principal-no-condition PASSES on properly-scoped Condition (specific account)", () => {
+    // The finding must NOT fire — the condition provides real scoping.
+    expect(
+      checkPasses(
+        "policy_antipattern",
+        PROPERLY_SCOPED_DOC,
+        "wildcard-principal-no-condition",
+      ),
     ).toBe(true);
   });
 });

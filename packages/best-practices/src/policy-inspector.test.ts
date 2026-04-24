@@ -4,6 +4,10 @@ import {
   POLICY_ANTIPATTERNS,
   type PolicyAntipattern,
 } from "./policy-inspector.js";
+import {
+  derivePolicyContext,
+  type PolicyContext,
+} from "./evaluate/policy-context.js";
 
 // Real-shaped policy documents. These mirror the Wave-20 real-data
 // mocks rule — no contrived key names, no stripped Version fields.
@@ -471,6 +475,153 @@ describe("inspectPolicyDocument", () => {
           "wildcard-principal-no-condition",
         ),
       ).toEqual({ matched: true, offendingStatementIndex: 0 });
+    });
+
+    // Epic 99 W3e (W-019 / CT-7) — trivially-permissive Condition loophole.
+    // A Condition that references a meaningful key but with a wildcard value
+    // ("*") provides no actual scoping and MUST still trigger the finding.
+
+    it("W-019: FIRES when Condition has a meaningful key but value is bare '*' (wildcard-valued aws:SourceAccount)", () => {
+      // The CT-7 loophole: `Condition: { StringLike: { "aws:SourceAccount": "*" } }`
+      // looks like it scopes, but "*" matches every account — no actual restriction.
+      const TRIVIAL_SOURCE_ACCOUNT = {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: "*",
+            Action: "sns:Publish",
+            Resource: "arn:aws:sns:us-east-1:210987654321:notifications",
+            Condition: {
+              StringLike: { "aws:SourceAccount": "*" },
+            },
+          },
+        ],
+      };
+      expect(
+        inspectPolicyDocument(
+          TRIVIAL_SOURCE_ACCOUNT,
+          "wildcard-principal-no-condition",
+        ),
+      ).toEqual({ matched: true, offendingStatementIndex: 0 });
+    });
+
+    it("W-019: FIRES when Condition has a meaningful key but value is array ['*'] (array wildcard)", () => {
+      const ARRAY_WILDCARD_SOURCE_ARN = {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: "*",
+            Action: "sns:Publish",
+            Resource: "arn:aws:sns:us-east-1:210987654321:notifications",
+            Condition: {
+              ArnLike: { "aws:SourceArn": ["*"] },
+            },
+          },
+        ],
+      };
+      expect(
+        inspectPolicyDocument(
+          ARRAY_WILDCARD_SOURCE_ARN,
+          "wildcard-principal-no-condition",
+        ),
+      ).toEqual({ matched: true, offendingStatementIndex: 0 });
+    });
+
+    it("W-019: does NOT fire when Condition has a meaningful key with a specific value (real account ID)", () => {
+      // Correct usage: key in allowlist, value is a specific non-wildcard account.
+      const SCOPED_SOURCE_ACCOUNT = {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: "*",
+            Action: "sns:Publish",
+            Resource: "arn:aws:sns:us-east-1:210987654321:notifications",
+            Condition: {
+              StringEquals: { "aws:SourceAccount": "210987654321" },
+            },
+          },
+        ],
+      };
+      expect(
+        inspectPolicyDocument(
+          SCOPED_SOURCE_ACCOUNT,
+          "wildcard-principal-no-condition",
+        ),
+      ).toEqual({ matched: false });
+    });
+
+    it("W-019: FIRES when Condition has only unmeaningful keys (e.g. aws:RequestedRegion)", () => {
+      // A Condition key that is NOT in the meaningful-key allowlist
+      // does not constitute genuine principal scoping.
+      const UNMEANINGFUL_CONDITION = {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: "*",
+            Action: "sns:Publish",
+            Resource: "arn:aws:sns:us-east-1:210987654321:notifications",
+            Condition: {
+              StringEquals: { "aws:RequestedRegion": "us-east-1" },
+            },
+          },
+        ],
+      };
+      expect(
+        inspectPolicyDocument(
+          UNMEANINGFUL_CONDITION,
+          "wildcard-principal-no-condition",
+        ),
+      ).toEqual({ matched: true, offendingStatementIndex: 0 });
+    });
+
+    it("W-019: does NOT fire when Condition has aws:PrincipalOrgID with a specific org (KMS-style cross-org trust)", () => {
+      const PRINCIPAL_ORG_SCOPED = {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: "*",
+            Action: "kms:Decrypt",
+            Resource: "*",
+            Condition: {
+              StringEquals: { "aws:PrincipalOrgID": "o-exampleorgid11" },
+            },
+          },
+        ],
+      };
+      expect(
+        inspectPolicyDocument(
+          PRINCIPAL_ORG_SCOPED,
+          "wildcard-principal-no-condition",
+        ),
+      ).toEqual({ matched: false });
+    });
+
+    it("W-019: does NOT fire when Condition key is kms:CallerAccount (KMS-specific scoping key)", () => {
+      const KMS_CALLER_ACCOUNT = {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: "*",
+            Action: "kms:GenerateDataKey",
+            Resource: "*",
+            Condition: {
+              StringEquals: { "kms:CallerAccount": "210987654321" },
+            },
+          },
+        ],
+      };
+      expect(
+        inspectPolicyDocument(
+          KMS_CALLER_ACCOUNT,
+          "wildcard-principal-no-condition",
+        ),
+      ).toEqual({ matched: false });
     });
   });
 
@@ -961,6 +1112,85 @@ describe("inspectPolicyDocument", () => {
         inspectPolicyDocument(trust, "cross-account-no-external-id"),
       ).toEqual({ matched: true, offendingStatementIndex: 1 });
     });
+
+    // Epic 99 W3e — PolicyContext discriminator (Winston suggestion #2 / CT-7 echo).
+    // cross-account-no-external-id is a trust-policy-only check. A resource policy
+    // (e.g. SNS topic policy, KMS key policy) or an identity policy (AWS::IAM::Policy)
+    // that happens to include an sts:AssumeRole action should NOT trigger this finding —
+    // the confused-deputy attack model requires a trust relationship, not a resource grant.
+
+    it("CT-7: does NOT fire in { kind: resource } context even when the statement would otherwise match", () => {
+      // An SNS topic policy that happens to allow sts:AssumeRole from an IAM ARN is
+      // unusual but not a trust-policy confused-deputy risk. Guard should not fire.
+      const resourceContextPolicy = {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: { AWS: TRUSTED_ROLE },
+            Action: "sts:AssumeRole",
+            Resource: "*",
+          },
+        ],
+      };
+      const ctx: PolicyContext = { kind: "resource" };
+      expect(
+        inspectPolicyDocument(
+          resourceContextPolicy,
+          "cross-account-no-external-id",
+          ctx,
+        ),
+      ).toEqual({ matched: false });
+    });
+
+    it("CT-7: does NOT fire in { kind: identity } context even when the statement would otherwise match", () => {
+      // An AWS::IAM::ManagedPolicy that grants sts:AssumeRole with Resource:* and an IAM
+      // principal is a privilege issue, but NOT the confused-deputy pattern — the
+      // external-id guard applies only to trust policies.
+      const identityContextPolicy = {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: { AWS: TRUSTED_ACCOUNT_ROOT },
+            Action: "sts:AssumeRole",
+          },
+        ],
+      };
+      const ctx: PolicyContext = { kind: "identity" };
+      expect(
+        inspectPolicyDocument(
+          identityContextPolicy,
+          "cross-account-no-external-id",
+          ctx,
+        ),
+      ).toEqual({ matched: false });
+    });
+
+    it("CT-7: DOES fire in { kind: trust } context (explicit context does not suppress trust-policy check)", () => {
+      // Passing an explicit trust context must not suppress the finding —
+      // the check must fire the same as when no context is provided.
+      const ctx: PolicyContext = { kind: "trust" };
+      expect(
+        inspectPolicyDocument(
+          TRUST_ROOT_NO_CONDITION,
+          "cross-account-no-external-id",
+          ctx,
+        ),
+      ).toEqual({ matched: true, offendingStatementIndex: 0 });
+    });
+
+    it("CT-7: DOES fire when no context is provided (backward-compatible — defaults to trust semantics)", () => {
+      // Call sites that do not derive context should continue to see the
+      // same results as before. BP-IAM-010 is the only rule using this
+      // pattern and it runs on AssumeRolePolicyDocument = trust context.
+      expect(
+        inspectPolicyDocument(
+          TRUST_ROOT_NO_CONDITION,
+          "cross-account-no-external-id",
+        ),
+      ).toEqual({ matched: true, offendingStatementIndex: 0 });
+    });
   });
 
   describe("missing-secure-transport-deny (Epic 98 W4.B4)", () => {
@@ -1222,6 +1452,86 @@ describe("inspectPolicyDocument", () => {
           inspectPolicyDocument(NARROW_S3_READ, pattern),
         ).not.toThrow();
       }
+    });
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  derivePolicyContext unit tests (Epic 99 W3e)                       */
+/* ------------------------------------------------------------------ */
+
+describe("derivePolicyContext", () => {
+  describe("trust context", () => {
+    it("returns { kind: 'trust' } for AWS::IAM::Role + AssumeRolePolicyDocument", () => {
+      expect(
+        derivePolicyContext("AWS::IAM::Role", "AssumeRolePolicyDocument"),
+      ).toEqual({ kind: "trust" });
+    });
+  });
+
+  describe("identity context", () => {
+    it("returns { kind: 'identity' } for AWS::IAM::Policy + PolicyDocument", () => {
+      expect(derivePolicyContext("AWS::IAM::Policy", "PolicyDocument")).toEqual(
+        { kind: "identity" },
+      );
+    });
+
+    it("returns { kind: 'identity' } for AWS::IAM::ManagedPolicy + PolicyDocument", () => {
+      expect(
+        derivePolicyContext("AWS::IAM::ManagedPolicy", "PolicyDocument"),
+      ).toEqual({ kind: "identity" });
+    });
+  });
+
+  describe("resource context", () => {
+    it("returns { kind: 'resource' } for AWS::S3::BucketPolicy + PolicyDocument", () => {
+      expect(
+        derivePolicyContext("AWS::S3::BucketPolicy", "PolicyDocument"),
+      ).toEqual({ kind: "resource" });
+    });
+
+    it("returns { kind: 'resource' } for AWS::SNS::TopicPolicy + PolicyDocument", () => {
+      expect(
+        derivePolicyContext("AWS::SNS::TopicPolicy", "PolicyDocument"),
+      ).toEqual({ kind: "resource" });
+    });
+
+    it("returns { kind: 'resource' } for AWS::SQS::QueuePolicy + PolicyDocument", () => {
+      expect(
+        derivePolicyContext("AWS::SQS::QueuePolicy", "PolicyDocument"),
+      ).toEqual({ kind: "resource" });
+    });
+
+    it("returns { kind: 'resource' } for AWS::KMS::Key + KeyPolicy", () => {
+      expect(derivePolicyContext("AWS::KMS::Key", "KeyPolicy")).toEqual({
+        kind: "resource",
+      });
+    });
+
+    it("returns { kind: 'resource' } for AWS::EFS::FileSystemPolicy + PolicyDocument", () => {
+      expect(
+        derivePolicyContext("AWS::EFS::FileSystemPolicy", "PolicyDocument"),
+      ).toEqual({ kind: "resource" });
+    });
+
+    it("returns { kind: 'resource' } for AWS::ECR::Repository + PolicyDocument", () => {
+      expect(
+        derivePolicyContext("AWS::ECR::Repository", "PolicyDocument"),
+      ).toEqual({ kind: "resource" });
+    });
+  });
+
+  describe("error cases", () => {
+    it("throws for an unrecognised resource type", () => {
+      expect(() =>
+        derivePolicyContext("AWS::DynamoDB::Table", "BillingMode"),
+      ).toThrowError(/unrecognised.*AWS::DynamoDB::Table/);
+    });
+
+    it("throws for an empty resource type string", () => {
+      expect(() => derivePolicyContext("", "PolicyDocument")).toThrowError(
+        /unrecognised/,
+      );
     });
   });
 });

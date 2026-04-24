@@ -94,6 +94,9 @@ jobs:
       - name: Citation lint
         run: pnpm citation-lint
 
+      - name: CI-multiplier stub lint
+        run: pnpm lint:ci-multiplier
+
       - name: Build all packages
         run: npx turbo build
 

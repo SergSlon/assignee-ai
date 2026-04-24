@@ -13,6 +13,7 @@ import {
 } from "../policy-inspector.js";
 import { isAwarenessCheck } from "./awareness-filter.js";
 import { nestedArrayPredicatePasses } from "./predicates/nested-array-predicate.js";
+import type { PolicyContext } from "./policy-context.js";
 
 /**
  * Epic 94 R4 (B-02). `expected_value: "0.0.0.0/0:22"` and `"0.0.0.0/0:3389"`
@@ -114,12 +115,25 @@ function parseCidrPortSet(
 /**
  * Evaluate a single check_type condition against a field value.
  *
+ * @param checkType      The check type from the rule YAML (e.g. "equals", "policy_antipattern").
+ * @param fieldValue     The value extracted from desiredState at property_path.
+ * @param expectedValue  The expected_value from the rule YAML.
+ * @param policyContext  Optional document-kind discriminator for `policy_antipattern` checks
+ *                       (see `evaluate/policy-context.ts`). When provided, context-sensitive
+ *                       predicates gate on the document kind — e.g. `cross-account-no-external-id`
+ *                       only fires in `{ kind: "trust" }` context. Derive via
+ *                       `derivePolicyContext(rule.resource_type, rule.property_path)` at the
+ *                       call site (barrel.ts) and pass through here. Omitting the parameter
+ *                       preserves the pre-Epic-99-W3e behaviour for all call sites that have
+ *                       not yet been updated to derive context.
+ *
  * @returns true if the check PASSES (best practice is satisfied), false if it FAILS (finding should fire)
  */
 export function checkPasses(
   checkType: string,
   fieldValue: unknown,
   expectedValue: unknown,
+  policyContext?: PolicyContext,
 ): boolean {
   // Awareness-family checks always "fail" so the BP fires as informational.
   if (isAwarenessCheck(checkType)) return false;
@@ -280,17 +294,31 @@ export function checkPasses(
       //   definitely absent, so the rule FAILS (fires). Routed through
       //   the inspector's absence branch which is tolerant of
       //   undefined/null/malformed documents.
+      //
+      // Epic 99 W3e — PolicyContext plumbing. `policyContext` is forwarded
+      // to `inspectPolicyDocument` so context-sensitive predicates (e.g.
+      // `cross-account-no-external-id`) can gate on the document kind.
+      // Call sites that derive and pass `policyContext` get context-aware
+      // evaluation; call sites that omit it preserve pre-W3e semantics.
       const patternName =
         typeof expectedValue === "string"
           ? (expectedValue as PolicyAntipattern)
           : undefined;
       if (patternName !== undefined && isAbsenceAntipattern(patternName)) {
-        const result = inspectPolicyDocument(fieldValue, patternName);
+        const result = inspectPolicyDocument(
+          fieldValue,
+          patternName,
+          policyContext,
+        );
         return !result.matched;
       }
       if (fieldValue === undefined || fieldValue === null) return true;
       if (patternName === undefined) return true;
-      const result = inspectPolicyDocument(fieldValue, patternName);
+      const result = inspectPolicyDocument(
+        fieldValue,
+        patternName,
+        policyContext,
+      );
       return !result.matched;
     }
 

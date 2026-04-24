@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   CLI_PARSE_MS,
   CREDENTIAL_CHECK_MS,
@@ -9,7 +9,7 @@ import {
   COMMAND_TOTAL_MS,
   STARTUP_BUDGETS,
   ALL_BUDGETS,
-  checkBudget,
+  checkTimingBudget,
   formatBudgetTable,
 } from "./time-budget.js";
 
@@ -99,20 +99,28 @@ describe("time-budget", () => {
     });
   });
 
-  describe("checkBudget", () => {
+  describe("checkTimingBudget", () => {
+    // Neutralise the 1.5× CI multiplier so assertions are deterministic
+    // on GH Actions (CI=true). All calls also pass explicit ciMultiplier,
+    // but the stub removes the latent env dependency.
+    // Pattern enforced by lint:ci-multiplier (T-006).
+    beforeEach(() => {
+      vi.stubEnv("CI", "");
+    });
+
     it("returns passed=true when actual is below budget", () => {
-      const result = checkBudget("CLI parse", 30, 50, 1.0);
+      const result = checkTimingBudget("CLI parse", 30, 50, 1.0);
       expect(result.passed).toBe(true);
       expect(result.message).toContain("PASS");
     });
 
     it("returns passed=true when actual equals budget", () => {
-      const result = checkBudget("CLI parse", 50, 50, 1.0);
+      const result = checkTimingBudget("CLI parse", 50, 50, 1.0);
       expect(result.passed).toBe(true);
     });
 
     it("returns passed=false when actual exceeds budget", () => {
-      const result = checkBudget("MCP startup", 4200, 3000, 1.0);
+      const result = checkTimingBudget("MCP startup", 4200, 3000, 1.0);
       expect(result.passed).toBe(false);
       expect(result.message).toContain("BUDGET EXCEEDED");
       expect(result.message).toContain("4200ms");
@@ -121,16 +129,16 @@ describe("time-budget", () => {
 
     it("applies CI multiplier to budget", () => {
       // Without multiplier: 120ms > 50ms budget → FAIL
-      const failResult = checkBudget("CLI parse", 70, 50, 1.0);
+      const failResult = checkTimingBudget("CLI parse", 70, 50, 1.0);
       expect(failResult.passed).toBe(false);
 
       // With 1.5x CI multiplier: 70ms <= 75ms effective → PASS
-      const passResult = checkBudget("CLI parse", 70, 50, 1.5);
+      const passResult = checkTimingBudget("CLI parse", 70, 50, 1.5);
       expect(passResult.passed).toBe(true);
     });
 
     it("preserves label and durations in result", () => {
-      const result = checkBudget("Test phase", 42, 100, 1.0);
+      const result = checkTimingBudget("Test phase", 42, 100, 1.0);
       expect(result.label).toBe("Test phase");
       expect(result.actualMs).toBe(42);
       expect(result.budgetMs).toBe(100);
@@ -140,8 +148,8 @@ describe("time-budget", () => {
   describe("formatBudgetTable", () => {
     it("formats results into a table with header", () => {
       const results = [
-        checkBudget("CLI parse", 30, 50, 1.0),
-        checkBudget("MCP startup", 4200, 3000, 1.0),
+        checkTimingBudget("CLI parse", 30, 50, 1.0),
+        checkTimingBudget("MCP startup", 4200, 3000, 1.0),
       ];
 
       const output = formatBudgetTable(results);
@@ -154,7 +162,7 @@ describe("time-budget", () => {
     });
 
     it("shows millisecond units", () => {
-      const results = [checkBudget("Test", 42, 100, 1.0)];
+      const results = [checkTimingBudget("Test", 42, 100, 1.0)];
       const output = formatBudgetTable(results);
       expect(output).toContain("42ms");
       expect(output).toContain("100ms");

@@ -4,4 +4,5 @@ pnpm lint:barrels
 pnpm lint:shims
 pnpm doc-lint
 pnpm citation-lint
+pnpm lint:ci-multiplier
 pnpm test

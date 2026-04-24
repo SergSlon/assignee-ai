@@ -109,7 +109,7 @@ export const ALL_BUDGETS: BudgetEntry[] = Object.values(STARTUP_BUDGETS);
  * @param ciMultiplier - Multiplier for CI runners (default 1.5 when CI=true)
  * @returns BudgetCheckResult with pass/fail and human-readable message
  */
-export function checkBudget(
+export function checkTimingBudget(
   label: string,
   actualMs: number,
   budgetMs: number,

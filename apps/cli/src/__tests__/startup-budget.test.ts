@@ -9,14 +9,22 @@
  * @see Story 29.5 — Startup Time Budget with CI Guard
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   STARTUP_BUDGETS,
-  checkBudget,
+  checkTimingBudget,
   formatBudgetTable,
 } from "../constants/time-budget.js";
 
 describe("startup budget CI guard", () => {
+  // Neutralise the 1.5× CI multiplier in checkTimingBudget so test
+  // results are deterministic regardless of whether CI=true is set by
+  // the runner. Every call in this file already passes an explicit
+  // ciMultiplier, but stubbing CI removes the latent env dependency.
+  // Pattern enforced by lint:ci-multiplier (T-006).
+  beforeEach(() => {
+    vi.stubEnv("CI", "");
+  });
   it("total cold start budget is 10 seconds", () => {
     expect(STARTUP_BUDGETS.TOTAL_COLD_START.budgetMs).toBe(10_000);
   });
@@ -27,7 +35,7 @@ describe("startup budget CI guard", () => {
     // so the test still exercises the FAIL path — the message format
     // assertion is what this case guards against, not the specific
     // threshold number.
-    const result = checkBudget(
+    const result = checkTimingBudget(
       STARTUP_BUDGETS.MCP_TOTAL_PLAN.label,
       6200,
       STARTUP_BUDGETS.MCP_TOTAL_PLAN.budgetMs,
@@ -51,17 +59,22 @@ describe("startup budget CI guard", () => {
     ];
 
     for (const { phase, actual } of timings) {
-      const result = checkBudget(phase.label, actual, phase.budgetMs, 1.0);
+      const result = checkTimingBudget(
+        phase.label,
+        actual,
+        phase.budgetMs,
+        1.0,
+      );
       expect(result.passed).toBe(true);
     }
   });
 
   it("budget table shows pass/fail indicators for each phase", () => {
     const results = [
-      checkBudget("CLI parse", 30, 50, 1.0),
-      checkBudget("Credential check", 150, 200, 1.0),
-      checkBudget("MCP startup (plan)", 4200, 3000, 1.0),
-      checkBudget("Total cold start", 7000, 10000, 1.0),
+      checkTimingBudget("CLI parse", 30, 50, 1.0),
+      checkTimingBudget("Credential check", 150, 200, 1.0),
+      checkTimingBudget("MCP startup (plan)", 4200, 3000, 1.0),
+      checkTimingBudget("Total cold start", 7000, 10000, 1.0),
     ];
 
     const table = formatBudgetTable(results);
@@ -74,7 +87,7 @@ describe("startup budget CI guard", () => {
 
   it("CI multiplier allows 1.5x headroom for slow runners", () => {
     // 70ms exceeds 50ms but is within 1.5x = 75ms
-    const result = checkBudget("CLI parse", 70, 50, 1.5);
+    const result = checkTimingBudget("CLI parse", 70, 50, 1.5);
     expect(result.passed).toBe(true);
   });
 });

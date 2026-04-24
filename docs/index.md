@@ -1,7 +1,8 @@
 # Assignee.ai — Documentation
 
-Docs organized by the [Diátaxis](https://diataxis.fr/) framework. Pick the
-quadrant that matches what you want to do.
+Docs organized by the [Diátaxis](https://diataxis.fr/) framework — four
+quadrants: **Tutorials**, **How-to**, **Reference**, **Explanation**.
+Pick the quadrant that matches what you want to do.
 
 > Note on the two MCP docs: `mcp-server.md` covers how to **expose** the
 > assignee CLI as an MCP server for IDEs (Cursor, Claude Code, Windsurf).
@@ -11,19 +12,22 @@ quadrant that matches what you want to do.
 
 ---
 
-## Tutorials — learning-oriented
+## [Tutorials](tutorials/) — learning-oriented
 
 Step-by-step lessons to get you from zero to a working setup. Read these first
-if you are new to assignee.ai.
+if you are new to assignee.ai. See [`tutorials/README.md`](tutorials/README.md)
+for the quadrant overview and contribution guide.
 
 | Doc                                  | What you'll learn                                                  |
 | ------------------------------------ | ------------------------------------------------------------------ |
 | [quickstart.md](quickstart.md)       | Install the CLI, bootstrap AWS, plan and apply your first resource |
 | [aws-bootstrap.md](aws-bootstrap.md) | Set up an AWS account and IAM users end-to-end for assignee.ai     |
 
-## How-to guides — task-oriented
+## [How-to guides](how-to/) — task-oriented
 
 Recipes for accomplishing specific goals. Assume you already know the basics.
+See [`how-to/README.md`](how-to/README.md) for the full guide list and
+the backlog of pending how-tos.
 
 | Doc                                                    | Goal                                                             |
 | ------------------------------------------------------ | ---------------------------------------------------------------- |
@@ -32,9 +36,11 @@ Recipes for accomplishing specific goals. Assume you already know the basics.
 | [mcp-server.md](mcp-server.md)                         | Expose assignee.ai as an MCP server to your IDE                  |
 | [testing-guide.md](testing-guide.md)                   | Run the project's test suite and add new tests                   |
 
-## Reference — information-oriented
+## [Reference](reference/) — information-oriented
 
 Dry, precise, lookup-style information. Skim the tables; search for specifics.
+See [`reference/README.md`](reference/README.md) for the migration roadmap
+(root-level reference docs move to `reference/` in Epic 100+).
 
 | Doc                                      | What it catalogs                                                                                   |
 | ---------------------------------------- | -------------------------------------------------------------------------------------------------- |
@@ -45,10 +51,11 @@ Dry, precise, lookup-style information. Skim the tables; search for specifics.
 | [best-practices.md](best-practices.md)   | Best-practice rule engine and the 185 shipped rules                                                |
 | [troubleshooting.md](troubleshooting.md) | Exit codes and error-class playbook (Bedrock region, CCAPI NotFound, throttling, expired creds, …) |
 
-## Explanation — understanding-oriented
+## [Explanation](explanation/) — understanding-oriented
 
 Background, design rationale, and the "why" behind the system. Read these
-when you want to understand how assignee.ai thinks.
+when you want to understand how assignee.ai thinks. See
+[`explanation/README.md`](explanation/README.md) for the full topic index.
 
 | Doc                                                                            | Topic                                                                                                                                     |
 | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
@@ -61,6 +68,7 @@ when you want to understand how assignee.ai thinks.
 | [explanation/telemetry-design.md](explanation/telemetry-design.md)             | Opt-in telemetry design + privacy model (no code yet; design doc gating future PRs)                                                       |
 | [explanation/run-ledger-design.md](explanation/run-ledger-design.md)           | Run-ID-based workflow stickiness via tags; why there is no state file                                                                     |
 | [explanation/contributing-a-bp-rule.md](explanation/contributing-a-bp-rule.md) | Worked example walkthrough for contributing a new best-practice rule                                                                      |
+| [explanation/flake-policy.md](explanation/flake-policy.md)                     | Retry-once discipline, flake-rate SLO, and quarantine process for unreliable tests                                                        |
 
 ---
 

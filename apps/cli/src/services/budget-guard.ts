@@ -132,7 +132,7 @@ export function parseMonthlyUsd(cost: string | undefined): ParseMonthlyResult {
  * @param budget - User/project config budget settings (optional)
  * @returns BudgetCheckResult indicating ok, warning, or blocked
  */
-export function checkBudget(
+export function checkMonthlyCostBudget(
   estimatedMonthlyCost: string | undefined,
   budget: ConfigBudget | undefined,
 ): BudgetCheckResult {

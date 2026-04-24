@@ -298,7 +298,7 @@ describe("timing", () => {
       // under a different label and then piggybacking — simpler: assert
       // the label mapping is still wired by checking the budget entry
       // exists for first-llm-call. The behavior test lives in
-      // startup-budget.test.ts which validates checkBudget() directly.
+      // startup-budget.test.ts which validates checkTimingBudget() directly.
       startTimer("first-llm-call");
       // Simulate a fast call — no warning. Verifies the timer is still
       // linked into the checker.
@@ -328,7 +328,7 @@ describe("timing", () => {
         warnings.push(String(chunk));
         return true;
       }) as unknown as typeof process.stderr.write;
-      // Neutralise the 1.5× CI multiplier in checkBudget
+      // Neutralise the 1.5× CI multiplier in checkTimingBudget
       // (time-budget.ts:118) so the threshold logic we care about here
       // — "95s > 90s override fires a warning" — is exercised
       // independent of whether the test runs under `CI=true`.
