@@ -9,7 +9,7 @@ The MCP server wraps the same 14-node LangGraph pipeline that powers the CLI int
 ## Prerequisites
 
 - Node.js >= 20
-- AWS credentials configured (same credential chain as the CLI -- see [Quickstart](./quickstart.md#prerequisites))
+- AWS credentials configured (same credential chain as the CLI -- see [Quickstart](./how-to/quickstart.md#prerequisites))
 - Amazon Bedrock access in your region
 - A source build of the repo (see Install section below)
 

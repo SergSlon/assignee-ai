@@ -81,12 +81,52 @@ NotFound as destroy success`.
 - The project does **not** require a DCO sign-off. If that changes, this
   section will be updated and the requirement will gate CI.
 
-## Pre-commit Hooks
+## Pre-commit and Pre-push Hooks (W10-04 / P064)
 
-`husky` + `lint-staged` run Prettier on staged `*.ts` / `*.tsx` /
-`*.json` / `*.md` files. Skipping hooks (`--no-verify`) is discouraged —
-if a hook fails, fix the underlying issue and re-stage. Do not bypass
-signing or hook enforcement without a maintainer's sign-off.
+The project uses a **two-tier hook split** so the commit cycle stays fast
+while the full quality suite runs at push time.
+
+### Pre-commit (`.husky/pre-commit`)
+
+Runs on every `git commit`:
+
+1. `pnpm lint-staged` — Prettier on staged `*.ts` / `*.tsx` / `*.json` / `*.md`.
+2. AWS account-ID scan — blocks commits that reintroduce the real dogfood
+   account ID (see `feedback_no_real_account_ids_in_repo`).
+3. `pnpm check-types` — TypeScript compile check (catches type errors early,
+   before push).
+4. `pnpm build` — full monorepo build via turbo cache (fast on unchanged files;
+   ensures the dist is always up-to-date when a hot-path file is committed).
+5. Pre-close probe gate (conditional) — runs `apps/cli/scripts/pre-close-probes.sh`
+   when a hot-path source file is staged and `apps/cli/dist/index.js` exists.
+   Controlled by `ASSIGNEE_SKIP_PRE_CLOSE_PROBES=1`.
+
+### Pre-push (`.husky/pre-push`)
+
+Runs before every `git push`: lint, typecheck, barrel lint, shim lint,
+doc-lint, citation-lint, CI-multiplier lint, and the full `pnpm test` suite.
+This is the authoritative quality gate; CI mirrors it.
+
+### When is `--no-verify` acceptable?
+
+Per `feedback_parallel_worker_commit_rhythm`, the ONLY sanctioned use of
+`--no-verify` is **parallel-worker mid-wave commits** inside an automated
+Epic story harness where:
+
+- A reviewer has already gated the story implementation.
+- The wave coordinator runs `pnpm build` + `pnpm test` (or
+  `pnpm -r test:coverage`) in a single serial pass after all workers land.
+- The PR description flags the bypass explicitly.
+
+**Never use `--no-verify` to work around a failing hook.** Fix the
+underlying issue and re-stage. CI does **not** honour `--no-verify` and
+will reject any commit whose source violates the full suite.
+
+To skip only the build gate (not the account-ID scan) during parallel work:
+
+```bash
+ASSIGNEE_SKIP_BUILD=1 git commit --no-verify
+```
 
 ## Testing
 

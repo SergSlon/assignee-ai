@@ -44,7 +44,7 @@ Tutorials assume:
 
 Tutorials do **not** cover bootstrap or account setup — those live under
 [`../how-to/`](../how-to/) (task recipes) or the top-level
-[`../quickstart.md`](../quickstart.md) (single-page quickstart).
+[`../how-to/quickstart.md`](../how-to/quickstart.md) (single-page quickstart).
 
 ---
 

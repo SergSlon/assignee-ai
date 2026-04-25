@@ -18,10 +18,10 @@ Step-by-step lessons to get you from zero to a working setup. Read these first
 if you are new to assignee.ai. See [`tutorials/README.md`](tutorials/README.md)
 for the quadrant overview and contribution guide.
 
-| Doc                                  | What you'll learn                                                  |
-| ------------------------------------ | ------------------------------------------------------------------ |
-| [quickstart.md](quickstart.md)       | Install the CLI, bootstrap AWS, plan and apply your first resource |
-| [aws-bootstrap.md](aws-bootstrap.md) | Set up an AWS account and IAM users end-to-end for assignee.ai     |
+| Doc                                          | What you'll learn                                                  |
+| -------------------------------------------- | ------------------------------------------------------------------ |
+| [how-to/quickstart.md](how-to/quickstart.md) | Install the CLI, bootstrap AWS, plan and apply your first resource |
+| [aws-bootstrap.md](aws-bootstrap.md)         | Set up an AWS account and IAM users end-to-end for assignee.ai     |
 
 ## [How-to guides](how-to/) — task-oriented
 

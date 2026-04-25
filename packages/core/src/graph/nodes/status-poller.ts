@@ -1,11 +1,11 @@
 /**
  * status_poller node — polls CloudControl for async operation status.
  * LangGraph self-loop: returns IN_PROGRESS to re-invoke itself, or routes to result_formatter.
- * Timeout: 5 minutes; poll interval: 2 seconds.
+ * Timeout: 5 minutes; poll interval: 2 seconds (base; exponential with jitter on throttling).
  *
  * Depends on ProvisioningPort (DIP) — no direct AWS SDK imports.
  *
- * @see Story 7-6, Story 9-2
+ * @see Story 7-6, Story 9-2, W10-05 (P042 → L6-F20) — exponential backoff with jitter
  */
 
 import {
@@ -13,12 +13,58 @@ import {
   RESOURCE_TYPES,
   LIST_RESOURCE_TYPES,
   type ProvisioningPort,
+  type ProvisioningPortError,
 } from "../../index.js";
 import { log, LOG_ACTIONS } from "../../utils/logger/index.js";
 import type { AgentState } from "../graph-state.js";
 
 const DEFAULT_POLL_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
-const POLL_INTERVAL_MS = 2_000; // 2 seconds
+const POLL_INTERVAL_MS = 2_000; // 2 seconds (base; throttling uses exponential backoff)
+
+// ── Exponential-backoff constants (W10-05 / P042 → L6-F20) ───────────────────
+/** Maximum number of throttling-backoff retries before hard failure. */
+const MAX_THROTTLE_RETRIES = 5;
+/** Base delay (ms) for the first throttling retry. */
+const BACKOFF_BASE_MS = 1_000; // 1 s
+/** Jitter window applied to every backoff interval (±50% of calculated delay). */
+const BACKOFF_JITTER_FRACTION = 0.5;
+/** Hard cap on any single backoff sleep (60 s per the story AC). */
+const BACKOFF_CAP_MS = 60_000;
+
+/**
+ * Compute exponential-backoff delay with ±jitter.
+ *
+ * Formula: min(base × 2^attempt, cap) × (1 + jitter × (rand − 0.5) × 2)
+ * @param attempt — zero-based retry attempt number (0 = first retry, 4 = fifth).
+ */
+export function computeBackoffMs(attempt: number): number {
+  const exponential = BACKOFF_BASE_MS * Math.pow(2, attempt);
+  const capped = Math.min(exponential, BACKOFF_CAP_MS);
+  const jitter = capped * BACKOFF_JITTER_FRACTION * (Math.random() - 0.5) * 2;
+  return Math.max(0, Math.round(capped + jitter));
+}
+
+/**
+ * Returns true when an error is a transient throttling or service-overload
+ * response from CloudControl — these benefit from exponential backoff,
+ * unlike hard failures which should surface immediately.
+ *
+ * Covers: ThrottlingException, ServiceUnavailableException, HTTP 503.
+ * Exported for unit-test coverage.
+ */
+export function isThrottlingError(err: ProvisioningPortError): boolean {
+  const msg = err.message.toLowerCase();
+  return (
+    msg.includes("throttling") ||
+    msg.includes("throttled") ||
+    msg.includes("rate exceeded") ||
+    msg.includes("too many requests") ||
+    msg.includes("service unavailable") ||
+    msg.includes("503") ||
+    // CloudControl sometimes wraps the HTTP 503 body verbatim
+    msg.includes("serviceunavailableexception")
+  );
+}
 
 /** Resource types that need extended provisioning timeouts. */
 const EXTENDED_TIMEOUT_TYPES: Set<string> = new Set([
@@ -172,7 +218,7 @@ export async function statusPollerNode(
     };
   }
 
-  // Wait between polls
+  // Wait between polls (base interval, independent of throttling backoff)
   await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
 
   const [pollErr, result] = await provisioner.getRequestStatus(
@@ -180,6 +226,39 @@ export async function statusPollerNode(
   );
 
   if (pollErr) {
+    // ── Throttling / 503 exponential-backoff (W10-05 / P042 → L6-F20) ─────
+    // On transient throttling errors, retry up to MAX_THROTTLE_RETRIES times
+    // with exponential backoff + jitter before surfacing a hard failure.
+    // The throttleRetryCount lives in AgentState (accessed via `state`) and
+    // is carried across self-loop iterations by the graph state reducer.
+    if (isThrottlingError(pollErr)) {
+      const throttleRetryCount = state.throttleRetryCount ?? 0;
+      if (throttleRetryCount < MAX_THROTTLE_RETRIES) {
+        const delay = computeBackoffMs(throttleRetryCount);
+        log({
+          ts: new Date().toISOString(),
+          runId: state.runId,
+          level: "warn",
+          action: LOG_ACTIONS.PROVISIONING_STATUS_CHECKED,
+          extras: {
+            phase: "throttle_backoff",
+            attempt: throttleRetryCount + 1,
+            maxRetries: MAX_THROTTLE_RETRIES,
+            delayMs: delay,
+            error: pollErr.message,
+          },
+        });
+        await new Promise<void>((resolve) => setTimeout(resolve, delay));
+        return {
+          executionStatus: ExecutionStatus.IN_PROGRESS,
+          throttleRetryCount: throttleRetryCount + 1,
+        };
+      }
+      return {
+        executionStatus: ExecutionStatus.FAILED,
+        errorMessage: `CloudControl polling exhausted ${MAX_THROTTLE_RETRIES} throttling retries: ${pollErr.message}`,
+      };
+    }
     return {
       executionStatus: ExecutionStatus.FAILED,
       errorMessage: `CloudControl polling failed: ${pollErr.message}`,

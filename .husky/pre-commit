@@ -1,5 +1,19 @@
 pnpm lint-staged
 
+# W10-04 (P064 → L6-F18 + L4-S21): type-check + build gate on every commit.
+# Catches TypeScript compile errors before they hit the remote (previously
+# only caught in pre-push). Build uses turbo cache so repeat invocations
+# on unchanged files are nearly instant (< 2 s typical).
+#
+# Escape-hatch for parallel-worker commits (feedback_parallel_worker_commit_rhythm):
+#   ASSIGNEE_SKIP_BUILD=1 git commit --no-verify  (bypass ONLY for known-good
+#   parallel-worker mid-wave commits; full gate runs at wave-close).
+# CI does NOT honour --no-verify -- the full suite runs unconditionally.
+if [[ "${ASSIGNEE_SKIP_BUILD:-0}" != "1" ]]; then
+  pnpm check-types
+  pnpm build
+fi
+
 # Epic 99 W1b CT-14 defense: reject commits that (re-)introduce the real
 # AWS account ID used during dogfood. Replace with the safe synthetic
 # ID documented in feedback_no_real_account_ids_in_repo.

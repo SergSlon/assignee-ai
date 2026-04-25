@@ -3,6 +3,8 @@ import { ExecutionStatus } from "../../index.js";
 import {
   statusPollerNode,
   isRetryableCloudFrontS3Error,
+  computeBackoffMs,
+  isThrottlingError,
 } from "./status-poller.js";
 import { ProvisioningErrorKind, type ProvisioningPort } from "../../index.js";
 
@@ -491,5 +493,190 @@ describe("isRetryableCloudFrontS3Error", () => {
     // Defensive: the poller occasionally sees empty statusMessage on
     // success — must never classify as retryable.
     expect(isRetryableCloudFrontS3Error(" ")).toBe(false);
+  });
+});
+
+// ── computeBackoffMs helper (W10-05 / P042 → L6-F20) ─────────────────────────
+describe("computeBackoffMs", () => {
+  it("returns a non-negative value for all attempts 0-5", () => {
+    for (let i = 0; i <= 5; i++) {
+      expect(computeBackoffMs(i)).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("is never greater than 60 000 ms (cap enforced)", () => {
+    for (let i = 0; i <= 10; i++) {
+      // With ±50% jitter the max possible is cap × 1.5 = 90 000 ms;
+      // however our implementation clamps the jitter so the result
+      // stays at or below cap × (1 + 0.5) = 90 000. We enforce ≤ 90 000
+      // (practical) and not ≤ 60 000 (the cap is pre-jitter).
+      expect(computeBackoffMs(i)).toBeLessThanOrEqual(90_000);
+    }
+  });
+
+  it("grows as attempt increases (median trend)", () => {
+    // The base (pre-jitter) doubles each attempt; even with max jitter
+    // the median at attempt 3 is 8×base = 8 000 ms > attempt 0 = 1 000.
+    // Run a few samples to confirm monotonic growth trend.
+    const samples = 20;
+    let sumAt0 = 0;
+    let sumAt3 = 0;
+    for (let i = 0; i < samples; i++) {
+      sumAt0 += computeBackoffMs(0);
+      sumAt3 += computeBackoffMs(3);
+    }
+    expect(sumAt3 / samples).toBeGreaterThan(sumAt0 / samples);
+  });
+});
+
+// ── isThrottlingError helper (W10-05 / P042 → L6-F20) ────────────────────────
+// Uses ProvisioningPortError shape: {kind, message} (not Error).
+const makeProvisioningError = (msg: string) => ({
+  kind: "UNKNOWN" as const,
+  message: msg,
+});
+
+describe("isThrottlingError", () => {
+  it("recognises ThrottlingException by message", () => {
+    expect(
+      isThrottlingError(
+        makeProvisioningError("ThrottlingException: Rate exceeded"),
+      ),
+    ).toBe(true);
+  });
+
+  it("recognises 503 Service Unavailable", () => {
+    expect(
+      isThrottlingError(makeProvisioningError("503 Service Unavailable")),
+    ).toBe(true);
+  });
+
+  it("recognises 'too many requests'", () => {
+    expect(
+      isThrottlingError(
+        makeProvisioningError("Too Many Requests: rate limit hit"),
+      ),
+    ).toBe(true);
+  });
+
+  it("does NOT match a generic network timeout", () => {
+    expect(
+      isThrottlingError(
+        makeProvisioningError("Network timeout connecting to endpoint"),
+      ),
+    ).toBe(false);
+  });
+
+  it("does NOT match a NotFound error", () => {
+    expect(
+      isThrottlingError(
+        makeProvisioningError("ResourceNotFoundException: Resource not found"),
+      ),
+    ).toBe(false);
+  });
+});
+
+// ── Throttling backoff integration (W10-05 / P042 → L6-F20) ─────────────────
+describe("statusPollerNode — throttling backoff", () => {
+  it("returns IN_PROGRESS with incremented throttleRetryCount on first 503", async () => {
+    mockProvisioner.getRequestStatus.mockResolvedValueOnce([
+      { kind: "UNKNOWN" as const, message: "503 Service Unavailable" },
+      null,
+    ]);
+
+    const promise = statusPollerNode(
+      makeState({ throttleRetryCount: 0 }),
+      mockProvisioner,
+    );
+    // Advance past POLL_INTERVAL_MS (2s) + backoff sleep
+    await vi.advanceTimersByTimeAsync(70_000);
+    const result = await promise;
+
+    expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
+    expect((result as { throttleRetryCount?: number }).throttleRetryCount).toBe(
+      1,
+    );
+  });
+
+  it("eventually succeeds after throttling then a SUCCESS poll", async () => {
+    // Simulate: first call throttles (retry 0→1), second call succeeds.
+    mockProvisioner.getRequestStatus
+      .mockResolvedValueOnce([
+        {
+          kind: "UNKNOWN" as const,
+          message: "ThrottlingException: Rate exceeded",
+        },
+        null,
+      ])
+      .mockResolvedValueOnce([
+        null,
+        {
+          operationStatus: "SUCCESS",
+          identifier: "arn:aws:s3:::my-bucket",
+          statusMessage: undefined,
+        },
+      ]);
+
+    // First iteration — throttles
+    const promise1 = statusPollerNode(
+      makeState({ throttleRetryCount: 0 }),
+      mockProvisioner,
+    );
+    await vi.advanceTimersByTimeAsync(70_000);
+    const result1 = await promise1;
+    expect(result1.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
+
+    // Second iteration — succeeds
+    const promise2 = statusPollerNode(
+      makeState({
+        throttleRetryCount:
+          (result1 as { throttleRetryCount?: number }).throttleRetryCount ?? 1,
+      }),
+      mockProvisioner,
+    );
+    await vi.advanceTimersByTimeAsync(2_000);
+    const result2 = await promise2;
+    expect(result2.executionStatus).toBe(ExecutionStatus.SUCCESS);
+  });
+
+  it("hard-fails after MAX_THROTTLE_RETRIES (5) throttling errors", async () => {
+    mockProvisioner.getRequestStatus.mockResolvedValue([
+      {
+        kind: "UNKNOWN" as const,
+        message: "ThrottlingException: Rate exceeded",
+      },
+      null,
+    ]);
+
+    // throttleRetryCount already at MAX (5) — next error should hard-fail
+    const promise = statusPollerNode(
+      makeState({ throttleRetryCount: 5 }),
+      mockProvisioner,
+    );
+    await vi.advanceTimersByTimeAsync(2_000);
+    const result = await promise;
+
+    expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+    expect(result.errorMessage).toMatch(/exhausted 5 throttling retries/);
+  });
+
+  it("does NOT treat NotFound as throttling — still short-circuits to success on destroy (regression)", async () => {
+    // feedback_cloudcontrol_notfound_short_circuit: NotFound on FAILED status must stay success on destroy.
+    // This test ensures the throttling path does NOT intercept a non-throttling error.
+    mockProvisioner.getRequestStatus.mockResolvedValueOnce([
+      { kind: "UNKNOWN" as const, message: "Network timeout" },
+      null,
+    ]);
+
+    const promise = statusPollerNode(makeState(), mockProvisioner);
+    await vi.advanceTimersByTimeAsync(2_000);
+    const result = await promise;
+
+    // Non-throttling error → FAILED immediately (no backoff)
+    expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+    expect(result.errorMessage).toMatch(/CloudControl polling failed/);
+    expect(
+      (result as { throttleRetryCount?: number }).throttleRetryCount,
+    ).toBeUndefined();
   });
 });

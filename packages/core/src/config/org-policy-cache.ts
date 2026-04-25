@@ -92,6 +92,8 @@ async function readCache(): Promise<OrgResourceConfig | undefined> {
 
 /**
  * Write org policy to the cache file.
+ * Mode 0o600 (owner read/write only) prevents world-readable token leakage
+ * — org-policy cache may contain SaaS auth context. P052 / L4-S08.
  */
 async function writeCache(data: OrgResourceConfig): Promise<void> {
   const cachePath = resolveCachePath();
@@ -101,7 +103,10 @@ async function writeCache(data: OrgResourceConfig): Promise<void> {
     fetchedAt: Date.now(),
     data,
   };
-  await fs.writeFile(cachePath, JSON.stringify(envelope, null, 2), "utf-8");
+  await fs.writeFile(cachePath, JSON.stringify(envelope, null, 2), {
+    encoding: "utf-8",
+    mode: 0o600,
+  });
 }
 
 /**
