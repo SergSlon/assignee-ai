@@ -1,0 +1,25 @@
+{
+  "// Purpose": "IDE-only TS coverage for scripts/*.ts. Runtime executes via `npx tsx`, NOT `tsc`. This file exists so editors resolve `node:fs` / `import.meta.url` / `process` without false-positive red squiggles. The project's `pnpm -r check-types` does NOT include this directory — workspace-package tsconfigs are the source of truth for build correctness.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "typeRoots": [
+      "../node_modules/@types",
+      "../apps/cli/node_modules/@types",
+      "../packages/core/node_modules/@types"
+    ],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": false
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
