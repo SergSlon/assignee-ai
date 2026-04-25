@@ -64,6 +64,23 @@ describe("org-policy-cache", () => {
       expect(result).toEqual(samplePolicy);
       expect(mockedFs.writeFile).toHaveBeenCalled();
     });
+
+    it("writes cache file with mode 0o600 (P052 / L4-S08)", async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(JSON.stringify(samplePolicy), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+
+      await fetchOrgPolicy("test-token");
+
+      expect(mockedFs.writeFile).toHaveBeenCalledWith(
+        expect.stringContaining("org-policy.json"),
+        expect.any(String),
+        expect.objectContaining({ mode: 0o600 }),
+      );
+    });
   });
 
   describe("API failure with cache fallback", () => {

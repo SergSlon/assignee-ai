@@ -43,6 +43,9 @@ import {
   scrubEmptyErrorMetadata,
 } from "@/services/cost-history/index.js";
 import { stripPromptBoundaryTags } from "@/llm/prompt-sanitize.js";
+// W10-07 (P051 → L3-F16): redact account IDs and sensitive resource names
+// from user-supplied intent before it enters the LLM prompt boundary.
+import { redactArnsInString } from "@/utils/arn-redactor.js";
 import type { AgentState } from "../../graph-state.js";
 
 /**
@@ -153,8 +156,11 @@ export async function readMemoryHints(
           const cleanMessage = scrubEmptyErrorMetadata(
             latestFailure.errorMessage,
           );
+          // W10-07: redact any ARNs (account IDs, bucket names) that leaked
+          // into the stored error message before including in LLM context.
+          const cleanMessageRedacted = redactArnsInString(cleanMessage);
           memoryHints.push(
-            `\u26A0 Previous error with ${latestFailure.resourceType}: ${cleanMessage}.${fixSuffix}`,
+            `\u26A0 Previous error with ${latestFailure.resourceType}: ${cleanMessageRedacted}.${fixSuffix}`,
           );
         }
       }
@@ -258,7 +264,10 @@ export function buildPrompt(input: {
     // `</user_intent>` strip left opening tags and nested <system> / code
     // fences intact. `stripPromptBoundaryTags` is defence-in-depth on top
     // of `sanitizeUserIntent` (NFR-16) applied upstream in intent-parser.
-    `User intent: <user_intent>${stripPromptBoundaryTags(userIntent)}</user_intent>`,
+    // W10-07 (P051 → L3-F16): redact ARNs (account IDs + sensitive resource
+    // names) from user intent before LLM sees it. Applied after boundary-tag
+    // strip so the two sanitisers compose without interfering.
+    `User intent: <user_intent>${redactArnsInString(stripPromptBoundaryTags(userIntent))}</user_intent>`,
     "",
     `Required properties: ${JSON.stringify(requiredKeys)}`,
     `Available properties: ${JSON.stringify(schemaKeys)}`,

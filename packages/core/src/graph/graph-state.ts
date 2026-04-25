@@ -200,6 +200,16 @@ export const graphAnnotation = Annotation.Root({
     default: () => 0,
   }),
   /**
+   * W10-05 (P042 → L6-F20): throttling-backoff retry counter.
+   * Incremented by status_poller each time a transient 503 / ThrottlingException
+   * is encountered. Resets to 0 at graph start. Distinct from `retryCount`
+   * (CloudFront S3 DNS-propagation retries) so the two budgets are independent.
+   */
+  throttleRetryCount: Annotation<number>({
+    reducer: (_, b) => b,
+    default: () => 0,
+  }),
+  /**
    * Non-blocking structured advisories surfaced from the parse / plan
    * pipeline. Unlike `errorMessage` (which halts the plan) advisories
    * let the plan succeed but surface a user-visible signal that some
