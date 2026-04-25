@@ -29,16 +29,17 @@ when filing a bug.
 
 ## Exit 12 — not implemented
 
-**Symptom.** `assignee plan --target-account <ID>` (or any command that
-accepts `--target-account`) exits immediately with code 12 and the message:
+**Symptom.** `assignee plan --target-account <ID>` (or `apply` / `destroy`
+with the same flag) exits immediately with code 12 and prints to stderr:
 
 ```
---target-account is not yet implemented. Cross-account assume-role support
-is planned for a future release.
+[plan] Epic 101: cross-account assume-role not yet implemented for <ID>
 ```
+
+(Replace `[plan]` with `[apply]` or `[destroy]` for those commands.)
 
 **Cause.** The `--target-account` flag is accepted by the CLI to reserve
-the interface, but the cross-account assume-role wiring is not yet live.
+the interface, but the cross-account assume-role wiring lands in Epic 101.
 
 **Fix.** Omit `--target-account` and ensure your operator credentials
 already target the intended account. Track the issue in the project
