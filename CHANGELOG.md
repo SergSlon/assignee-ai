@@ -18,6 +18,63 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### W1 — Pattern-1 sensitive-data class-fix
+
+#### Added
+
+- `ResourceField.sensitive?: boolean` marker on the plugin elicited-field
+  type. One structural change closes 6 acquisition-DD findings
+  (L1-F01 + L1-F06 + L1-F07 + L1-F21 + L3-F11 + L4-S11) per Anders C1
+  single-root-cause cluster framing. Default `false`; pre-W1 plugins
+  remain back-compatible.
+- `stripSensitiveFromElicited(record, sensitiveNames)` helper in
+  `packages/core/src/utils/redact.ts` — replaces values for fields whose
+  name is in the sensitive set with the shared `[REDACTED]` sentinel.
+  No-mutation invariant preserved.
+- `redactLogContent()` in `packages/core/src/telemetry/otel-allowlist.ts`
+  — line-by-line allowlist filter applied by the CI-side
+  `scripts/scrub-logs-for-upload.ts` to `~/.assignee/logs/` JSONL artefacts
+  before upload (closes W6's gap where the script referenced a function
+  that didn't exist).
+- `filterSensitiveElicitedFields(extras, sensitiveNames)` in
+  `otel-allowlist.ts` — OTEL emission filter that drops sensitive-marked
+  fields from `event.extras` using the same `[REDACTED]` sentinel.
+- `scripts/migrate-patterns-cleartext.ts` — idempotent dry-run-by-default
+  one-shot migration of historical `~/.assignee/memory/patterns.json`.
+  Backs up to `.bak` before mutation; running twice on a clean file is
+  a no-op.
+- `scripts/audit-patterns-cleartext.ts` — repeatable audit that scans the
+  runtime patterns file for credential allowlist matches plus AKIA-key
+  patterns. Exits 0 on clean / absent file; non-zero on any match.
+- Plugin annotations: `rds-dbinstance/credentials.ts`
+  (`MasterUserPassword`), `secretsmanager-secret.ts` (`SecretString`),
+  `events-connection.ts` (`AuthParameters` carrying API key / Basic auth
+  password / OAuth client secret) all now declare `sensitive: true` on
+  their credential-bearing fields.
+
+#### Fixed
+
+- Memory-recorder write boundary (`upsertPatternRecord`) accepts an
+  optional `sensitiveNames` set and applies the helper before
+  `JSON.stringify` to disk. Pattern-memory records no longer leak
+  credentials elicited via plugin wizards.
+- `writeFailureRecord` in the memory recorder now applies
+  `redactAccountIdsInPrompt()` to the captured `errorMessage` before
+  persistence. AWS account IDs in CloudControl error strings are
+  scrubbed before reaching the failure record on disk.
+- Checkpointer write path: `stripSensitiveFromElicited` composes
+  additively with the existing key-name allowlist in
+  `checkpoint/redaction.ts` (CFN `desiredState` layer). Cooperation
+  tests confirm the same `[REDACTED]` sentinel and no allowlist conflict.
+
+#### Compliance framing
+
+- GDPR Art 32 ("appropriate technical measures") — storing credentials
+  cleartext in pattern-memory or checkpoints is the textbook failure
+  this story closes.
+- GDPR Art 83(5) — €20M / 4% global-turnover fine exposure once any EU
+  customer is processed; ICO/CNIL precedent (British Airways, H&M).
+
 ### W2 — Pre-close credentials
 
 #### Added

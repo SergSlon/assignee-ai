@@ -108,6 +108,24 @@ export interface ResourceField {
    */
   required?: boolean;
   /**
+   * Whether this field carries sensitive / credential material (e.g. a database
+   * password, API secret, or plaintext secret value).
+   *
+   * When true, `stripSensitiveFromElicited()` replaces the field VALUE with
+   * `"[REDACTED]"` before the elicited-options record is written to any
+   * persistence boundary (memory-recorder, checkpoint, OTEL exporter).
+   *
+   * Optional — defaults to false. Pre-W1 plugins that omit this flag continue
+   * to work unchanged (their fields are not scrubbed by the elicited-field
+   * layer, though the CFN allowlist in `checkpoint/redaction.ts` still catches
+   * the standard sensitive key names).
+   *
+   * GDPR Art 32 / Art 83(5): storing plaintext credentials at rest is a
+   * textbook "appropriate technical measures" failure with €20M / 4% fine
+   * exposure once any EU customer is processed.
+   */
+  sensitive?: boolean;
+  /**
    * Transforms the user's answer into the correct CloudFormation property value.
    * If absent, the raw answer is used as-is (suitable for string/number fields).
    * Return undefined to omit the field from desiredState (e.g., user answered "no").

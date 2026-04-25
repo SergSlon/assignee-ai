@@ -15,11 +15,26 @@
  * the exporter is still gated by ASSIGNEE_OTEL_ENDPOINT. This allowlist
  * only controls WHAT is forwarded when the exporter is enabled.
  *
+ * W1-01 (Epic 100): `filterSensitiveElicitedFields()` extends the
+ * allowlist filter with plugin-driven elicited-field markers. Any value
+ * in `event.extras` that was produced from a `sensitive: true` field is
+ * stripped at OTEL emit time. The mechanism is additive — the existing
+ * W6 unknown-field and PII-gate logic runs first; sensitive-marker
+ * scrubbing runs after as a second pass on the permitted subset.
+ *
+ * Cross-reference: W6 P010 OTEL cluster owns field-classification;
+ * W1 owns the field-level `sensitive` marker on ResourceField. Do NOT
+ * duplicate each other's logic — compose via this module.
+ *
  * @see packages/core/src/telemetry/otel-exporter.ts — exporter activation
  * @see packages/core/src/telemetry/spans.ts — per-graph-node spans
  */
 
 import { EnvVar } from "../constants/env-vars.js";
+import {
+  stripSensitiveFromElicited,
+  ELICITED_REDACTED_VALUE,
+} from "../utils/redact.js";
 
 // ── Privacy classification type ────────────────────────────────────────
 
@@ -265,4 +280,89 @@ export function filterAllowlistedFields(
   }
 
   return filtered;
+}
+
+// ── W1-01 (Epic 100): sensitive elicited-field filter ─────────────────────────
+
+/**
+ * Second-pass filter that drops values originating from `sensitive: true`
+ * plugin fields from an already-allowlist-filtered `extras` map.
+ *
+ * Call this AFTER `filterAllowlistedFields()` — the allowlist pass gates
+ * on field NAME (unknown = drop; PII = drop unless opted in). This pass
+ * gates on the VALUE being a sensitive elicited-option that slipped through
+ * under a non-PII field name.
+ *
+ * Design: caller supplies `sensitiveNames` — the set of field names from the
+ * current plugin invocation that are marked `sensitive: true`. The function
+ * delegates to `stripSensitiveFromElicited()` from `utils/redact.ts` so both
+ * layers share one implementation and one sentinel string.
+ *
+ * @param extras - Already-allowlist-filtered extras map.
+ * @param sensitiveNames - Set of field names carrying credential material for
+ *   this invocation. Empty set = no-op (pre-W1 callers are unaffected).
+ * @returns A new object with sensitive-field values replaced by "[REDACTED]".
+ */
+export function filterSensitiveElicitedFields(
+  extras: Record<string, unknown>,
+  sensitiveNames: ReadonlySet<string>,
+): Record<string, unknown> {
+  if (sensitiveNames.size === 0) return extras;
+  return stripSensitiveFromElicited(extras, sensitiveNames);
+}
+
+// ── scrub-logs-for-upload integration (W6 gap closure) ───────────────────────
+
+/**
+ * Re-export of `ELICITED_REDACTED_VALUE` for downstream consumers
+ * (e.g. scrub-logs-for-upload.ts) that need to know the sentinel string
+ * used by the sensitive-marker layer.
+ */
+export { ELICITED_REDACTED_VALUE };
+
+/**
+ * Line-level log content redactor for CI artefact upload (W6 / scrub-logs-for-upload.ts).
+ *
+ * `scrub-logs-for-upload.ts` tries to import `mod.redactLogContent` from this
+ * module. This function applies the OTEL field allowlist (which already
+ * covers unknown fields and PII) as a best-effort line-by-line scrub of raw
+ * log content. For each line that parses as a JSON log event with an `extras`
+ * object, it runs `filterAllowlistedFields` to drop unknown/PII fields.
+ * Lines that are not valid JSON, or events without `extras`, pass through
+ * unchanged.
+ *
+ * NOTE: This is a log-text scrubber, not a re-emission filter. The canonical
+ * field-level redaction happens at emit time in `filterAllowlistedFields` and
+ * `filterSensitiveElicitedFields`. This function is the CI artefact safety-net
+ * for log files that were written before W1/W6 emit-time filters were active.
+ *
+ * @param content - Raw log file content (newline-delimited JSON or plain text).
+ * @returns Scrubbed content string.
+ */
+export function redactLogContent(content: string): string {
+  if (!content) return content;
+  const lines = content.split("\n");
+  const scrubbed = lines.map((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return line;
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(trimmed) as Record<string, unknown>;
+    } catch {
+      return line; // Not JSON — pass through
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return line;
+    }
+    const extras = parsed["extras"];
+    if (extras && typeof extras === "object" && !Array.isArray(extras)) {
+      const filteredExtras = filterAllowlistedFields(
+        extras as Record<string, unknown>,
+        false, // never include PII in CI artefacts
+      );
+      return JSON.stringify({ ...parsed, extras: filteredExtras });
+    }
+    return line;
+  });
+  return scrubbed.join("\n");
 }

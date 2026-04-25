@@ -87,6 +87,10 @@ export const eventsConnectionPlugin: ResourcePlugin = {
     {
       name: "AuthParameters",
       required: true,
+      // W1-01 (Epic 100): carries credential material (API key, Basic auth
+      // password, OAuth client secret). Strip from elicited-options at every
+      // persistence boundary via stripSensitiveFromElicited().
+      sensitive: true,
       question: {
         type: "string",
         label: "Auth parameters (JSON)",

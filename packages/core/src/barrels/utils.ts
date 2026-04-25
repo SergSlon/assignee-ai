@@ -1,6 +1,12 @@
 // Utils
 export { sanitizeUserIntent, MAX_INTENT_LENGTH } from "../utils/sanitize.js";
-export { redactSensitive } from "../utils/redact.js";
+export {
+  redactSensitive,
+  redactAccountIdsInPrompt,
+  stripSensitiveFromElicited,
+  buildSensitiveFieldSet,
+  ELICITED_REDACTED_VALUE,
+} from "../utils/redact.js";
 export { withTimeout } from "../utils/timeout.js";
 export { unwrapMcpText } from "../utils/mcp.js";
 export {
