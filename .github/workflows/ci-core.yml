@@ -125,7 +125,7 @@ jobs:
         # If the script is absent (Worker D hasn't landed yet), skip gracefully.
         run: |
           if [ -f scripts/generate-notice.ts ]; then
-            node scripts/generate-notice.ts --check
+            npx tsx scripts/generate-notice.ts --check
           else
             echo "scripts/generate-notice.ts not yet present — skipping (Worker D pending)"
           fi
