@@ -36,7 +36,7 @@ function sha256(content: string | Buffer): string {
   return createHash("sha256").update(content).digest("hex");
 }
 
-function createFakeTarball(content: string): Buffer {
+function _createFakeTarball(content: string): Buffer {
   // Create a minimal tar.gz containing a fake "assignee" binary
   // We use a base64-encoded minimal tar.gz for portability
   // (avoids spawning tar in the test setup)
@@ -185,7 +185,10 @@ describe.skipIf(!ENABLED)("install.sh — MITM / tamper detection", () => {
 
   it("SHA256 match allows install.sh to proceed past the verification step", () => {
     const legitContent = "legitimate tarball content v2";
-    const { legitSha, manifestPath } = buildMitmScenario(tmpDir, legitContent);
+    const { legitSha: _legitSha, manifestPath } = buildMitmScenario(
+      tmpDir,
+      legitContent,
+    );
 
     // Write the LEGIT file (not tampered)
     const tarballDir = join(tmpDir, "download2");
