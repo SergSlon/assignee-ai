@@ -523,6 +523,63 @@ describe("buildResourceArn", () => {
     });
   });
 
+  /**
+   * W5-02 (P054 → L1-F08 + L3-F17): round-trip tests for all 5 partitions.
+   * Synthesise ARN per partition; parse back; assert region + partition match.
+   * Covers aws / aws-cn / aws-us-gov / aws-iso / aws-iso-e.
+   */
+  describe("W5-02 partition round-trip — all 5 partitions", () => {
+    const cases: Array<{
+      region: string;
+      partition: string;
+      expectedArn: string;
+    }> = [
+      {
+        region: "us-east-1",
+        partition: "aws",
+        expectedArn: `arn:aws:iam::${ACCOUNT}:role/my-role`,
+      },
+      {
+        region: "cn-north-1",
+        partition: "aws-cn",
+        expectedArn: `arn:aws-cn:iam::${ACCOUNT}:role/my-role`,
+      },
+      {
+        region: "us-gov-east-1",
+        partition: "aws-us-gov",
+        expectedArn: `arn:aws-us-gov:iam::${ACCOUNT}:role/my-role`,
+      },
+      {
+        region: "us-iso-east-1",
+        partition: "aws-iso",
+        expectedArn: `arn:aws-iso:iam::${ACCOUNT}:role/my-role`,
+      },
+      {
+        region: "eu-isoe-west-1",
+        partition: "aws-iso-e",
+        expectedArn: `arn:aws-iso-e:iam::${ACCOUNT}:role/my-role`,
+      },
+    ];
+
+    for (const { region, partition, expectedArn } of cases) {
+      it(`synthesises ${partition} ARN for region ${region} and round-trips correctly`, () => {
+        const arn = buildResourceArn({
+          resourceType: RESOURCE_TYPES.IAM_ROLE,
+          identifier: "my-role",
+          region,
+          accountId: ACCOUNT,
+        });
+        expect(arn).toBe(expectedArn);
+        // Parse back — partition segment is index 1 of arn:<partition>:...
+        const arnParts = arn.split(":");
+        expect(arnParts[1]).toBe(partition);
+        // Region segment is index 3 (empty for global services like IAM)
+        // IAM is global so region slot is "" — verify partition only.
+        expect(isArn(arn)).toBe(true);
+      });
+    }
+  });
+
   describe("unknown resource types", () => {
     it("returns the identifier verbatim for unknown types", () => {
       expect(

@@ -40,6 +40,7 @@ import {
 import { skipIfCompanionResource } from "./resource-provisioner/companion-skip.js";
 import { checkUnsupportedRedirect } from "./resource-provisioner/redirect-guard.js";
 import { handleCreateError } from "./resource-provisioner/create-error-handler.js";
+import { routeProvisioningByPartition } from "../../provisioning/partition-aware-provisioner.js";
 
 // Re-export for backwards-compatibility with existing test imports and any
 // external callers. DO NOT remove — `resource-provisioner.test.ts` imports
@@ -131,6 +132,51 @@ export async function resourceProvisionerNode(
   // Pre-create: wait for CloudFront S3 bucket DNS if we just created one.
   await waitForCloudFrontS3DnsIfNeeded(state);
 
+  // W5-04 (P055 → L5-S08): check partition × resource-type support matrix.
+  // For non-commercial partitions (aws-cn, aws-us-gov, aws-iso, aws-iso-e)
+  // where CCAPI does not support the resource type, route to SDK-direct
+  // fallback (S3/IAM/VPC) or surface an actionable error.
+  // Commercial (`aws`) partition is a no-op passthrough — zero behaviour change.
+  let partitionRouteResult;
+  try {
+    partitionRouteResult = await routeProvisioningByPartition(
+      state.resourceType,
+      JSON.stringify(propertiesWithTags),
+    );
+  } catch (routeErr) {
+    return {
+      executionStatus: ExecutionStatus.FAILED,
+      errorMessage:
+        routeErr instanceof Error
+          ? routeErr.message
+          : `Partition routing failed: ${String(routeErr)}`,
+    };
+  }
+
+  if (partitionRouteResult.handled) {
+    // SDK-direct path succeeded synchronously. Transition directly to SUCCESS
+    // so the graph routes to result_formatter without entering status_poller.
+    // (CCAPI's async token flow is bypassed — SDK-direct calls are synchronous.)
+    log({
+      ts: new Date().toISOString(),
+      runId: state.runId,
+      level: "info",
+      action: LOG_ACTIONS.RESOURCE_PROVISION_STARTED,
+      extras: {
+        resourceType: state.resourceType,
+        path: "sdk-direct-fallback",
+        identifier: partitionRouteResult.identifier,
+      },
+    });
+    return {
+      resourceArn: partitionRouteResult.identifier,
+      executionStatus: ExecutionStatus.SUCCESS,
+      startedAt: Date.now(),
+      desiredState,
+    };
+  }
+
+  // CCAPI path — commercial partition or CCAPI-supported non-commercial type.
   // CloudControl async create (with CloudFront S3-DNS retry budget).
   const { createErr, createResult } = await createResourceWithCloudFrontRetry(
     provisioner,

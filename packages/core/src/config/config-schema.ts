@@ -69,8 +69,16 @@ export type AutoFixModeType = (typeof AutoFixMode)[keyof typeof AutoFixMode];
 
 // ── Default Values ───────────────────────────────────────────────────────
 
-/** Default AWS region when none is configured or provided via AWS_REGION env var. */
-export const DEFAULT_AWS_REGION = "us-east-1";
+/**
+ * Default AWS region — derived from the `AWS_REGION` env var when set,
+ * otherwise falls back to `"us-east-1"` for US-first operators.
+ *
+ * W5-01 (P007-tech → L1-F05): using env-derived value stops EU operators
+ * from silently hitting a US-East default when they have AWS_REGION
+ * configured in their shell / process environment.
+ */
+export const DEFAULT_AWS_REGION: string =
+  process.env["AWS_REGION"] ?? "us-east-1";
 
 /** Default values for all preference fields. */
 export const CONFIG_DEFAULTS: Required<ConfigPreferences> = {

@@ -68,6 +68,17 @@ describe("getPartitionFromRegion", () => {
     });
   });
 
+  describe("EU Sovereign Cloud / aws-iso-e (W5-02 P054)", () => {
+    it("eu-isoe-west-1 → aws-iso-e", () => {
+      expect(getPartitionFromRegion("eu-isoe-west-1")).toBe("aws-iso-e");
+    });
+    // Verify it does NOT fall through to commercial aws
+    it("eu-isoe-west-1 does not accidentally match aws", () => {
+      const p = getPartitionFromRegion("eu-isoe-west-1");
+      expect(p).not.toBe("aws");
+    });
+  });
+
   describe("return type is narrowed", () => {
     it("is one of the AwsPartition union members", () => {
       const p: AwsPartition = getPartitionFromRegion("us-east-1");
