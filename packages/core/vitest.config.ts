@@ -72,6 +72,21 @@ export default defineConfig({
         branches: 86,
         functions: 73,
         statements: 88,
+        // W6-01: per-file ≥ 80% line coverage floor for destroy-strategies.
+        // Vitest v1+ supports glob-pattern per-file thresholds as keys in this
+        // object. The pattern is resolved relative to the package root.
+        // Each concrete strategy file (non-test) must reach 80% line coverage.
+        // See: https://vitest.dev/config/#coverage-thresholds
+        "src/destroy-strategies/strategies/**/*.ts": {
+          lines: 80,
+          branches: 70,
+          functions: 80,
+          statements: 80,
+        },
+        "src/destroy-strategies/default-strategies.ts": {
+          lines: 80,
+          statements: 80,
+        },
       },
     },
   },

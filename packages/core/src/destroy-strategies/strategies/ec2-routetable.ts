@@ -22,7 +22,6 @@ import {
 } from "../../config/aws-credentials.js";
 import { DEFAULT_AWS_REGION } from "../../config/config-schema.js";
 import type { DestroyStrategy } from "../types.js";
-import { warnDestroy } from "../warn.js";
 
 export const ec2RouteTableStrategy: DestroyStrategy = {
   resourceType: RESOURCE_TYPES.EC2_ROUTE_TABLE,
@@ -50,7 +49,7 @@ export const ec2RouteTableStrategy: DestroyStrategy = {
         // DescribeRouteTables failed entirely (deleted out-of-band, or
         // missing ec2:DescribeRouteTables). Warn and continue — the
         // CCAPI delete will produce the authoritative error.
-        warnDestroy("route_table_describe_failed", {
+        ctx.warn("route_table_describe_failed", {
           identifier: resource.identifier,
           error: descErr instanceof Error ? descErr.message : String(descErr),
         });
@@ -74,7 +73,7 @@ export const ec2RouteTableStrategy: DestroyStrategy = {
             // shouldn't abort the whole destroy. CCAPI will surface a
             // clean DependencyViolation later if the residual
             // association actually blocks the delete.
-            warnDestroy("route_table_disassociate_failed", {
+            ctx.warn("route_table_disassociate_failed", {
               identifier: resource.identifier,
               associationId: assoc.RouteTableAssociationId,
               error:
@@ -92,7 +91,7 @@ export const ec2RouteTableStrategy: DestroyStrategy = {
           error: `Cannot disassociate RouteTable before delete: ${err.message}`,
         };
       }
-      warnDestroy("route_table_disassociate_failed", {
+      ctx.warn("route_table_disassociate_failed", {
         identifier: resource.identifier,
         error: err instanceof Error ? err.message : String(err),
       });

@@ -23,7 +23,6 @@ import {
 } from "../../config/aws-credentials.js";
 import { DEFAULT_AWS_REGION } from "../../config/config-schema.js";
 import type { DestroyStrategy } from "../types.js";
-import { warnDestroy } from "../warn.js";
 
 /**
  * CloudFront distribution disable polling parameters.
@@ -114,7 +113,7 @@ export const cloudfrontDistributionStrategy: DestroyStrategy = {
               consecutiveTransientErrors = 0;
             } catch (pollErr) {
               consecutiveTransientErrors++;
-              warnDestroy("cloudfront_poll_transient_error", {
+              ctx.warn("cloudfront_poll_transient_error", {
                 identifier: resource.identifier,
                 attempt: i + 1,
                 consecutive: consecutiveTransientErrors,

@@ -23,7 +23,6 @@ import {
 } from "../../config/aws-credentials.js";
 import { DEFAULT_AWS_REGION } from "../../config/config-schema.js";
 import type { DestroyStrategy } from "../types.js";
-import { warnDestroy } from "../warn.js";
 
 export const ec2InternetGatewayStrategy: DestroyStrategy = {
   resourceType: RESOURCE_TYPES.EC2_INTERNET_GATEWAY,
@@ -73,7 +72,7 @@ export const ec2InternetGatewayStrategy: DestroyStrategy = {
         }
       }
       if (detachFail > 0) {
-        warnDestroy("igw_partial_detach_state", {
+        ctx.warn("igw_partial_detach_state", {
           identifier: resource.identifier,
           detachedCount: detachOk,
           remainingCount: detachFail,
@@ -92,7 +91,7 @@ export const ec2InternetGatewayStrategy: DestroyStrategy = {
       // raced a concurrent destroy. Log and continue — the downstream
       // CloudControl delete will surface a clean error if it really is
       // still attached.
-      warnDestroy("igw_detach_failed", {
+      ctx.warn("igw_detach_failed", {
         identifier: resource.identifier,
         error: err instanceof Error ? err.message : String(err),
       });

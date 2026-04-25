@@ -87,6 +87,33 @@ export const EnvVar = {
    */
   ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS: "ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS",
 
+  // ── Nightly E2E destroy smoke (W6-03) ────────────────────────
+  /**
+   * Maximum total USD cost budget for a single nightly E2E destroy smoke
+   * run. When the estimated remaining cost of un-provisioned resources
+   * would breach this cap, the suite exits early and emits a
+   * `budget_exceeded` event to the cost ledger. Default: "5" ($5/day).
+   * @see feedback_daily_cost_ceiling
+   * @see apps/cli/src/e2e/nightly-destroy-smoke.test.ts
+   */
+  ASSIGNEE_NIGHTLY_BUDGET_USD: "ASSIGNEE_NIGHTLY_BUDGET_USD",
+  /**
+   * Directory where nightly E2E cost ledger JSONL files are written.
+   * Defaults to `~/.assignee/logs/`. Each file is named
+   * `nightly-cost-YYYY-MM-DD.jsonl` and contains one JSON record per
+   * provisioned+destroyed resource type.
+   */
+  ASSIGNEE_NIGHTLY_LEDGER_DIR: "ASSIGNEE_NIGHTLY_LEDGER_DIR",
+
+  // ── OTEL privacy (W6-04) ─────────────────────────────────────
+  /**
+   * When set to "1", the OTEL exporter includes PII-classified fields
+   * in emitted events. When unset or "0", PII fields are stripped
+   * at the source-side allowlist before export.
+   * @see packages/core/src/telemetry/otel-allowlist.ts
+   */
+  ASSIGNEE_OTEL_INCLUDE_PII: "ASSIGNEE_OTEL_INCLUDE_PII",
+
   // `ASSIGNEE_ENABLE_REMOTE_MCP` was previously defined here to gate the
   // opt-in remote knowledge MCP server. REMOVED per acquisition-DD L4-S01
   // (2026-04-24): fetch-and-execute of unpinned remote Python was

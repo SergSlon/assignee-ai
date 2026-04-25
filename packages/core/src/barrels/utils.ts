@@ -136,6 +136,26 @@ export {
   type OtlpLogPayload,
 } from "../telemetry/otel-exporter.js";
 
+// Telemetry — OTEL source-side allowlist + field classification (W6-04)
+export {
+  filterAllowlistedFields,
+  isPiiIncluded,
+  OTEL_FIELD_ALLOWLIST,
+  ALLOWED_FIELD_NAMES,
+  FIELD_PRIVACY_MAP,
+  type AllowlistEntry,
+  type PrivacyClass,
+} from "../telemetry/otel-allowlist.js";
+
+// Telemetry — Per-graph-node span emitter (W6-04)
+export {
+  emitNodeEntry,
+  emitNodeExit,
+  withNodeSpan,
+  SPAN_EXCLUDED_NODES,
+  type SpanEvent,
+} from "../telemetry/spans.js";
+
 // Utils — Display output (non-interactive renderers: spinner, intro/outro,
 // success/error, compound, security, table, status) (Story 50-4 Wave 5 Pass C-2)
 export {
@@ -298,3 +318,11 @@ export {
 
 // Utils — Post-provision security posture check (Story 50-4 Wave 5 Pass H)
 export { checkSecurityPosture } from "../utils/security-posture.js";
+
+// Utils — ARN-structure-preserving redactor (W10-07 / P051 → L3-F16)
+export {
+  redactArn,
+  redactArnsInString,
+  REDACTED_ACCOUNT_ID,
+  REDACTED_RESOURCE,
+} from "../utils/arn-redactor.js";
