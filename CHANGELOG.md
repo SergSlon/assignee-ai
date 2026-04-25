@@ -18,6 +18,109 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### W4 — SaaS-backbone scaffolding
+
+#### Added
+
+- `packages/core/src/checkpoint/port.ts` — `CheckpointerPort` Hexagonal port
+  (save/load/list/delete/prune). Substrate for Epic 102's Postgres / DynamoDB.
+- `packages/core/src/checkpoint/in-memory-adapter.ts` and
+  `file-durable-adapter.ts` — in-memory and file-backed adapters that pass
+  the shared port-contract test suite. HMAC + 0o600 + atomic-write
+  invariants retained.
+- `packages/core/src/locks/advisory-lock-port.ts` and `file-advisory-lock.ts`
+  — `AdvisoryLockPort` with `withLock(name, fn)` plus a file adapter using
+  `O_CREAT|O_EXCL` atomic acquisition + 10 s stale-lock reclamation. Passes
+  a 10-concurrent-writer contention test with zero corruption.
+- `packages/core/src/telemetry/telemetry-event-schema.ts`,
+  `telemetry-port.ts`, `in-memory-telemetry-adapter.ts` — `TelemetryEvent`
+  schema (`event_name`, `timestamp`, `node_id`, `tenant_id` placeholder,
+  `extras`) and `TelemetryPort.emit` / `emitFiltered` with W6
+  `filterAllowlistedFields` + W1 `filterSensitiveElicitedFields`
+  composition. Off by default via `ASSIGNEE_TELEMETRY_ADAPTER` gate
+  (positive signal L1-F52 retained).
+- `scripts/backup-provisions.ts` (TS, runs via `npx tsx`) — copies
+  `~/.assignee/memory/provisions.json` to
+  `~/.assignee/backups/provisions-YYYY-MM-DD.json` with 7-day rotation,
+  0o600, atomic-write, never moves source.
+- `assignee restore-provisions [--from <date>]` CLI command — restores
+  the destroy-safety registry from the latest or specified-date backup;
+  idempotent; safety-copies the current file before overwrite.
+- 13/14 graph nodes (HUMAN_APPROVAL excluded) now emit telemetry at
+  entry + exit through `withTelemetry` in `create-graph.ts`.
+  Status-poller (W10) and OTEL spans (W6) integrations preserved.
+
+#### Changed
+
+- Memory-recorder writes (`writeProvisionRecord`, `writeFailureRecord`,
+  `upsertPatternRecord`) now acquire/release the advisory lock around the
+  write+fsync. W1's `stripSensitiveFromElicited` and
+  `redactAccountIdsInPrompt` call sites remain INSIDE the lock scope —
+  semantics unchanged, concurrency-safety added.
+
+#### Deferred
+
+- Production Postgres / DynamoDB checkpointer adapter → Epic 102.
+- Production telemetry collector + DPA with collector → Epic 102 / legal.
+- Remote backup sink for `provisions.json` → Epic 102.
+
+### W5 — EU-residency tech defaults
+
+#### Added
+
+- `packages/core/src/utils/url-validator.ts` — scheme allowlist
+  (`https://` always; `http://` only for `localhost`). `ASSIGNEE_SAAS_URL`
+  and `OLLAMA_BASE_URL` consumption sites now route through the validator
+  with actionable rejection: `"<URL> rejected: only https:// (or
+http://localhost) accepted for <env-var>"`.
+- `packages/core/src/saas/saas-url.ts` — region-derived
+  `SAAS_API_URL` default (`https://<region>.api.assignee.ai`); explicit
+  `ASSIGNEE_SAAS_URL` override validated by the URL validator. Honours
+  `AWS_REGION` end-to-end.
+- `packages/core/src/provisioning/ccapi-partition-support.ts` — partition
+  × resource-type CCAPI support matrix sourced from AWS docs (verified
+  2026-04-25). Conservative posture: types with W5-04 SDK-direct adapters
+  (S3 / IAM / VPC) prefer the SDK-direct path in non-commercial partitions
+  even where CCAPI nominally works, because CCAPI's create-property
+  surface is uneven across partitions.
+- `packages/core/src/provisioning/partition-aware-provisioner.ts` —
+  router that dispatches to SDK-direct in non-commercial partitions or
+  emits an actionable "not supported in `<partition>`" error.
+- `packages/core/src/provisioning/sdk-direct-fallback/{s3-bucket,iam-role,
+ec2-vpc}.ts` — first three SDK-direct adapters covering S3 buckets, IAM
+  roles, and EC2 VPCs in GovCloud / China / ISO / EU Sovereign Cloud
+  partitions. The remaining ~35 resource types receive the actionable
+  fallback message until Epic 102+ extends the adapter set.
+- 7-region matrix tests (`eu-central-1`, `eu-west-1`, `eu-west-2`,
+  `eu-north-1`, `us-east-1`, `us-west-2`, `ap-south-1`) for
+  region-derivation defaults.
+
+#### Changed
+
+- `DEFAULT_AWS_REGION` is now derived from `process.env.AWS_REGION`
+  (falls back to `us-east-1` only when unset). EU operators with an
+  explicit `AWS_REGION` no longer hit US-East defaults.
+- Bedrock model invocation derives the inference-profile prefix
+  (`eu.` / `ap.` / `us.`) from the resolved region, partition-aware.
+  Bedrock region error hints (`feedback_bedrock_region_error_hints`)
+  retained.
+- `KNOWN_BEDROCK_REGIONS` refreshed: adds `eu-west-2` and `eu-north-1`;
+  sourcing-date comment block cites the AWS Bedrock region-availability
+  docs page (verified 2026-04-25). No regions removed.
+- `eu-isoe-west-1` now correctly maps to the `aws-iso-e` partition (was
+  `aws`). Synthesised ARNs round-trip parse for all 5 partitions
+  (`aws`, `aws-cn`, `aws-us-gov`, `aws-iso`, `aws-iso-e`).
+  `feedback_partition_aware_arn_matching` discipline retained.
+
+#### Compliance framing
+
+- GDPR Chapter V (Articles 44-49) cross-border-transfer remediation at
+  the technical layer (Matteo C3 §4.2 CONDITIONAL-mandatory-pre-close).
+- DE BSI C5 / FR SecNumCloud public-sector thesis enabled by
+  `aws-iso-e` partition correctness (Richard C5 §1 PROMOTE).
+- Anders C1 §lane-level theme #4 — residency-defaults-safety cluster
+  closure.
+
 ### W1 — Pattern-1 sensitive-data class-fix
 
 #### Added

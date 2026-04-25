@@ -222,6 +222,7 @@ const PROBE_WHITELIST_FLAGS = new Set<string>([
   "--disable-llm-logging", // init toggle — tested in init.test.ts
   "--gaps-only", // status --bp-coverage — tested in status-bp-coverage.test.ts
   "--include-structural-gaps", // status --bp-coverage — tested in status-bp-coverage.test.ts
+  "--from", // restore-provisions (W4-04) — tested in restore-provisions.test.ts
 ]);
 
 /** Extract every `<long-flag>` from Commander `.option("...")` calls. */

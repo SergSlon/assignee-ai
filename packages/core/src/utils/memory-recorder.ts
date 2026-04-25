@@ -6,6 +6,8 @@
  */
 
 import crypto from "node:crypto";
+import * as os from "node:os";
+import * as path from "node:path";
 import { defaultErrorHintRegistry } from "../errors/hint-registry.js";
 import { AssigneeError, ProvisioningError } from "../errors.js";
 import { CostEstimateLabel } from "../pricing/filter-constants.js";
@@ -19,6 +21,16 @@ import {
   stripSensitiveFromElicited,
   redactAccountIdsInPrompt,
 } from "./redact.js";
+// W4-03 (Epic 100 Round 3): advisory lock around provisions.json writes.
+import { defaultFileAdvisoryLock } from "../locks/file-advisory-lock.js";
+
+/** Lock name = provisions.json path for advisory-lock serialisation. */
+const PROVISIONS_LOCK_NAME = path.join(
+  os.homedir(),
+  ".assignee",
+  "memory",
+  "provisions.json",
+);
 
 /**
  * Writes a provision record to the memory log (Story 19.3).
@@ -31,31 +43,34 @@ export async function writeProvisionRecord(
   desiredState: Record<string, unknown> | undefined,
   estimatedMonthlyCost: string | undefined,
 ): Promise<void> {
-  try {
-    await defaultMemoryService.appendProvision({
-      runId,
-      resourceType: resourceType || UNKNOWN_FALLBACK,
-      resourceArn: resourceArn ?? "",
-      region:
-        process.env[EnvVar.AWS_REGION] ??
-        process.env[EnvVar.AWS_DEFAULT_REGION] ??
-        UNKNOWN_FALLBACK,
-      desiredStateHash: crypto
-        .createHash("sha256")
-        .update(JSON.stringify(desiredState ?? {}))
-        .digest("hex"),
-      estimatedMonthlyCost: estimatedMonthlyCost ?? CostEstimateLabel.NA,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (err) {
-    log({
-      ts: new Date().toISOString(),
-      runId,
-      level: "warn",
-      action: LOG_ACTIONS.MEMORY_WRITE_FAILED,
-      extras: { error: err instanceof Error ? err.message : String(err) },
-    });
-  }
+  // W4-03: advisory lock wraps the full write.
+  await defaultFileAdvisoryLock.withLock(PROVISIONS_LOCK_NAME, async () => {
+    try {
+      await defaultMemoryService.appendProvision({
+        runId,
+        resourceType: resourceType || UNKNOWN_FALLBACK,
+        resourceArn: resourceArn ?? "",
+        region:
+          process.env[EnvVar.AWS_REGION] ??
+          process.env[EnvVar.AWS_DEFAULT_REGION] ??
+          UNKNOWN_FALLBACK,
+        desiredStateHash: crypto
+          .createHash("sha256")
+          .update(JSON.stringify(desiredState ?? {}))
+          .digest("hex"),
+        estimatedMonthlyCost: estimatedMonthlyCost ?? CostEstimateLabel.NA,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      log({
+        ts: new Date().toISOString(),
+        runId,
+        level: "warn",
+        action: LOG_ACTIONS.MEMORY_WRITE_FAILED,
+        extras: { error: err instanceof Error ? err.message : String(err) },
+      });
+    }
+  });
 }
 
 /**
@@ -86,34 +101,38 @@ export async function writeFailureRecord(
         ? error.code
         : ErrorCode.UNKNOWN;
 
-  // Redact account IDs and ARNs from the raw CloudControl error message
-  // before persistence. This is additive over the existing W10-07
-  // redactArnsInString call sites — both layers cooperate.
-  const safeErrorMessage = redactAccountIdsInPrompt(
-    errorMessage ?? "Unknown error",
-  );
+  // W4-03: advisory lock wraps W1's redactAccountIdsInPrompt + write.
+  // W1 invariant: redactAccountIdsInPrompt call site preserved inside lock.
+  await defaultFileAdvisoryLock.withLock(PROVISIONS_LOCK_NAME, async () => {
+    // Redact account IDs and ARNs from the raw CloudControl error message
+    // before persistence. This is additive over the existing W10-07
+    // redactArnsInString call sites — both layers cooperate.
+    const safeErrorMessage = redactAccountIdsInPrompt(
+      errorMessage ?? "Unknown error",
+    );
 
-  try {
-    await defaultMemoryService.appendFailure({
-      runId,
-      resourceType: resourceType || UNKNOWN_FALLBACK,
-      errorCode,
-      errorMessage: safeErrorMessage,
-      suggestedFix,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (err) {
-    log({
-      ts: new Date().toISOString(),
-      runId,
-      level: "warn",
-      action: LOG_ACTIONS.MEMORY_WRITE_FAILED,
-      extras: {
-        memoryWriteError: "Failed to write failure record",
-        error: err instanceof Error ? err.message : String(err),
-      },
-    });
-  }
+    try {
+      await defaultMemoryService.appendFailure({
+        runId,
+        resourceType: resourceType || UNKNOWN_FALLBACK,
+        errorCode,
+        errorMessage: safeErrorMessage,
+        suggestedFix,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      log({
+        ts: new Date().toISOString(),
+        runId,
+        level: "warn",
+        action: LOG_ACTIONS.MEMORY_WRITE_FAILED,
+        extras: {
+          memoryWriteError: "Failed to write failure record",
+          error: err instanceof Error ? err.message : String(err),
+        },
+      });
+    }
+  });
 }
 
 /**
@@ -186,25 +205,29 @@ export async function upsertPatternRecord(
   elicitedOptions: Record<string, unknown>,
   sensitiveNames: ReadonlySet<string> = new Set(),
 ): Promise<void> {
-  const safeOptions =
-    sensitiveNames.size > 0
-      ? stripSensitiveFromElicited(elicitedOptions, sensitiveNames)
-      : elicitedOptions;
+  // W4-03: advisory lock wraps W1's stripSensitiveFromElicited + write.
+  // W1 invariant: stripSensitiveFromElicited call site preserved inside lock.
+  await defaultFileAdvisoryLock.withLock(PROVISIONS_LOCK_NAME, async () => {
+    const safeOptions =
+      sensitiveNames.size > 0
+        ? stripSensitiveFromElicited(elicitedOptions, sensitiveNames)
+        : elicitedOptions;
 
-  try {
-    await defaultMemoryService.upsertPattern({
-      pattern: patternId,
-      optionsSelected: safeOptions,
-      count: 1, // upsertPattern handles incrementing
-      lastUsed: new Date().toISOString(),
-    });
-  } catch {
-    log({
-      ts: new Date().toISOString(),
-      runId,
-      level: "warn",
-      action: LOG_ACTIONS.RESULT_FORMATTED,
-      extras: { memoryWriteError: "Failed to write pattern record" },
-    });
-  }
+    try {
+      await defaultMemoryService.upsertPattern({
+        pattern: patternId,
+        optionsSelected: safeOptions,
+        count: 1, // upsertPattern handles incrementing
+        lastUsed: new Date().toISOString(),
+      });
+    } catch {
+      log({
+        ts: new Date().toISOString(),
+        runId,
+        level: "warn",
+        action: LOG_ACTIONS.RESULT_FORMATTED,
+        extras: { memoryWriteError: "Failed to write pattern record" },
+      });
+    }
+  });
 }

@@ -12,6 +12,9 @@
  */
 
 import { StateGraph, START, END, MemorySaver } from "@langchain/langgraph";
+import type { CheckpointerPort } from "../checkpoint/port.js";
+import type { TelemetryPort } from "../telemetry/telemetry-port.js";
+import { emitFiltered } from "../telemetry/telemetry-port.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import { GraphNode } from "../constants/graph-node.js";
 import { graphAnnotation } from "./graph-state.js";
@@ -55,6 +58,73 @@ export interface CreateGraphOptions {
   llmClient?: LlmPort;
   /** Optional recording interceptor for SDK middleware. */
   recorder?: RecordingInterceptor;
+  /**
+   * W4-01 (Epic 100 Round 3): optional LangGraph-compatible saver.
+   * Defaults to a fresh MemorySaver (in-memory). Epic 102 will supply
+   * a Postgres/DDB saver.
+   */
+  checkpointSaver?: InstanceType<typeof MemorySaver>;
+  /**
+   * W4-01: optional plan-checkpoint port (PlanCheckpoint read/write,
+   * distinct from the LangGraph HITL saver above).
+   */
+  checkpointerPort?: CheckpointerPort;
+  /**
+   * W4-05 (Epic 100 Round 3): optional TelemetryPort adapter.
+   * When provided AND ASSIGNEE_TELEMETRY_ADAPTER is set (L1-F52 opt-in),
+   * each graph node emits entry + exit TelemetryEvents. HUMAN_APPROVAL
+   * is excluded. Absent -> no-op (telemetry off by default).
+   */
+  telemetryAdapter?: TelemetryPort;
+}
+
+// W4-05 telemetry node wrapper
+async function withTelemetry<S extends { runId: string }, R>(
+  nodeId: string,
+  adapter: TelemetryPort | undefined,
+  fn: (state: S) => Promise<R> | R,
+  state: S,
+): Promise<R> {
+  void emitFiltered(adapter, {
+    event_name: `${nodeId}.entry`,
+    timestamp: new Date().toISOString(),
+    node_id: nodeId,
+    tenant_id: "local",
+    extras: { node: nodeId, nodeEntry: true, runId: state.runId },
+  });
+  try {
+    const result = await fn(state);
+    void emitFiltered(adapter, {
+      event_name: `${nodeId}.exit`,
+      timestamp: new Date().toISOString(),
+      node_id: nodeId,
+      tenant_id: "local",
+      extras: {
+        node: nodeId,
+        nodeExit: true,
+        result: "success",
+        runId: state.runId,
+      },
+    });
+    return result;
+  } catch (err) {
+    const errorClass =
+      err instanceof Error ? err.constructor.name : "UnknownError";
+    void emitFiltered(adapter, {
+      event_name: `${nodeId}.exit`,
+      timestamp: new Date().toISOString(),
+      node_id: nodeId,
+      tenant_id: "local",
+      extras: {
+        node: nodeId,
+        nodeExit: true,
+        result: "failure",
+        errorClass,
+        runId: state.runId,
+      },
+    });
+    throw err;
+  }
 }
 
 export function createGraph(
@@ -91,36 +161,95 @@ export function createGraph(
     llmClient: llmAdapter,
   });
 
+  // W4-05: telemetry adapter (undefined = no-op via emitFiltered).
+  const tel = options.telemetryAdapter;
+
   const workflow = new StateGraph(graphAnnotation)
-    .addNode(GraphNode.INTENT_PARSER, (state) => intentParserNode(state))
-    .addNode(GraphNode.SCHEMA_FETCHER, (state) => schemaFetcherNode(state))
+    .addNode(GraphNode.INTENT_PARSER, (state) =>
+      withTelemetry(GraphNode.INTENT_PARSER, tel, intentParserNode, state),
+    )
+    .addNode(GraphNode.SCHEMA_FETCHER, (state) =>
+      withTelemetry(GraphNode.SCHEMA_FETCHER, tel, schemaFetcherNode, state),
+    )
     .addNode(GraphNode.OPTION_ELICITOR, (state) =>
-      optionElicitorNode(state, tools, llmAdapter),
+      withTelemetry(
+        GraphNode.OPTION_ELICITOR,
+        tel,
+        (s) => optionElicitorNode(s, tools, llmAdapter),
+        state,
+      ),
     )
     .addNode(GraphNode.COMPOUND_DISPATCHER, (state) =>
-      compoundDispatcherNode(state),
+      withTelemetry(
+        GraphNode.COMPOUND_DISPATCHER,
+        tel,
+        compoundDispatcherNode,
+        state,
+      ),
     )
-    .addNode(GraphNode.PLAN_GENERATOR, (state) => planGeneratorNode(state))
+    .addNode(GraphNode.PLAN_GENERATOR, (state) =>
+      withTelemetry(GraphNode.PLAN_GENERATOR, tel, planGeneratorNode, state),
+    )
     .addNode(GraphNode.VALIDATE_DESIRED_STATE, (state) =>
-      validateDesiredStateNode(state),
+      withTelemetry(
+        GraphNode.VALIDATE_DESIRED_STATE,
+        tel,
+        validateDesiredStateNode,
+        state,
+      ),
     )
     .addNode(GraphNode.ADVICE_GENERATOR, (state) =>
-      adviceGeneratorNode(state, tools),
+      withTelemetry(
+        GraphNode.ADVICE_GENERATOR,
+        tel,
+        (s) => adviceGeneratorNode(s, tools),
+        state,
+      ),
     )
     .addNode(GraphNode.PREFLIGHT_GUARD, (state) =>
-      preflightGuardNode(state, tools),
+      withTelemetry(
+        GraphNode.PREFLIGHT_GUARD,
+        tel,
+        (s) => preflightGuardNode(s, tools),
+        state,
+      ),
     )
+    // HUMAN_APPROVAL excluded from telemetry (blocks on user input -- W4-05 AC).
     .addNode(GraphNode.HUMAN_APPROVAL, (state) => humanApprovalNode(state))
     .addNode(GraphNode.RESOURCE_PROVISIONER, (state) =>
-      resourceProvisionerNode(state, provisioner),
+      withTelemetry(
+        GraphNode.RESOURCE_PROVISIONER,
+        tel,
+        (s) => resourceProvisionerNode(s, provisioner),
+        state,
+      ),
     )
     .addNode(GraphNode.STATUS_POLLER, (state) =>
-      statusPollerNode(state, provisioner),
+      withTelemetry(
+        GraphNode.STATUS_POLLER,
+        tel,
+        (s) => statusPollerNode(s, provisioner),
+        state,
+      ),
     )
-    .addNode(GraphNode.BP_EVALUATOR, (state) => bpEvaluatorNode(state, tools))
-    .addNode(GraphNode.FIX_APPLICATOR, (state) => fixApplicatorNode(state))
+    .addNode(GraphNode.BP_EVALUATOR, (state) =>
+      withTelemetry(
+        GraphNode.BP_EVALUATOR,
+        tel,
+        (s) => bpEvaluatorNode(s, tools),
+        state,
+      ),
+    )
+    .addNode(GraphNode.FIX_APPLICATOR, (state) =>
+      withTelemetry(GraphNode.FIX_APPLICATOR, tel, fixApplicatorNode, state),
+    )
     .addNode(GraphNode.RESULT_FORMATTER, (state) =>
-      resultFormatterNode(state, tools),
+      withTelemetry(
+        GraphNode.RESULT_FORMATTER,
+        tel,
+        (s) => resultFormatterNode(s, tools),
+        state,
+      ),
     )
     .addConditionalEdges(START, routeCheckpointEntry, {
       [GraphNode.INTENT_PARSER]: GraphNode.INTENT_PARSER,
@@ -176,8 +305,11 @@ export function createGraph(
       [END]: END,
     });
 
+  // W4-01: accept an optional LangGraph-compatible saver; fall back to MemorySaver.
+  const lgCheckpointer = options.checkpointSaver ?? new MemorySaver();
+
   return workflow.compile({
     interruptBefore: [GraphNode.RESOURCE_PROVISIONER],
-    checkpointer: new MemorySaver(),
+    checkpointer: lgCheckpointer,
   });
 }
