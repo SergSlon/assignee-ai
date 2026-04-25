@@ -43,6 +43,9 @@ export const credentialFields: ResourcePlugin["commonFields"] = [
   },
   {
     name: CfnKey.MASTER_USER_PASSWORD,
+    // W1-01 (Epic 100): credential field — strip from elicited-options at
+    // every persistence boundary via stripSensitiveFromElicited().
+    sensitive: true,
     question: {
       type: "string",
       label: "Master password",

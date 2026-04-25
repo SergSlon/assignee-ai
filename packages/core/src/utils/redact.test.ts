@@ -20,7 +20,14 @@
  *     with no identifiers) pass through unchanged.
  */
 import { describe, it, expect } from "vitest";
-import { redactSensitive, redactAccountIdsInPrompt } from "./redact.js";
+import {
+  redactSensitive,
+  redactAccountIdsInPrompt,
+  stripSensitiveFromElicited,
+  buildSensitiveFieldSet,
+  ELICITED_REDACTED_VALUE,
+} from "./redact.js";
+import type { ResourceField } from "../resource-plugins/types.js";
 
 describe("redactSensitive — bare account IDs", () => {
   it("replaces a bare 12-digit account ID with [ACCOUNT]", () => {
@@ -269,5 +276,165 @@ describe("redactAccountIdsInPrompt — preserves ARN skeleton, scrubs account sl
       expect(out).toContain(p);
       expect(out).toContain("topic");
     }
+  });
+});
+
+// ── W1-01 (Epic 100): stripSensitiveFromElicited ──────────────────────────────
+//
+// Covers all acceptance-criteria cases:
+//   - Empty record
+//   - No sensitive fields (passthrough)
+//   - One sensitive field (redacted)
+//   - Mixed sensitive + non-sensitive fields
+//   - buildSensitiveFieldSet helper
+//   - Returns a new object (no mutation)
+//
+// The test strings "secret-canary-12345" are the canary credential strings
+// referenced in the story spec.
+
+describe("buildSensitiveFieldSet", () => {
+  const makeField = (name: string, sensitive?: boolean): ResourceField => ({
+    name,
+    question: { type: "string", label: name },
+    sensitive,
+  });
+
+  it("returns empty set when no fields are sensitive", () => {
+    const fields = [makeField("DBName"), makeField("Engine")];
+    const set = buildSensitiveFieldSet(fields);
+    expect(set.size).toBe(0);
+  });
+
+  it("includes only fields with sensitive: true", () => {
+    const fields = [
+      makeField("DBName"),
+      makeField("MasterUserPassword", true),
+      makeField("Engine"),
+      makeField("SecretString", true),
+    ];
+    const set = buildSensitiveFieldSet(fields);
+    expect(set.size).toBe(2);
+    expect(set.has("MasterUserPassword")).toBe(true);
+    expect(set.has("SecretString")).toBe(true);
+    expect(set.has("DBName")).toBe(false);
+    expect(set.has("Engine")).toBe(false);
+  });
+
+  it("treats sensitive: false the same as absent (not included)", () => {
+    const fields = [makeField("Foo", false), makeField("Bar")];
+    const set = buildSensitiveFieldSet(fields);
+    expect(set.size).toBe(0);
+  });
+
+  it("handles empty field list", () => {
+    expect(buildSensitiveFieldSet([]).size).toBe(0);
+  });
+});
+
+describe("stripSensitiveFromElicited", () => {
+  const noSensitiveNames = new Set<string>();
+  const withPassword = new Set(["MasterUserPassword"]);
+  const multiSensitive = new Set(["MasterUserPassword", "SecretString"]);
+
+  it("returns empty object when input is empty", () => {
+    expect(stripSensitiveFromElicited({}, noSensitiveNames)).toEqual({});
+    expect(stripSensitiveFromElicited({}, withPassword)).toEqual({});
+  });
+
+  it("passes through a record with no sensitive fields unchanged", () => {
+    const input = {
+      DBName: "myapp",
+      Engine: "postgres",
+      MultiAZ: false,
+    };
+    const result = stripSensitiveFromElicited(input, noSensitiveNames);
+    expect(result).toEqual(input);
+    // Verify it's a new object, not the same reference
+    expect(result).not.toBe(input);
+  });
+
+  it("passes through record when sensitiveNames set is empty", () => {
+    const input = {
+      DBName: "myapp",
+      MasterUserPassword: "secret-canary-12345",
+    };
+    const result = stripSensitiveFromElicited(input, noSensitiveNames);
+    // Without any names in the set, nothing is scrubbed
+    expect(result["MasterUserPassword"]).toBe("secret-canary-12345");
+  });
+
+  it("redacts a single sensitive field value", () => {
+    const input = {
+      MasterUserPassword: "secret-canary-12345",
+    };
+    const result = stripSensitiveFromElicited(input, withPassword);
+    expect(result["MasterUserPassword"]).toBe(ELICITED_REDACTED_VALUE);
+    expect(result["MasterUserPassword"]).not.toContain("secret-canary-12345");
+  });
+
+  it("redacts only the sensitive fields in a mixed record", () => {
+    const input = {
+      DBName: "myapp",
+      Engine: "postgres",
+      MasterUsername: "appuser",
+      MasterUserPassword: "secret-canary-12345",
+    };
+    const result = stripSensitiveFromElicited(input, withPassword);
+    // Sensitive field is redacted
+    expect(result["MasterUserPassword"]).toBe(ELICITED_REDACTED_VALUE);
+    // Non-sensitive fields pass through unchanged
+    expect(result["DBName"]).toBe("myapp");
+    expect(result["Engine"]).toBe("postgres");
+    expect(result["MasterUsername"]).toBe("appuser");
+    // Canary must not appear anywhere in the result
+    expect(JSON.stringify(result)).not.toContain("secret-canary-12345");
+  });
+
+  it("redacts multiple sensitive fields simultaneously", () => {
+    const input = {
+      Name: "my-secret",
+      Description: "Production credentials",
+      SecretString: "secret-canary-12345",
+      MasterUserPassword: "another-secret-canary-67890",
+      Tags: "env:prod",
+    };
+    const result = stripSensitiveFromElicited(input, multiSensitive);
+    expect(result["SecretString"]).toBe(ELICITED_REDACTED_VALUE);
+    expect(result["MasterUserPassword"]).toBe(ELICITED_REDACTED_VALUE);
+    expect(result["Name"]).toBe("my-secret");
+    expect(result["Description"]).toBe("Production credentials");
+    expect(result["Tags"]).toBe("env:prod");
+    // Neither canary string should survive
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain("secret-canary-12345");
+    expect(serialized).not.toContain("another-secret-canary-67890");
+  });
+
+  it("does not mutate the input object", () => {
+    const input = { MasterUserPassword: "secret-canary-12345" };
+    const frozen = Object.freeze({ ...input });
+    expect(() =>
+      stripSensitiveFromElicited(frozen, withPassword),
+    ).not.toThrow();
+    // Original value preserved
+    expect(frozen.MasterUserPassword).toBe("secret-canary-12345");
+  });
+
+  it("preserves non-string values (booleans, numbers, null, arrays) for non-sensitive fields", () => {
+    const input = {
+      MultiAZ: false,
+      Port: 5432,
+      Tags: null,
+      AllowedValues: ["a", "b"],
+    };
+    const result = stripSensitiveFromElicited(input, noSensitiveNames);
+    expect(result["MultiAZ"]).toBe(false);
+    expect(result["Port"]).toBe(5432);
+    expect(result["Tags"]).toBeNull();
+    expect(result["AllowedValues"]).toEqual(["a", "b"]);
+  });
+
+  it("ELICITED_REDACTED_VALUE is the string literal '[REDACTED]'", () => {
+    expect(ELICITED_REDACTED_VALUE).toBe("[REDACTED]");
   });
 });

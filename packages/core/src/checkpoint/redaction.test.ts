@@ -292,3 +292,70 @@ describe("stripRedactedFields", () => {
     expect(stripRedactedFields({})).toEqual({});
   });
 });
+
+// ── W1-01 (Epic 100): cooperation between CFN allowlist and elicited-field marker ──
+//
+// The checkpoint redaction layer (allowlist-based, key-name exact match) and
+// the W1 elicited-field marker (sensitive: true on ResourceField) are ADDITIVE
+// layers that both target write boundaries. This suite pins that:
+//   - redactSensitiveFields covers the CFN desiredState layer (existing).
+//   - stripSensitiveFromElicited covers the elicited-options layer (W1).
+//   - Both use the same placeholder string "[REDACTED]".
+//   - A field that is BOTH in the CFN allowlist AND marked sensitive: true
+//     is scrubbed by EITHER layer independently (belt-and-suspenders).
+//
+// This confirms that checkpoint serialization is additive, not competing.
+
+describe("W1-01 integration — CFN allowlist cooperates with elicited-field marker", () => {
+  it("REDACTED_VALUE equals ELICITED_REDACTED_VALUE (same sentinel, both layers compatible)", async () => {
+    const { ELICITED_REDACTED_VALUE } = await import("../utils/redact.js");
+    // Both layers must produce the same placeholder so checkpoint-resume
+    // and pattern-record reads can rely on a single sentinel string.
+    expect(REDACTED_VALUE).toBe(ELICITED_REDACTED_VALUE);
+    expect(REDACTED_VALUE).toBe("[REDACTED]");
+  });
+
+  it("CFN allowlist redacts MasterUserPassword in desiredState (existing path)", () => {
+    const desiredState = {
+      DBName: "myapp",
+      MasterUserPassword: "secret-canary-12345",
+      Engine: "postgres",
+    };
+    const redacted = redactSensitiveFields(desiredState);
+    expect(redacted["MasterUserPassword"]).toBe(REDACTED_VALUE);
+    expect(redacted["DBName"]).toBe("myapp");
+    expect(JSON.stringify(redacted)).not.toContain("secret-canary-12345");
+  });
+
+  it("elicited-field marker independently scrubs the same field name in elicited-options", async () => {
+    const { stripSensitiveFromElicited } = await import("../utils/redact.js");
+    const elicitedOptions = {
+      DBName: "myapp",
+      MasterUserPassword: "secret-canary-12345",
+    };
+    const sensitive = new Set(["MasterUserPassword"]);
+    const safe = stripSensitiveFromElicited(elicitedOptions, sensitive);
+    expect(safe["MasterUserPassword"]).toBe("[REDACTED]");
+    expect(safe["DBName"]).toBe("myapp");
+    expect(JSON.stringify(safe)).not.toContain("secret-canary-12345");
+  });
+
+  it("a record processed by both layers is fully scrubbed (belt-and-suspenders)", async () => {
+    const { stripSensitiveFromElicited } = await import("../utils/redact.js");
+    const raw = {
+      DBName: "myapp",
+      MasterUserPassword: "secret-canary-12345",
+      SecretString: "another-secret-canary-67890",
+    };
+    const sensitive = new Set(["MasterUserPassword", "SecretString"]);
+    // Layer 1: elicited-field marker (W1)
+    const afterW1 = stripSensitiveFromElicited(raw, sensitive);
+    // Layer 2: CFN allowlist (existing checkpoint layer)
+    const afterCfn = redactSensitiveFields(afterW1 as Record<string, unknown>);
+    // After both layers, no credential appears in the result
+    const serialized = JSON.stringify(afterCfn);
+    expect(serialized).not.toContain("secret-canary-12345");
+    expect(serialized).not.toContain("another-secret-canary-67890");
+    expect(afterCfn["DBName"]).toBe("myapp");
+  });
+});

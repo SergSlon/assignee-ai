@@ -111,6 +111,9 @@ export const secretsManagerSecretPlugin: ResourcePlugin = {
   advancedFields: [
     {
       name: CfnKey.SECRET_STRING,
+      // W1-01 (Epic 100): plaintext secret payload — strip from elicited-options
+      // at every persistence boundary via stripSensitiveFromElicited().
+      sensitive: true,
       question: {
         type: "string",
         label: "Secret value (plaintext — NOT recommended)",

@@ -12,9 +12,16 @@
  * Lifted from `apps/cli/src/utils/error-messages/redaction.ts` in Story
  * 50-4 Wave 5.1 so the in-core CloudControlAdapter and other lifted
  * services can call it without reaching back into the CLI.
+ *
+ * W1-01 (Epic 100): `stripSensitiveFromElicited()` — elicited-field marker
+ * layer. Complements the CFN-property key-name allowlist in
+ * `checkpoint/redaction.ts` (which handles serialised CFN desiredState).
+ * This helper handles in-memory elicited-option records BEFORE they reach
+ * any persistence boundary (memory-recorder / checkpoint / OTEL).
  */
 
 import { ARN_PATTERN_SOURCE } from "../config/aws-partition.js";
+import type { ResourceField } from "../resource-plugins/types.js";
 
 const ARN_PATTERN = new RegExp(
   `${ARN_PATTERN_SOURCE}[a-z0-9-]+:[a-z0-9-]*:\\d{12}:[^\\s]*`,
@@ -72,4 +79,64 @@ export function redactAccountIdsInPrompt(message: string): string {
   return message
     .replace(ACCOUNT_IN_ARN_PATTERN, "$1[ACCOUNT]$2")
     .replace(ACCOUNT_ID_PATTERN, "[ACCOUNT]");
+}
+
+// ── Elicited-field sensitive marker (W1-01 / Epic 100) ────────────────────
+
+/** Value used to mask sensitive elicited-field values. */
+export const ELICITED_REDACTED_VALUE = "[REDACTED]";
+
+/**
+ * Builds a fast lookup set of field names that are marked `sensitive: true`
+ * from a plugin's field definitions. Used by `stripSensitiveFromElicited`.
+ *
+ * @param fields - Flat list of ResourceField definitions (commonFields +
+ *   advancedFields from a plugin, or a combined list across plugins).
+ * @returns Set of field names whose `sensitive` flag is true.
+ */
+export function buildSensitiveFieldSet(
+  fields: ReadonlyArray<ResourceField>,
+): ReadonlySet<string> {
+  const names = new Set<string>();
+  for (const field of fields) {
+    if (field.sensitive === true) {
+      names.add(field.name);
+    }
+  }
+  return names;
+}
+
+/**
+ * Returns a shallow copy of `elicitedRecord` with VALUES of sensitive fields
+ * replaced by `"[REDACTED]"`. Non-sensitive field values are passed through
+ * unchanged (including nested objects — this helper is intentionally
+ * SHALLOW: nested CFN property redaction is the checkpoint/redaction layer's
+ * responsibility).
+ *
+ * Usage: call with the plugin's field definitions before writing the
+ * elicited-options record to any persistence boundary (memory-recorder,
+ * checkpoint `elicitedOptions`, OTEL exporter extras).
+ *
+ * Back-compat: fields whose `sensitive` flag is absent or false are left
+ * untouched, so pre-W1 plugins work without modification.
+ *
+ * @param elicitedRecord - The raw elicited-options map (e.g. from wizard).
+ * @param sensitiveNames  - Set of field names that carry credential material.
+ *   Build once per plugin invocation via `buildSensitiveFieldSet(fields)`.
+ * @returns A new object — the input is never mutated.
+ *
+ * @example
+ * const sensitive = buildSensitiveFieldSet([...commonFields, ...advancedFields]);
+ * const safe = stripSensitiveFromElicited(elicitedOptions, sensitive);
+ * await writePatternRecord(patternId, safe);
+ */
+export function stripSensitiveFromElicited(
+  elicitedRecord: Record<string, unknown>,
+  sensitiveNames: ReadonlySet<string>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(elicitedRecord)) {
+    result[key] = sensitiveNames.has(key) ? ELICITED_REDACTED_VALUE : value;
+  }
+  return result;
 }

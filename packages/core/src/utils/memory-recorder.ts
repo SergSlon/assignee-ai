@@ -15,6 +15,10 @@ import { EnvVar } from "../constants/env-vars.js";
 import { ErrorCode } from "../constants/errors.js";
 import { log, LOG_ACTIONS } from "./logger/index.js";
 import { UNKNOWN_FALLBACK } from "../config/cfn-keys/defaults.js";
+import {
+  stripSensitiveFromElicited,
+  redactAccountIdsInPrompt,
+} from "./redact.js";
 
 /**
  * Writes a provision record to the memory log (Story 19.3).
@@ -57,6 +61,12 @@ export async function writeProvisionRecord(
 /**
  * Writes a failure record to the memory log (Story 19.4).
  * Fire-and-forget: failures are logged but never block the error output.
+ *
+ * W1-01 (Epic 100): `errorMessage` is passed through
+ * `redactAccountIdsInPrompt` before writing to disk — CloudControl error
+ * messages routinely contain 12-digit account IDs and full ARNs (e.g.
+ * "AccessDenied: arn:aws:iam::210987654321:user/test") that must not be
+ * persisted in cleartext to ~/.assignee/memory/failures.json.
  */
 export async function writeFailureRecord(
   runId: string,
@@ -76,12 +86,19 @@ export async function writeFailureRecord(
         ? error.code
         : ErrorCode.UNKNOWN;
 
+  // Redact account IDs and ARNs from the raw CloudControl error message
+  // before persistence. This is additive over the existing W10-07
+  // redactArnsInString call sites — both layers cooperate.
+  const safeErrorMessage = redactAccountIdsInPrompt(
+    errorMessage ?? "Unknown error",
+  );
+
   try {
     await defaultMemoryService.appendFailure({
       runId,
       resourceType: resourceType || UNKNOWN_FALLBACK,
       errorCode,
-      errorMessage: errorMessage ?? "Unknown error",
+      errorMessage: safeErrorMessage,
       suggestedFix,
       timestamp: new Date().toISOString(),
     });
@@ -153,16 +170,31 @@ export async function appendDestroyedArn(
 /**
  * Upserts a compound pattern record in memory (Story 19.5).
  * Fire-and-forget: failures are logged but never block results.
+ *
+ * W1-01 (Epic 100): `sensitiveNames` is the set of elicited-field names that
+ * carry credential material (built via `buildSensitiveFieldSet(plugin.fields)`
+ * at the call site). When provided, `elicitedOptions` is scrubbed before
+ * writing to disk so that passwords and secrets are never persisted in
+ * cleartext to ~/.assignee/memory/patterns.json.
+ *
+ * Callers that do not supply `sensitiveNames` (pre-W1 call sites) continue
+ * to work unchanged — the pattern record is written as-is.
  */
 export async function upsertPatternRecord(
   runId: string,
   patternId: string,
   elicitedOptions: Record<string, unknown>,
+  sensitiveNames: ReadonlySet<string> = new Set(),
 ): Promise<void> {
+  const safeOptions =
+    sensitiveNames.size > 0
+      ? stripSensitiveFromElicited(elicitedOptions, sensitiveNames)
+      : elicitedOptions;
+
   try {
     await defaultMemoryService.upsertPattern({
       pattern: patternId,
-      optionsSelected: elicitedOptions,
+      optionsSelected: safeOptions,
       count: 1, // upsertPattern handles incrementing
       lastUsed: new Date().toISOString(),
     });
