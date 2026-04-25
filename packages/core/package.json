@@ -31,6 +31,10 @@
     "./__tests__/fixtures/wizard-matrix-plugins.js": {
       "import": "./dist/__tests__/fixtures/wizard-matrix-plugins.js",
       "types": "./dist/__tests__/fixtures/wizard-matrix-plugins.d.ts"
+    },
+    "./audit": {
+      "import": "./dist/audit/index.js",
+      "types": "./dist/audit/index.d.ts"
     }
   },
   "files": [

@@ -198,6 +198,16 @@ to preferences.auto_fix and control how \`assignee plan\` reacts to best
       );
     }
 
+    // W3-03 (Epic 100 Round 5): display OIDC status when no adapter is configured.
+    // The env var ASSIGNEE_OIDC_ADAPTER is not set today → message is always
+    // visible. Epic 101 (identity-squad hire) will suppress this when a real
+    // IdP adapter is configured.
+    if (!process.env["ASSIGNEE_OIDC_ADAPTER"]) {
+      process.stderr.write(
+        "OIDC: not configured (Epic 101 follow-on); using AWS_PROFILE SSO via story 100-W2-02\n",
+      );
+    }
+
     const introCtx = await resolveIntroContext();
     clack.intro(
       (isGlobal

@@ -63,6 +63,8 @@ import { resolveApplyArgs, type ApplyOpts } from "./apply/arg-parser.js";
 import { runApply, type ApplyRunResult } from "./apply/orchestrator.js";
 import { installJsonStderrFilter } from "./json-stderr-filter.js";
 import { redactAccountIdIfDemoMode } from "./output-format.js";
+import { validateAccountId } from "../utils/account-id-validator.js";
+import { ProcessExitCode } from "../constants/errors.js";
 
 /**
  * Buffering stdout suppressor used when `--output json` is active.
@@ -321,6 +323,12 @@ export const applyCommand = new Command(CommandName.APPLY)
     "--json",
     "Shorthand for --output json (emit machine-readable envelope)",
   )
+  // W3-04 (Epic 100 Round 5): multi-account surface flag. Parse + validate
+  // only. Cross-account STS assume-role wiring defers to Epic 101.
+  .option(
+    "--target-account <id>",
+    "Target AWS account ID (12 digits). W3-04 scaffold: parses and validates only; cross-account assume-role wiring is Epic 101.",
+  )
   // Epic 92 Wave 3.b.1 (C-24 / D-02): ONE consolidated addHelpText
   // block with APPLY-specific examples. Before this fix the Examples
   // block leaked `assignee plan "..."` invocations under
@@ -330,6 +338,25 @@ export const applyCommand = new Command(CommandName.APPLY)
     `\n${SUPPORTED_TYPES_HINT}\n\nExamples:\n  assignee apply "${EXAMPLE_S3_INTENT}"\n  assignee apply --yes "Create an S3 bucket"\n  assignee apply --checkpoint .assignee/checkpoint-abc.json\n  assignee apply --wizard "Create an EC2 instance"\n  assignee apply --set size=t3.medium "Create an EC2 instance"\n  assignee apply --json --yes "Create an S3 bucket"`,
   )
   .action(async (intent: string | undefined, rawOpts: ApplyOptsWithJson) => {
+    // W3-04 (Epic 100 Round 5): validate --target-account early.
+    type ApplyOptsWithTarget = ApplyOptsWithJson & { targetAccount?: string };
+    const rawOptsWithTarget = rawOpts as ApplyOptsWithTarget;
+    if (rawOptsWithTarget.targetAccount !== undefined) {
+      const validation = validateAccountId(rawOptsWithTarget.targetAccount);
+      if (!validation.valid) {
+        process.stderr.write(
+          `[apply] ${validation.reason ?? "Invalid account ID"}\n`,
+        );
+        process.exit(ProcessExitCode.GENERIC_ERROR);
+        return;
+      }
+      process.stderr.write(
+        `[apply] Epic 101: cross-account assume-role not yet implemented for ${rawOptsWithTarget.targetAccount}\n`,
+      );
+      process.exit(ProcessExitCode.NOT_IMPLEMENTED);
+      return;
+    }
+
     // Normalise `--json` → `--output json` (same collapse plan.ts
     // performs). Reading `rawOpts.output ?? "text"` gives the canonical
     // value for the rest of the action.

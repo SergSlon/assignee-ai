@@ -1,0 +1,5 @@
+{
+  "role": "read-only",
+  "actions": ["list", "status", "drift", "audit-verify"],
+  "resourceGlob": "*"
+}

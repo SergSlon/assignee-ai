@@ -18,6 +18,126 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### W3 — Identity scaffolding
+
+#### Added
+
+- `packages/core/src/audit/hmac-chain.ts` — per-tenant HMAC chain
+  primitive (`computeChainLink` + `verifyChainLink`). Each audit-log
+  record carries `HMAC(key, prevHmac || record_serialised)`; corrupting
+  any single record breaks the chain and the verifier identifies the
+  index. ISO 27001 A.12.4 logging-and-monitoring requirement met for
+  the in-process scope.
+- `packages/core/src/audit/audit-log.ts` — append-only audit log with
+  chain metadata `{record, hmac, prevHmac, index}`. Writes go through
+  W4-03 advisory-lock service (`withLock` from `file-advisory-lock.ts`)
+  so concurrent writers don't corrupt the chain. File-mode 0o600.
+- `packages/core/src/audit/audit-verifier.ts` — chain walker returning
+  `{ ok: true }` or `{ ok: false, brokenAt, reason }` (where reason ∈
+  `payload-mismatch | hmac-mismatch | missing-prev`). Pre-W3 records
+  bypass the verifier with a clear "pre-HMAC region" marker.
+- `assignee audit-verify` CLI command — runs the verifier against the
+  local audit log; exit 0 on clean, non-zero with diagnostics on
+  broken chain.
+- `packages/core/src/rbac/{policy-schema,policy-store,role-context}.ts`
+  — Zod schema (role + actions + resource-glob), in-memory + file
+  adapters, hardcoded `"operator"` role context. Five fixtures
+  committed (admin / operator / read-only / auditor / restricted).
+  Audit-log records carry the role field. **No enforcement at command
+  boundaries yet** — scaffolding only; enforcement is Epic 101.
+- `packages/core/src/identity/{oidc-port,in-memory-oidc-adapter}.ts`
+  — `OIDCPort` interface (`validateToken`, `extractClaims`,
+  `refreshToken`) with a fixture-backed in-memory adapter. CLI surface
+  in `init.ts` directs operators to W2's `AWS_PROFILE` SSO path until
+  Epic 101 lands the real Okta / AzureAD / Auth0 adapters.
+- `apps/cli/src/utils/account-id-validator.ts` — 12-digit numeric
+  format, partition-agnostic (GovCloud / China account IDs are still
+  12-digit), rejects `123456789012` and `210987654321` per
+  `feedback_placeholder_arn_preflight_guard`.
+- `--target-account <ID>` flag on `plan`, `apply`, `destroy`. Surface
+  only — emits `"Epic 101: cross-account assume-role not yet
+implemented for <ID>"` and exits with the new
+  `ProcessExitCode.NOT_IMPLEMENTED` (= 12). Single-account flow
+  unchanged when the flag is absent.
+- `ProcessExitCode.NOT_IMPLEMENTED = 12` enum entry.
+
+#### Compliance framing
+
+- ISO 27001 A.12.4 logging-and-monitoring control met for in-process
+  audit-log writes (HMAC chain + verifier).
+- Day-1 SSO pilot remains W2 `AWS_PROFILE`; enterprise identity-tier
+  SKU launch unlocked by Epic 101 (12-engineer-week identity-squad
+  hire).
+
+#### Deferred
+
+- KMS-signed remote audit-log sink + S3 object-lock storage → Epic 101.
+- Real OIDC adapters (Okta / AzureAD / Auth0) → Epic 101.
+- RBAC enforcement at command boundaries → Epic 101.
+- STS assume-role chaining for `--target-account` → Epic 101.
+- `audit-verify --from <date> --to <date>` filters → Epic 101.
+
+### W9 — Distribution + release pipeline
+
+#### Added
+
+- `.github/workflows/release.yml` (renamed from
+  `release.yml.disabled`) — full pipeline (build → SBOM → provenance →
+  publish), DRY-RUN-by-default with **8 `if: env.ASSIGNEE_RELEASE_PUBLISH
+== '1'` gates** across every publish-side step (npm publish,
+  package-binaries, GitHub release, smoke-test, SBOM attach, provenance
+  attach, Homebrew tap publish). Tag pushes alone do nothing visible
+  externally; the acquirer flips `ASSIGNEE_RELEASE_PUBLISH=1` post-go-
+  decision.
+- `CODEOWNERS` at repo root — `* @founder` baseline plus commented-out
+  per-area lines for post-W3 ownership.
+- `docs/explanation/codeowners-and-branch-protection.md` — SOC 2 CC8.1
+  / ISO 27001 A.6.3 control baseline; required-status-checks table
+  (build / test / coverage / audit / lint / citation-lint /
+  audit-action-pins); `gh api` example for the manual GitHub-side
+  enable steps.
+- `scripts/audit-codeowners.ts` — CI lint asserting the file exists,
+  parses, and contains a catch-all rule.
+- `scripts/verify-domain-mx.ts` and `verify-domain-ownership.ts` —
+  re-runnable verification of `assignee.ai` /
+  `app.assignee.ai` MX records and TXT-based ownership proofs.
+  Injectable resolver makes the unit tests deterministic — zero real
+  DNS lookups in `pnpm test`.
+- `scripts/generate-release-notes.ts` — produces external-facing
+  release notes from `git log <from>..<to>`. Strips BMAD-ID patterns
+  (`Epic-N` / `W9-01` / `P017` / `L1-F14` / `story N` / `R<n>`),
+  groups commits into Keep-a-Changelog categories
+  (Added / Changed / Fixed / Deprecated / Removed / Security),
+  suppresses `chore:` / `docs:` / `ci:` / `test:` noise. 63 unit tests
+  cover the BMAD-stripping + categorisation matrix. Wired into
+  `release.yml` as `body_path: release-notes.md` for the GitHub
+  release publish step.
+- `homebrew/assignee.rb` extended with W7-08 SHA256 provenance
+  comments + `cosign verify-attestation` instructions; the
+  `update-homebrew` job in `release.yml` is gated behind both
+  `ASSIGNEE_RELEASE_PUBLISH=1` AND `ASSIGNEE_TAP_PUBLISH=1` so the tap
+  cannot publish even if the main release flips.
+- `docs/how-to/release-process.md` and
+  `docs/how-to/install-via-homebrew.md` (extended) — cover the full
+  DRY-RUN-by-default semantics + private-tap install path.
+
+#### Fixed
+
+- 3 remaining unverified `TODO-PIN` SHAs in `release.yml` resolved
+  to GitHub-verified values
+  (`anchore/sbom-action@f325610c…`, `sigstore/cosign-installer@59acb6260…`,
+  `softprops/action-gh-release@72f2c25fc…` × 3 occurrences).
+  All `TODO-PIN` comments removed from the file;
+  `scripts/audit-action-pins.ts` exits 0.
+
+#### Compliance framing
+
+- `feedback_no_public_artifacts` discipline — design + build + test
+  every distribution path; do not publish until the acquirer flips
+  `ASSIGNEE_RELEASE_PUBLISH` and `ASSIGNEE_TAP_PUBLISH`.
+- SOC 2 CC8.1 + ISO 27001 A.6.3 branch-protection control documented
+  for the manual GitHub-side enablement.
+
 ### W4 — SaaS-backbone scaffolding
 
 #### Added

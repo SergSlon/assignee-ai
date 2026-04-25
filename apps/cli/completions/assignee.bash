@@ -18,10 +18,10 @@ _assignee_completions() {
   local command="${COMP_WORDS[1]}"
   case "${command}" in
     plan)
-      COMPREPLY=( $(compgen -W "--output --json --no-apply --no-advice --source --set --yes --quick --wizard" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--output --json --no-apply --no-advice --source --set --yes --quick --wizard --target-account" -- "${cur}") )
       ;;
     apply)
-      COMPREPLY=( $(compgen -W "--wizard --quick --no-advice --yes --checkpoint --source --set --output --json" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--wizard --quick --no-advice --yes --checkpoint --source --set --output --json --target-account" -- "${cur}") )
       ;;
     init)
       COMPREPLY=( $(compgen -W "--global --yes --wizard --region --auto-fix --profile" -- "${cur}") )
@@ -30,7 +30,7 @@ _assignee_completions() {
       COMPREPLY=( $(compgen -W "" -- "${cur}") )
       ;;
     destroy)
-      COMPREPLY=( $(compgen -W "--yes --pending-window-in-days --recovery-window-in-days --force-delete-without-recovery --output --json" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--yes --pending-window-in-days --recovery-window-in-days --force-delete-without-recovery --output --json --target-account" -- "${cur}") )
       ;;
     drift)
       COMPREPLY=( $(compgen -W "--resource --region --status --exclude --baseline --output --json --output-file --concurrency --detailed --wizard" -- "${cur}") )

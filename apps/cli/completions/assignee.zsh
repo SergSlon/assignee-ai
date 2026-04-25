@@ -42,7 +42,8 @@ _assignee() {
             '--set[Pre-set field values (repeatable), supports human names (e.g., --set size=t3.medium)]:key=value:' \
             '--yes[Accepted for CI wrapper compatibility; plan is read-only and does not mutate.]' \
             '--quick[Skip wizard prompts that have defaults — only ask for required fields without a default. Shows a summary gate before generating the plan.]' \
-            '--wizard[Run interactive configuration wizard (prompts for required fields; plan-only, no provisioning).]'
+            '--wizard[Run interactive configuration wizard (prompts for required fields; plan-only, no provisioning).]' \
+            '--target-account[Target AWS account ID (12 digits). W3-04 scaffold\: parses and validates only; cross-account assume-role wiring is Epic 101.]:id:'
           ;;
         apply)
           _arguments \
@@ -54,7 +55,8 @@ _assignee() {
             '--source[Path to local files to upload after provisioning (e.g., static site)]:path:' \
             '--set[Pre-set wizard field values (repeatable)]:key=value...:' \
             '--output[Output format (json|text)]:format:' \
-            '--json[Shorthand for --output json (emit machine-readable envelope)]'
+            '--json[Shorthand for --output json (emit machine-readable envelope)]' \
+            '--target-account[Target AWS account ID (12 digits). W3-04 scaffold\: parses and validates only; cross-account assume-role wiring is Epic 101.]:id:'
           ;;
         init)
           _arguments \
@@ -74,7 +76,8 @@ _assignee() {
             '--recovery-window-in-days[SecretsManager secrets only\: recovery window (7-30 days, default 7). Secrets continue billing until the window elapses.]:n:' \
             '--force-delete-without-recovery[SecretsManager secrets only\: skip the recovery window and destroy the secret immediately. Mutually exclusive with --recovery-window-in-days.]' \
             '--output[Output format (json|text)]:format:' \
-            '--json[Shorthand for --output json (emit machine-readable envelope)]'
+            '--json[Shorthand for --output json (emit machine-readable envelope)]' \
+            '--target-account[Target AWS account ID (12 digits). W3-04 scaffold\: parses and validates only; cross-account assume-role wiring is Epic 101.]:id:'
           ;;
         drift)
           _arguments \
