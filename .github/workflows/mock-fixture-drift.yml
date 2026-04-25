@@ -87,8 +87,7 @@ jobs:
         # doesn't produce a nightly red ❌. The verify step below
         # emits a visible warning annotation instead.
         continue-on-error: true
-        uses: aws-actions/configure-aws-credentials@b47578312673ae6fa5b5096b330d9fbac3d9b9c4 # v4.0.1
-        # TODO-PIN: confirm SHA for aws-actions/configure-aws-credentials@v4 — using v4.0.1 SHA as placeholder
+        uses: aws-actions/configure-aws-credentials@1c6460a84bd4d87ce261cddada66cd7881aea06b # v4.0.1
         with:
           role-to-assume: ${{ vars.AWS_DRIFT_READER_ROLE_ARN }}
           aws-access-key-id: ${{ secrets.ASSIGNEE_DRIFT_READER_ACCESS_KEY_ID }}
