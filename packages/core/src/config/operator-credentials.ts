@@ -81,10 +81,16 @@ export function operatorCredentials(): AwsConfig {
     process.stderr.write(buildMissingOperatorCredsWarning());
   }
 
+  // W2-01: also read optional session token so ASIA* short-term credentials
+  // (STS AssumeRole, SSO) propagate to all SDK clients via this helper.
+  const sessionToken =
+    process.env[EnvVar.OPERATOR_SESSION_TOKEN]?.trim() || undefined;
+
   return {
     accessKeyId,
     secretAccessKey,
     region: AWS_REGION,
+    ...(sessionToken ? { sessionToken } : {}),
   };
 }
 

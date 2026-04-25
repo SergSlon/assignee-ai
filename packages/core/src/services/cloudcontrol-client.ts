@@ -17,6 +17,8 @@ export interface AwsConfig {
   accessKeyId: string;
   secretAccessKey: string;
   region: string;
+  /** Optional STS session token — required for ASIA* short-term credentials (SSO, assumed roles). W2-01. */
+  sessionToken?: string;
 }
 
 /**
@@ -43,6 +45,8 @@ export function createCloudControlClient(
     credentials: {
       accessKeyId: config.accessKeyId,
       secretAccessKey: config.secretAccessKey,
+      // W2-01: pass session token for STS/SSO short-term credentials.
+      ...(config.sessionToken ? { sessionToken: config.sessionToken } : {}),
     },
   });
 }

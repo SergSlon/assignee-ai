@@ -1,0 +1,9 @@
+{
+  "startUrl": "https://example.awsapps.com/start",
+  "region": "us-east-1",
+  "accessToken": "cachedSsoAccessTokenExample123456789",
+  "expiresAt": "2099-12-31T23:59:59.000Z",
+  "clientId": "ssoClientIdExample123456",
+  "clientSecret": "ssoClientSecretExample123456789012",
+  "registrationExpiresAt": "2099-12-31T23:59:59.000Z"
+}

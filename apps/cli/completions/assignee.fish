@@ -47,6 +47,7 @@ complete -c assignee -n "__fish_seen_subcommand_from init" -l yes -s y -d 'Skip 
 complete -c assignee -n "__fish_seen_subcommand_from init" -l wizard -d 'Run the interactive wizard (default behaviour; mutually exclusive with --yes)'
 complete -c assignee -n "__fish_seen_subcommand_from init" -l region -r -d 'AWS region to write into the config (skips the region prompt)'
 complete -c assignee -n "__fish_seen_subcommand_from init" -l auto-fix -r -d 'Set preferences.auto_fix mode: ask | apply | skip (skips the auto-fix prompt)'
+complete -c assignee -n "__fish_seen_subcommand_from init" -l profile -r -d 'AWS profile to use for credential resolution (reads ~/.aws/config; supports SSO, assumed-role, static)'
 
 # Options for 'destroy'
 complete -c assignee -n "__fish_seen_subcommand_from destroy" -l yes -s y -d 'Auto-confirm destroy without interactive prompt (for CI/CD)'

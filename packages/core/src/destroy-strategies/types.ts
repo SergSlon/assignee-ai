@@ -17,6 +17,8 @@ export interface AwsConfig {
   accessKeyId: string;
   secretAccessKey: string;
   region: string;
+  /** Optional STS session token — required for ASIA* short-term credentials (SSO, assumed roles). W2-01. */
+  sessionToken?: string;
 }
 
 /** AWS CloudControl API operation status values. */

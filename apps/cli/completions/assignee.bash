@@ -24,7 +24,7 @@ _assignee_completions() {
       COMPREPLY=( $(compgen -W "--wizard --quick --no-advice --yes --checkpoint --source --set --output --json" -- "${cur}") )
       ;;
     init)
-      COMPREPLY=( $(compgen -W "--global --yes --wizard --region --auto-fix" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--global --yes --wizard --region --auto-fix --profile" -- "${cur}") )
       ;;
     completions)
       COMPREPLY=( $(compgen -W "" -- "${cur}") )

@@ -5,6 +5,8 @@
  *  - M-S6: stable error message (no cwd heuristic)
  *  - M-S7: whitespace-only env vars rejected
  *  - M-S8: availableRoles() / envVarsForRole() single source of truth
+ *  - W2-01: ASSIGNEE_OPERATOR_SESSION_TOKEN wired through resolver
+ *  - W2-03: 8-row credential resolver test matrix
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
@@ -13,14 +15,18 @@ import {
   availableRoles,
   envVarsForRole,
   hasAssigneeCredentials,
+  InvalidSessionTokenError,
   MissingAssigneeCredentialsError,
   requireAssigneeCredentials,
   tryAssigneeCredentials,
 } from "./aws-credentials.js";
+import { readFileSync } from "fs";
+import { join } from "path";
 
 const ALL_VARS = [
   "ASSIGNEE_OPERATOR_ACCESS_KEY_ID",
   "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY",
+  "ASSIGNEE_OPERATOR_SESSION_TOKEN",
   "ASSIGNEE_READER_ACCESS_KEY_ID",
   "ASSIGNEE_READER_SECRET_ACCESS_KEY",
   "ASSIGNEE_AUDITOR_ACCESS_KEY_ID",
@@ -209,6 +215,139 @@ describe("aws-credentials helpers", () => {
       expect(captures[0]).toContain(
         "in your environment (or in the .env file at the project root)",
       );
+    });
+  });
+
+  // ── W2-01: ASSIGNEE_OPERATOR_SESSION_TOKEN (Epic 100) ────────────────────
+
+  describe("requireAssigneeCredentials — session token (W2-01)", () => {
+    const VALID_KEY = "ASIAIOSFODNN7STSEXAMP";
+    const VALID_SECRET = "stsSecretKeyValueExample123456789012345";
+    const VALID_TOKEN =
+      "AQoXnyc4lcK4w4OIaHPGTq6EXAMPLEsessionTOKEN1234567890abcdefghijklmno";
+
+    it("row-1: env-var-only (AKIA + secret, no session token) — resolver returns correct shape without sessionToken", () => {
+      process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
+      process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] =
+        "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+      // No session token set
+      const creds = requireAssigneeCredentials("operator");
+      expect(creds.accessKeyId).toBe("AKIAIOSFODNN7EXAMPLE");
+      expect(creds.secretAccessKey).toBe(
+        "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+      );
+      expect(creds.sessionToken).toBeUndefined();
+    });
+
+    it("row-3: positive — ASIA key + session token — sessionToken propagated in credentials object", () => {
+      process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = VALID_KEY;
+      process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] = VALID_SECRET;
+      process.env["ASSIGNEE_OPERATOR_SESSION_TOKEN"] = VALID_TOKEN;
+      const creds = requireAssigneeCredentials("operator");
+      expect(creds.accessKeyId).toBe(VALID_KEY);
+      expect(creds.secretAccessKey).toBe(VALID_SECRET);
+      expect(creds.sessionToken).toBe(VALID_TOKEN);
+    });
+
+    it("row-6: invalid (too-short) session token — throws InvalidSessionTokenError with SSO hint", () => {
+      process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = VALID_KEY;
+      process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] = VALID_SECRET;
+      process.env["ASSIGNEE_OPERATOR_SESSION_TOKEN"] = "tooshort";
+      expect(() => requireAssigneeCredentials("operator")).toThrow(
+        InvalidSessionTokenError,
+      );
+    });
+
+    it("row-6: invalid session token error message mentions aws sso login", () => {
+      process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = VALID_KEY;
+      process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] = VALID_SECRET;
+      process.env["ASSIGNEE_OPERATOR_SESSION_TOKEN"] = "badtoken";
+      try {
+        requireAssigneeCredentials("operator");
+        expect.fail("expected throw");
+      } catch (err) {
+        expect(err).toBeInstanceOf(InvalidSessionTokenError);
+        expect((err as Error).message).toContain("aws sso login");
+      }
+    });
+
+    it("tryAssigneeCredentials — propagates sessionToken when set", () => {
+      process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = VALID_KEY;
+      process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] = VALID_SECRET;
+      process.env["ASSIGNEE_OPERATOR_SESSION_TOKEN"] = VALID_TOKEN;
+      const creds = tryAssigneeCredentials("operator");
+      expect(creds).not.toBeUndefined();
+      expect(creds?.sessionToken).toBe(VALID_TOKEN);
+    });
+
+    it("tryAssigneeCredentials — ignores session token that is too short (silent drop)", () => {
+      process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = VALID_KEY;
+      process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] = VALID_SECRET;
+      process.env["ASSIGNEE_OPERATOR_SESSION_TOKEN"] = "tinytoken";
+      const creds = tryAssigneeCredentials("operator");
+      expect(creds?.sessionToken).toBeUndefined();
+    });
+
+    it("row-5: no creds anywhere — throws MissingAssigneeCredentialsError with setup hint", () => {
+      // All env vars already cleared by beforeEach scrubEnv
+      expect(() => requireAssigneeCredentials("operator")).toThrow(
+        MissingAssigneeCredentialsError,
+      );
+    });
+
+    it("whitespace-only session token is treated as absent (no sessionToken in result)", () => {
+      process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = VALID_KEY;
+      process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] = VALID_SECRET;
+      process.env["ASSIGNEE_OPERATOR_SESSION_TOKEN"] = "   ";
+      const creds = requireAssigneeCredentials("operator");
+      expect(creds.sessionToken).toBeUndefined();
+    });
+  });
+
+  // ── W2-03: Anti-pattern doc lint ─────────────────────────────────────────
+
+  describe("sso-authentication.md anti-pattern lint (W2-02 / W2-03)", () => {
+    it("docs/how-to/sso-authentication.md does NOT mention raw-key export as the SSO workaround", () => {
+      // The doc must guide users towards --profile / AWS_PROFILE, NOT towards
+      // exporting raw AWS keys as the SSO workaround. This test ensures the
+      // anti-pattern never comes back.
+      const docPath = join(
+        // Navigate from packages/core/src/config/ up 4 levels to repo root, then into docs/
+        new URL(".", import.meta.url).pathname,
+        "../../../..",
+        "docs/how-to/sso-authentication.md",
+      );
+      let content: string;
+      try {
+        content = readFileSync(docPath, "utf-8");
+      } catch {
+        throw new Error(
+          `docs/how-to/sso-authentication.md not found at ${docPath}. ` +
+            "The file must exist (W2-02 acceptance criterion).",
+        );
+      }
+
+      // Must NOT instruct SSO users to export raw keys as the solution.
+      // These patterns match only concrete anti-pattern instructions —
+      // affirmative sentences recommending raw-key export as the SSO
+      // workaround. They do NOT match negative guidance like "you do not
+      // need to export raw access keys when using SSO".
+      const antiPatterns = [
+        /for SSO[,\s].*export AWS_ACCESS_KEY_ID/i,
+        /to use SSO[,\s].*export your access keys/i,
+        /you must export AWS_ACCESS_KEY_ID for SSO/i,
+        /as a workaround[,\s].*export AWS_ACCESS_KEY_ID/i,
+      ];
+      for (const pattern of antiPatterns) {
+        expect(
+          pattern.test(content),
+          `doc contains raw-key-export anti-pattern: ${pattern}`,
+        ).toBe(false);
+      }
+
+      // MUST mention --profile and AWS_PROFILE as the supported approach.
+      expect(content).toMatch(/--profile/);
+      expect(content).toMatch(/AWS_PROFILE/);
     });
   });
 });
