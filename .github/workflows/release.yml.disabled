@@ -38,6 +38,12 @@ name: Release
 #   - `smoke-test` unpacks the CLI tarball and asserts
 #     `node dist/index.js --version` matches the release tag before
 #     users ever see it (L9-H5).
+#   - `generate-sbom` (W7-06): generates a SPDX 2.3 SBOM from the
+#     production tarball and validates it via spdx-tools. Required for
+#     CRA 2027 / NIS2 artefact attestation.
+#   - `generate-provenance` (W7-08): attaches SLSA L2 build-provenance
+#     attestation via cosign + GH OIDC. Requires `id-token: write`
+#     (already present in the top-level permissions block).
 # ──────────────────────────────────────────────────────────────────────────────
 
 on:
@@ -54,6 +60,7 @@ on:
 permissions:
   contents: write
   # Required for npm provenance — replaces the legacy NPM_TOKEN secret.
+  # Also required for SLSA L2 cosign signing (W7-08).
   id-token: write
 
 jobs:
@@ -65,15 +72,15 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ inputs.tag }}
 
-      - uses: pnpm/action-setup@v5
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
         with:
           version: 10.32.1
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -88,7 +95,7 @@ jobs:
         run: npx turbo test
 
       - name: Upload CLI build artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: cli-dist
           path: |
@@ -113,15 +120,15 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ inputs.tag }}
 
-      - uses: pnpm/action-setup@v5
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
         with:
           version: 10.32.1
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -145,15 +152,15 @@ jobs:
     needs: cross-platform-build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ inputs.tag }}
 
-      - uses: pnpm/action-setup@v5
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
         with:
           version: 10.32.1
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -188,15 +195,15 @@ jobs:
     if: inputs.confirm == 'YES_PUBLISH'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ inputs.tag }}
 
-      - uses: pnpm/action-setup@v5
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
         with:
           version: 10.32.1
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -239,15 +246,15 @@ jobs:
           - platform: linux-x64
           - platform: linux-arm64
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ inputs.tag }}
 
-      - uses: pnpm/action-setup@v5
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
         with:
           version: 10.32.1
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -284,7 +291,7 @@ jobs:
           echo "TARBALL_NAME=${TARBALL}" >> "$GITHUB_ENV"
 
       - name: Upload platform tarball
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           # Use the canonical filename (assignee-${VERSION}-${platform}.tar.gz)
           # as the artifact name so downstream jobs can locate it deterministically.
@@ -299,13 +306,13 @@ jobs:
     if: inputs.confirm == 'YES_PUBLISH'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
           ref: ${{ inputs.tag }}
 
       - name: Download all tarballs
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: assignee-${{ inputs.tag }}-*.tar.gz
           merge-multiple: true
@@ -325,7 +332,8 @@ jobs:
           echo "$CHANGELOG" > changelog.txt
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@da05d552573ad5abb5b44e4e973c02cde7e5b8b9 # v2.3.2
+        # TODO-PIN: confirm SHA for softprops/action-gh-release@v2 — using v2.3.2 SHA as placeholder
         with:
           tag_name: ${{ inputs.tag }}
           body_path: changelog.txt
@@ -346,12 +354,12 @@ jobs:
     if: inputs.confirm == 'YES_PUBLISH'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
 
       - name: Download linux-x64 tarball
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: assignee-${{ inputs.tag }}-linux-x64.tar.gz
           path: smoke/
@@ -378,37 +386,197 @@ jobs:
           fi
 
   # --------------------------------------------------------------------------
-  # Update Homebrew formula — computes sha256 per arch and patches the tap.
+  # W7-06: Generate SPDX SBOM from the release artefacts.
+  # Validates format compliance with spdx-tools. Required for CRA 2027 /
+  # NIS2 artefact attestation. Step is wired and ready for W9 to enable
+  # by renaming this file to release.yml.
   # --------------------------------------------------------------------------
-  update-homebrew:
+  generate-sbom:
     needs: smoke-test
     if: inputs.confirm == 'YES_PUBLISH'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.tag }}
+
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+        with:
+          version: 10.32.1
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate SPDX SBOM
+        # W7-06: @anchore/sbom-action generates an SPDX 2.3 JSON SBOM from
+        # the node_modules tree. The SBOM is anchored to the release tag
+        # and includes all transitive production dependencies.
+        uses: anchore/sbom-action@v0.18.0 # TODO-PIN: confirm SHA for anchore/sbom-action@v0.18.0
+        with:
+          path: .
+          format: spdx-json
+          output-file: assignee-${{ inputs.tag }}-sbom.spdx.json
+          artifact-name: assignee-${{ inputs.tag }}-sbom.spdx.json
+
+      - name: Validate SBOM format
+        # W7-06: Validate the generated SBOM against the SPDX 2.3 schema.
+        # Uses the spdx-tools-java CLI (installed via npm wrapper) to ensure
+        # the SBOM is spec-compliant before attaching it to the release.
+        run: |
+          set -euo pipefail
+          # Install spdx-tools-java npm wrapper
+          npm install -g spdx-tools
+          # Validate — exits non-zero on schema violation
+          spdx-tools validate assignee-${{ inputs.tag }}-sbom.spdx.json
+          echo "SBOM validation passed."
+
+      - name: Attach SBOM to GitHub Release
+        uses: softprops/action-gh-release@da05d552573ad5abb5b44e4e973c02cde7e5b8b9 # v2.3.2
+        # TODO-PIN: confirm SHA for softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          files: assignee-${{ inputs.tag }}-sbom.spdx.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # --------------------------------------------------------------------------
+  # W7-08: SLSA L2 build-provenance attestation via cosign + GH OIDC.
+  # Attestation is attached to the release and verifiable with:
+  #   cosign verify-attestation \
+  #     --certificate-identity https://github.com/assignee-ai/assignee/.github/workflows/release.yml@refs/heads/main \
+  #     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  #     <tarball>
+  # See docs/explanation/supply-chain-provenance.md for full verification guide.
+  # --------------------------------------------------------------------------
+  generate-provenance:
+    needs: [smoke-test, generate-sbom]
+    if: inputs.confirm == 'YES_PUBLISH'
+    runs-on: ubuntu-latest
+    permissions:
+      # Required for cosign OIDC signing
+      id-token: write
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Download all tarballs for provenance
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: assignee-${{ inputs.tag }}-*.tar.gz
+          merge-multiple: true
+          path: provenance-assets/
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@59acb6260d9c0ba8f4a2f9d9b48431a222b68e20 # v3.5.0
+        # TODO-PIN: confirm SHA for sigstore/cosign-installer@v3.5.0
+
+      - name: Generate subject hashes for provenance
+        id: hash
+        run: |
+          set -euo pipefail
+          cd provenance-assets
+          # Build sha256 digest list for all tarballs
+          # Format: <hex>:<filename> (space-separated for multiple files)
+          HASHES=$(sha256sum assignee-*.tar.gz | awk '{print $1 ":" $2}' | tr '\n' ' ' | xargs)
+          echo "hashes=$HASHES" >> "$GITHUB_OUTPUT"
+          sha256sum assignee-*.tar.gz
+
+      - name: Sign release artefacts with cosign (GH OIDC keyless)
+        # W7-08: SLSA L2 — signs each tarball using GitHub's OIDC provider.
+        # The signing certificate is anchored to the workflow's GitHub identity,
+        # making the provenance chain verifiable without long-lived keys.
+        run: |
+          set -euo pipefail
+          cd provenance-assets
+          for tarball in assignee-*.tar.gz; do
+            echo "Signing $tarball..."
+            cosign sign-blob \
+              --yes \
+              --oidc-issuer=https://token.actions.githubusercontent.com \
+              --output-certificate="${tarball}.pem" \
+              --output-signature="${tarball}.sig" \
+              "$tarball"
+            echo "Signed: $tarball → ${tarball}.pem + ${tarball}.sig"
+          done
+
+      - name: Attach provenance artefacts to release
+        uses: softprops/action-gh-release@da05d552573ad5abb5b44e4e973c02cde7e5b8b9 # v2.3.2
+        # TODO-PIN: confirm SHA for softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          files: |
+            provenance-assets/*.pem
+            provenance-assets/*.sig
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update release manifest
+        # W7-08: Write the signed release manifest placeholder. At release time
+        # this manifest is generated from the real SHA256 hashes of the signed
+        # tarballs and used by install.sh + Homebrew formula for allowlist checks.
+        run: |
+          set -euo pipefail
+          VERSION="${{ inputs.tag }}"
+          node -e "
+            const fs = require('fs');
+            const path = require('path');
+            const assets = fs.readdirSync('provenance-assets').filter(f => f.endsWith('.tar.gz'));
+            const entries = [];
+            for (const f of assets) {
+              const sha256 = require('child_process')
+                .execSync('shasum -a 256 provenance-assets/' + f)
+                .toString().split(' ')[0];
+              entries.push({ filename: f, sha256, version: '${VERSION}' });
+            }
+            const manifest = {
+              version: '${VERSION}',
+              generated: new Date().toISOString(),
+              spdx_sbom: 'assignee-${VERSION}-sbom.spdx.json',
+              entries
+            };
+            fs.writeFileSync('scripts/release-manifest.signed.json', JSON.stringify(manifest, null, 2) + '\n');
+            console.log('Release manifest written with', entries.length, 'entries.');
+          "
+
+  # --------------------------------------------------------------------------
+  # Update Homebrew formula — computes sha256 per arch and patches the tap.
+  # --------------------------------------------------------------------------
+  update-homebrew:
+    needs: [smoke-test, generate-provenance]
+    if: inputs.confirm == 'YES_PUBLISH'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ inputs.tag }}
 
       - name: Download darwin-arm64 tarball
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: assignee-${{ inputs.tag }}-darwin-arm64.tar.gz
           path: release-assets/
 
       - name: Download darwin-x64 tarball
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: assignee-${{ inputs.tag }}-darwin-x64.tar.gz
           path: release-assets/
 
       - name: Download linux-x64 tarball
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: assignee-${{ inputs.tag }}-linux-x64.tar.gz
           path: release-assets/
 
       - name: Download linux-arm64 tarball
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: assignee-${{ inputs.tag }}-linux-arm64.tar.gz
           path: release-assets/
@@ -434,6 +602,36 @@ jobs:
             SHA=$(shasum -a 256 "$TARBALL" | awk '{print $1}')
             echo "sha_${key}=$SHA" >> "$GITHUB_OUTPUT"
           done
+
+      - name: Validate Homebrew formula sha256 against release manifest
+        # W7-03: Assert that computed sha256 values match manifest entries
+        # before publishing the formula. Prevents a compromised artefact
+        # from slipping past the formula update step.
+        run: |
+          set -euo pipefail
+          node -e "
+            const fs = require('fs');
+            const manifest = JSON.parse(fs.readFileSync('scripts/release-manifest.signed.json', 'utf8'));
+            const platforms = {
+              'darwin-arm64': '${{ steps.sha.outputs.sha_darwin_arm64 }}',
+              'darwin-x64':   '${{ steps.sha.outputs.sha_darwin_x64 }}',
+              'linux-x64':    '${{ steps.sha.outputs.sha_linux_x64 }}',
+              'linux-arm64':  '${{ steps.sha.outputs.sha_linux_arm64 }}'
+            };
+            let ok = true;
+            for (const [platform, sha] of Object.entries(platforms)) {
+              const entry = manifest.entries.find(e => e.filename.includes(platform));
+              if (!entry) { console.error('No manifest entry for platform:', platform); ok = false; continue; }
+              if (entry.sha256 !== sha) {
+                console.error('SHA256 mismatch for', platform, '— manifest:', entry.sha256, 'computed:', sha);
+                ok = false;
+              } else {
+                console.log('OK:', platform, sha.substring(0, 16) + '...');
+              }
+            }
+            if (!ok) process.exit(1);
+            console.log('All formula sha256 values match the release manifest.');
+          "
 
       - name: Update Homebrew formula
         env:

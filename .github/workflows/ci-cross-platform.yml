@@ -99,4 +99,7 @@ jobs:
       # `ci.yml` push/PR workflow on ubuntu-latest + node 22. The
       # cross-platform sweep intentionally does NOT republish.
       publish-coverage: false
-    secrets: inherit
+    # W7-05: explicit secret declarations replacing `secrets: inherit`
+    secrets:
+      BEDROCK_LOGGING_VERIFIED: ${{ secrets.BEDROCK_LOGGING_VERIFIED }}
+      GIST_TOKEN: ${{ secrets.GIST_TOKEN }}

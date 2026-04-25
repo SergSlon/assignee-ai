@@ -29,7 +29,10 @@ jobs:
       os: ubuntu-latest
       node: "20"
       publish-coverage: false
-    secrets: inherit
+    # W7-05: explicit secret declarations replacing `secrets: inherit`
+    secrets:
+      BEDROCK_LOGGING_VERIFIED: ${{ secrets.BEDROCK_LOGGING_VERIFIED }}
+      GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
 
   ubuntu-node22:
     name: ci (ubuntu-latest / node 22)
@@ -38,4 +41,7 @@ jobs:
       os: ubuntu-latest
       node: "22"
       publish-coverage: true
-    secrets: inherit
+    # W7-05: explicit secret declarations replacing `secrets: inherit`
+    secrets:
+      BEDROCK_LOGGING_VERIFIED: ${{ secrets.BEDROCK_LOGGING_VERIFIED }}
+      GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
