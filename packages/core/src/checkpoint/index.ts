@@ -27,3 +27,9 @@ export { saveCheckpoint, loadCheckpoint } from "./store.js";
 export { loadCheckpointFromPath, type CheckpointVerifier } from "./loader.js";
 export { pruneExpiredCheckpoints } from "./pruner.js";
 export { findNewestValidCheckpoint } from "./auto-detect.js";
+// W4-01: CheckpointerPort hexagonal interface.
+export type { CheckpointerPort } from "./port.js";
+// W4-01: In-memory adapter (default for createGraph / tests).
+export { InMemoryCheckpointerAdapter } from "./in-memory-adapter.js";
+// W4-02: File-backed durable adapter (production-local until Epic 102).
+export { FileDurableCheckpointerAdapter } from "./file-durable-adapter.js";
