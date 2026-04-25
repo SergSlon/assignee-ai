@@ -172,8 +172,7 @@ jobs:
 
       - name: Update coverage badge
         if: inputs.publish-coverage && github.ref == 'refs/heads/main' && vars.COVERAGE_GIST_ID != ''
-        uses: schneegans/dynamic-badges-action@b374e394e1bca42b4d4bf6d10f1a5a2e03e62d07 # v1.7.0
-        # TODO-PIN: confirm SHA for schneegans/dynamic-badges-action@v1.8.0 — using v1.7.0 SHA as placeholder
+        uses: schneegans/dynamic-badges-action@e9a478b16159b4d31420099ba146cdc50f134483 # v1.7.0
         with:
           auth: ${{ secrets.GIST_TOKEN }}
           gistID: ${{ vars.COVERAGE_GIST_ID }}
