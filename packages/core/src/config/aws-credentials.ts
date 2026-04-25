@@ -21,7 +21,10 @@
  *
  * @see Story 18.8 — IAM Security Overhaul
  * @see feedback_simulate_ci_no_creds.md
+ * @see W2-01 — Wire ASSIGNEE_OPERATOR_SESSION_TOKEN (Epic 100)
  */
+
+import { EnvVar } from "../constants/env-vars.js";
 
 export type AssigneeRole = "operator" | "reader" | "auditor";
 
@@ -55,11 +58,15 @@ export class MissingAssigneeCredentialsError extends Error {
 
 const ROLE_TO_VARS: Record<
   AssigneeRole,
-  { accessKey: string; secretKey: string }
+  { accessKey: string; secretKey: string; sessionTokenKey?: string }
 > = {
   operator: {
     accessKey: "ASSIGNEE_OPERATOR_ACCESS_KEY_ID",
     secretKey: "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY",
+    // W2-01: ASSIGNEE_OPERATOR_SESSION_TOKEN is declared in env-vars.ts but was
+    // never read here — SSO operators using ASIA* keys got AccessDenied
+    // because the session token was silently dropped.
+    sessionTokenKey: EnvVar.OPERATOR_SESSION_TOKEN,
   },
   reader: {
     accessKey: "ASSIGNEE_READER_ACCESS_KEY_ID",
@@ -97,7 +104,8 @@ export function envVarsForRole(role: AssigneeRole): {
   accessKey: string;
   secretKey: string;
 } {
-  return ROLE_TO_VARS[role];
+  const { accessKey, secretKey } = ROLE_TO_VARS[role];
+  return { accessKey, secretKey };
 }
 
 /**
@@ -114,10 +122,36 @@ export function availableRoles(): AssigneeRole[] {
 }
 
 /**
+ * Thrown when a session token is present but structurally invalid
+ * (e.g. expired STS token or obviously malformed value). The message
+ * includes an actionable hint for SSO users.
+ *
+ * @see W2-01 — Wire ASSIGNEE_OPERATOR_SESSION_TOKEN (Epic 100)
+ */
+export class InvalidSessionTokenError extends Error {
+  constructor(varName: string) {
+    super(
+      `Session token in ${varName} appears invalid or expired. ` +
+        `If you are using AWS SSO, run \`aws sso login\` to refresh your session, ` +
+        `then re-export the token: \`eval $(aws configure export-credentials --profile <profile> --format env)\``,
+    );
+    this.name = "InvalidSessionTokenError";
+  }
+}
+
+/** Minimum plausible length for an AWS STS session token. Tokens issued
+ *  by STS are typically 100–1000+ characters. A value shorter than this
+ *  is almost certainly a typo or truncated paste. */
+const MIN_SESSION_TOKEN_LEN = 16;
+
+/**
  * Returns the credentials for a given role, or throws a clear error if
  * the required env vars are not set.
  *
  * NEVER falls through to the default credential chain.
+ *
+ * W2-01: now reads the optional session token env var (currently only
+ * declared for the operator role via ASSIGNEE_OPERATOR_SESSION_TOKEN).
  */
 export function requireAssigneeCredentials(
   role: AssigneeRole,
@@ -146,7 +180,23 @@ export function requireAssigneeCredentials(
     );
   }
 
-  return { accessKeyId, secretAccessKey };
+  // W2-01: read optional session token. Validate if present.
+  let sessionToken: string | undefined;
+  if (vars.sessionTokenKey) {
+    const rawToken = process.env[vars.sessionTokenKey]?.trim();
+    if (rawToken) {
+      if (rawToken.length < MIN_SESSION_TOKEN_LEN) {
+        throw new InvalidSessionTokenError(vars.sessionTokenKey);
+      }
+      sessionToken = rawToken;
+    }
+  }
+
+  return {
+    accessKeyId,
+    secretAccessKey,
+    ...(sessionToken ? { sessionToken } : {}),
+  };
 }
 
 /**
@@ -154,6 +204,9 @@ export function requireAssigneeCredentials(
  * (or are whitespace-only).
  * Use only when a feature has a documented graceful no-op path
  * (e.g., best-effort discovery in plan mode).
+ *
+ * W2-01: now reads the optional session token env var so STS credentials
+ * (ASIA* keys) work correctly in best-effort callers as well.
  */
 export function tryAssigneeCredentials(
   role: AssigneeRole,
@@ -162,7 +215,21 @@ export function tryAssigneeCredentials(
   const accessKeyId = process.env[vars.accessKey]?.trim();
   const secretAccessKey = process.env[vars.secretKey]?.trim();
   if (!accessKeyId || !secretAccessKey) return undefined;
-  return { accessKeyId, secretAccessKey };
+
+  // W2-01: also pick up session token when present.
+  let sessionToken: string | undefined;
+  if (vars.sessionTokenKey) {
+    const rawToken = process.env[vars.sessionTokenKey]?.trim();
+    if (rawToken && rawToken.length >= MIN_SESSION_TOKEN_LEN) {
+      sessionToken = rawToken;
+    }
+  }
+
+  return {
+    accessKeyId,
+    secretAccessKey,
+    ...(sessionToken ? { sessionToken } : {}),
+  };
 }
 
 /**

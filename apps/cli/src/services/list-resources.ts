@@ -55,6 +55,10 @@ export async function fetchManagedResources(
           credentials: {
             accessKeyId: opCreds.accessKeyId,
             secretAccessKey: opCreds.secretAccessKey,
+            // W2-01: pass session token for STS/SSO short-term credentials.
+            ...(opCreds.sessionToken
+              ? { sessionToken: opCreds.sessionToken }
+              : {}),
           },
         }
       : {}),

@@ -391,6 +391,10 @@ async function scheduleKmsKeyDeletion(
           credentials: {
             accessKeyId: awsConfig.accessKeyId,
             secretAccessKey: awsConfig.secretAccessKey,
+            // W2-01: pass session token for STS/SSO short-term credentials.
+            ...(awsConfig.sessionToken
+              ? { sessionToken: awsConfig.sessionToken }
+              : {}),
           },
         }
       : {}),
@@ -443,6 +447,10 @@ async function deleteSecret(
           credentials: {
             accessKeyId: awsConfig.accessKeyId,
             secretAccessKey: awsConfig.secretAccessKey,
+            // W2-01: pass session token for STS/SSO short-term credentials.
+            ...(awsConfig.sessionToken
+              ? { sessionToken: awsConfig.sessionToken }
+              : {}),
           },
         }
       : {}),
@@ -498,6 +506,10 @@ async function deleteEventBus(resolved: ResolvedResource): Promise<void> {
           credentials: {
             accessKeyId: awsConfig.accessKeyId,
             secretAccessKey: awsConfig.secretAccessKey,
+            // W2-01: pass session token for STS/SSO short-term credentials.
+            ...(awsConfig.sessionToken
+              ? { sessionToken: awsConfig.sessionToken }
+              : {}),
           },
         }
       : {}),

@@ -1711,4 +1711,36 @@ describe("assignee init --wizard alias (Epic 96 W2 R4)", () => {
     expect(captured).toContain("--wizard");
     expect(captured).toMatch(/Examples:[\s\S]*--wizard/);
   });
+
+  // ── W2-02: --profile flag (Epic 100) ──────────────────────────────────────
+
+  it("--help output lists --profile flag (W2-02)", async () => {
+    const { initCommand } = await import("./init.js");
+    let captured = "";
+    initCommand.outputHelp({
+      write: (chunk: string) => {
+        captured += chunk;
+      },
+    } as unknown as { error: boolean });
+    expect(captured).toContain("--profile");
+  });
+
+  it("--profile flag is registered on the init command (W2-02)", async () => {
+    const { initCommand } = await import("./init.js");
+    const profileOpt = initCommand.options.find(
+      (o: { long?: string }) => o.long === "--profile",
+    );
+    expect(profileOpt).toBeDefined();
+  });
+
+  it("--yes flag help example mentions --profile (W2-02 documentation check)", async () => {
+    const { initCommand } = await import("./init.js");
+    let captured = "";
+    initCommand.outputHelp({
+      write: (chunk: string) => {
+        captured += chunk;
+      },
+    } as unknown as { error: boolean });
+    expect(captured).toContain("--profile enterprise-sso");
+  });
 });

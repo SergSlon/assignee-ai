@@ -62,7 +62,8 @@ _assignee() {
             '--yes[Skip interactive prompts and accept defaults (CI scriptability)]' \
             '--wizard[Run the interactive wizard (default behaviour; mutually exclusive with --yes)]' \
             '--region[AWS region to write into the config (skips the region prompt)]:region:' \
-            '--auto-fix[Set preferences.auto_fix mode\: ask | apply | skip (skips the auto-fix prompt)]:mode:'
+            '--auto-fix[Set preferences.auto_fix mode\: ask | apply | skip (skips the auto-fix prompt)]:mode:' \
+            '--profile[AWS profile to use for credential resolution (reads ~/.aws/config; supports SSO, assumed-role, static)]:profile:'
           ;;
         completions)
           ;;

@@ -27,6 +27,8 @@ export function createTaggingClient(
     credentials: {
       accessKeyId: config.accessKeyId,
       secretAccessKey: config.secretAccessKey,
+      // W2-01: pass session token for STS/SSO short-term credentials.
+      ...(config.sessionToken ? { sessionToken: config.sessionToken } : {}),
     },
   });
 }

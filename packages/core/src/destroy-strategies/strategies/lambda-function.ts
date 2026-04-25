@@ -97,6 +97,10 @@ export const lambdaFunctionStrategy: DestroyStrategy = {
         credentials: {
           accessKeyId: awsConfig.accessKeyId,
           secretAccessKey: awsConfig.secretAccessKey,
+          // W2-01: pass session token for STS/SSO short-term credentials.
+          ...(awsConfig.sessionToken
+            ? { sessionToken: awsConfig.sessionToken }
+            : {}),
         },
       });
 

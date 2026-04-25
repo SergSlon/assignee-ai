@@ -32,6 +32,12 @@ export {
 // Config — operator credential reader (Story 50-4 Wave 5 Pass G)
 export { operatorCredentials } from "../../config/operator-credentials.js";
 
+// Config — AWS SDK provider chain (W2-02 / P004 → L5-S05)
+export {
+  resolveOperatorCredentialProvider,
+  type CredentialProvider,
+} from "../../config/provider-chain.js";
+
 // Config — user config loader (Story 50-4 Wave 5 Pass G)
 export {
   loadUserConfig,
@@ -104,6 +110,7 @@ export {
   envVarsForRole,
   ASSIGNEE_ROLES,
   MissingAssigneeCredentialsError,
+  InvalidSessionTokenError,
   type AssigneeRole,
   type ExplicitAwsCredentials,
 } from "../../config/aws-credentials.js";

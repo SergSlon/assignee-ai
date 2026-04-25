@@ -78,6 +78,8 @@ export async function defaultVpcExistenceClientFactory(): Promise<VpcExistenceCl
           credentials: {
             accessKeyId: creds.accessKeyId,
             secretAccessKey: creds.secretAccessKey,
+            // W2-01: pass session token for STS/SSO short-term credentials.
+            ...(creds.sessionToken ? { sessionToken: creds.sessionToken } : {}),
           },
         }
       : {}),

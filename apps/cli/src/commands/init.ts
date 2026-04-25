@@ -33,6 +33,7 @@ import {
 } from "./init/intro-context.js";
 import { runGlobalInit } from "./init/global-flow.js";
 import { runProjectInit } from "./init/project-flow.js";
+import { resolveCredentialsWithProfile } from "../utils/command-runner/credentials.js";
 
 // ── Re-exports for back-compat (tests + other commands) ────────────────
 export {
@@ -95,6 +96,8 @@ interface InitOptions {
   wizard?: boolean;
   region?: string;
   autoFix?: AutoFixModeType;
+  /** W2-02: AWS profile to use for credential resolution. */
+  profile?: string;
 }
 
 export const initCommand = new Command(CommandName.INIT)
@@ -131,6 +134,10 @@ export const initCommand = new Command(CommandName.INIT)
     "Set preferences.auto_fix mode: ask | apply | skip (skips the auto-fix prompt)",
     parseAutoFixFlag,
   )
+  .option(
+    "--profile <profile>",
+    "AWS profile to use for credential resolution (reads ~/.aws/config; supports SSO, assumed-role, static)",
+  )
   .addHelpText(
     "after",
     `
@@ -143,6 +150,10 @@ Examples:
         Create/update ~/.config/assignee/config.yaml for the current user
   $ assignee init --yes --region us-east-1 --auto-fix ask
         Non-interactive, CI-friendly: skip all prompts, use supplied values
+  $ assignee init --profile enterprise-sso
+        Resolve credentials via the "enterprise-sso" AWS profile (SSO-friendly)
+  $ AWS_PROFILE=enterprise-sso assignee init
+        Same — profile can also be set via environment variable
 
 The wizard offers three auto-fix modes (ask / apply / skip) that persist
 to preferences.auto_fix and control how \`assignee plan\` reacts to best
@@ -176,6 +187,15 @@ to preferences.auto_fix and control how \`assignee plan\` reacts to best
       );
       process.exit(1);
       return;
+    }
+
+    // W2-02: resolve profile-based credentials before any SDK client is
+    // constructed. This is a no-op when ASSIGNEE_OPERATOR_* are already set.
+    if (options.profile ?? process.env["AWS_PROFILE"]) {
+      await resolveCredentialsWithProfile(
+        options.profile,
+        options.yes === true,
+      );
     }
 
     const introCtx = await resolveIntroContext();
