@@ -90,11 +90,63 @@ brew uninstall assignee
 brew untap assignee-ai/assignee  # optional — removes the tap too
 ```
 
+## Private tap / pre-public-release install
+
+The Homebrew tap is **not yet public** — `ASSIGNEE_TAP_PUBLISH=1` must be
+flipped by the acquirer post-go-decision before `brew tap assignee-ai/assignee`
+works for end users (see `docs/how-to/release-process.md`).
+
+Until the tap is public, install from source or use the pre-built tarball:
+
+### Install from tarball (pre-release testing)
+
+```sh
+# 1. Download the linux/macOS tarball from the GitHub release page (or CI artefacts)
+VERSION="v0.1.0"
+PLATFORM="darwin-arm64"   # or darwin-x64 / linux-x64 / linux-arm64
+TARBALL="assignee-${VERSION}-${PLATFORM}.tar.gz"
+
+# 2. Extract
+mkdir -p ~/opt/assignee
+tar -xzf "${TARBALL}" -C ~/opt/assignee
+
+# 3. Create a wrapper (requires node@22 on PATH)
+cat > /usr/local/bin/assignee <<'SH'
+#!/bin/bash
+exec node ~/opt/assignee/dist/index.js "$@"
+SH
+chmod +x /usr/local/bin/assignee
+
+# 4. Verify
+assignee --version
+```
+
+### Formula template
+
+The formula template at `homebrew/assignee.rb` uses `$VERSION` and `$SHA_*`
+placeholders rendered by the `update-homebrew` CI job. The template is
+committed to the main repo; the rendered formula lives in the
+`assignee-ai/homebrew-assignee` tap repo (not yet public).
+
+To test the formula template locally with a specific build:
+
+```sh
+# Compute real sha256 for your local tarball first
+sha256sum assignee-v0.1.0-darwin-arm64.tar.gz
+
+# Then install directly from the formula file
+brew install --formula homebrew/assignee.rb
+```
+
+Note: `brew install --formula <local-path>` skips the tap repo entirely.
+Use this for pre-release QA only.
+
 ## Troubleshooting
 
 ### `Error: No available formula with the name "assignee"`
 
-The tap is not added yet. Run `brew tap assignee-ai/assignee` first.
+The tap is not added yet (or not yet public). Run `brew tap assignee-ai/assignee` first.
+If the tap is not yet public, use the tarball install path above.
 
 ### `SHA256 mismatch`
 

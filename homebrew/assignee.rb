@@ -3,10 +3,33 @@
 # Install: brew tap assignee-ai/assignee && brew install assignee
 #
 # NOTE: This file is a TEMPLATE. The release workflow
-# (`.github/workflows/release.yml.disabled`) renders the $VERSION / $SHA_*
+# (`.github/workflows/release.yml`) renders the $VERSION / $SHA_*
 # variables via envsubst at publish time and commits the rendered formula to
 # the tap repo. Do not hand-edit the rendered copy in the tap — edit this
 # template instead.
+#
+# SHA256 provenance (W7-08 / W9-05):
+#   The $SHA_* values are computed by the `update-homebrew` CI job from the
+#   tarballs produced by `package-binaries` and validated against the signed
+#   release manifest at `scripts/release-manifest.signed.json` before the
+#   formula is pushed to the tap. Each tarball is additionally signed with
+#   cosign (SLSA L2). To verify independently:
+#
+#     cosign verify-blob \
+#       --certificate "${TARBALL}.pem" \
+#       --signature "${TARBALL}.sig" \
+#       --certificate-identity \
+#         "https://github.com/assignee-ai/assignee/.github/workflows/release.yml@refs/heads/main" \
+#       --certificate-oidc-issuer \
+#         "https://token.actions.githubusercontent.com" \
+#       "${TARBALL}"
+#
+#   See docs/explanation/supply-chain-provenance.md for the full guide.
+#
+# Tap-publish gate (W9-05):
+#   The `update-homebrew` job in release.yml is gated behind
+#   ASSIGNEE_TAP_PUBLISH=1 (in addition to ASSIGNEE_RELEASE_PUBLISH=1).
+#   The acquirer flips both variables post-go-decision.
 
 class Assignee < Formula
   desc "AI-Native Cloud Operator — plan and apply infrastructure with natural language"

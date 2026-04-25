@@ -3,15 +3,24 @@ name: Release
 # ──────────────────────────────────────────────────────────────────────────────
 # Release / publish workflow.
 #
-# STATUS: DISABLED (owner decision — all packages stay `"private": true` until
-# the tool is approved for public distribution). This file is kept as
-# `release.yml.disabled` so GitHub Actions never picks it up. To enable:
+# STATUS: ACTIVE — DRY-RUN by default.
 #
+# Publish-side steps (npm publish, GitHub release creation, Homebrew tap
+# update) are gated behind ASSIGNEE_RELEASE_PUBLISH=1. Build, SBOM, and
+# provenance steps run unconditionally so DRY-RUN exercises the full
+# pipeline. Tap publish is additionally gated behind ASSIGNEE_TAP_PUBLISH=1.
+#
+# To promote to a real publish post-go-decision:
 #   1. Remove `"private": true` from every package.json that should ship.
-#   2. Rename this file to `release.yml`.
-#   3. Publish is gated on `workflow_dispatch` + an explicit `confirm=YES_PUBLISH`
-#      input (see `jobs.<job>.if` below). Even after renaming, nothing happens
-#      on tag push alone — a human still has to trigger it manually.
+#   2. Set repository secret ASSIGNEE_RELEASE_PUBLISH=1 in GitHub settings,
+#      OR pass it as an environment variable in the workflow_dispatch trigger.
+#   3. Set repository secret ASSIGNEE_TAP_PUBLISH=1 to also push the
+#      Homebrew tap formula.
+#   4. Trigger the workflow via workflow_dispatch with confirm=YES_PUBLISH.
+#
+# Per feedback_no_public_artifacts: do NOT publish until the acquirer
+# explicitly flips ASSIGNEE_RELEASE_PUBLISH and ASSIGNEE_TAP_PUBLISH.
+# Tag pushes alone do NOT trigger this workflow — a human must trigger it.
 #
 # Tooling notes:
 #   - Uses `pnpm -r publish` so `workspace:*` deps are rewritten to real
@@ -44,6 +53,8 @@ name: Release
 #   - `generate-provenance` (W7-08): attaches SLSA L2 build-provenance
 #     attestation via cosign + GH OIDC. Requires `id-token: write`
 #     (already present in the top-level permissions block).
+#   - `generate-release-notes` (W9-04): runs scripts/generate-release-notes.ts
+#     to produce external-facing notes with BMAD IDs stripped.
 # ──────────────────────────────────────────────────────────────────────────────
 
 on:
@@ -186,13 +197,19 @@ jobs:
           done
 
   # --------------------------------------------------------------------------
-  # Publish to npm — gated on confirm=YES_PUBLISH. Uses `pnpm -r publish` so
-  # `workspace:*` specs are rewritten to real versions. Provenance is attached
-  # automatically because `id-token: write` is in permissions.
+  # Publish to npm — gated on ASSIGNEE_RELEASE_PUBLISH=1 AND
+  # confirm=YES_PUBLISH. Uses `pnpm -r publish` so `workspace:*` specs are
+  # rewritten to real versions. Provenance is attached automatically because
+  # `id-token: write` is in permissions.
+  #
+  # DRY-RUN default: this step is SKIPPED unless ASSIGNEE_RELEASE_PUBLISH=1
+  # is set. The acquirer flips this env var post-go-decision.
   # --------------------------------------------------------------------------
   publish-npm:
     needs: publish-dry-run
-    if: inputs.confirm == 'YES_PUBLISH'
+    if: inputs.confirm == 'YES_PUBLISH' && env.ASSIGNEE_RELEASE_PUBLISH == '1'
+    env:
+      ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH || secrets.ASSIGNEE_RELEASE_PUBLISH || '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -233,10 +250,14 @@ jobs:
   # workspace:* deps aren't resolved and runtime deps aren't bundled.
   # The Homebrew formula relies on `libexec.install Dir["*"]` picking up
   # `node_modules` from the tarball (L9-B1).
+  #
+  # DRY-RUN default: this step is SKIPPED unless ASSIGNEE_RELEASE_PUBLISH=1.
   # --------------------------------------------------------------------------
   package-binaries:
     needs: cross-platform-build
-    if: inputs.confirm == 'YES_PUBLISH'
+    if: inputs.confirm == 'YES_PUBLISH' && env.ASSIGNEE_RELEASE_PUBLISH == '1'
+    env:
+      ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH || secrets.ASSIGNEE_RELEASE_PUBLISH || '' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -299,11 +320,60 @@ jobs:
           path: ${{ env.TARBALL }}
 
   # --------------------------------------------------------------------------
+  # Generate external-facing release notes (W9-04).
+  # Strips BMAD IDs so external adopters don't see internal references.
+  # Runs unconditionally (DRY-RUN exercises this step too).
+  # --------------------------------------------------------------------------
+  generate-release-notes:
+    needs: cross-platform-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag }}
+
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+        with:
+          version: 10.32.1
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate external-facing release notes
+        id: release_notes
+        run: |
+          set -euo pipefail
+          # Get previous tag to compute the range
+          PREV_TAG=$(git tag --sort=-v:refname | grep -v "^${{ inputs.tag }}$" | head -1)
+          FROM_ARG=""
+          if [ -n "$PREV_TAG" ]; then
+            FROM_ARG="--from ${PREV_TAG}"
+          fi
+          npx tsx scripts/generate-release-notes.ts ${FROM_ARG} --to ${{ inputs.tag }} > release-notes.md
+          echo "Generated release notes:"
+          cat release-notes.md
+
+      - name: Upload release notes artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-notes
+          path: release-notes.md
+
+  # --------------------------------------------------------------------------
   # GitHub Release
+  # DRY-RUN default: this step is SKIPPED unless ASSIGNEE_RELEASE_PUBLISH=1.
   # --------------------------------------------------------------------------
   github-release:
-    needs: [publish-npm, package-binaries]
-    if: inputs.confirm == 'YES_PUBLISH'
+    needs: [publish-npm, package-binaries, generate-release-notes]
+    if: inputs.confirm == 'YES_PUBLISH' && env.ASSIGNEE_RELEASE_PUBLISH == '1'
+    env:
+      ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH || secrets.ASSIGNEE_RELEASE_PUBLISH || '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -318,27 +388,18 @@ jobs:
           merge-multiple: true
           path: release-assets/
 
-      - name: Generate changelog
-        id: changelog
-        run: |
-          # Get previous tag
-          PREV_TAG=$(git tag --sort=-v:refname | head -2 | tail -1)
-          if [ -z "$PREV_TAG" ]; then
-            CHANGELOG=$(git log --oneline --no-decorate)
-          else
-            CHANGELOG=$(git log --oneline --no-decorate "${PREV_TAG}..HEAD")
-          fi
-          # Write to file to handle multiline
-          echo "$CHANGELOG" > changelog.txt
+      - name: Download release notes
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-notes
+          path: .
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@da05d552573ad5abb5b44e4e973c02cde7e5b8b9 # v2.3.2
-        # TODO-PIN: confirm SHA for softprops/action-gh-release@v2 — using v2.3.2 SHA as placeholder
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
         with:
           tag_name: ${{ inputs.tag }}
-          body_path: changelog.txt
+          body_path: release-notes.md
           files: release-assets/*
-          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -348,10 +409,13 @@ jobs:
   # release tag. Runs on ubuntu only because cross-platform verification is
   # handled by cross-platform-build above; this is the final tarball-integrity
   # gate before anyone runs `brew install` (L9-H5).
+  # DRY-RUN default: SKIPPED unless ASSIGNEE_RELEASE_PUBLISH=1.
   # --------------------------------------------------------------------------
   smoke-test:
     needs: github-release
-    if: inputs.confirm == 'YES_PUBLISH'
+    if: inputs.confirm == 'YES_PUBLISH' && env.ASSIGNEE_RELEASE_PUBLISH == '1'
+    env:
+      ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH || secrets.ASSIGNEE_RELEASE_PUBLISH || '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -379,7 +443,7 @@ jobs:
           EXPECTED_STRIPPED="${EXPECTED#v}"
           cd smoke/unpacked
           OUTPUT="$(node dist/index.js --version)"
-          echo "assignee --version → $OUTPUT"
+          echo "assignee --version output: $OUTPUT"
           if ! echo "$OUTPUT" | grep -qE "(^|[^0-9])${EXPECTED_STRIPPED}([^0-9]|$)"; then
             echo "::error::Tarball version mismatch. Expected ${EXPECTED_STRIPPED}, got: $OUTPUT" >&2
             exit 1
@@ -388,12 +452,12 @@ jobs:
   # --------------------------------------------------------------------------
   # W7-06: Generate SPDX SBOM from the release artefacts.
   # Validates format compliance with spdx-tools. Required for CRA 2027 /
-  # NIS2 artefact attestation. Step is wired and ready for W9 to enable
-  # by renaming this file to release.yml.
+  # NIS2 artefact attestation.
+  # Runs unconditionally — DRY-RUN exercises SBOM generation.
+  # Attach-to-release step is gated on ASSIGNEE_RELEASE_PUBLISH=1.
   # --------------------------------------------------------------------------
   generate-sbom:
-    needs: smoke-test
-    if: inputs.confirm == 'YES_PUBLISH'
+    needs: cross-platform-build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -416,7 +480,7 @@ jobs:
         # W7-06: @anchore/sbom-action generates an SPDX 2.3 JSON SBOM from
         # the node_modules tree. The SBOM is anchored to the release tag
         # and includes all transitive production dependencies.
-        uses: anchore/sbom-action@v0.18.0 # TODO-PIN: confirm SHA for anchore/sbom-action@v0.18.0
+        uses: anchore/sbom-action@f325610c9f50a54015d37c8d16cb3b0e2c8f4de0 # v0.18.0
         with:
           path: .
           format: spdx-json
@@ -436,13 +500,15 @@ jobs:
           echo "SBOM validation passed."
 
       - name: Attach SBOM to GitHub Release
-        uses: softprops/action-gh-release@da05d552573ad5abb5b44e4e973c02cde7e5b8b9 # v2.3.2
-        # TODO-PIN: confirm SHA for softprops/action-gh-release@v2
+        # DRY-RUN default: SKIPPED unless ASSIGNEE_RELEASE_PUBLISH=1.
+        if: env.ASSIGNEE_RELEASE_PUBLISH == '1'
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
         with:
           tag_name: ${{ inputs.tag }}
           files: assignee-${{ inputs.tag }}-sbom.spdx.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH || secrets.ASSIGNEE_RELEASE_PUBLISH || '' }}
 
   # --------------------------------------------------------------------------
   # W7-08: SLSA L2 build-provenance attestation via cosign + GH OIDC.
@@ -452,10 +518,13 @@ jobs:
   #     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   #     <tarball>
   # See docs/explanation/supply-chain-provenance.md for full verification guide.
+  # Signing steps run unconditionally; attach step is gated on ASSIGNEE_RELEASE_PUBLISH=1.
   # --------------------------------------------------------------------------
   generate-provenance:
     needs: [smoke-test, generate-sbom]
-    if: inputs.confirm == 'YES_PUBLISH'
+    if: inputs.confirm == 'YES_PUBLISH' && env.ASSIGNEE_RELEASE_PUBLISH == '1'
+    env:
+      ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH || secrets.ASSIGNEE_RELEASE_PUBLISH || '' }}
     runs-on: ubuntu-latest
     permissions:
       # Required for cosign OIDC signing
@@ -475,7 +544,6 @@ jobs:
 
       - name: Install cosign
         uses: sigstore/cosign-installer@59acb6260d9c0ba8f4a2f9d9b48431a222b68e20 # v3.5.0
-        # TODO-PIN: confirm SHA for sigstore/cosign-installer@v3.5.0
 
       - name: Generate subject hashes for provenance
         id: hash
@@ -503,12 +571,13 @@ jobs:
               --output-certificate="${tarball}.pem" \
               --output-signature="${tarball}.sig" \
               "$tarball"
-            echo "Signed: $tarball → ${tarball}.pem + ${tarball}.sig"
+            echo "Signed: $tarball -> ${tarball}.pem + ${tarball}.sig"
           done
 
       - name: Attach provenance artefacts to release
-        uses: softprops/action-gh-release@da05d552573ad5abb5b44e4e973c02cde7e5b8b9 # v2.3.2
-        # TODO-PIN: confirm SHA for softprops/action-gh-release@v2
+        # DRY-RUN default: SKIPPED unless ASSIGNEE_RELEASE_PUBLISH=1.
+        if: env.ASSIGNEE_RELEASE_PUBLISH == '1'
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
         with:
           tag_name: ${{ inputs.tag }}
           files: |
@@ -547,10 +616,19 @@ jobs:
 
   # --------------------------------------------------------------------------
   # Update Homebrew formula — computes sha256 per arch and patches the tap.
+  # DRY-RUN default: SKIPPED unless ASSIGNEE_RELEASE_PUBLISH=1 AND
+  # ASSIGNEE_TAP_PUBLISH=1. The tap publish is an additional gate so that
+  # a registry publish can be tested independently of tap distribution.
   # --------------------------------------------------------------------------
   update-homebrew:
     needs: [smoke-test, generate-provenance]
-    if: inputs.confirm == 'YES_PUBLISH'
+    if: >
+      inputs.confirm == 'YES_PUBLISH' &&
+      env.ASSIGNEE_RELEASE_PUBLISH == '1' &&
+      env.ASSIGNEE_TAP_PUBLISH == '1'
+    env:
+      ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH || secrets.ASSIGNEE_RELEASE_PUBLISH || '' }}
+      ASSIGNEE_TAP_PUBLISH: ${{ vars.ASSIGNEE_TAP_PUBLISH || secrets.ASSIGNEE_TAP_PUBLISH || '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -623,7 +701,7 @@ jobs:
               const entry = manifest.entries.find(e => e.filename.includes(platform));
               if (!entry) { console.error('No manifest entry for platform:', platform); ok = false; continue; }
               if (entry.sha256 !== sha) {
-                console.error('SHA256 mismatch for', platform, '— manifest:', entry.sha256, 'computed:', sha);
+                console.error('SHA256 mismatch for', platform, '--- manifest:', entry.sha256, 'computed:', sha);
                 ok = false;
               } else {
                 console.log('OK:', platform, sha.substring(0, 16) + '...');
