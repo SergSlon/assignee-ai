@@ -1,0 +1,5 @@
+{
+  "role": "auditor",
+  "actions": ["list", "status", "audit-verify"],
+  "resourceGlob": "*"
+}

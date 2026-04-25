@@ -1,0 +1,5 @@
+{
+  "role": "restricted",
+  "actions": ["list"],
+  "resourceGlob": "AWS::S3::*"
+}

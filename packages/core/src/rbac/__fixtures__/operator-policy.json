@@ -1,0 +1,15 @@
+{
+  "role": "operator",
+  "actions": [
+    "plan",
+    "apply",
+    "destroy",
+    "list",
+    "status",
+    "drift",
+    "init",
+    "optimize",
+    "reconcile"
+  ],
+  "resourceGlob": "*"
+}

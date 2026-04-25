@@ -29,6 +29,7 @@ complete -c assignee -n "__fish_seen_subcommand_from plan" -l set -r -d 'Pre-set
 complete -c assignee -n "__fish_seen_subcommand_from plan" -l yes -s y -d 'Accepted for CI wrapper compatibility; plan is read-only and does not mutate.'
 complete -c assignee -n "__fish_seen_subcommand_from plan" -l quick -s q -d 'Skip wizard prompts that have defaults — only ask for required fields without a default. Shows a summary gate before generating the plan.'
 complete -c assignee -n "__fish_seen_subcommand_from plan" -l wizard -d 'Run interactive configuration wizard (prompts for required fields; plan-only, no provisioning).'
+complete -c assignee -n "__fish_seen_subcommand_from plan" -l target-account -r -d 'Target AWS account ID (12 digits). W3-04 scaffold: parses and validates only; cross-account assume-role wiring is Epic 101.'
 
 # Options for 'apply'
 complete -c assignee -n "__fish_seen_subcommand_from apply" -l wizard -d 'Run interactive configuration wizard (without this flag, defaults are auto-selected from your intent)'
@@ -40,6 +41,7 @@ complete -c assignee -n "__fish_seen_subcommand_from apply" -l source -s s -r -d
 complete -c assignee -n "__fish_seen_subcommand_from apply" -l set -r -d 'Pre-set wizard field values (repeatable)'
 complete -c assignee -n "__fish_seen_subcommand_from apply" -l output -s o -r -d 'Output format (json|text)'
 complete -c assignee -n "__fish_seen_subcommand_from apply" -l json -d 'Shorthand for --output json (emit machine-readable envelope)'
+complete -c assignee -n "__fish_seen_subcommand_from apply" -l target-account -r -d 'Target AWS account ID (12 digits). W3-04 scaffold: parses and validates only; cross-account assume-role wiring is Epic 101.'
 
 # Options for 'init'
 complete -c assignee -n "__fish_seen_subcommand_from init" -l global -d 'Create global user config (~/.config/assignee/config.yaml) instead of project config'
@@ -56,6 +58,7 @@ complete -c assignee -n "__fish_seen_subcommand_from destroy" -l recovery-window
 complete -c assignee -n "__fish_seen_subcommand_from destroy" -l force-delete-without-recovery -d 'SecretsManager secrets only: skip the recovery window and destroy the secret immediately. Mutually exclusive with --recovery-window-in-days.'
 complete -c assignee -n "__fish_seen_subcommand_from destroy" -l output -s o -r -d 'Output format (json|text)'
 complete -c assignee -n "__fish_seen_subcommand_from destroy" -l json -d 'Shorthand for --output json (emit machine-readable envelope)'
+complete -c assignee -n "__fish_seen_subcommand_from destroy" -l target-account -r -d 'Target AWS account ID (12 digits). W3-04 scaffold: parses and validates only; cross-account assume-role wiring is Epic 101.'
 
 # Options for 'drift'
 complete -c assignee -n "__fish_seen_subcommand_from drift" -l resource -r -d 'Filter by resource type'

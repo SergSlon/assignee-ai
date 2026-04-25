@@ -12,6 +12,13 @@ export const ProcessExitCode = {
   DOCTOR_WARNINGS: 2,
   POLICY_SAFETY_ABORT: 10,
   MCP_STARTUP_FAILED: 11,
+  /**
+   * W3-04 (Epic 100 Round 5): Feature not yet implemented — surface exists
+   * but wiring defers to Epic 101. Commands exit with this code when
+   * the user invokes a scaffold-only flag (e.g. --target-account)
+   * that does not have full backing logic yet.
+   */
+  NOT_IMPLEMENTED: 12,
 } as const;
 
 /**

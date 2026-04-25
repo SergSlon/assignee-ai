@@ -1,0 +1,102 @@
+/**
+ * W3-01 (Epic 100 Round 5) — `assignee audit-verify` command.
+ *
+ * Walks the local audit-log HMAC chain and reports whether it is intact.
+ * Exits 0 on a clean chain; exits non-zero with diagnostics on a broken
+ * chain or when the log file does not exist.
+ *
+ * Usage:
+ *   assignee audit-verify [--from <date>] [--to <date>] [--log-file <path>]
+ *
+ * Options:
+ *   --from <date>     Skip entries whose timestamp is before this ISO date.
+ *                     (Planned for Epic 101; today the full chain is verified.)
+ *   --to <date>       Skip entries whose timestamp is after this ISO date.
+ *                     (Planned for Epic 101; today the full chain is verified.)
+ *   --log-file <path> Override the default audit log file path.
+ *
+ * Remote sink verification (KMS-signed S3 object-lock) defers to Epic 101.
+ */
+
+import { Command } from "commander";
+import { verifyAuditLog } from "@assignee/core/audit";
+import { DEFAULT_AUDIT_LOG_FILE } from "@assignee/core/audit";
+
+// ── Command ────────────────────────────────────────────────────────────
+
+export interface AuditVerifyOptions {
+  from?: string;
+  to?: string;
+  logFile?: string;
+}
+
+export const auditVerifyCommand = new Command("audit-verify")
+  .description(
+    "Verify the HMAC chain integrity of the local audit log (W3-01). " +
+      "Exits 0 on a clean chain; non-zero with diagnostics when the chain is broken.",
+  )
+  .option(
+    "--from <date>",
+    "Start date for verification range (ISO 8601). Scaffold: full chain always verified; range filtering is Epic 101.",
+  )
+  .option(
+    "--to <date>",
+    "End date for verification range (ISO 8601). Scaffold: full chain always verified; range filtering is Epic 101.",
+  )
+  .option(
+    "--log-file <path>",
+    `Audit log file path (default: ${DEFAULT_AUDIT_LOG_FILE})`,
+  )
+  .addHelpText(
+    "after",
+    `
+Examples:
+  $ assignee audit-verify
+        Verify the full audit log HMAC chain.
+  $ assignee audit-verify --log-file /path/to/audit.log
+        Verify a specific audit log file.
+
+Note: --from / --to date filtering defers to Epic 101 (identity-squad hire).
+The current implementation always walks the full chain.
+`,
+  )
+  .action(async (opts: AuditVerifyOptions) => {
+    const logFile = opts.logFile ?? DEFAULT_AUDIT_LOG_FILE;
+
+    // Warn if --from or --to were supplied (scaffold: not yet filtering).
+    if (opts.from !== undefined || opts.to !== undefined) {
+      process.stderr.write(
+        "[audit-verify] Note: --from / --to date filtering is not yet implemented " +
+          "(Epic 101 follow-on); the full chain will be verified.\n",
+      );
+    }
+
+    let result: Awaited<ReturnType<typeof verifyAuditLog>>;
+    try {
+      result = await verifyAuditLog(logFile);
+    } catch (err) {
+      process.stderr.write(
+        `[audit-verify] Failed to read audit log at "${logFile}": ` +
+          `${err instanceof Error ? err.message : String(err)}\n`,
+      );
+      process.exit(1);
+      return;
+    }
+
+    if (result.ok) {
+      process.stdout.write(
+        `[audit-verify] Chain OK — ${result.total} HMAC-bearing record(s) verified` +
+          (result.legacyCount > 0
+            ? `, ${result.legacyCount} pre-HMAC legacy record(s) skipped`
+            : "") +
+          ".\n",
+      );
+      process.exit(0);
+    } else {
+      process.stderr.write(
+        `[audit-verify] Chain BROKEN at record index ${result.brokenAt}: ${result.reason}. ` +
+          `${result.total} record(s) checked, ${result.legacyCount} legacy record(s) skipped.\n`,
+      );
+      process.exit(1);
+    }
+  });

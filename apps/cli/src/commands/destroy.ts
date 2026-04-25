@@ -83,6 +83,8 @@ import { pickFromMatches } from "./destroy/multi-match-prompt.js";
 import { startSpinner, stopSpinner } from "../utils/display.js";
 import { installJsonStderrFilter } from "./json-stderr-filter.js";
 import { redactAccountIdIfDemoMode } from "./output-format.js";
+import { validateAccountId } from "../utils/account-id-validator.js";
+import { ProcessExitCode } from "../constants/errors.js";
 
 // ── Re-exports for back-compat (tests + external callers) ─────────────
 export { resourceConfirmationToken } from "./destroy/typed-confirm.js";
@@ -656,6 +658,12 @@ export const destroyCommand = new Command(CommandName.DESTROY)
     "--json",
     "Shorthand for --output json (emit machine-readable envelope)",
   )
+  // W3-04 (Epic 100 Round 5): multi-account surface flag. Parse + validate
+  // only. Cross-account STS assume-role wiring defers to Epic 101.
+  .option(
+    "--target-account <id>",
+    "Target AWS account ID (12 digits). W3-04 scaffold: parses and validates only; cross-account assume-role wiring is Epic 101.",
+  )
   .addHelpText(
     "after",
     `
@@ -684,6 +692,27 @@ the resource is still billing and recoverable during the window.
   )
   .action(
     async (resource: string | undefined, rawOpts: DestroyOptsWithJson) => {
+      // W3-04 (Epic 100 Round 5): validate --target-account early.
+      type DestroyOptsWithTarget = DestroyOptsWithJson & {
+        targetAccount?: string;
+      };
+      const rawOptsWithTarget = rawOpts as DestroyOptsWithTarget;
+      if (rawOptsWithTarget.targetAccount !== undefined) {
+        const validation = validateAccountId(rawOptsWithTarget.targetAccount);
+        if (!validation.valid) {
+          process.stderr.write(
+            `[destroy] ${validation.reason ?? "Invalid account ID"}\n`,
+          );
+          process.exit(ProcessExitCode.GENERIC_ERROR);
+          return;
+        }
+        process.stderr.write(
+          `[destroy] Epic 101: cross-account assume-role not yet implemented for ${rawOptsWithTarget.targetAccount}\n`,
+        );
+        process.exit(ProcessExitCode.NOT_IMPLEMENTED);
+        return;
+      }
+
       // Normalise `--json` → `--output json`.
       const json = rawOpts.json === true || rawOpts.output === "json";
       const suppressor = installJsonStdoutSuppressor(json);

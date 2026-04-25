@@ -60,6 +60,8 @@ import { renderDiscoveryBlock } from "./plan/discovery.js";
 import { runPlan } from "./plan/orchestrator.js";
 import { installJsonStderrFilter } from "./json-stderr-filter.js";
 import { redactAccountIdIfDemoMode } from "./output-format.js";
+import { validateAccountId } from "../utils/account-id-validator.js";
+import { ProcessExitCode } from "../constants/errors.js";
 
 /**
  * Buffering stdout interceptor used when `--output json` is active.
@@ -219,6 +221,12 @@ export const planCommand = new Command(CommandName.PLAN)
     // mode beyond the required-field prompts.
     "Run interactive configuration wizard (prompts for required fields; plan-only, no provisioning).",
   )
+  // W3-04 (Epic 100 Round 5): multi-account surface flag. Parse + validate
+  // only. Cross-account STS assume-role wiring defers to Epic 101.
+  .option(
+    "--target-account <id>",
+    "Target AWS account ID (12 digits). W3-04 scaffold: parses and validates only; cross-account assume-role wiring is Epic 101.",
+  )
   // Epic 92 Wave 3.b.1 (C-24 / D-01): single consolidated Examples +
   // discovery block — previously composed as two separate addHelpText
   // calls which rendered back-to-back "Examples:" headers in
@@ -240,6 +248,31 @@ export const planCommand = new Command(CommandName.PLAN)
     // is a separate boolean option and coalesces here. The local
     // `PlanOptsWithAliases` widens `PlanOpts` to expose the synonym
     // keys without mutating the shared arg-parser contract.
+    // W3-04 (Epic 100 Round 5): validate --target-account early, before any
+    // expensive graph work begins. Invalid format or placeholder → non-zero
+    // exit. Valid → Epic 101 surface message + NOT_IMPLEMENTED exit.
+    type PlanOptsWithTargetAccount = PlanOpts & {
+      targetAccount?: string;
+      wizard?: boolean;
+      json?: boolean;
+    };
+    const rawOptsWithTarget = rawOpts as PlanOptsWithTargetAccount;
+    if (rawOptsWithTarget.targetAccount !== undefined) {
+      const validation = validateAccountId(rawOptsWithTarget.targetAccount);
+      if (!validation.valid) {
+        process.stderr.write(
+          `[plan] ${validation.reason ?? "Invalid account ID"}\n`,
+        );
+        process.exit(ProcessExitCode.GENERIC_ERROR);
+        return;
+      }
+      process.stderr.write(
+        `[plan] Epic 101: cross-account assume-role not yet implemented for ${rawOptsWithTarget.targetAccount}\n`,
+      );
+      process.exit(ProcessExitCode.NOT_IMPLEMENTED);
+      return;
+    }
+
     type PlanOptsWithAliases = PlanOpts & { wizard?: boolean; json?: boolean };
     const aliasOpts = rawOpts as PlanOptsWithAliases;
     const opts: PlanOpts = { ...rawOpts };
