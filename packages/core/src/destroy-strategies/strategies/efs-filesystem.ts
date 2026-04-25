@@ -15,7 +15,6 @@ import { RESOURCE_TYPES } from "../../config/resource-types/named.js";
 import { requireAssigneeCredentials } from "../../config/aws-credentials.js";
 import { DEFAULT_AWS_REGION } from "../../config/config-schema.js";
 import type { DestroyStrategy } from "../types.js";
-import { warnDestroy } from "../warn.js";
 
 /** Poll cap for mount-target deletion propagation: 30 × 2s = 60s. */
 const EFS_MT_POLL_MAX_ATTEMPTS = 30;
@@ -51,7 +50,7 @@ export const efsFileSystemStrategy: DestroyStrategy = {
                 }),
               );
             } catch (mtErr) {
-              warnDestroy("efs_mount_target_delete_failed", {
+              ctx.warn("efs_mount_target_delete_failed", {
                 fileSystemId: resource.identifier,
                 mountTargetId: mt.MountTargetId,
                 error: mtErr instanceof Error ? mtErr.message : String(mtErr),
@@ -75,7 +74,7 @@ export const efsFileSystemStrategy: DestroyStrategy = {
         efs.destroy();
       }
     } catch (err) {
-      warnDestroy("efs_mount_target_cleanup_failed", {
+      ctx.warn("efs_mount_target_cleanup_failed", {
         identifier: resource.identifier,
         error: err instanceof Error ? err.message : String(err),
       });

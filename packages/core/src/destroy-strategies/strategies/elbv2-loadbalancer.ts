@@ -35,7 +35,6 @@ import {
 import { requireAssigneeCredentials } from "../../config/aws-credentials.js";
 import { DEFAULT_AWS_REGION } from "../../config/config-schema.js";
 import type { DestroyStrategy } from "../types.js";
-import { warnDestroy } from "../warn.js";
 
 /**
  * ALB post-delete ENI drain parameters.
@@ -70,7 +69,7 @@ export const elbv2LoadBalancerStrategy: DestroyStrategy = {
       // an unknown scheme is observable.
       const scheme = schemeMatch?.[1] ?? null;
       if (scheme === null) {
-        warnDestroy("elbv2_scheme_unknown", {
+        ctx.warn("elbv2_scheme_unknown", {
           identifier: resource.identifier,
           arn: resource.arn,
           hint: "ELBv2 scheme regex matched neither app|net|gwy — falling through to 60s blind-sleep fallback. Add the new scheme to the regex in elbv2-loadbalancer.ts.",
@@ -121,7 +120,7 @@ export const elbv2LoadBalancerStrategy: DestroyStrategy = {
       // Non-fatal: if ENI polling fails, log and continue. The downstream
       // tier 4 deletes may still succeed if AWS has released the ENIs, or
       // they'll surface their own DependencyViolation error.
-      warnDestroy("alb_eni_drain_failed", {
+      ctx.warn("alb_eni_drain_failed", {
         identifier: resource.identifier,
         error: err instanceof Error ? err.message : String(err),
       });

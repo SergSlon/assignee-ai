@@ -27,7 +27,6 @@ import {
 import { DEFAULT_AWS_REGION } from "../../config/config-schema.js";
 import { isAccessDeniedError } from "../../config/aws-errors.js";
 import type { DestroyStrategy } from "../types.js";
-import { warnDestroy } from "../warn.js";
 
 /**
  * S3 DeleteObjects accepts at most 1000 keys per request. ListObjectVersions
@@ -98,7 +97,7 @@ export const s3BucketStrategy: DestroyStrategy = {
           // IsTruncated=true but omits both next markers. Break out so
           // destroy fails fast.
           if (isTruncated && !keyMarker && !versionIdMarker) {
-            warnDestroy("s3_list_versions_truncated_without_marker", {
+            ctx.warn("s3_list_versions_truncated_without_marker", {
               identifier: resource.identifier,
               batch,
             });
@@ -132,7 +131,7 @@ export const s3BucketStrategy: DestroyStrategy = {
       }
       // Other failures (network, throttling, empty bucket) — log and continue
       // so destroy still attempts DeleteBucket.
-      warnDestroy("s3_empty_bucket_failed", {
+      ctx.warn("s3_empty_bucket_failed", {
         identifier: resource.identifier,
         error: errMsg,
       });

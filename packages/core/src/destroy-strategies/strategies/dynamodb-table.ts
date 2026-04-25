@@ -23,7 +23,6 @@ import {
 } from "../../config/aws-credentials.js";
 import { DEFAULT_AWS_REGION } from "../../config/config-schema.js";
 import type { DestroyStrategy } from "../types.js";
-import { warnDestroy } from "../warn.js";
 
 const DDB_DISABLE_PROTECTION_MAX_POLLS = 6;
 const DDB_DISABLE_PROTECTION_POLL_INTERVAL_MS = 5000;
@@ -79,7 +78,7 @@ export const dynamodbTableStrategy: DestroyStrategy = {
                   `this table and retry. Underlying error: ${errMessage}`,
               };
             }
-            warnDestroy("dynamodb_describe_after_disable_failed", {
+            ctx.warn("dynamodb_describe_after_disable_failed", {
               identifier: resource.identifier,
               attempt: i + 1,
               error: errMessage,
@@ -90,7 +89,7 @@ export const dynamodbTableStrategy: DestroyStrategy = {
             described.Table?.DeletionProtectionEnabled === true;
           if (!stillProtected) break;
           if (i === DDB_DISABLE_PROTECTION_MAX_POLLS - 1) {
-            warnDestroy("dynamodb_disable_protection_propagation_timeout", {
+            ctx.warn("dynamodb_disable_protection_propagation_timeout", {
               identifier: resource.identifier,
               polls: DDB_DISABLE_PROTECTION_MAX_POLLS,
             });
@@ -114,7 +113,7 @@ export const dynamodbTableStrategy: DestroyStrategy = {
       // role may lack dynamodb:UpdateTable. Log and continue — the main
       // CloudControl delete path below will surface a clean error if the
       // table actually *is* protected.
-      warnDestroy("dynamodb_disable_protection_failed", {
+      ctx.warn("dynamodb_disable_protection_failed", {
         identifier: resource.identifier,
         error: err instanceof Error ? err.message : String(err),
       });
