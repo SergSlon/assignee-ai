@@ -35,7 +35,6 @@
  * @see architecture.md — MCP Servers Catalog section
  */
 import { McpServerName, McpCommand } from "../constants/mcp.js";
-import { DEFAULT_AWS_REGION } from "./config-schema.js";
 import {
   requireAssigneeCredentials,
   MissingAssigneeCredentialsError,
@@ -129,7 +128,10 @@ function auditorEnv(region = AWS_REGION): Record<string, string> {
 export function getMcpServerConfigs(): Record<string, McpServerConfig> {
   const configs: Record<string, McpServerConfig> = {};
 
-  // Pricing API is only available in us-east-1.
+  // Pricing API is only available in us-east-1 (AWS constraint).
+  // W5-01: we pass the literal "us-east-1" here — NOT the operator's region
+  // — because the AWS Pricing API endpoint only exists in us-east-1.
+  // The operator's credentials are still used; only the region differs.
   // --with "botocore[crt]" is required for the pricing server's AWS
   // credential chain. Reader-scoped — gracefully omitted on operator-only
   // environments so non-pricing commands can still spawn the MCP stack.
@@ -137,7 +139,7 @@ export function getMcpServerConfigs(): Record<string, McpServerConfig> {
     configs[McpServerName.PRICING] = {
       command: McpCommand.UVX,
       args: ["--with", "botocore[crt]", MCP_PINS.AWS_PRICING],
-      env: readerEnv(DEFAULT_AWS_REGION),
+      env: readerEnv("us-east-1"),
     };
   } catch (err) {
     if (!(err instanceof MissingAssigneeCredentialsError)) throw err;

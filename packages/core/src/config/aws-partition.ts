@@ -12,10 +12,15 @@
  *   - `aws-iso`    — US ISO (us-iso-east-1, us-iso-west-1)
  *   - `aws-iso-b`  — US ISOB (us-isob-east-1)
  *
- * AWS has announced additional secret-region partitions (`aws-iso-e`,
- * `aws-iso-f`) whose region prefixes are not yet stable in the public
- * SDK. We fall back to `aws-iso` for any `us-iso*-*` prefix that is not
- * explicitly ISOB so callers still produce a well-formed ARN.
+ * AWS has announced additional partitions beyond the five originally
+ * public ones. `aws-iso-e` covers `eu-isoe-west-1` (EU Sovereign Cloud
+ * / DE BSI C5 / FR SecNumCloud). `aws-iso-f` region prefixes are not
+ * yet stable in the public SDK. We fall back to `aws-iso` for any
+ * `us-iso*-*` prefix that is not explicitly ISOB so callers still
+ * produce a well-formed ARN.
+ *
+ * W5-02 (P054 → L1-F08 + L3-F17): eu-isoe-west-1 maps to aws-iso-e.
+ * This is the EU Sovereign Cloud / DE BSI C5 / FR SecNumCloud partition.
  *
  * Construction vs. matching
  * -------------------------
@@ -59,12 +64,16 @@ export type AwsPartition =
  *   getPartitionFromRegion("cn-northwest-1")  // "aws-cn"
  *   getPartitionFromRegion("us-iso-east-1")   // "aws-iso"
  *   getPartitionFromRegion("us-isob-east-1")  // "aws-iso-b"
+ *   getPartitionFromRegion("eu-isoe-west-1")  // "aws-iso-e"
  */
 export function getPartitionFromRegion(region: string): AwsPartition {
   if (region.startsWith("us-gov-")) return "aws-us-gov";
   if (region.startsWith("cn-")) return "aws-cn";
   // ISOB must come before ISO — "us-isob-east-1".startsWith("us-iso") is true.
   if (region.startsWith("us-isob-")) return "aws-iso-b";
+  // EU Sovereign Cloud (W5-02 P054): eu-isoe-* maps to aws-iso-e.
+  // Must check eu-isoe- before falling through to the commercial aws path.
+  if (region.startsWith("eu-isoe-")) return "aws-iso-e";
   if (region.startsWith("us-iso")) return "aws-iso";
   return "aws";
 }

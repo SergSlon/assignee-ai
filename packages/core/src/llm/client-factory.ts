@@ -11,6 +11,7 @@ import { LlmError } from "../errors.js";
 import { AWS_REGION } from "../config/constants/aws.js";
 import { EnvVar } from "../constants/env-vars.js";
 import { LlmProvider } from "../constants/llm-providers.js";
+import { assertValidUrl } from "../utils/url-validator.js";
 import type { ParsedModel } from "./model-parser.js";
 
 /**
@@ -58,6 +59,9 @@ export async function createLanguageModel(
     case LlmProvider.OLLAMA: {
       const baseURL =
         process.env["OLLAMA_BASE_URL"] ?? "http://localhost:11434/v1";
+      // W5-03 (P007-tech → L4-S09): validate OLLAMA_BASE_URL before use.
+      // localhost http is allowed (that is the standard Ollama setup).
+      assertValidUrl(baseURL, "OLLAMA_BASE_URL", { allowLocalhostHttp: true });
       const { createOpenAI } = await import("@ai-sdk/openai");
       const ollama = createOpenAI({
         baseURL,
