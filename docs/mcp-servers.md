@@ -79,7 +79,7 @@ Upgraded in Story 45.2 from `awslabs.cost-management-mcp-server@1.0.2` (separate
 | Reader   | `ASSIGNEE_READER_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY`   | Pricing, Documentation, Billing MCPs  | pricing:GetProducts, ce:GetCost\*, docs read-only |
 | Auditor  | `ASSIGNEE_AUDITOR_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY`  | IAM, WA Security MCPs                 | iam:Simulate*, securityhub:Get*, guardduty:Get\*  |
 
-MCP subprocesses receive credentials via env var injection — never via shared AWS profile or IMDS. Empty credentials are never passed (throws `MissingAssigneeCredentialsError` before spawn).
+MCP subprocesses receive credentials via env var injection — never via shared AWS profile or IMDS. Credential builders resolve credentials **lazily per-server** inside a try/catch — if one server's credentials are missing or invalid, that server fails to start while the others continue normally (graceful degradation). Empty credentials are never passed to a server that successfully resolves them (`MissingAssigneeCredentialsError` is thrown before spawn if the resolution itself fails).
 
 ## Security
 

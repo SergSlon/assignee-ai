@@ -29,18 +29,21 @@ Recipes for accomplishing specific goals. Assume you already know the basics.
 See [`how-to/README.md`](how-to/README.md) for the full guide list and
 the backlog of pending how-tos.
 
-| Doc                                                    | Goal                                                             |
-| ------------------------------------------------------ | ---------------------------------------------------------------- |
-| [drift-detection.md](drift-detection.md)               | Detect and reconcile config drift between desired and live state |
-| [how-to/read-a-plan-box.md](how-to/read-a-plan-box.md) | Decode every section of the `assignee plan` plan box             |
-| [mcp-server.md](mcp-server.md)                         | Expose assignee.ai as an MCP server to your IDE                  |
-| [testing-guide.md](testing-guide.md)                   | Run the project's test suite and add new tests                   |
+| Doc                                                              | Goal                                                             |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------- |
+| [drift-detection.md](drift-detection.md)                         | Detect and reconcile config drift between desired and live state |
+| [how-to/read-a-plan-box.md](how-to/read-a-plan-box.md)           | Decode every section of the `assignee plan` plan box             |
+| [how-to/sso-authentication.md](how-to/sso-authentication.md)     | Authenticate with AWS SSO / Identity Center profiles             |
+| [how-to/install-via-homebrew.md](how-to/install-via-homebrew.md) | Install the CLI via the Homebrew tap                             |
+| [how-to/release-process.md](how-to/release-process.md)           | Run or observe the CLI release pipeline                          |
+| [mcp-server.md](mcp-server.md)                                   | Expose assignee.ai as an MCP server to your IDE                  |
+| [testing-guide.md](testing-guide.md)                             | Run the project's test suite and add new tests                   |
 
 ## [Reference](reference/) — information-oriented
 
 Dry, precise, lookup-style information. Skim the tables; search for specifics.
 See [`reference/README.md`](reference/README.md) for the migration roadmap
-(root-level reference docs move to `reference/` in Epic 100+).
+(root-level reference docs move to `reference/` in a future subwave).
 
 | Doc                                      | What it catalogs                                                                                   |
 | ---------------------------------------- | -------------------------------------------------------------------------------------------------- |
@@ -50,6 +53,7 @@ See [`reference/README.md`](reference/README.md) for the migration roadmap
 | [mcp-servers.md](mcp-servers.md)         | AWS MCP servers consumed by the pipeline (pins + tools)                                            |
 | [best-practices.md](best-practices.md)   | Best-practice rule engine and the 185 shipped rules                                                |
 | [troubleshooting.md](troubleshooting.md) | Exit codes and error-class playbook (Bedrock region, CCAPI NotFound, throttling, expired creds, …) |
+| [reference/](reference/)                 | 38 auto-generated per-type reference pages (one page per supported AWS resource type)              |
 
 ## [Explanation](explanation/) — understanding-oriented
 
@@ -57,29 +61,34 @@ Background, design rationale, and the "why" behind the system. Read these
 when you want to understand how assignee.ai thinks. See
 [`explanation/README.md`](explanation/README.md) for the full topic index.
 
-| Doc                                                                            | Topic                                                                                                                                     |
-| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| [explanation/ai-architecture.md](explanation/ai-architecture.md)               | **What the AI parts actually do** — LLM callsites, MCP servers, BP engine, HITL interrupt, with code-cited accuracy + a real captured run |
-| [architecture.md](architecture.md)                                             | Monorepo layout, 14-node LangGraph pipeline, hexagonal ports                                                                              |
-| [architecture-flows.md](architecture-flows.md)                                 | End-to-end flow diagrams for plan / apply / destroy / drift                                                                               |
-| [integration-architecture.md](integration-architecture.md)                     | How CLI, MCP server, and `@assignee/core` fit together                                                                                    |
-| [explanation/invariants.md](explanation/invariants.md)                         | Load-bearing rules (partition-aware ARN, CCAPI NotFound short-circuit, safety allowlist, …) — read before touching ARN/destroy/cred code  |
-| [explanation/oss-vs-saas.md](explanation/oss-vs-saas.md)                       | What stays OSS and what monetizes — the trust-credential argument for the split                                                           |
-| [explanation/telemetry-design.md](explanation/telemetry-design.md)             | Opt-in telemetry design + privacy model (no code yet; design doc gating future PRs)                                                       |
-| [explanation/run-ledger-design.md](explanation/run-ledger-design.md)           | Run-ID-based workflow stickiness via tags; why there is no state file                                                                     |
-| [explanation/contributing-a-bp-rule.md](explanation/contributing-a-bp-rule.md) | Worked example walkthrough for contributing a new best-practice rule                                                                      |
-| [explanation/flake-policy.md](explanation/flake-policy.md)                     | Retry-once discipline, flake-rate SLO, and quarantine process for unreliable tests                                                        |
+| Doc                                                                                                | Topic                                                                                                                                     |
+| -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| [explanation/ai-architecture.md](explanation/ai-architecture.md)                                   | **What the AI parts actually do** — LLM callsites, MCP servers, BP engine, HITL interrupt, with code-cited accuracy + a real captured run |
+| [architecture.md](architecture.md)                                                                 | Monorepo layout, 14-node LangGraph pipeline, hexagonal ports                                                                              |
+| [architecture-flows.md](architecture-flows.md)                                                     | End-to-end flow diagrams for plan / apply / destroy / drift                                                                               |
+| [integration-architecture.md](integration-architecture.md)                                         | How CLI, MCP server, and `@assignee/core` fit together                                                                                    |
+| [explanation/invariants.md](explanation/invariants.md)                                             | Load-bearing rules (partition-aware ARN, CCAPI NotFound short-circuit, safety allowlist, …) — read before touching ARN/destroy/cred code  |
+| [explanation/oss-vs-saas.md](explanation/oss-vs-saas.md)                                           | What stays OSS and what monetizes — the trust-credential argument for the split                                                           |
+| [explanation/telemetry-design.md](explanation/telemetry-design.md)                                 | Opt-in telemetry design + privacy model (no code yet; design doc gating future PRs)                                                       |
+| [explanation/run-ledger-design.md](explanation/run-ledger-design.md)                               | Run-ID-based workflow stickiness via tags; why there is no state file                                                                     |
+| [explanation/contributing-a-bp-rule.md](explanation/contributing-a-bp-rule.md)                     | Worked example walkthrough for contributing a new best-practice rule                                                                      |
+| [explanation/flake-policy.md](explanation/flake-policy.md)                                         | Retry-once discipline, flake-rate SLO, and quarantine process for unreliable tests                                                        |
+| [explanation/ci-gates.md](explanation/ci-gates.md)                                                 | Every CI gate, what it checks, and when it fires                                                                                          |
+| [explanation/codeowners-and-branch-protection.md](explanation/codeowners-and-branch-protection.md) | CODEOWNERS structure and branch-protection rules                                                                                          |
+| [explanation/domain-ownership.md](explanation/domain-ownership.md)                                 | How code ownership is sliced across the monorepo                                                                                          |
+| [explanation/sbom.md](explanation/sbom.md)                                                         | Software Bill of Materials — generation, format, and published artifact location                                                          |
+| [explanation/supply-chain-provenance.md](explanation/supply-chain-provenance.md)                   | Artifact signing, provenance attestation, and supply-chain security model                                                                 |
 
 ---
 
-## Key metrics (as of 2026-04-24)
+## Key metrics (as of 2026-04-25)
 
 | Metric                         | Count                                                                                                                                                     |
 | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Supported AWS resource types   | 38 (36 with dedicated plugins + 2 compound-only that fall through to the generic plugin: `EC2::VPCGatewayAttachment`, `EC2::SubnetRouteTableAssociation`) |
 | Compound architecture patterns | 11 first-class                                                                                                                                            |
 | LangGraph pipeline nodes       | 14                                                                                                                                                        |
-| CLI commands                   | 13                                                                                                                                                        |
+| CLI commands                   | 15                                                                                                                                                        |
 | MCP server tools               | 5                                                                                                                                                         |
 | Resource plugins               | 38 registered (36 type-specific + generic fallback; 2 compound-only types share the generic)                                                              |
 | Best practice YAML rules       | 185 (count matches `packages/best-practices/manifest.json`)                                                                                               |
@@ -90,3 +99,5 @@ when you want to understand how assignee.ai thinks. See
 | IAM credential users           | 3                                                                                                                                                         |
 | Test files                     | across 4 packages (cli + mcp-server + core + best-practices) — run `pnpm -r test:coverage` for live counts                                                |
 | RUN_E2E compound coverage      | 9/11 first-class compounds (websocket-api and vpc-public-only not yet exercised end-to-end)                                                               |
+
+> Full release history is in [`docs/engineering/changelog-history.md`](engineering/changelog-history.md).

@@ -22,13 +22,15 @@ places:
    `AWS::EC2::Route`, `AWS::SNS::Subscription`) are skipped — the
    `NO_TAG_TYPES` set in the same file is the canonical list.
 2. **Provision records** — the memory-recorder at
-   [`packages/core/src/utils/memory-recorder.ts`](../../packages/core/src/utils/memory-recorder.ts)
-   (re-exported via `apps/cli/src/utils/memory-recorder.ts`)
+   [`packages/core/src/services/memory/service.ts`](../../packages/core/src/services/memory/service.ts)
    appends a JSONL entry with the runId, resource type, ARN, region,
    desired-state SHA-256 hash, estimated monthly cost, and timestamp.
    The file lives under the user's memory dir (`~/.assignee/memory/` by
    default) and is fire-and-forget — write failures never block the
-   apply path.
+   apply path. Writes are protected by the `AdvisoryLockPort` and use an
+   atomic rename so concurrent CLI invocations never produce a corrupted
+   file (see `docs/explanation/invariants.md § Atomic-write + advisory-lock
+on memory persistence`).
 3. **Checkpoint files** — when the user pauses between plan and apply
    (Ctrl-C after the typed-name confirm) the checkpoint writer at
    [`apps/cli/src/commands/plan/checkpoint-writer.ts`](../../apps/cli/src/commands/plan/checkpoint-writer.ts)

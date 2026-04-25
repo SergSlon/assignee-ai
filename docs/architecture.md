@@ -142,48 +142,102 @@ Two registries:
 
 ### Ports
 
-| Port               | Location                                     | Purpose                   |
-| ------------------ | -------------------------------------------- | ------------------------- |
-| `LlmPort`          | `packages/core/src/ports/llm-port.ts`        | Abstract LLM interface    |
-| `ProvisioningPort` | `apps/cli/src/services/provisioning-port.ts` | Abstract CloudControl API |
+| Port               | Location                                        | Purpose                                                                 |
+| ------------------ | ----------------------------------------------- | ----------------------------------------------------------------------- |
+| `LlmPort`          | `packages/core/src/ports/llm-port.ts`           | Abstract LLM interface                                                  |
+| `ProvisioningPort` | `apps/cli/src/services/provisioning-port.ts`    | Abstract CloudControl API                                               |
+| `CheckpointerPort` | `packages/core/src/checkpoint/port.ts`          | HITL checkpoint storage (save/load/list/delete/prune)                   |
+| `AdvisoryLockPort` | `packages/core/src/locks/advisory-lock-port.ts` | Advisory lock for memory persistence (acquire/release/withLock)         |
+| `TelemetryPort`    | `packages/core/src/telemetry/telemetry-port.ts` | Telemetry event emission (emit/emitFiltered)                            |
+| `OIDCPort`         | `packages/core/src/identity/oidc-port.ts`       | Identity validation scaffold (validateToken/extractClaims/refreshToken) |
 
 ### Adapters
 
-| Adapter               | Implements       | Purpose                         |
-| --------------------- | ---------------- | ------------------------------- |
-| `LlmAdapter`          | LlmPort          | Universal LLM via Vercel AI SDK |
-| `BedrockLlmAdapter`   | LlmPort          | Direct Bedrock adapter          |
-| `MockLlmAdapter`      | LlmPort          | Testing adapter                 |
-| `CloudControlAdapter` | ProvisioningPort | AWS CloudControl API wrapper    |
+| Adapter                          | Implements       | Purpose                                                                                                                                 |
+| -------------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `LlmAdapter`                     | LlmPort          | Universal LLM via Vercel AI SDK                                                                                                         |
+| `BedrockLlmAdapter`              | LlmPort          | Direct Bedrock adapter                                                                                                                  |
+| `MockLlmAdapter`                 | LlmPort          | Testing adapter                                                                                                                         |
+| `CloudControlAdapter`            | ProvisioningPort | AWS CloudControl API wrapper                                                                                                            |
+| `InMemoryCheckpointerAdapter`    | CheckpointerPort | In-process checkpoint storage (default; test/dev)                                                                                       |
+| `FileDurableCheckpointerAdapter` | CheckpointerPort | File-backed checkpoint storage (`~/.assignee/checkpoints/`, 0o600, atomic-write, HMAC-signed); substrate for Epic 102 Postgres/DynamoDB |
+| `FileAdvisoryLockAdapter`        | AdvisoryLockPort | File-based advisory lock (`O_CREAT                                                                                                      | O_EXCL` acquisition, 10 s stale-lock reclamation); substrate for Epic 102 distributed lock service |
+| `InMemoryTelemetryAdapter`       | TelemetryPort    | Ring-buffer telemetry sink (cap 1000 events); active only when `ASSIGNEE_TELEMETRY_ADAPTER` is set                                      |
+| `InMemoryOIDCAdapter`            | OIDCPort         | Fixture-backed OIDC adapter (test only); real Okta/AzureAD/Auth0 adapter deferred to Epic 101                                           |
 
 ### Key Services
 
-| Service                      | File                        | Purpose                                                                                                                                    |
-| ---------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `graph.ts`                   | services/                   | LangGraph workflow construction                                                                                                            |
-| `graph-state.ts`             | services/                   | State annotation definition                                                                                                                |
-| `graph-routing.ts`           | services/                   | Conditional edge routing                                                                                                                   |
-| `memory.ts`                  | services/                   | JSON-file provision/failure/pattern memory                                                                                                 |
-| `checkpoint-state.ts`        | commands/apply/             | Checkpoint save/resume state at apply time                                                                                                 |
-| `checkpoint-writer.ts`       | commands/plan/              | Write plan checkpoint JSON from graph state                                                                                                |
-| `checkpoint.ts` (schema)     | @assignee/core/schema/      | Checkpoint serialize/validate schema (Zod)                                                                                                 |
-| `cleanup.ts`                 | services/                   | Orchestrates checkpoint/cache/memory cleanup                                                                                               |
-| `price-cache.ts`             | services/                   | TTL-based pricing result cache                                                                                                             |
-| `mcp-client.ts`              | services/                   | MCP server process management (singleton)                                                                                                  |
-| `list-resources.ts`          | services/                   | AWS Resource Groups Tagging API queries                                                                                                    |
-| `billing.ts`                 | services/                   | Live cost data from Cost Management MCP                                                                                                    |
-| `drift-detector.ts`          | services/                   | Deep-diff desired vs. actual state                                                                                                         |
-| `drift-detector-factory.ts`  | services/                   | Factory for drift detector with env config                                                                                                 |
-| `destroy-service.ts`         | services/                   | Single-resource destroy logic (production bulk destroy removed Story 50-3; tier ordering lives in `packages/core/src/destroy-strategies/`) |
-| `resource-resolver.ts`       | services/                   | Resolve resources by ARN or name                                                                                                           |
-| `status-aggregator.ts`       | services/                   | Aggregate resources for status command                                                                                                     |
-| `cloudcontrol-client.ts`     | services/                   | CloudControl SDK client factory                                                                                                            |
-| `cloudcontrol-adapter.ts`    | services/                   | ProvisioningPort implementation                                                                                                            |
-| `credential-detector.ts`     | services/                   | AWS credential auto-detection                                                                                                              |
-| `completion-generator.ts`    | services/                   | Shell completion generation                                                                                                                |
-| `desired-state-sanitizer.ts` | packages/core/src/services/ | Strip extraneous keys, coerce types                                                                                                        |
-| `required-field-repairer.ts` | services/                   | Fill missing required fields from defaults                                                                                                 |
-| `s3-upload.ts`               | services/                   | Static site file upload to S3                                                                                                              |
+| Service                       | File                            | Purpose                                                                                                                                    |
+| ----------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `graph.ts`                    | services/                       | LangGraph workflow construction                                                                                                            |
+| `graph-state.ts`              | services/                       | State annotation definition                                                                                                                |
+| `graph-routing.ts`            | services/                       | Conditional edge routing                                                                                                                   |
+| `memory.ts`                   | services/                       | JSON-file provision/failure/pattern memory                                                                                                 |
+| `checkpoint-state.ts`         | commands/apply/                 | Checkpoint save/resume state at apply time                                                                                                 |
+| `checkpoint-writer.ts`        | commands/plan/                  | Write plan checkpoint JSON from graph state                                                                                                |
+| `checkpoint.ts` (schema)      | @assignee/core/schema/          | Checkpoint serialize/validate schema (Zod)                                                                                                 |
+| `cleanup.ts`                  | services/                       | Orchestrates checkpoint/cache/memory cleanup                                                                                               |
+| `price-cache.ts`              | services/                       | TTL-based pricing result cache                                                                                                             |
+| `mcp-client.ts`               | services/                       | MCP server process management (singleton)                                                                                                  |
+| `list-resources.ts`           | services/                       | AWS Resource Groups Tagging API queries                                                                                                    |
+| `billing.ts`                  | services/                       | Live cost data from Cost Management MCP                                                                                                    |
+| `drift-detector.ts`           | services/                       | Deep-diff desired vs. actual state                                                                                                         |
+| `drift-detector-factory.ts`   | services/                       | Factory for drift detector with env config                                                                                                 |
+| `destroy-service.ts`          | services/                       | Single-resource destroy logic (production bulk destroy removed Story 50-3; tier ordering lives in `packages/core/src/destroy-strategies/`) |
+| `resource-resolver.ts`        | services/                       | Resolve resources by ARN or name                                                                                                           |
+| `status-aggregator.ts`        | services/                       | Aggregate resources for status command                                                                                                     |
+| `cloudcontrol-client.ts`      | services/                       | CloudControl SDK client factory                                                                                                            |
+| `cloudcontrol-adapter.ts`     | services/                       | ProvisioningPort implementation                                                                                                            |
+| `credential-detector.ts`      | services/                       | AWS credential auto-detection                                                                                                              |
+| `completion-generator.ts`     | services/                       | Shell completion generation                                                                                                                |
+| `desired-state-sanitizer.ts`  | packages/core/src/services/     | Strip extraneous keys, coerce types                                                                                                        |
+| `required-field-repairer.ts`  | services/                       | Fill missing required fields from defaults                                                                                                 |
+| `s3-upload.ts`                | services/                       | Static site file upload to S3                                                                                                              |
+| `audit/`                      | packages/core/src/audit/        | HMAC-chain audit log — `audit-log.ts`, `audit-verifier.ts`, `hmac-chain.ts`                                                                |
+| `rbac/`                       | packages/core/src/rbac/         | RBAC scaffolding — `policy-schema.ts`, `policy-store.ts`, `role-context.ts`; five fixtures (admin/operator/read-only/auditor/restricted)   |
+| `provisioning/`               | packages/core/src/provisioning/ | Partition-aware provisioner router — `ccapi-partition-support.ts` matrix + `partition-aware-provisioner.ts`                                |
+| `telemetry/spans.ts`          | packages/core/src/telemetry/    | Per-graph-node span emitter (13/14 nodes at entry + exit; HUMAN_APPROVAL excluded)                                                         |
+| `telemetry/otel-allowlist.ts` | packages/core/src/telemetry/    | `OTEL_FIELD_ALLOWLIST` + `FIELD_PRIVACY_MAP` source-side allowlist with `@privacy: PII/SYSTEM/OPERATIONAL` classification                  |
+
+## Persistence Boundaries and Sensitive-Field Redaction
+
+Three redaction layers compose additively at every persistence boundary (pattern-memory writes, checkpoint writes, OTEL emission, failure-record `errorMessage`):
+
+1. **`ResourceField.sensitive?: boolean`** (`packages/core/src/resource-plugins/`) — plugin authors mark fields whose values must never leave the machine (e.g., `MasterUserPassword`, `SecretString`, `AuthParameters`). `stripSensitiveFromElicited()` in `packages/core/src/utils/redact.ts` enforces this at every write site.
+2. **CFN property-name allowlist** (`packages/core/src/checkpoint/redaction.ts`) — CloudFormation property names known to carry secret values are allowlisted for scrubbing. Uses allowlist-not-denylist semantics to avoid false-positive matches on benign fields like `PasswordPolicy`, `UserData`, and `TokenValidityUnits`.
+3. **OTEL field allowlist** (`packages/core/src/telemetry/otel-allowlist.ts`) — `OTEL_FIELD_ALLOWLIST` with `@privacy: PII | SYSTEM | OPERATIONAL` classification. Unknown fields are dropped before forwarding to any OTEL exporter.
+
+All three layers run in this order before any data reaches disk, an external sink, or an LLM prompt.
+
+## Audit Log
+
+`packages/core/src/audit/` provides an HMAC chain-of-custody log:
+
+- **Chain primitive** (`hmac-chain.ts`): `HMAC(key, prevHmac || record_serialised)`. Each record is chained to its predecessor so tampering is detectable.
+- **Verifier** (`audit-verifier.ts`): Walks the chain and reports the first-broken index with `reason: payload-mismatch | hmac-mismatch | missing-prev`.
+- **Key** (`ASSIGNEE_AUDIT_KEY` env var): Per-tenant when set; per-process fallback with a `WARNING` log when absent.
+- **RBAC context**: Hardcoded `"operator"` role is embedded in every audit record; real per-user roles are wired in Epic 101 once OIDC enforcement lands.
+- **Future sinks**: KMS-signed remote sink + S3 object-lock storage are deferred to Epic 101.
+
+## RBAC Scaffolding
+
+`packages/core/src/rbac/` is a scaffolded RBAC layer — not yet enforced at command boundaries:
+
+- `policy-schema.ts` — Zod schema for role-permission policies.
+- `policy-store.ts` — In-memory and file-backed adapters for storing policies.
+- `role-context.ts` — Current-role resolution.
+- Five fixture policies committed under `packages/core/src/rbac/__fixtures__/`: `admin`, `operator`, `read-only`, `auditor`, `restricted`.
+
+Enforcement at CLI command boundaries is deferred to Epic 101 (OIDC + real role resolution).
+
+## Partition-Aware Provisioning
+
+`packages/core/src/provisioning/` adds a routing layer for non-commercial AWS partitions:
+
+- `ccapi-partition-support.ts` — Matrix of which resource types are available in GovCloud, China, ISO, and iso-e partitions.
+- `partition-aware-provisioner.ts` — Routes S3, IAM, and VPC through SDK-direct adapters for non-commercial partitions; sends an actionable "not supported in `<partition>`" message for unsupported types.
+
+This layer sits between `CloudControlAdapter` and the caller — no change to node code is required.
 
 ## Configuration System
 

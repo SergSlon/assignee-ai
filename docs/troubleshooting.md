@@ -17,12 +17,32 @@ The CLI follows a stable exit-code contract — scripts can branch on it.
 | `2`   | `assignee doctor` warnings-only — no hard failures, but at least one check returned `!` (e.g. optional role credentials not set, stale checkpoints); non-blocking but worth reviewing |
 | `10`  | Policy / safety abort — state guard, preflight rejection, typed-confirm mismatch, IAM safety allowlist, drift threshold, best-practice block                                          |
 | `11`  | MCP server startup failure — the spawned MCP server (cfn-mcp, aws-pricing, etc.) failed to start; check pin freshness and Python/uv install                                           |
+| `12`  | Not implemented — feature is recognised but not yet wired (e.g. `--target-account` cross-account provisioning); upgrade to a newer release or omit the flag                           |
 | `130` | Interrupted via `SIGINT` (Ctrl-C)                                                                                                                                                     |
 | `143` | Terminated via `SIGTERM`                                                                                                                                                              |
 
 Any other non-zero code is a Node-level crash — capture the stderr JSON
 log lines (`error` / `warn` events persist under `~/.assignee/logs/`)
 when filing a bug.
+
+---
+
+## Exit 12 — not implemented
+
+**Symptom.** `assignee plan --target-account <ID>` (or any command that
+accepts `--target-account`) exits immediately with code 12 and the message:
+
+```
+--target-account is not yet implemented. Cross-account assume-role support
+is planned for a future release.
+```
+
+**Cause.** The `--target-account` flag is accepted by the CLI to reserve
+the interface, but the cross-account assume-role wiring is not yet live.
+
+**Fix.** Omit `--target-account` and ensure your operator credentials
+already target the intended account. Track the issue in the project
+backlog for a status update on cross-account support.
 
 ---
 
@@ -170,14 +190,46 @@ skew.
 keys, rotate via `assignee setup --profile admin`. For clock skew,
 sync your system clock.
 
-### Throttling / `RequestLimitExceeded`
+### `InvalidSessionTokenError` — malformed session token
 
-**Symptom.** Random `RateExceeded` or `ThrottlingException` mid-apply.
+**Symptom.** `session token expired or invalid; run \`aws sso login\` if
+using SSO` at startup, before any AWS call.
 
-**Cause.** Account-level CCAPI request quota.
+**Cause.** `ASSIGNEE_OPERATOR_SESSION_TOKEN` is set but has fewer than
+16 characters — this is the minimum length validation that catches
+truncated or placeholder values.
 
-**Fix.** Retry — assignee already backs off. If it's chronic, request
-a CloudControl quota increase in the Service Quotas console.
+**Fix.** Either clear `ASSIGNEE_OPERATOR_SESSION_TOKEN` (if you are not
+using temporary STS credentials) or re-export the full token value from
+`aws sts get-session-token` / `aws sso login --profile <name>`.
+
+### SSO session expired mid-run
+
+**Symptom.** `Session expired. Run: aws sso login --profile <name>`
+appears mid-plan or mid-apply, replacing an opaque `AccessDenied` stack
+trace.
+
+**Cause.** The SSO token cached on disk expired. The CLI detects the
+Cognito expiry signal and surfaces an actionable message with the profile
+name rather than a raw API error.
+
+**Fix.** Run `aws sso login --profile <name>` (the profile name is
+printed in the error message), then retry the failed command. If you are
+not using named profiles, `aws sso login` without `--profile` refreshes
+the default profile.
+
+### Throttling / `RequestLimitExceeded` / 503 errors
+
+**Symptom.** Random `RateExceeded`, `ThrottlingException`, or HTTP 503
+responses mid-apply or during status polling.
+
+**Cause.** Account-level CCAPI request quota or transient service
+unavailability.
+
+**Fix.** Assignee's status poller uses exponential backoff with jitter
+(up to 5 retries, capped at 60 s per attempt) — a single 503 will not
+cause a hard failure. If throttling is chronic or retries exhaust,
+request a CloudControl quota increase in the Service Quotas console.
 
 ---
 
@@ -192,11 +244,15 @@ a CloudControl quota increase in the Service Quotas console.
 is opt-in per region. Your `AWS_REGION` likely has no enabled models.
 
 **Fix.** `LlmAdapter` wraps these with an actionable hint naming the
-current `AWS_REGION` and suggesting `us-east-1` or `us-west-2` (the
-canonical Bedrock regions). Either switch regions
-(`export AWS_REGION=us-east-1`) or enable the model in the AWS console
+current `AWS_REGION` and suggesting a region where Bedrock is available.
+Either switch regions (`export AWS_REGION=us-east-1`) or enable the
+model in the AWS console > Bedrock > Model access.
 
-> Bedrock > Model access.
+Known regions with Bedrock availability include `us-east-1`, `us-west-2`,
+`eu-west-1`, `eu-west-2`, `eu-north-1`, `ap-northeast-1`, and others.
+EU operators: `eu-west-2` (London) and `eu-north-1` (Stockholm) were
+added to the supported list — verify your region is in
+`KNOWN_BEDROCK_REGIONS` if the hint does not name it.
 
 ### LLM returned invalid JSON
 
@@ -298,6 +354,77 @@ from last week. Expired checkpoints are rejected at load time.
 
 **Fix.** Re-run `assignee plan` to mint a fresh checkpoint, then
 apply. Checkpoints live under `.assignee/checkpoint-<runId>.json`.
+
+---
+
+## Audit log error classes
+
+### Audit log chain broken
+
+**Symptom.** `assignee audit-verify` reports:
+`Chain broken at index <N>: <reason>` — records around that index are
+suspect.
+
+**Cause.** The append-only audit log stores a hash chain across records.
+A broken chain means at least one record was altered, deleted, or the
+log file was truncated after the fact. This is a security-relevant
+signal.
+
+**Fix.** Examine the records around the reported index in
+`~/.assignee/logs/audit-*.jsonl`. Determine whether the break was
+caused by a crash (partial write) or by external modification. If
+external, treat as a potential security incident and review CloudTrail
+for activity in the corresponding time window.
+
+### `audit-no-suppress` CI lint failure
+
+**Symptom.** CI fails with:
+`audit-no-suppress: '|| true' masking found on assignee invocation line`
+in `.github/actions/*/action.yml`.
+
+**Cause.** A `|| true` suffix on an `assignee` CLI invocation silently
+swallows non-zero exit codes, defeating the audit trail. This is a CI
+blocker enforced by the lint rule.
+
+**Fix.** Remove `|| true` from the offending line. If the command is
+expected to fail under some conditions, branch explicitly on the exit
+code (see the drift exit-code example in the "Exit 1" section above).
+
+### MCP audit log append failure
+
+**Symptom.** MCP server logs contain lines of the form:
+`{"action":"append-failed","source":"audit-log",...}` (emitted via
+`mcpLogError`).
+
+**Cause.** The MCP server could not append to the audit log — typically
+a permissions issue or a full disk on `~/.assignee/logs/`.
+
+**Fix.** Check disk space (`df -h ~/.assignee`) and permissions
+(`ls -la ~/.assignee/logs/`). The MCP server continues operating after
+an append failure, but the affected operation will not appear in
+`assignee audit-verify` output.
+
+---
+
+## Destroy registry recovery
+
+### Restoring from local backup
+
+If the provision registry (`~/.assignee/memory/`) is corrupted or
+accidentally deleted, you can restore from the last local backup:
+
+```bash
+# Restore all provisions from the default backup location
+assignee restore-provisions
+
+# Restore provisions recorded on or after a specific date
+assignee restore-provisions --from 2026-04-01
+```
+
+The command replays backup records into the registry. Resources that are
+no longer live in AWS (as seen by CloudControl) are skipped. After
+restoration, run `assignee drift` to verify the restored baseline is
+consistent with live state.
 
 ---
 

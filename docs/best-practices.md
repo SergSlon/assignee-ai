@@ -233,3 +233,13 @@ In project init:
 ```yaml
 autoFixBestPractices: true # equivalent to auto_fix: apply
 ```
+
+## Destroy Strategy Unit-Test Floor
+
+Every destroy strategy in `packages/core/src/destroy-strategies/strategies/` must maintain **≥ 80 % line coverage**. This floor was established alongside a quality pass that added dedicated test files for S3, IGW, RouteTable, DynamoDB, EFS, ELBv2, and CloudFront strategies.
+
+If you add or modify a strategy, CI enforces the 80 % floor via `pnpm -r test:coverage`. Strategies with non-trivial branching (pre-delete hooks, AWS API fallback paths) must test each branch — the coverage number alone is not sufficient.
+
+## Non-Fatal Warnings in Destroy Strategies
+
+Seven strategies — S3, IGW, RouteTable, DynamoDB, EFS, ELBv2, and CloudFront — emit non-fatal warnings via the `DestroyContext.warn` callback for advisory conditions (e.g., a dependency that cannot be cleaned up automatically, a rate-limiting backoff). Do NOT write directly to `process.stderr` or use any static `warnDestroy()` call that bypasses the context. Using the `ctx.warn` callback keeps warnings observable in tests and structured in the JSON log output.

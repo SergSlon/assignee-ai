@@ -44,8 +44,8 @@ answer either question gets cut.
 
 ### The CLI and its dependencies
 
-The `assignee` CLI binary, the 13-node LangGraph pipeline, the hexagonal
-ports / adapters under `@assignee/core`, the MCP adapters, and the MCP
+The `assignee` CLI binary, the 14-node LangGraph pipeline, the hexagonal
+ports and adapters under `@assignee/core`, the MCP adapters, and the MCP
 server (`@assignee/mcp-server`) are all MIT-licensed, forever. That
 includes:
 
@@ -59,7 +59,7 @@ includes:
   the trigger language, the auto-fix patch application, the interactive
   fix UX.
 
-### The 185 BP rules + 10 compound patterns
+### The 185 BP rules + 11 compound patterns
 
 The rule library at [`packages/best-practices/`](../../packages/best-practices)
 is MIT-licensed. Community contributions are welcome (see
@@ -67,11 +67,12 @@ is MIT-licensed. Community contributions are welcome (see
 — the network-effect bet is that a community-contributed rule library
 compounds over time and a competitor's proprietary rule set doesn't.
 
-The ten canonical compound patterns (`serverless-api`, `static-website`,
+The eleven canonical compound patterns (`serverless-api`, `static-website`,
 `efs-with-vpc`, `vpc-networking`, `vpc-public-only`, `lambda-with-exec-role`,
 `scheduled-lambda`, `message-processing`, `container-service`,
-`three-tier-web`) stay OSS for the same reason: they're a reusable
-knowledge artifact, not a monetisation surface.
+`three-tier-web`, plus the VPC Networking pattern that gained
+`AWS::EC2::EIP` as a first-class member) stay OSS for the same reason:
+they're a reusable knowledge artifact, not a monetisation surface.
 
 ### Cost preflight and mandatory tagging
 
@@ -113,11 +114,25 @@ and per-environment approval policies. That layer is server-side
 infrastructure — it has no OSS analogue and it has clear willingness to
 pay from enterprise buyers.
 
-### Signed-intent audit trail (KMS ECDSA)
+**Scaffolding present today.** `packages/core/src/rbac/` ships the Zod
+policy schema, in-memory and file-backed policy stores, and a role-context
+resolver. Five fixture policies (admin / operator / read-only / auditor /
+restricted) are committed. `packages/core/src/identity/oidc-port.ts`
+defines the `OIDCPort` interface. Neither is enforced at CLI command
+boundaries yet — enforcement is Epic 101. The OSS side ships the
+schema and interface so the architecture is inspectable before the SaaS
+tier exists.
 
-Every approved plan gets signed with a customer-managed KMS ECDSA key
-at apply time. The signature + the plan JSON + the runId are stored in
-a tamper-evident log (S3 with Object Lock + CloudTrail). Auditors can
+### Signed-intent audit trail
+
+Every approved plan can be chained into a tamper-evident HMAC log.
+The local HMAC-chain audit log (`packages/core/src/audit/`) is the OSS
+foundation: it chains every audit record to its predecessor with
+`HMAC(key, prevHmac || record_serialised)` and a verifier that reports
+the first-broken index.
+
+The SaaS tier extends this with a KMS ECDSA signature at apply time,
+S3 Object Lock storage, and a CloudTrail integration. Auditors can then
 verify "who approved what, when, and against which rule set" years
 later. This is compliance-grade provenance; consumers who need it
 (financial services, healthcare, regulated SaaS) pay for it.

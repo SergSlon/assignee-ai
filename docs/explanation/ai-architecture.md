@@ -309,6 +309,43 @@ So far we've talked about the MCP servers the pipeline _consumes_. The project a
 
 All 5 are registered at `apps/mcp-server/src/tools/index.ts:15-21`. They go through the same 14-node graph as the CLI, which means the HITL interrupt fires _inside the MCP server call_ — an agent calling `apply_plan` without `confirmed: true` gets a rejection, not a silent provision.
 
+## 8.6. Epic 100 architectural additions
+
+The following features shipped in Epic 100 and are architecturally significant — they affect the hexagonal port surface, the persistence safety model, and the observability pipeline.
+
+### New hexagonal ports (port count: 6)
+
+Four ports were added to `packages/core/`:
+
+| Port               | Location                                        | Purpose                                                                                                                                                                                                                                     |
+| ------------------ | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `CheckpointerPort` | `packages/core/src/checkpoint/port.ts`          | HITL checkpoint storage: `save` / `load` / `list` / `delete` / `prune`. Two adapters today: in-memory (dev/test) and file-durable (`~/.assignee/checkpoints/`, 0o600, atomic-write, HMAC-signed). Substrate for Epic 102 Postgres/DynamoDB. |
+| `AdvisoryLockPort` | `packages/core/src/locks/advisory-lock-port.ts` | Advisory lock for memory-persistence writes: `acquire` / `release` / `withLock`. File adapter uses `O_CREAT                                                                                                                                 | O_EXCL` atomic acquisition and 10 s stale-lock reclamation. Substrate for Epic 102 distributed lock service. |
+| `TelemetryPort`    | `packages/core/src/telemetry/telemetry-port.ts` | Telemetry event emission: `emit` / `emitFiltered`. `InMemoryTelemetryAdapter` ring-buffer (cap 1 000). Active only when `ASSIGNEE_TELEMETRY_ADAPTER` is set (no vendor phone-home by default).                                              |
+| `OIDCPort`         | `packages/core/src/identity/oidc-port.ts`       | Identity validation scaffold: `validateToken` / `extractClaims` / `refreshToken`. In-memory fixture-backed adapter today; real Okta/AzureAD/Auth0 adapter deferred to Epic 101.                                                             |
+
+### Sensitive-field marker layer (W1)
+
+`ResourceField.sensitive?: boolean` was added to the plugin elicited-field type. `stripSensitiveFromElicited()` is invoked at every persistence boundary — pattern-memory writes, checkpoint writes, OTEL emission, failure-record `errorMessage`. This composes additively with the existing CFN property-name allowlist (`checkpoint/redaction.ts`) and the OTEL field allowlist (`telemetry/otel-allowlist.ts`). Fields annotated today: RDS `MasterUserPassword`, SecretsManager `SecretString`, EventBridge Connection `AuthParameters`.
+
+### Audit log (W3-01)
+
+`packages/core/src/audit/` — HMAC-chain primitive, verifier, and writer. See `docs/explanation/invariants.md § HMAC audit chain integrity` for the full contract.
+
+### RBAC scaffolding (W3-02)
+
+`packages/core/src/rbac/` — Zod policy schema, policy store (in-memory + file adapters), role-context resolver, five fixtures. No enforcement at command boundaries yet; enforcement is Epic 101.
+
+### Partition-aware provisioning router (W5-04)
+
+`packages/core/src/provisioning/ccapi-partition-support.ts` + `partition-aware-provisioner.ts`. Routes S3, IAM, and VPC resources through SDK-direct adapters for non-commercial partitions (GovCloud, China, ISO, iso-e); other types receive an actionable "not supported in `<partition>`" message. See `docs/explanation/invariants.md § Partition-aware provisioner as the CCAPI routing layer`.
+
+### Telemetry pipeline (W6-04 + W4-05)
+
+`OTEL_FIELD_ALLOWLIST` + `FIELD_PRIVACY_MAP` source-side allowlist (`otel-allowlist.ts`) with `@privacy: PII | SYSTEM | OPERATIONAL` classification. Per-graph-node spans (`telemetry/spans.ts`) at 13/14 node entry + exit. `redactLogContent()` line-by-line filter wired into the CI artefact-upload scrub (`scripts/scrub-logs-for-upload.ts`). See `docs/explanation/telemetry-design.md` for the full observability pipeline.
+
+---
+
 ## 8.5. Epic 88-98 architectural additions
 
 The sections above were last fully updated against Epic 84 HEAD. The following features shipped in Epics 88-98 and are architecturally significant — they affect what the AI pipeline does, how BP rules behave, and how errors are surfaced.

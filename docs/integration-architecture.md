@@ -61,6 +61,12 @@ The shared foundation. Contains **zero business logic** -- only types, data, and
 - Zod schemas for checkpoints, memory, audit, drift
 - Result<T> tuple type
 - Intent sanitization (prompt injection protection)
+- Hexagonal ports: `CheckpointerPort`, `AdvisoryLockPort`, `TelemetryPort`, `OIDCPort` (adapters in the same package)
+- Audit log (`packages/core/src/audit/`) — HMAC-chain, verifier, per-tenant key
+- RBAC scaffolding (`packages/core/src/rbac/`) — Zod policy schema, in-memory + file adapters, five fixtures
+- Partition-aware provisioner (`packages/core/src/provisioning/`) — CCAPI partition matrix + SDK-direct routing for GovCloud/China/ISO
+- Telemetry spans (`packages/core/src/telemetry/spans.ts`) — per-graph-node entry/exit spans for 13/14 nodes
+- OTEL source-side allowlist (`packages/core/src/telemetry/otel-allowlist.ts`) — `OTEL_FIELD_ALLOWLIST` with `@privacy` classification and W1 sensitive-field scrub composition
 
 ### CLI (`apps/cli/`)
 
