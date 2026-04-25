@@ -306,7 +306,7 @@ describeE2E("nightly-destroy-smoke — per-type provision + destroy", () => {
           const { createGraph } = await import("../services/graph.js");
           const { createMcpClient, getMcpTools, closeMcpClient } =
             await import("../services/mcp-client.js");
-          const { ExecutionMode, ExecutionStatus } =
+          const { ExecutionMode, ExecutionStatus: _ExecutionStatus } =
             await import("@assignee/core");
 
           const mcpClient = await createMcpClient();
