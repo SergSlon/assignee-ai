@@ -21,7 +21,6 @@
  * @see packages/core/src/telemetry/otel-allowlist.ts
  */
 
-import { EnvVar } from "../constants/env-vars.js";
 import type { TelemetryEvent } from "./telemetry-event-schema.js";
 import {
   filterAllowlistedFields,

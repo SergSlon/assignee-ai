@@ -10,7 +10,7 @@
  *   - Fire-and-forget: adapter errors are swallowed by `emitFiltered`.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { InMemoryTelemetryAdapter } from "./in-memory-telemetry-adapter.js";
 import {
   isTelemetryEnabled,

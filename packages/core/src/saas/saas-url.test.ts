@@ -9,7 +9,7 @@
  * derivation helpers in isolation by resetting vi.resetModules() between
  * cases and re-importing the module.
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 
 /** Re-import saas.ts with a given AWS_REGION set, returning the exports. */
 async function importSaasWithRegion(
