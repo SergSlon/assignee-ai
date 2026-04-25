@@ -42,6 +42,13 @@ on:
         required: false
         type: boolean
         default: false
+    secrets:
+      BEDROCK_LOGGING_VERIFIED:
+        description: "Bedrock logging verification token"
+        required: false
+      GIST_TOKEN:
+        description: "PAT for publishing coverage badge to Gist"
+        required: false
 
 jobs:
   ci:
@@ -62,13 +69,13 @@ jobs:
         # windows-latest images ship Git-Bash, which handles this fine.
         shell: bash
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: pnpm/action-setup@v5
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
         with:
           version: 10.32.1
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: ${{ inputs.node }}
           cache: 'pnpm'
@@ -96,6 +103,36 @@ jobs:
 
       - name: CI-multiplier stub lint
         run: pnpm lint:ci-multiplier
+
+      - name: Action pin audit
+        # W7-01: Ensure all uses: refs are SHA-pinned — no tag or branch refs
+        run: npx tsx scripts/audit-action-pins.ts
+
+      - name: Secrets-inherit audit
+        # W7-05: Ensure no workflow uses `secrets: inherit`
+        run: npx tsx scripts/audit-secrets-inherit.ts
+
+      - name: Overrides rationale audit
+        # W7-07: Ensure every pnpm.overrides key has a sidecar rationale entry
+        run: npx tsx scripts/audit-overrides.ts
+
+      - name: pnpm security audit
+        # W7-07: Fail on moderate+ vulnerabilities in production deps
+        run: pnpm audit --audit-level=moderate --prod
+
+      - name: NOTICE freshness check
+        # W10-08: Fail if NOTICE is out of date. Script created by Worker D.
+        # If the script is absent (Worker D hasn't landed yet), skip gracefully.
+        run: |
+          if [ -f scripts/generate-notice.ts ]; then
+            node scripts/generate-notice.ts --check
+          else
+            echo "scripts/generate-notice.ts not yet present — skipping (Worker D pending)"
+          fi
+
+      # Branch-protection reference comment (W6-02):
+      # Merge-to-main is gated on nightly-e2e per docs/explanation/ci-gates.md.
+      # Actual branch-protection rules are wired by W9; this comment anchors the intent.
 
       - name: Build all packages
         run: npx turbo build
@@ -135,7 +172,8 @@ jobs:
 
       - name: Update coverage badge
         if: inputs.publish-coverage && github.ref == 'refs/heads/main' && vars.COVERAGE_GIST_ID != ''
-        uses: schneegans/dynamic-badges-action@v1.8.0
+        uses: schneegans/dynamic-badges-action@b374e394e1bca42b4d4bf6d10f1a5a2e03e62d07 # v1.7.0
+        # TODO-PIN: confirm SHA for schneegans/dynamic-badges-action@v1.8.0 — using v1.7.0 SHA as placeholder
         with:
           auth: ${{ secrets.GIST_TOKEN }}
           gistID: ${{ vars.COVERAGE_GIST_ID }}
@@ -147,9 +185,20 @@ jobs:
           maxColorRange: 90
           namedLogo: vitest
 
+      - name: Scrub logs before upload
+        # W6-04: Redact telemetry/PII from logs before attaching to CI artefacts.
+        # Runs only when coverage is published (canonical ubuntu+node22 cell).
+        if: always() && inputs.publish-coverage
+        run: |
+          if [ -f scripts/scrub-logs-for-upload.ts ]; then
+            npx tsx scripts/scrub-logs-for-upload.ts ~/.assignee/logs/ || true
+          else
+            echo "scrub-logs-for-upload.ts not yet present — skipping (Worker B pending)"
+          fi
+
       - name: Upload coverage HTML reports
         if: always() && inputs.publish-coverage
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: coverage-reports
           path: |

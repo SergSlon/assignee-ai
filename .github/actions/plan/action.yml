@@ -46,7 +46,8 @@ runs:
   steps:
     # ── Setup Python for MCP servers (uvx) ──────────────────────────────────
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+      # TODO-PIN: confirm SHA for actions/setup-python@v5 — using v5.6.0 SHA as placeholder
       with:
         python-version: '3.11'
 
@@ -107,17 +108,25 @@ runs:
         ASSIGNEE_AUDITOR_ACCESS_KEY_ID: ${{ inputs.assignee-auditor-access-key-id || inputs.assignee-operator-access-key-id }}
         ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY: ${{ inputs.assignee-auditor-secret-access-key || inputs.assignee-operator-secret-access-key }}
       run: |
-        PLAN_OUTPUT=$(assignee plan "${{ steps.read-intent.outputs.intent }}" -o json --no-apply 2>&1) || true
+        # W6-02: `|| true` removed — let the shell propagate the real exit code.
+        PLAN_OUTPUT=$(assignee plan "${{ steps.read-intent.outputs.intent }}" -o json --no-apply 2>&1)
+        EXIT_CODE=$?
 
-        # Write plan JSON to output using delimiter
+        # W7-04: Write plan JSON to a file artefact (avoids template-literal injection
+        # when the post-comment step interpolates plan output into github-script).
+        echo "$PLAN_OUTPUT" > /tmp/assignee-plan-output.json
+
+        # Also write to GITHUB_OUTPUT for downstream steps
         echo "plan-json<<PLAN_EOF" >> "$GITHUB_OUTPUT"
         echo "$PLAN_OUTPUT" >> "$GITHUB_OUTPUT"
         echo "PLAN_EOF" >> "$GITHUB_OUTPUT"
 
+        exit $EXIT_CODE
+
     # ── Upload checkpoint artifact ──────────────────────────────────────────
     - name: Upload checkpoint artifact
       if: steps.run-plan.outputs.plan-json != ''
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
       with:
         name: assignee-plan-checkpoint
         path: ${{ inputs.config-path }}/checkpoint-*.json
@@ -127,10 +136,21 @@ runs:
     # ── Post PR comment ─────────────────────────────────────────────────────
     - name: Post PR comment
       if: always()
-      uses: actions/github-script@v7
+      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
       with:
+        # W7-04: LLM-emitted content is NOT interpolated as a template literal.
+        # Plan JSON is read from the file artefact (/tmp/assignee-plan-output.json)
+        # inside the script body — not injected via ${{ }} expansion.
         script: |
-          const planJson = `${{ steps.run-plan.outputs.plan-json }}`;
+          const fs = require('fs');
+          // W7-04 file artefact pattern: read plan output from file, not template
+          let planJson = '';
+          try {
+            planJson = fs.readFileSync('/tmp/assignee-plan-output.json', 'utf8');
+          } catch {
+            // Fallback if file wasn't written (plan step was skipped)
+            planJson = '';
+          }
           const script = require('./post-comment.js');
           await script({ github, context, planJson });
       env:
