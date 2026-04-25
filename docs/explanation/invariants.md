@@ -670,6 +670,119 @@ last commit's epic-id appears in CHANGELOG Unreleased.
 
 ---
 
+## Atomic-write + advisory-lock on memory persistence
+
+**Rule.** Every write to `provisions.json`, `failures.json`, and `patterns.json` must (a) acquire the advisory lock via `AdvisoryLockPort.withLock` before touching the file, and (b) write atomically — write to a `.tmp` file, then `rename()` into place. Never write directly to the target file.
+
+**Why.** Concurrent CLI invocations or a SIGTERM mid-write can produce a truncated or interleaved JSONL file. An atomic rename ensures a reader always sees either the old complete file or the new complete file, never a partial.
+
+**Where it's enforced.**
+
+- `packages/core/src/locks/advisory-lock-port.ts` — `AdvisoryLockPort` interface.
+- `packages/core/src/locks/file-advisory-lock.ts` — file-based adapter (`O_CREAT|O_EXCL`, 10 s stale-lock reclamation).
+- `packages/core/src/services/memory/file-store.ts` — `writeProvisionRecord`, `writeFailureRecord`, `upsertPatternRecord` all acquire/release through the lock service.
+
+**Source memory.** Positive signal L1-F43.
+
+---
+
+## File mode 0o600 on all operator-data files
+
+**Rule.** Every file that holds operator-sensitive data must be created or overwritten with mode `0o600` (owner read/write only). This applies to: `patterns.json`, `provisions.json`, checkpoint files (`~/.assignee/checkpoints/`), the HMAC-chained audit log, the org-policy cache, and any backup files.
+
+**Why.** Operator data includes desired-state JSON that may contain ARNs, account IDs, and resource names. World-readable files on a shared host (CI runners, dev workstations) leak this to other processes.
+
+**Where it's enforced.**
+
+- `packages/core/src/checkpoint/file-durable-adapter.ts` — sets `0o600` after atomic write.
+- `packages/core/src/services/memory/file-store.ts` — sets `0o600` on all three memory files.
+- `packages/core/src/audit/audit-log.ts` — sets `0o600` on the HMAC audit log.
+
+---
+
+## Sensitive-field marker at every persistence boundary
+
+**Rule.** Plugin authors must annotate `ResourceField` entries with `sensitive: true` for any field whose value must not leave the local machine (e.g., `MasterUserPassword`, `SecretString`, `AuthParameters`). `stripSensitiveFromElicited()` must be called at every persistence boundary: memory writes, checkpoint writes, OTEL emit, and failure-record `errorMessage`.
+
+**Why.** A redaction layer that only covers _known_ property names by CFN convention (layer 2) misses fields that are sensitive because of what the user typed, not because of the property path. The `sensitive` marker is the plugin author's declaration of intent; the strip function is the enforcement point.
+
+**Where it's enforced.**
+
+- `packages/core/src/resource-plugins/` — `ResourceField.sensitive?: boolean` type field.
+- `packages/core/src/utils/redact.ts` — `stripSensitiveFromElicited()`.
+- `packages/core/src/telemetry/otel-allowlist.ts` — `filterSensitiveElicitedFields()` wired into `emitFiltered`.
+
+---
+
+## HMAC audit chain integrity
+
+**Rule.** Every audit-log record is chained to its predecessor via `HMAC(key, prevHmac || record_serialised)`. The chain must be verified with `audit-verifier.ts` before trusting a historical log. If any record's hash breaks, the verifier reports the first-broken index and `reason`.
+
+**Why.** An audit log without tamper detection is advisory at best. The HMAC chain makes silent modification detectable: appending, reordering, or editing any record breaks the chain from that point forward.
+
+**Where it's enforced.**
+
+- `packages/core/src/audit/hmac-chain.ts` — chain primitive.
+- `packages/core/src/audit/audit-verifier.ts` — walk + first-broken-index report.
+- `packages/core/src/audit/audit-log.ts` — writer that applies the chain on every append.
+
+**Key source.** `ASSIGNEE_AUDIT_KEY` env var; per-process fallback logged as `WARNING`.
+
+---
+
+## ARN-preserving redactor for LLM prompts
+
+**Rule.** When redacting content before including it in an LLM prompt, use the ARN-structure-preserving redactor from `packages/core/src/utils/redact.ts` (`arn-redactor` path). The redactor replaces the account-ID segment only (e.g., `arn:aws:s3:::bucket` stays readable; `arn:aws:iam::123456789012:role/foo` becomes `arn:aws:iam::[ACCOUNT]:role/foo`). Full-scrub redactors that replace the entire ARN lose structural information the LLM needs for plan generation.
+
+**Where it's enforced.**
+
+- `packages/core/src/utils/redact.ts` — `buildResourceArn` + ARN-structure-preserving replace.
+- `packages/core/src/graph/nodes/result-formatter.ts` — `state.resourceArn` mutation point.
+
+**Source memory.** `feedback_arn_builder_for_display.md`.
+
+---
+
+## Partition-aware provisioner as the CCAPI routing layer
+
+**Rule.** Any resource type that may be requested in a non-commercial partition (GovCloud `aws-us-gov`, China `aws-cn`, ISO `aws-iso`, `aws-iso-e`) must route through `partition-aware-provisioner.ts`. This module consults `ccapi-partition-support.ts` and either dispatches to an SDK-direct adapter or returns an actionable "not supported in `<partition>`" error. Do not add per-type partition branches to node code.
+
+**Why.** CCAPI coverage in non-commercial partitions is sparse and changes independently of the resource-plugin surface. Centralising the partition check in one router means new partition restrictions only need to be added to the matrix file, not scattered across plugins.
+
+**Where it's enforced.**
+
+- `packages/core/src/provisioning/ccapi-partition-support.ts` — matrix.
+- `packages/core/src/provisioning/partition-aware-provisioner.ts` — router.
+
+---
+
+## Telemetry is off by default — no vendor phone-home
+
+**Rule.** No telemetry event reaches any external sink unless the operator has explicitly set `ASSIGNEE_TELEMETRY_ADAPTER` to a non-empty value. `isTelemetryEnabled()` in `packages/core/src/telemetry/telemetry-port.ts` is the canonical gate; all `emitFiltered` paths call it first.
+
+**Why.** This is a credential-holding infrastructure tool. Silent outbound calls violate the trust model that differentiates Assignee from black-box SaaS tools. Opt-in is mandatory on both OSS and SaaS sides.
+
+**Where it's enforced.**
+
+- `packages/core/src/telemetry/telemetry-port.ts` — `isTelemetryEnabled()` + `emitFiltered` gate.
+- `packages/core/src/telemetry/in-memory-telemetry-adapter.ts` — the only concrete adapter today; calls nothing external.
+
+**Source memory.** Positive signal L1-F52. See also `docs/explanation/telemetry-design.md`.
+
+---
+
+## Destroy strategy warnings via `ctx.warn`, not stderr
+
+**Rule.** Destroy strategies that emit non-fatal warnings must use `DestroyContext.warn(msg)` — never `process.stderr.write`, `console.warn`, or any static `warnDestroy()` helper that bypasses the context object.
+
+**Why.** The `ctx.warn` callback keeps warnings observable in unit tests (where stderr is invisible) and routes them into the structured JSON log. Static side-channel writes can't be asserted in tests, making it impossible to verify that a pre-delete hook issued its expected warning.
+
+**Where it's enforced.**
+
+- `packages/core/src/destroy-strategies/strategies/` — seven strategies (S3, IGW, RouteTable, DynamoDB, EFS, ELBv2, CloudFront) use `ctx.warn` exclusively.
+
+---
+
 ## How to add a new invariant
 
 1. Write the rule (one sentence).

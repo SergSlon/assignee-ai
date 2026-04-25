@@ -24,6 +24,7 @@ When set, structured JSON diagnostic logs are written to stderr. Without it, inf
 | `2`   | `assignee doctor` returned warnings only (no hard failures, see `--short`)                                                                                                                                                                  |
 | `10`  | Policy / safety abort (typed-confirm mismatch, state guard, preflight rejection, BP block, etc.) — includes `BP_BLOCKED` envelope when a blocking best-practice finding blocks the apply path (see `packages/core/src/constants/errors.ts`) |
 | `11`  | MCP server startup failure                                                                                                                                                                                                                  |
+| `12`  | Not implemented — `--target-account` was passed but cross-account provisioning is not yet available. Scripts can detect this code to fall back gracefully without treating it as a general error.                                           |
 | `130` | Interrupted via SIGINT (Ctrl-C)                                                                                                                                                                                                             |
 | `143` | Terminated via SIGTERM                                                                                                                                                                                                                      |
 
@@ -59,12 +60,13 @@ assignee plan [intent] [options]
 
 **Options:**
 
-| Flag                    | Description                                     | Default |
-| ----------------------- | ----------------------------------------------- | ------- |
-| `-o, --output <format>` | Output format (`json` or `text`)                | `text`  |
-| `--no-apply`            | Skip the "Apply now?" prompt after plan display | false   |
-| `--set <key=value...>`  | Pre-set wizard field values (repeatable)        | -       |
-| `--source <path>`       | Source directory for static website S3 upload   | -       |
+| Flag                    | Description                                                                                           | Default |
+| ----------------------- | ----------------------------------------------------------------------------------------------------- | ------- |
+| `-o, --output <format>` | Output format (`json` or `text`)                                                                      | `text`  |
+| `--no-apply`            | Skip the "Apply now?" prompt after plan display                                                       | false   |
+| `--set <key=value...>`  | Pre-set wizard field values (repeatable)                                                              | -       |
+| `--source <path>`       | Source directory for static website S3 upload                                                         | -       |
+| `--target-account <ID>` | **Not yet implemented** — reserved for future cross-account provisioning. Exits with code `12` today. | -       |
 
 **Behavior:**
 
@@ -113,6 +115,7 @@ assignee apply [intent] [options]
 | `-c, --checkpoint <path>` | Use a saved plan checkpoint instead of re-planning                                                    | -       |
 | `--set <key=value...>`    | Pre-set wizard field values (repeatable)                                                              | -       |
 | `--source <path>`         | Source directory for static website S3 upload                                                         | -       |
+| `--target-account <ID>`   | **Not yet implemented** — reserved for future cross-account provisioning. Exits with code `12` today. | -       |
 
 **Behavior:**
 
@@ -219,9 +222,10 @@ assignee destroy <resource> [options]
 
 **Options:**
 
-| Flag        | Description                                          | Default |
-| ----------- | ---------------------------------------------------- | ------- |
-| `-y, --yes` | Auto-confirm without interactive prompt (CI/CD mode) | false   |
+| Flag                    | Description                                                                                           | Default |
+| ----------------------- | ----------------------------------------------------------------------------------------------------- | ------- |
+| `-y, --yes`             | Auto-confirm without interactive prompt (CI/CD mode)                                                  | false   |
+| `--target-account <ID>` | **Not yet implemented** — reserved for future cross-account provisioning. Exits with code `12` today. | -       |
 
 **Behavior:**
 
@@ -466,9 +470,10 @@ assignee init [options]
 
 **Options:**
 
-| Flag       | Description                                         | Default |
-| ---------- | --------------------------------------------------- | ------- |
-| `--global` | Create global user config instead of project config | false   |
+| Flag               | Description                                                                          | Default   |
+| ------------------ | ------------------------------------------------------------------------------------ | --------- |
+| `--global`         | Create global user config instead of project config                                  | false     |
+| `--profile <name>` | AWS SSO profile name to resolve credentials from. Honored when `AWS_PROFILE` is set. | `default` |
 
 **Behavior:**
 
@@ -634,4 +639,67 @@ assignee completions <shell>
 eval "$(assignee completions zsh)"    # add to ~/.zshrc
 eval "$(assignee completions bash)"   # add to ~/.bashrc
 assignee completions fish | source    # Fish shell
+```
+
+---
+
+## Audit Workflow
+
+### audit-verify
+
+Verify the integrity of the on-disk audit log chain. Each audit event is HMAC-signed with `ASSIGNEE_AUDIT_KEY`; this command re-derives the chain hash from the beginning of the log and reports the first record (if any) where the chain breaks.
+
+```
+assignee audit-verify [options]
+```
+
+**Options:**
+
+| Flag     | Description             | Default |
+| -------- | ----------------------- | ------- |
+| `--json` | Emit the report as JSON | false   |
+
+**Behavior:**
+
+Reads `~/.assignee/audit/` JSONL files in chronological order. Recomputes the HMAC chain and exits 0 if the chain is intact, exits 1 with a diagnostic line pointing to the first corrupt or missing record if not.
+
+When `ASSIGNEE_AUDIT_KEY` is unset (which causes `assignee` to auto-generate a per-process key on start), the chain **cannot** be verified across process restarts. The command prints a warning in that case and exits 2.
+
+**Examples:**
+
+```bash
+assignee audit-verify
+assignee audit-verify --json
+```
+
+---
+
+## Restore Workflow
+
+### restore-provisions
+
+Restore the local provision ledger from an exported or backed-up JSONL file. Useful after moving to a new machine or recovering from accidental deletion of `~/.assignee/memory/`.
+
+```
+assignee restore-provisions [options]
+```
+
+**Options:**
+
+| Flag            | Description                                           | Default |
+| --------------- | ----------------------------------------------------- | ------- |
+| `--from <date>` | Only restore records on or after this ISO-8601 date   | all     |
+| `-y, --yes`     | Skip the "N records will be merged — proceed?" prompt | false   |
+| `--dry-run`     | Print what would be restored without writing to disk  | false   |
+
+**Behavior:**
+
+Reads provision records from stdin (JSONL) or a file path passed as a positional argument. Merges into `~/.assignee/memory/provisions.jsonl`, deduplicating by run ID. The `--from` flag limits the restore to records whose `timestamp` field is on or after the given date (ISO-8601, e.g., `2026-01-01`), which is useful when a partial ledger is available.
+
+**Examples:**
+
+```bash
+cat backup.jsonl | assignee restore-provisions
+assignee restore-provisions backup.jsonl --from 2026-01-01
+assignee restore-provisions backup.jsonl --dry-run
 ```

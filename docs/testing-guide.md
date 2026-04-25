@@ -7,10 +7,12 @@
 ## Quick reference
 
 ```bash
-pnpm test                                    # full suite, ~20s, no AWS needed (see "pnpm -r test:coverage" for live counts)
-pnpm check-types                             # TypeScript type check
-pnpm --filter @assignee/mcp-server test:e2e  # MCP E2E against real AWS (~43 min)
-RUN_E2E=1 pnpm --filter assignee test        # CLI graph E2E against real AWS (opt-in gate)
+pnpm test                                         # full suite, ~20s, no AWS needed (see "pnpm -r test:coverage" for live counts)
+pnpm check-types                                  # TypeScript type check
+pnpm --filter @assignee/mcp-server test:e2e       # MCP E2E against real AWS (~43 min)
+RUN_E2E=1 pnpm --filter assignee test             # CLI graph E2E against real AWS (opt-in gate)
+RUN_E2E=1 npx vitest run src/e2e/nightly-destroy-smoke.test.ts  # destroy-smoke suite (opt-in)
+RUN_INSTALL_MITM_FIXTURE=1 npx vitest run src/e2e/install-sh-mitm.test.ts  # install-script MITM fixture
 ```
 
 ---
@@ -100,6 +102,51 @@ anything that runs during vitest, you **must**:
 
 Without step 1, turbo will cache the wrong result and the gate/flag becomes
 silently ineffective.
+
+### Nightly destroy-smoke gate — `RUN_E2E=1`
+
+`apps/cli/src/e2e/nightly-destroy-smoke.test.ts` exercises the destroy
+pipeline across all supported resource types, verifying that every type
+can be cleanly torn down after provisioning. Like the plan E2E suite, it
+is gated by `RUN_E2E=1`:
+
+```bash
+RUN_E2E=1 npx vitest run src/e2e/nightly-destroy-smoke.test.ts --reporter=verbose
+```
+
+Run this before any release to catch destroy regressions (pre-delete
+hooks, tier ordering, CCAPI NotFound short-circuit). It is intended for
+nightly CI — not every dev push.
+
+### Install-script MITM fixture gate — `RUN_INSTALL_MITM_FIXTURE=1`
+
+`apps/cli/src/e2e/install-sh-mitm.test.ts` runs the `install.sh` script
+against a local MITM fixture that intercepts download requests. This
+validates the install script's URL patterns, checksum verification, and
+error-path handling without hitting real GitHub releases:
+
+```bash
+RUN_INSTALL_MITM_FIXTURE=1 npx vitest run src/e2e/install-sh-mitm.test.ts
+```
+
+Set `RUN_INSTALL_MITM_FIXTURE=1` in the `tasks.test.env` array in
+`turbo.json` if you add env-var branching inside that file (same rule as
+`RUN_E2E`).
+
+### Destroy-strategy coverage floor
+
+Every destroy strategy under `packages/core/src/destroy-strategies/` is
+required to maintain **≥ 80% line coverage**. The coverage check is
+enforced by the per-strategy test files (co-located with the strategy
+source). If you add a new destroy strategy, add the corresponding
+`*.test.ts` and hit the 80% floor before merging.
+
+### Audit log tests
+
+Unit tests for the audit log live at `packages/core/src/audit/*.test.ts`.
+They cover append, hash-chain validation, and the `audit-verify` chain-
+broken reporting path. These tests run as part of the standard `pnpm test`
+suite — no special gate is needed.
 
 ---
 

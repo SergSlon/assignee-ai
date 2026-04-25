@@ -24,7 +24,26 @@ This creates:
 - **assignee-reader** — CloudFormation schema, Pricing, Cost Explorer (read-only)
 - **assignee-auditor** — IAM simulate, SecurityHub, GuardDuty, Inspector (read-only)
 
-Access keys are written to `.env` automatically. The command is idempotent — safe to re-run.
+Access keys are written to `.env` automatically. If `ASSIGNEE_OPERATOR_SESSION_TOKEN`
+is already set in the environment, `assignee setup` forwards it alongside the
+access key pair — useful for short-lived STS or assumed-role credentials.
+The command is idempotent — safe to re-run.
+
+### SSO / named profile alternative
+
+If your team uses AWS SSO, you can skip the IAM-user setup entirely by
+initialising with a named profile:
+
+```bash
+aws sso login --profile my-sso-profile
+assignee init --profile my-sso-profile
+```
+
+The `--profile` flag on `assignee init` sets `AWS_PROFILE` for all
+subsequent CLI invocations. Credentials are resolved lazily from the SSO
+token cache — no long-lived access keys are stored in `.env`. See
+[how-to/sso-authentication.md](how-to/sso-authentication.md) for the
+full SSO walk-through.
 
 > **Existing users:** re-run `assignee setup` to pick up Wave 19/20 IAM updates
 > (`s3:ListBucketVersions`, `s3:DeleteObjectVersion`, `ec2:DescribeAddresses`,
@@ -190,11 +209,36 @@ gh secret set BEDROCK_LOGGING_VERIFIED --body "true"
 
 ---
 
+---
+
+## Partition support
+
+Assignee detects the active AWS partition from the caller-identity ARN
+(`arn:aws:…` vs `arn:aws-cn:…` vs `arn:aws-us-gov:…`, etc.) and adjusts
+provisioning accordingly.
+
+| Partition       | S3, IAM, VPC provisioning | Other resource types                |
+| --------------- | ------------------------- | ----------------------------------- |
+| `aws` (default) | CloudControl API          | CloudControl API                    |
+| `aws-cn`        | SDK-direct fallback       | "Not supported in aws-cn" error     |
+| `aws-us-gov`    | SDK-direct fallback       | "Not supported in aws-us-gov" error |
+| `aws-iso*`      | SDK-direct fallback       | "Not supported in aws-iso\*" error  |
+
+**GovCloud / China / ISO operators:** S3, IAM Role, and VPC resources
+provisioned in non-commercial partitions use SDK-direct paths (not the
+CloudControl API). All other resource types emit an actionable error at
+provision time explaining which partition they are in and what is
+currently unsupported. Submit a feature request if you need additional
+types in your partition.
+
+**ARN detection:** Assignee uses the pattern `/^arn:aws[\w-]*:/` (not
+the literal `arn:aws:`) to correctly identify ARNs across all partitions,
+including GovCloud (`aws-us-gov`) and China (`aws-cn`).
+
+---
+
 ## References
 
-- Story 0.5 spec: see `_bmad-output/implementation-artifacts/_archive/done-stories/` at workspace root
-- Story 2.5 spec: same archive directory
-- Story 18.8 spec: same archive directory
 - NFR-10: All Bedrock invocations must be logged for auditability
 - NFR-13: No wildcard IAM permissions
 - NFR-14: All provisioned resources must carry mandatory traceability tags

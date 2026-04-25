@@ -12,9 +12,13 @@ is the outcome, not the explanation.
 
 ## Current how-to guides
 
-| Guide                                      | Goal                                                   |
-| ------------------------------------------ | ------------------------------------------------------ |
-| [`read-a-plan-box.md`](read-a-plan-box.md) | Decode every section of the `assignee plan` output box |
+| Guide                                                | Goal                                                         |
+| ---------------------------------------------------- | ------------------------------------------------------------ |
+| [`quickstart.md`](quickstart.md)                     | Install, bootstrap, and run your first `assignee plan`       |
+| [`read-a-plan-box.md`](read-a-plan-box.md)           | Decode every section of the `assignee plan` output box       |
+| [`sso-authentication.md`](sso-authentication.md)     | Configure AWS SSO so `assignee` uses short-lived credentials |
+| [`install-via-homebrew.md`](install-via-homebrew.md) | Install `assignee` via Homebrew on macOS / Linux             |
+| [`release-process.md`](release-process.md)           | Cut a release and publish the CLI artefacts                  |
 
 Coverage is intentionally small today — this directory is the right place
 to add new task recipes as the project grows. See "Pending how-tos" below
@@ -34,7 +38,6 @@ written). Contributors: pick one, write the recipe, open a PR.
 - Migrate an existing CloudFormation stack to `assignee` management
 - Extend `assignee` with a new resource type plugin
 - Expose the Assignee MCP server to Cursor / Claude Code
-- Run `assignee` with temporary STS credentials / AWS SSO
 
 ---
 

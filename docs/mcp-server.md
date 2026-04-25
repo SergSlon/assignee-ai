@@ -292,7 +292,9 @@ The server uses the same credential chain as the CLI. Verify credentials are set
 echo $ASSIGNEE_OPERATOR_ACCESS_KEY_ID
 ```
 
-The MCP config `env` block must include either `ASSIGNEE_OPERATOR_ACCESS_KEY_ID` / `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` or standard AWS credential environment variables. SSO sessions are not supported in the MCP context because the server runs as a background process.
+The MCP config `env` block must include either `ASSIGNEE_OPERATOR_ACCESS_KEY_ID` / `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` or standard AWS credential environment variables. Because the MCP server runs as a long-lived background process, SSO token refresh is not automatic — if you use short-lived credentials, set `ASSIGNEE_OPERATOR_SESSION_TOKEN` alongside the key pair, or rotate the credentials in the MCP config before the session expires.
+
+**Lazy credential resolution:** Each MCP sub-server (Pricing, Documentation, IAM, WA Security, Billing) resolves credentials independently with its own try/catch. A missing or invalid credential set for one server does not crash the others — the affected server reports a startup failure and the remaining servers continue normally.
 
 ### "Graph context not initialized" error
 
@@ -307,6 +309,20 @@ Check the server logs in your IDE's MCP output panel.
 ### "Unsupported resource type" from `plan_resource`
 
 Not all CloudFormation types are supported yet. The 38 user-addressable types include S3, SSM Parameter, IAM Role, EC2, RDS, Lambda, VPC, Subnet, Security Group, DynamoDB, SQS, SNS, SNS Subscription, ELBv2 (ALB/NLB), ECS Cluster, ECR Repository, CloudWatch Logs, Internet Gateway, Route Table, Route, NAT Gateway, API Gateway V2, CloudWatch Alarm, Secrets Manager, EFS FileSystem, EFS MountTarget, EventBridge Rule, EventBridge EventBus, EventBridge Connection, EventBridge ApiDestination, KMS Key, CloudFront Distribution, CloudFront OAC, S3 BucketPolicy, Elastic IP (EIP), plus 2 compound-only types (`AWS::EC2::VPCGatewayAttachment`, `AWS::EC2::SubnetRouteTableAssociation`) that fall through to the generic plugin. See [resource-types.md](./resource-types.md) for the full list.
+
+### Audit log append failures
+
+The MCP server maintains an append-only audit log of all tool invocations.
+If a write fails (disk full, permissions error), the server emits a
+structured warning via `mcpLogError`:
+
+```json
+{ "action": "append-failed", "source": "audit-log", "reason": "<OS error>" }
+```
+
+The server continues operating after an append failure, but the affected
+operation will not appear in `assignee audit-verify` output. Check disk
+space and permissions under `~/.assignee/logs/`.
 
 ### `destroy_resource` failures
 

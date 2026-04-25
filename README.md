@@ -116,6 +116,35 @@ For full diagnostics, run `assignee doctor`.
 
 See [docs/aws-bootstrap.md](docs/aws-bootstrap.md) for the IAM policy setup (operator / reader / auditor) before running `doctor`.
 
+### AWS credentials
+
+Two paths for operator credentials:
+
+**Long-term IAM credentials** (simplest for solo dev):
+
+```bash
+export ASSIGNEE_OPERATOR_ACCESS_KEY_ID=AKIAxxx
+export ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY=xxx
+```
+
+**AWS SSO / assumed roles** (recommended for teams and CI):
+
+```bash
+# Resolve credentials via a named profile in ~/.aws/config:
+assignee init --profile enterprise-sso
+
+# Equivalent using the environment variable:
+AWS_PROFILE=enterprise-sso assignee plan "..."
+```
+
+When your profile issues ASIA-prefixed short-term credentials (SSO, `aws sts assume-role`), also set:
+
+```bash
+export ASSIGNEE_OPERATOR_SESSION_TOKEN=<session-token>
+```
+
+For a full walkthrough including `aws sso login` and token-refresh error hints, see [docs/how-to/sso-authentication.md](docs/how-to/sso-authentication.md).
+
 ## Table of contents
 
 - [30-second hero](#30-second-hero)
@@ -129,6 +158,8 @@ See [docs/aws-bootstrap.md](docs/aws-bootstrap.md) for the IAM policy setup (ope
 - [Supported resource types](#supported-resource-types)
 - [MCP Server](#mcp-server)
 - [Architecture](#architecture)
+- [Privacy and data handling](#privacy-and-data-handling)
+- [Distribution and supply-chain](#distribution-and-supply-chain)
 - [Development](#development)
 - [Project status](#project-status)
 - [AWS setup](#aws-setup)
@@ -200,23 +231,29 @@ All AWS credentials stay local — they never leave your machine. Bedrock calls 
 
 13 top-level commands. Run `assignee <command> --help` for the full flag surface. See [docs/commands.md](docs/commands.md) for the full reference.
 
-| Command                        | Description                                                   | Key flags                                                         |
-| :----------------------------- | :------------------------------------------------------------ | :---------------------------------------------------------------- |
-| `assignee plan <intent>`       | Generate infrastructure plan (no AWS writes)                  | `--source`, `-o json\|text`, `--no-apply`, `--no-advice`, `--set` |
-| `assignee apply <intent>`      | Plan + provision with HITL approval                           | `--source`, `--yes`, `--wizard`, `--checkpoint`, `--set`          |
-| `assignee init`                | Initialize `.assignee/` project directory                     | `--global`                                                        |
-| `assignee list`                | Show managed resources with cost                              | `--region`, `--json`                                              |
-| `assignee destroy <resource>`  | Safe single-resource teardown with confirmation               | `--yes`                                                           |
-| `assignee drift [resource-id]` | Check resources for configuration drift                       | `--resource`, `--region`, `--status`, `--json`, `--concurrency`   |
-| `assignee reconcile`           | Reconcile drifted resources to desired state                  | `--resource`, `--dry-run`, `--auto-reconcile`                     |
-| `assignee status`              | Intelligence summary (memory, findings, costs)                | `--json`, `--region`, `--bp-coverage`                             |
-| `assignee setup`               | Automate IAM role/policy creation                             | `--profile`, `--yes`                                              |
-| `assignee completions <shell>` | Generate shell completions (bash/zsh/fish)                    | —                                                                 |
-| `assignee optimize`            | Cost-optimization recommendations per resource                | `--resource`, `--region`, `--json`, `--apply`                     |
-| `assignee doctor`              | Diagnose local environment (Node, creds, MCP) + identity info | `--json`, `--fix`, `--short`                                      |
-| `assignee version`             | Print version + Node/platform + MCP server pins               | —                                                                 |
+| Command                                       | Description                                                    | Key flags                                                                             |
+| :-------------------------------------------- | :------------------------------------------------------------- | :------------------------------------------------------------------------------------ |
+| `assignee plan <intent>`                      | Generate infrastructure plan (no AWS writes)                   | `--source`, `-o json\|text`, `--no-apply`, `--no-advice`, `--set`, `--target-account` |
+| `assignee apply <intent>`                     | Plan + provision with HITL approval                            | `--source`, `--yes`, `--wizard`, `--checkpoint`, `--set`, `--target-account`          |
+| `assignee init`                               | Initialize `.assignee/` project directory; resolve SSO creds   | `--global`, `--profile`                                                               |
+| `assignee list`                               | Show managed resources with cost                               | `--region`, `--json`                                                                  |
+| `assignee destroy <resource>`                 | Safe single-resource teardown with confirmation                | `--yes`, `--target-account`                                                           |
+| `assignee drift [resource-id]`                | Check resources for configuration drift                        | `--resource`, `--region`, `--status`, `--json`, `--concurrency`                       |
+| `assignee reconcile`                          | Reconcile drifted resources to desired state                   | `--resource`, `--dry-run`, `--auto-reconcile`                                         |
+| `assignee status`                             | Intelligence summary (memory, findings, costs)                 | `--json`, `--region`, `--bp-coverage`                                                 |
+| `assignee setup`                              | Automate IAM role/policy creation                              | `--profile`, `--yes`                                                                  |
+| `assignee completions <shell>`                | Generate shell completions (bash/zsh/fish)                     | —                                                                                     |
+| `assignee optimize`                           | Cost-optimization recommendations per resource                 | `--resource`, `--region`, `--json`, `--apply`                                         |
+| `assignee doctor`                             | Diagnose local environment (Node, creds, MCP) + identity info  | `--json`, `--fix`, `--short`                                                          |
+| `assignee version`                            | Print version + Node/platform + MCP server pins                | —                                                                                     |
+| `assignee restore-provisions [--from <date>]` | Restore `~/.assignee/memory/provisions.json` from local backup | `--from`                                                                              |
+| `assignee audit-verify`                       | Walk the local audit-log HMAC chain; exit non-zero on break    | `--log-file`                                                                          |
 
 Discovery shortcuts live under `plan --help`: supported resource types, compound patterns, and example intents. `doctor --short` replaces the removed `whoami` subcommand and prints the active IAM identity + region.
+
+**`--target-account <ID>`** is accepted by `plan`, `apply`, and `destroy`. Cross-account assume-role is not wired yet — the flag surfaces a "not yet implemented" message and exits with code 12. It is documented now so tooling can pass it through without breaking when the feature ships.
+
+**`pnpm backup-provisions`** — npm script that copies `~/.assignee/memory/provisions.json` to `~/.assignee/backups/provisions-YYYY-MM-DD.json` with 7-day rotation. Pair with `assignee restore-provisions` to recover the destroy-safety registry after an accidental delete.
 
 ---
 
@@ -415,14 +452,48 @@ Optional servers are spawned only when the corresponding command requires them.
 **Credential separation:**
 
 - `ASSIGNEE_OPERATOR_*` env vars → operator IAM user → Bedrock AI calls + CloudFormation provisioning
+- `ASSIGNEE_OPERATOR_SESSION_TOKEN` → required for ASIA-prefixed short-term credentials (SSO, assumed roles)
 - `ASSIGNEE_READER_*` env vars → reader IAM user → MCP servers with read-only access (CCAPI, pricing)
 - `ASSIGNEE_AUDITOR_*` env vars → auditor IAM user → MCP servers with audit access (CloudFormation describe/list)
+
+**Region behaviour:**
+
+- `AWS_REGION` is honoured end-to-end — setting `AWS_REGION=eu-central-1` routes Bedrock calls to the `eu.` inference profile and defaults the SaaS API URL to `https://eu-central-1.api.assignee.ai`. Unset falls back to `us-east-1`. EU operators no longer need to override a hardcoded US-East default.
+- `eu-isoe-west-1` maps correctly to the `aws-iso-e` partition for EU Sovereign Cloud workloads.
+- GovCloud, China, ISO, and EU Sovereign Cloud operators get SDK-direct provisioning for S3 buckets, IAM roles, and EC2 VPCs. Other resource types in non-commercial partitions receive a clear "not supported in `<partition>`" message.
 
 **Advanced overrides:**
 
 - `ASSIGNEE_NO_CLARIFIER=1` — skip the intent-clarifier prompt on ambiguous inputs (useful in CI / scripted flows where no operator is available to answer). Source: [`apps/cli/src/services/clarifier.ts`](apps/cli/src/services/clarifier.ts).
 - `ASSIGNEE_MCP_MAX_ACTIVE_APPLIES=N` — override the default 100 concurrent-apply ceiling on the MCP server (tune for high-concurrency CI fleets; must be a positive integer — invalid values fall back to 100). Source: [`apps/mcp-server/src/tools/apply-plan/active-applies.ts`](apps/mcp-server/src/tools/apply-plan/active-applies.ts).
+- `ASSIGNEE_SAAS_URL` / `OLLAMA_BASE_URL` — must be `https://` (or `http://localhost`); non-HTTPS values are rejected with an actionable error message.
+- `ASSIGNEE_AUDIT_KEY` — per-tenant HMAC key for the local audit log. Unset falls back to a session-ephemeral key (logged once with a warning). Set a stable value for audit chains that survive restarts.
+- `ASSIGNEE_OTEL_ENDPOINT` — opt-in OTEL telemetry collector URL. Off by default; no telemetry emitted unless set. Also requires `ASSIGNEE_TELEMETRY_ADAPTER`. PII fields are stripped unless `ASSIGNEE_OTEL_INCLUDE_PII=1`.
 - `--resource-type` shorthand warnings — shorthand aliases (`s3`, `lambda`, `rds`, etc.) resolve to a single "headline" CFN type; when the underlying service also exposes other supported types, the CLI emits a `console.warn` on stderr suggesting the explicit CFN form. Source: [`apps/cli/src/commands/resource-type-filter.ts`](apps/cli/src/commands/resource-type-filter.ts).
+
+---
+
+## Privacy and data handling
+
+All AWS credentials and elicited resource field values stay on your machine. The sensitive-field rules below apply without any configuration:
+
+- **Credential-bearing plugin fields** — `MasterUserPassword` (RDS), `SecretString` (Secrets Manager), and `AuthParameters` (EventBridge Connection) are marked `sensitive: true`. Values are redacted to `[REDACTED]` before being written to pattern-memory, checkpoints, OTEL events, or failure records. They never reach the LLM in a subsequent plan.
+- **Account ID scrubbing** — 12-digit AWS account IDs are stripped from LLM prompts and from error strings captured in failure records.
+- **Audit log** — every provision and destroy action is appended to a local HMAC chain (`~/.assignee/logs/audit.log`, mode 0o600). Run `assignee audit-verify` to walk the chain and confirm no record has been tampered with. Set `ASSIGNEE_AUDIT_KEY` to a stable secret so the chain survives restarts.
+- **Org-policy cache** — `~/.assignee/cache/org-policy-cache.json` is written mode 0o600.
+- **OTEL telemetry** — off by default. Opt in by setting `ASSIGNEE_OTEL_ENDPOINT` (collector URL) and `ASSIGNEE_TELEMETRY_ADAPTER`. PII fields are stripped from emitted events unless `ASSIGNEE_OTEL_INCLUDE_PII=1`.
+
+---
+
+## Distribution and supply-chain
+
+**Release pipeline** — `release.yml` is active but **dry-run by default**: every publish step (npm publish, GitHub release, Homebrew tap) is gated behind `ASSIGNEE_RELEASE_PUBLISH=1`. Tag pushes alone do nothing externally visible. The Homebrew tap additionally requires `ASSIGNEE_TAP_PUBLISH=1`. See [docs/how-to/release-process.md](docs/how-to/release-process.md) for the full flow.
+
+**Installer integrity** — `install.sh` SHA256-verifies the fetched tarball against a signed manifest. Downgrade attempts to known-vulnerable versions require explicit `ASSIGNEE_DOWNGRADE_ACK=1`.
+
+**Supply-chain artefacts** — every release produces an SPDX SBOM and a SLSA L2 cosign-signed provenance attestation. `NOTICE` and `THIRD-PARTY-NOTICES.md` are generated from the pnpm dependency tree in SPDX format; CI enforces freshness. All GitHub Actions steps are SHA-pinned; `pnpm audit` runs in CI. See [docs/explanation/supply-chain-provenance.md](docs/explanation/supply-chain-provenance.md) and [docs/explanation/sbom.md](docs/explanation/sbom.md) for verification instructions.
+
+**Branch protection** — `CODEOWNERS` at repo root; required-status-checks and review rules documented in [docs/explanation/codeowners-and-branch-protection.md](docs/explanation/codeowners-and-branch-protection.md).
 
 ---
 
@@ -456,50 +527,50 @@ Packages `@assignee/cli` and `@assignee/mcp-server` are `"private": true` and in
 
 ### Completed epics
 
-| Epic   | Description                                                                                                                                | Status                     |
-| :----- | :----------------------------------------------------------------------------------------------------------------------------------------- | :------------------------- |
-| **0**  | Project Foundation & Monorepo Setup                                                                                                        | Done                       |
-| **1**  | Plan Command (LangGraph, MCP, intent parsing, plan generation)                                                                             | Done                       |
-| **2**  | Apply Command (HITL, provisioning, status polling, tagging)                                                                                | Done                       |
-| **7**  | Resource Intelligence (option elicitation, pricing, doc hints — see [Supported resource types](#supported-resource-types))                 | Done                       |
-| **8**  | Compound Provisioning (architecture patterns, dependency ordering — see [Compound architecture patterns](#compound-architecture-patterns)) | Done                       |
-| **9**  | Architecture Hardening (type safety, error handling, prompt injection guard)                                                               | Done                       |
-| **10** | Plan Intelligence & Checkpoint (save/resume, guardrails, plan-to-apply)                                                                    | Done                       |
-| **11** | Expert Apply Mode (`--yes`, `--no-wizard`, `--checkpoint`)                                                                                 | Done                       |
-| **12** | Best Practices Library (YAML schema, trigger engine, 185 rules today, FSBP)                                                                | Done (12.4, 12.6 deferred) |
-| **14** | Multi-Provider LLM Gateway (Vercel AI SDK — bedrock, anthropic, openai, google, ollama)                                                    | Done (14.2-14.4 deferred)  |
-| **18** | CLI Polish & Distribution (init, list, destroy, completions, npm/brew, GH Action)                                                          | Done                       |
-| **19** | Intelligence Layer (IAM MCP, WA Security MCP, memory system, status, billing)                                                              | Done                       |
-| **20** | MCP Server (plan, apply, list, estimate tools for AI agents)                                                                               | Done                       |
-| **22** | Auto-Fix Round (apply auto-fixable BP patches with user consent)                                                                           | Done                       |
-| **23** | Real-Time Pricing Breakdown (live pricing via AWS Pricing MCP, zero hardcoded $)                                                           | Done                       |
-| **24** | Instance Type Selection UX (category filters, workload classification)                                                                     | Done                       |
-| **25** | Sprint F — Tier 1 Resources (LogGroup, IGW, RouteTable, Route, NatGateway)                                                                 | Done                       |
-| **26** | Sprint G — Tier 2 Resources (ApiGatewayV2, CloudWatch Alarm, SecretsManager)                                                               | Done                       |
-| **27** | Config Precedence (user, project, org policy, env overrides, CLI flags)                                                                    | Done                       |
-| **28** | Drift Detection (`assignee drift`, `assignee reconcile`)                                                                                   | Done                       |
-| **29** | MCP Connection Pre-Warming & Resilience                                                                                                    | Done (29.4 deferred)       |
-| **30** | Request/Response Recording & Replay                                                                                                        | Done                       |
-| **31** | CloudFormation Schema SDK Migration (direct SDK, no MCP dependency)                                                                        | Done                       |
-| **33** | Auto-Cleanup (checkpoints, cache rotation, memory TTL)                                                                                     | Done                       |
-| **34** | Quality Hardening (node robustness, code splitting, error compensation)                                                                    | Done                       |
-| **35** | Actionable Findings (interactive fix selection, fix hints, fix categories)                                                                 | Done                       |
-| **37** | Static Site Deploy (`--source`, S3 upload, CloudFront + OAC)                                                                               | Done                       |
-| **38** | Full Codebase Hardening (bounds checks, timeout caps, input validation)                                                                    | Done                       |
-| **50** | Positioning, Bloat Cut, Publish Prep                                                                                                       | In progress                |
+| Epic    | Description                                                                                                                                | Status                     |
+| :------ | :----------------------------------------------------------------------------------------------------------------------------------------- | :------------------------- |
+| **0**   | Project Foundation & Monorepo Setup                                                                                                        | Done                       |
+| **1**   | Plan Command (LangGraph, MCP, intent parsing, plan generation)                                                                             | Done                       |
+| **2**   | Apply Command (HITL, provisioning, status polling, tagging)                                                                                | Done                       |
+| **7**   | Resource Intelligence (option elicitation, pricing, doc hints — see [Supported resource types](#supported-resource-types))                 | Done                       |
+| **8**   | Compound Provisioning (architecture patterns, dependency ordering — see [Compound architecture patterns](#compound-architecture-patterns)) | Done                       |
+| **9**   | Architecture Hardening (type safety, error handling, prompt injection guard)                                                               | Done                       |
+| **10**  | Plan Intelligence & Checkpoint (save/resume, guardrails, plan-to-apply)                                                                    | Done                       |
+| **11**  | Expert Apply Mode (`--yes`, `--no-wizard`, `--checkpoint`)                                                                                 | Done                       |
+| **12**  | Best Practices Library (YAML schema, trigger engine, 185 rules today, FSBP)                                                                | Done (12.4, 12.6 deferred) |
+| **14**  | Multi-Provider LLM Gateway (Vercel AI SDK — bedrock, anthropic, openai, google, ollama)                                                    | Done (14.2-14.4 deferred)  |
+| **18**  | CLI Polish & Distribution (init, list, destroy, completions, npm/brew, GH Action)                                                          | Done                       |
+| **19**  | Intelligence Layer (IAM MCP, WA Security MCP, memory system, status, billing)                                                              | Done                       |
+| **20**  | MCP Server (plan, apply, list, estimate tools for AI agents)                                                                               | Done                       |
+| **22**  | Auto-Fix Round (apply auto-fixable BP patches with user consent)                                                                           | Done                       |
+| **23**  | Real-Time Pricing Breakdown (live pricing via AWS Pricing MCP, zero hardcoded $)                                                           | Done                       |
+| **24**  | Instance Type Selection UX (category filters, workload classification)                                                                     | Done                       |
+| **25**  | Sprint F — Tier 1 Resources (LogGroup, IGW, RouteTable, Route, NatGateway)                                                                 | Done                       |
+| **26**  | Sprint G — Tier 2 Resources (ApiGatewayV2, CloudWatch Alarm, SecretsManager)                                                               | Done                       |
+| **27**  | Config Precedence (user, project, org policy, env overrides, CLI flags)                                                                    | Done                       |
+| **28**  | Drift Detection (`assignee drift`, `assignee reconcile`)                                                                                   | Done                       |
+| **29**  | MCP Connection Pre-Warming & Resilience                                                                                                    | Done (29.4 deferred)       |
+| **30**  | Request/Response Recording & Replay                                                                                                        | Done                       |
+| **31**  | CloudFormation Schema SDK Migration (direct SDK, no MCP dependency)                                                                        | Done                       |
+| **33**  | Auto-Cleanup (checkpoints, cache rotation, memory TTL)                                                                                     | Done                       |
+| **34**  | Quality Hardening (node robustness, code splitting, error compensation)                                                                    | Done                       |
+| **35**  | Actionable Findings (interactive fix selection, fix hints, fix categories)                                                                 | Done                       |
+| **37**  | Static Site Deploy (`--source`, S3 upload, CloudFront + OAC)                                                                               | Done                       |
+| **38**  | Full Codebase Hardening (bounds checks, timeout caps, input validation)                                                                    | Done                       |
+| **50**  | Positioning, Bloat Cut, Publish Prep                                                                                                       | Done                       |
+| **100** | Security, SSO, EU-residency, distribution hardening, audit-log HMAC chain                                                                  | Done                       |
 
-### Deferred epics (post-traction / SaaS phase)
+### Deferred (noted so operators don't expect features that aren't shipped yet)
 
-| Epic   | Description                                         |
-| :----- | :-------------------------------------------------- |
-| **3**  | Auth & Identity (browser OIDC, user/org ID)         |
-| **4**  | Policy & Governance (SaaS policy engine, cost caps) |
-| **5**  | Team & Spend (admin invites, spend dashboard)       |
-| **6**  | Audit & Compliance (WORM log, X-Ray, cost anomaly)  |
-| **13** | Provider Abstraction (cloud-agnostic ports)         |
-| **15** | `assignee advice` command (multi-skill analysis)    |
-| **16** | SKILL.md Extensibility (plugin system)              |
-| **17** | Config Cascade & Profiles                           |
+| Area                                         | Status                   |
+| :------------------------------------------- | :----------------------- |
+| Full SSO/OIDC/RBAC enforcement               | Epic 101                 |
+| Cross-account `--target-account` assume-role | Epic 101                 |
+| KMS-signed remote audit-log sink             | Epic 101                 |
+| Production Postgres / DynamoDB checkpointer  | Epic 102                 |
+| Production telemetry collector + DPA         | Epic 102 / legal         |
+| Plugin extensibility                         | Epic 103                 |
+| Provider abstraction (multi-cloud)           | Deferred (post-traction) |
 
 ---
 
@@ -509,19 +580,29 @@ See [docs/aws-bootstrap.md](docs/aws-bootstrap.md) for the full IAM policy setup
 
 **Quick start:** `assignee setup` automates IAM role/policy creation. For manual setup, follow the guide.
 
+For SSO-based credential setup (recommended for teams, CI, and AWS Organizations), see [docs/how-to/sso-authentication.md](docs/how-to/sso-authentication.md). The `assignee init --profile <name>` flag is the entry point; `ASSIGNEE_OPERATOR_SESSION_TOKEN` is required when the profile issues ASIA-prefixed short-term credentials.
+
 ---
 
 ## Documentation
 
-| Document              | Location                                                 |
-| --------------------- | -------------------------------------------------------- |
-| Documentation Index   | [docs/index.md](docs/index.md)                           |
-| Architecture Flows    | [docs/architecture-flows.md](docs/architecture-flows.md) |
-| Commands Reference    | [docs/commands.md](docs/commands.md)                     |
-| Resource Types        | [docs/resource-types.md](docs/resource-types.md)         |
-| Best Practices Engine | [docs/best-practices.md](docs/best-practices.md)         |
-| AWS Setup Guide       | [docs/aws-bootstrap.md](docs/aws-bootstrap.md)           |
-| Troubleshooting       | [docs/troubleshooting.md](docs/troubleshooting.md)       |
+| Document                       | Location                                                                                                     |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| Documentation Index            | [docs/index.md](docs/index.md)                                                                               |
+| Architecture Flows             | [docs/architecture-flows.md](docs/architecture-flows.md)                                                     |
+| Commands Reference             | [docs/commands.md](docs/commands.md)                                                                         |
+| Resource Types                 | [docs/resource-types.md](docs/resource-types.md)                                                             |
+| Best Practices Engine          | [docs/best-practices.md](docs/best-practices.md)                                                             |
+| AWS Setup Guide                | [docs/aws-bootstrap.md](docs/aws-bootstrap.md)                                                               |
+| SSO / Profile Authentication   | [docs/how-to/sso-authentication.md](docs/how-to/sso-authentication.md)                                       |
+| Quickstart                     | [docs/how-to/quickstart.md](docs/how-to/quickstart.md)                                                       |
+| Release Process                | [docs/how-to/release-process.md](docs/how-to/release-process.md)                                             |
+| Install via Homebrew           | [docs/how-to/install-via-homebrew.md](docs/how-to/install-via-homebrew.md)                                   |
+| Supply Chain & Provenance      | [docs/explanation/supply-chain-provenance.md](docs/explanation/supply-chain-provenance.md)                   |
+| SBOM                           | [docs/explanation/sbom.md](docs/explanation/sbom.md)                                                         |
+| CI Gates                       | [docs/explanation/ci-gates.md](docs/explanation/ci-gates.md)                                                 |
+| CODEOWNERS & Branch Protection | [docs/explanation/codeowners-and-branch-protection.md](docs/explanation/codeowners-and-branch-protection.md) |
+| Troubleshooting                | [docs/troubleshooting.md](docs/troubleshooting.md)                                                           |
 
 ---
 
