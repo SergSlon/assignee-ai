@@ -72,13 +72,10 @@ export async function resolveOperatorCredentialProvider(
   profile?: string,
 ): Promise<OperatorCredentialResult> {
   // Dynamic import — @aws-sdk/credential-providers is declared in the CLI
-  // app's package.json and available via the monorepo's shared node_modules.
-  // The @ts-ignore suppresses TS2307 "Cannot find module" which would otherwise
-  // fire because @assignee/core's tsconfig doesn't list this as an explicit
-  // dependency. Runtime behaviour is correct: the package is always resolvable
-  // in the monorepo environment and in the CLI app bundle.
-  // @ts-ignore TS2307 — module resolved at runtime via monorepo node_modules
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // app's package.json and resolvable via the monorepo's shared node_modules.
+  // The "as string" cast bypasses TypeScript's literal-string import-resolution
+  // check; runtime resolution succeeds in both the monorepo dev environment
+  // and the CLI app bundle.
   const credProviders: Record<string, unknown> = await import(
     "@aws-sdk/credential-providers" as string
   );
