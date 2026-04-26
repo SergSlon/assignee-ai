@@ -537,6 +537,18 @@ export function validateLambdaCodeShape(
     );
   }
 
+  // MED-2: check S3ObjectVersion FIRST — when it is present without S3Bucket
+  // AND/OR S3Key, emit the more-specific error before the generic
+  // "S3Bucket without S3Key" check fires.
+  const hasS3ObjectVersion = "S3ObjectVersion" in c;
+  if (hasS3ObjectVersion && (!hasS3Bucket || !hasS3Key)) {
+    return (
+      "[ERROR] Lambda Code.S3ObjectVersion requires both Code.S3Bucket and Code.S3Key. " +
+      "[FIX] Add Code.S3Bucket and Code.S3Key alongside Code.S3ObjectVersion, " +
+      "or remove Code.S3ObjectVersion if you do not need a specific object version."
+    );
+  }
+
   if (hasS3Bucket && !hasS3Key) {
     return (
       "[ERROR] Lambda Code.S3Bucket is set but S3Key is missing. " +
@@ -714,31 +726,49 @@ export function validateSecretsManagerSecretShape(
 }
 
 /**
- * EC2::VPC — CidrBlock is required. Without it CloudControl rejects with
- * "Required property CidrBlock missing".
+ * EC2::VPC — CidrBlock is required for standard VPCs. IPAM-allocated VPCs
+ * use Ipv4IpamPoolId or Ipv6IpamPoolId instead of a fixed CidrBlock.
+ * HIGH-1: original check rejected IPAM VPCs by requiring CidrBlock
+ * unconditionally. Fix: pass when any of the three CIDR source properties
+ * is present.
  */
 export function validateEc2VpcShape(
   desiredState: Record<string, unknown>,
 ): string | null {
-  if (!desiredState["CidrBlock"]) {
+  if (
+    !desiredState["CidrBlock"] &&
+    !desiredState["Ipv4IpamPoolId"] &&
+    !desiredState["Ipv6IpamPoolId"]
+  ) {
     return (
-      "[ERROR] AWS::EC2::VPC is missing required property CidrBlock. " +
-      "[FIX] Provide a valid CIDR block (e.g. 10.0.0.0/16)."
+      "[ERROR] AWS::EC2::VPC is missing a CIDR source property. " +
+      "[FIX] Provide one of: CidrBlock (e.g. 10.0.0.0/16) for a standard VPC, " +
+      "Ipv4IpamPoolId for an IPAM-allocated VPC, or Ipv6IpamPoolId for an IPv6 IPAM VPC."
     );
   }
   return null;
 }
 
 /**
- * EC2::Subnet — CidrBlock and VpcId are both required.
+ * EC2::Subnet — CidrBlock and VpcId are both required for standard IPv4
+ * subnets. IPv6-native subnets may omit CidrBlock in favour of Ipv6Native:true
+ * or Ipv6CidrBlock. HIGH-2: original check rejected IPv6-native subnets by
+ * requiring CidrBlock unconditionally.
+ *
+ * VpcId remains required regardless of CIDR mode.
  */
 export function validateEc2SubnetShape(
   desiredState: Record<string, unknown>,
 ): string | null {
-  if (!desiredState["CidrBlock"]) {
+  if (
+    !desiredState["CidrBlock"] &&
+    !desiredState["Ipv6Native"] &&
+    !desiredState["Ipv6CidrBlock"]
+  ) {
     return (
-      "[ERROR] AWS::EC2::Subnet is missing required property CidrBlock. " +
-      "[FIX] Provide a valid CIDR block that fits within the parent VPC (e.g. 10.0.1.0/24)."
+      "[ERROR] AWS::EC2::Subnet is missing a CIDR source. " +
+      "[FIX] Provide one of: CidrBlock (e.g. 10.0.1.0/24) for an IPv4 subnet, " +
+      "Ipv6CidrBlock for an IPv6 subnet, or set Ipv6Native: true for an IPv6-only subnet."
     );
   }
   if (!desiredState["VpcId"]) {
@@ -751,8 +781,13 @@ export function validateEc2SubnetShape(
 }
 
 /**
- * RDS::DBSubnetGroup — SubnetIds must contain at least 2 subnet IDs.
- * AWS requires multi-AZ subnet coverage for DB subnet groups.
+ * RDS::DBSubnetGroup — SubnetIds must contain at least 2 subnet IDs in at
+ * least 2 different Availability Zones. AWS rejects subnet groups that span
+ * fewer than 2 AZs. This validator enforces the count threshold; AZ diversity
+ * cannot be checked at plan time without an AWS API call.
+ *
+ * LOW-1: extended error message to mention "in at least 2 different
+ * Availability Zones" so users understand the AZ-diversity requirement.
  */
 export function validateRdsDbSubnetGroupShape(
   desiredState: Record<string, unknown>,
@@ -760,8 +795,10 @@ export function validateRdsDbSubnetGroupShape(
   const subnetIds = desiredState["SubnetIds"];
   if (Array.isArray(subnetIds) && subnetIds.length < 2) {
     return (
-      `[ERROR] RDS DBSubnetGroup SubnetIds has ${subnetIds.length} entry — AWS requires at least 2 subnets in different Availability Zones. ` +
-      "[FIX] Add at least one more subnet from a different AZ to satisfy the multi-AZ coverage requirement."
+      `[ERROR] RDS DBSubnetGroup SubnetIds has ${subnetIds.length} subnet — ` +
+      "AWS requires at least 2 subnets in at least 2 different Availability Zones. " +
+      "[FIX] Add at least one more subnet from a different AZ. " +
+      "Select subnets from separate AZs (e.g. us-east-1a and us-east-1b) to satisfy the multi-AZ coverage requirement."
     );
   }
   return null;
@@ -818,11 +855,23 @@ export function validateElbv2LoadBalancerShape(
  * EFS::FileSystem — KmsKeyId must not be set unless Encrypted is also true.
  * Setting KmsKeyId without Encrypted: true silently enables encryption in
  * some SDK versions but is rejected by CloudFormation.
+ *
+ * LOW-2: treat an empty-string KmsKeyId as absent (same as not set).
+ * An empty-string KmsKeyId means "no custom key specified", which is
+ * equivalent to omitting the property entirely and should NOT trigger the
+ * "KmsKeyId without Encrypted" error.
  */
 export function validateEfsFileSystemShape(
   desiredState: Record<string, unknown>,
 ): string | null {
-  if ("KmsKeyId" in desiredState && desiredState["Encrypted"] !== true) {
+  const kmsKeyId = desiredState["KmsKeyId"];
+  // LOW-2: empty string is treated as absent — only a non-empty KmsKeyId
+  // combined with Encrypted !== true is an error.
+  const hasRealKmsKeyId =
+    "KmsKeyId" in desiredState &&
+    typeof kmsKeyId === "string" &&
+    kmsKeyId.trim() !== "";
+  if (hasRealKmsKeyId && desiredState["Encrypted"] !== true) {
     return (
       "[ERROR] EFS FileSystem sets KmsKeyId but Encrypted is not true. " +
       "[FIX] Add Encrypted: true alongside KmsKeyId, or remove KmsKeyId to use the default AWS-managed EFS key when encryption is enabled."
@@ -850,19 +899,27 @@ export function validateEventsRuleShape(
 }
 
 /**
- * KMS::Key — KeyPolicy is required. Without a key policy CloudControl
- * rejects the resource with "KeyPolicy is required".
+ * KMS::Key — KeyPolicy is NOT enforced at plan time. AWS KMS applies a
+ * sensible default key policy when KeyPolicy is omitted, granting the root
+ * account administrator access. Enforcing KeyPolicy here would be STRICTER
+ * than AWS itself, blocking legitimate "create KMS key" intents that rely on
+ * the default policy.
+ *
+ * MED-1: removed the required-KeyPolicy check. The validator function is
+ * kept and exported for callers that want to opt-in to a strict KeyPolicy
+ * enforcement (e.g. compliance pipelines), but it is NOT registered in
+ * PLAN_SHAPE_VALIDATORS.
+ *
+ * Callers that do want to enforce a key policy can invoke this directly:
+ *   validateKmsKeyShape(desiredState) — returns null (always passes now).
+ *
+ * To re-add enforcement: register `validateKmsKeyShape` back in
+ * PLAN_SHAPE_VALIDATORS[RESOURCE_TYPES.KMS_KEY].
  */
 export function validateKmsKeyShape(
-  desiredState: Record<string, unknown>,
+  _desiredState: Record<string, unknown>,
 ): string | null {
-  if (!("KeyPolicy" in desiredState)) {
-    return (
-      "[ERROR] AWS::KMS::Key is missing required property KeyPolicy. " +
-      "[FIX] Add a KeyPolicy document that grants at least the root account administrator access: " +
-      '{ "Version": "2012-10-17", "Statement": [{ "Effect": "Allow", "Principal": { "AWS": "arn:aws:iam::<account-id>:root" }, "Action": "kms:*", "Resource": "*" }] }.'
-    );
-  }
+  // MED-1: no-op. AWS supplies a default key policy when KeyPolicy is absent.
   return null;
 }
 
