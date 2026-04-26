@@ -38,6 +38,12 @@ vi.mock("../../utils/aws-resource-discovery/index.js", () => ({
   discoverRdsEngineVersions: vi.fn().mockResolvedValue([]),
   discoverRdsInstanceClasses: vi.fn().mockResolvedValue([]),
   discoverLambdaRuntimes: vi.fn().mockResolvedValue([]),
+  discoverRouteTables: vi.fn().mockResolvedValue([]),
+  discoverInternetGateways: vi.fn().mockResolvedValue([]),
+  discoverNatGateways: vi.fn().mockResolvedValue([]),
+  discoverEfsFileSystems: vi.fn().mockResolvedValue([]),
+  discoverSnsTopics: vi.fn().mockResolvedValue([]),
+  discoverKmsKeys: vi.fn().mockResolvedValue([]),
   clearDiscoveryCache: vi.fn(),
   resolveAmiFromOsName: vi.fn().mockResolvedValue(null),
   DiscoveryCacheKey: {
@@ -48,6 +54,12 @@ vi.mock("../../utils/aws-resource-discovery/index.js", () => ({
     RDS_ENGINE_VERSIONS: "discover-rds-engine-versions",
     RDS_INSTANCE_CLASSES: "discover-rds-instance-classes",
     LAMBDA_RUNTIMES: "discover-lambda-runtimes",
+    ROUTE_TABLES: "discover-route-tables",
+    INTERNET_GATEWAYS: "discover-internet-gateways",
+    NAT_GATEWAYS: "discover-nat-gateways",
+    EFS_FILE_SYSTEMS: "discover-efs-file-systems",
+    SNS_TOPICS: "discover-sns-topics",
+    KMS_KEYS: "discover-kms-keys",
   },
 }));
 

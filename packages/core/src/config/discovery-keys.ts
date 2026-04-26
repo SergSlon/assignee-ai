@@ -13,4 +13,10 @@ export const DiscoveryCacheKey = {
   VPCS: "discover-vpcs",
   AMIS: "discover-amis",
   LAMBDA_RUNTIMES: "discover-lambda-runtimes",
+  ROUTE_TABLES: "discover-route-tables",
+  INTERNET_GATEWAYS: "discover-internet-gateways",
+  NAT_GATEWAYS: "discover-nat-gateways",
+  EFS_FILE_SYSTEMS: "discover-efs-file-systems",
+  SNS_TOPICS: "discover-sns-topics",
+  KMS_KEYS: "discover-kms-keys",
 } as const;

@@ -1,14 +1,23 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
 // Mock AWS SDK clients before importing the module under test.
-const { mockEc2Send, mockSsmSend, mockRdsSend, mockWithTimeout } = vi.hoisted(
-  () => ({
-    mockEc2Send: vi.fn(),
-    mockSsmSend: vi.fn(),
-    mockRdsSend: vi.fn(),
-    mockWithTimeout: vi.fn(async (promise: Promise<unknown>) => promise),
-  }),
-);
+const {
+  mockEc2Send,
+  mockSsmSend,
+  mockRdsSend,
+  mockEfsSend,
+  mockSnsSend,
+  mockKmsSend,
+  mockWithTimeout,
+} = vi.hoisted(() => ({
+  mockEc2Send: vi.fn(),
+  mockSsmSend: vi.fn(),
+  mockRdsSend: vi.fn(),
+  mockEfsSend: vi.fn(),
+  mockSnsSend: vi.fn(),
+  mockKmsSend: vi.fn(),
+  mockWithTimeout: vi.fn(async (promise: Promise<unknown>) => promise),
+}));
 
 // NOTE: Constructor implementations use plain classes (not vi.fn) so they
 // survive vitest's mockReset:true. The class instances close over the stable
@@ -24,6 +33,40 @@ vi.mock("@aws-sdk/client-ec2", () => {
     DescribeSecurityGroupsCommand: vi.fn(),
     DescribeKeyPairsCommand: vi.fn(),
     DescribeImagesCommand: vi.fn(),
+    DescribeRouteTablesCommand: vi.fn(),
+    DescribeInternetGatewaysCommand: vi.fn(),
+    DescribeNatGatewaysCommand: vi.fn(),
+  };
+});
+
+vi.mock("@aws-sdk/client-efs", () => {
+  class EFSClient {
+    send = mockEfsSend;
+  }
+  return {
+    EFSClient,
+    DescribeFileSystemsCommand: vi.fn(),
+  };
+});
+
+vi.mock("@aws-sdk/client-sns", () => {
+  class SNSClient {
+    send = mockSnsSend;
+  }
+  return {
+    SNSClient,
+    ListTopicsCommand: vi.fn(),
+  };
+});
+
+vi.mock("@aws-sdk/client-kms", () => {
+  class KMSClient {
+    send = mockKmsSend;
+  }
+  return {
+    KMSClient,
+    ListKeysCommand: vi.fn(),
+    ListAliasesCommand: vi.fn(),
   };
 });
 
@@ -62,6 +105,12 @@ import {
   discoverRdsInstanceClasses,
   searchAmis,
   clearDiscoveryCache,
+  discoverRouteTables,
+  discoverInternetGateways,
+  discoverNatGateways,
+  discoverEfsFileSystems,
+  discoverSnsTopics,
+  discoverKmsKeys,
 } from "./aws-resource-discovery/index.js";
 
 describe("aws-resource-discovery", () => {
@@ -122,6 +171,42 @@ describe("aws-resource-discovery", () => {
       expect(mockEc2Send).not.toHaveBeenCalled();
     });
 
+    it("discoverRouteTables returns [] without invoking the SDK", async () => {
+      const result = await discoverRouteTables();
+      expect(result).toEqual([]);
+      expect(mockEc2Send).not.toHaveBeenCalled();
+    });
+
+    it("discoverInternetGateways returns [] without invoking the SDK", async () => {
+      const result = await discoverInternetGateways();
+      expect(result).toEqual([]);
+      expect(mockEc2Send).not.toHaveBeenCalled();
+    });
+
+    it("discoverNatGateways returns [] without invoking the SDK", async () => {
+      const result = await discoverNatGateways();
+      expect(result).toEqual([]);
+      expect(mockEc2Send).not.toHaveBeenCalled();
+    });
+
+    it("discoverEfsFileSystems returns [] without invoking the SDK", async () => {
+      const result = await discoverEfsFileSystems();
+      expect(result).toEqual([]);
+      expect(mockEfsSend).not.toHaveBeenCalled();
+    });
+
+    it("discoverSnsTopics returns [] without invoking the SDK", async () => {
+      const result = await discoverSnsTopics();
+      expect(result).toEqual([]);
+      expect(mockSnsSend).not.toHaveBeenCalled();
+    });
+
+    it("discoverKmsKeys returns [] without invoking the SDK", async () => {
+      const result = await discoverKmsKeys();
+      expect(result).toEqual([]);
+      expect(mockKmsSend).not.toHaveBeenCalled();
+    });
+
     it("discoverAmis returns [] without invoking the SDK", async () => {
       const result = await discoverAmis();
       expect(result).toEqual([]);
@@ -168,12 +253,21 @@ describe("aws-resource-discovery", () => {
       await expect(searchAmis("ml")).resolves.toEqual([]);
       await expect(discoverRdsEngineVersions()).resolves.toEqual([]);
       await expect(discoverRdsInstanceClasses()).resolves.toEqual([]);
+      await expect(discoverRouteTables()).resolves.toEqual([]);
+      await expect(discoverInternetGateways()).resolves.toEqual([]);
+      await expect(discoverNatGateways()).resolves.toEqual([]);
+      await expect(discoverEfsFileSystems()).resolves.toEqual([]);
+      await expect(discoverSnsTopics()).resolves.toEqual([]);
+      await expect(discoverKmsKeys()).resolves.toEqual([]);
 
       // Critical: not a single AWS SDK call was attempted — we never even
       // constructed a client, let alone sent a request.
       expect(mockEc2Send).not.toHaveBeenCalled();
       expect(mockSsmSend).not.toHaveBeenCalled();
       expect(mockRdsSend).not.toHaveBeenCalled();
+      expect(mockEfsSend).not.toHaveBeenCalled();
+      expect(mockSnsSend).not.toHaveBeenCalled();
+      expect(mockKmsSend).not.toHaveBeenCalled();
     });
   });
 
@@ -867,6 +961,443 @@ describe("aws-resource-discovery", () => {
         ],
         Owners: ["amazon"],
       });
+    });
+  });
+
+  // ── discoverRouteTables ─────────────────────────────────────────────────
+
+  describe("discoverRouteTables", () => {
+    it("returns labelled options for route tables with Name tags", async () => {
+      mockEc2Send.mockResolvedValueOnce({
+        RouteTables: [
+          {
+            RouteTableId: "rtb-0123456789abcdef0",
+            VpcId: "vpc-0abc123456",
+            Tags: [{ Key: "Name", Value: "public-rt" }],
+          },
+        ],
+      });
+      const result = await discoverRouteTables();
+      expect(result).toEqual([
+        {
+          value: "rtb-0123456789abcdef0",
+          label: "public-rt (rtb-0123456789abcdef0, vpc: vpc-0abc123456)",
+        },
+      ]);
+    });
+
+    it("falls back to route table ID when no Name tag", async () => {
+      mockEc2Send.mockResolvedValueOnce({
+        RouteTables: [
+          {
+            RouteTableId: "rtb-0abcdef1234567890",
+            VpcId: "vpc-xyz",
+            Tags: [],
+          },
+        ],
+      });
+      const result = await discoverRouteTables();
+      expect(result).toEqual([
+        {
+          value: "rtb-0abcdef1234567890",
+          label: "rtb-0abcdef1234567890 (vpc: vpc-xyz)",
+        },
+      ]);
+    });
+
+    it("returns [] when API returns null", async () => {
+      mockEc2Send.mockResolvedValueOnce(null);
+      const result = await discoverRouteTables();
+      expect(result).toEqual([]);
+    });
+
+    it("returns [] when API throws", async () => {
+      mockEc2Send.mockRejectedValueOnce(new Error("access denied"));
+      const result = await discoverRouteTables();
+      expect(result).toEqual([]);
+    });
+
+    it("returns [] when reader credentials are absent", async () => {
+      const savedKey = process.env["ASSIGNEE_READER_ACCESS_KEY_ID"];
+      const savedSecret = process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"];
+      delete process.env["ASSIGNEE_READER_ACCESS_KEY_ID"];
+      delete process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"];
+      const result = await discoverRouteTables();
+      expect(result).toEqual([]);
+      expect(mockEc2Send).not.toHaveBeenCalled();
+      process.env["ASSIGNEE_READER_ACCESS_KEY_ID"] = savedKey;
+      process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"] = savedSecret;
+    });
+  });
+
+  // ── discoverInternetGateways ────────────────────────────────────────────
+
+  describe("discoverInternetGateways", () => {
+    it("returns labelled options for IGWs with Name tags and VPC attachment", async () => {
+      mockEc2Send.mockResolvedValueOnce({
+        InternetGateways: [
+          {
+            InternetGatewayId: "igw-0123456789abcdef0",
+            Attachments: [{ VpcId: "vpc-0abc123456", State: "available" }],
+            Tags: [{ Key: "Name", Value: "main-igw" }],
+          },
+        ],
+      });
+      const result = await discoverInternetGateways();
+      expect(result).toEqual([
+        {
+          value: "igw-0123456789abcdef0",
+          label: "main-igw (igw-0123456789abcdef0, vpc: vpc-0abc123456)",
+        },
+      ]);
+    });
+
+    it("shows 'detached' when IGW has no VPC attachment", async () => {
+      mockEc2Send.mockResolvedValueOnce({
+        InternetGateways: [
+          {
+            InternetGatewayId: "igw-0abcdef1234567890",
+            Attachments: [],
+            Tags: [],
+          },
+        ],
+      });
+      const result = await discoverInternetGateways();
+      expect(result[0]!.label).toContain("detached");
+    });
+
+    it("returns [] when API returns null", async () => {
+      mockEc2Send.mockResolvedValueOnce(null);
+      const result = await discoverInternetGateways();
+      expect(result).toEqual([]);
+    });
+
+    it("returns [] when reader credentials are absent", async () => {
+      const savedKey = process.env["ASSIGNEE_READER_ACCESS_KEY_ID"];
+      const savedSecret = process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"];
+      delete process.env["ASSIGNEE_READER_ACCESS_KEY_ID"];
+      delete process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"];
+      const result = await discoverInternetGateways();
+      expect(result).toEqual([]);
+      expect(mockEc2Send).not.toHaveBeenCalled();
+      process.env["ASSIGNEE_READER_ACCESS_KEY_ID"] = savedKey;
+      process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"] = savedSecret;
+    });
+  });
+
+  // ── discoverNatGateways ─────────────────────────────────────────────────
+
+  describe("discoverNatGateways", () => {
+    it("returns labelled options for available NAT gateways with Name tags", async () => {
+      mockEc2Send.mockResolvedValueOnce({
+        NatGateways: [
+          {
+            NatGatewayId: "nat-0123456789abcdef0",
+            SubnetId: "subnet-0abc123456",
+            State: "available",
+            Tags: [{ Key: "Name", Value: "public-nat" }],
+          },
+        ],
+      });
+      const result = await discoverNatGateways();
+      expect(result).toEqual([
+        {
+          value: "nat-0123456789abcdef0",
+          label:
+            "public-nat (nat-0123456789abcdef0, subnet: subnet-0abc123456)",
+        },
+      ]);
+    });
+
+    it("falls back to NAT GW ID when no Name tag", async () => {
+      mockEc2Send.mockResolvedValueOnce({
+        NatGateways: [
+          {
+            NatGatewayId: "nat-0abcdef1234567890",
+            SubnetId: "subnet-xyz",
+            State: "available",
+            Tags: [],
+          },
+        ],
+      });
+      const result = await discoverNatGateways();
+      expect(result[0]!.label).toContain("subnet-xyz");
+      expect(result[0]!.value).toBe("nat-0abcdef1234567890");
+    });
+
+    it("returns [] when API returns null", async () => {
+      mockEc2Send.mockResolvedValueOnce(null);
+      const result = await discoverNatGateways();
+      expect(result).toEqual([]);
+    });
+
+    it("returns [] when reader credentials are absent", async () => {
+      const savedKey = process.env["ASSIGNEE_READER_ACCESS_KEY_ID"];
+      const savedSecret = process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"];
+      delete process.env["ASSIGNEE_READER_ACCESS_KEY_ID"];
+      delete process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"];
+      const result = await discoverNatGateways();
+      expect(result).toEqual([]);
+      expect(mockEc2Send).not.toHaveBeenCalled();
+      process.env["ASSIGNEE_READER_ACCESS_KEY_ID"] = savedKey;
+      process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"] = savedSecret;
+    });
+  });
+
+  // ── discoverEfsFileSystems ─────────────────────────────────────────────
+
+  describe("discoverEfsFileSystems", () => {
+    it("returns labelled options for available EFS file systems with Name tags", async () => {
+      mockEfsSend.mockResolvedValueOnce({
+        FileSystems: [
+          {
+            FileSystemId: "fs-0123456789abcdef0",
+            LifeCycleState: "available",
+            SizeInBytes: { Value: 10737418240 }, // 10 GiB
+            Tags: [{ Key: "Name", Value: "shared-storage" }],
+          },
+        ],
+      });
+      const result = await discoverEfsFileSystems();
+      expect(result).toHaveLength(1);
+      expect(result[0]!.value).toBe("fs-0123456789abcdef0");
+      expect(result[0]!.label).toContain("shared-storage");
+      expect(result[0]!.label).toContain("fs-0123456789abcdef0");
+    });
+
+    it("filters out non-available file systems", async () => {
+      mockEfsSend.mockResolvedValueOnce({
+        FileSystems: [
+          {
+            FileSystemId: "fs-available",
+            LifeCycleState: "available",
+            Tags: [{ Key: "Name", Value: "ok" }],
+          },
+          {
+            FileSystemId: "fs-creating",
+            LifeCycleState: "creating",
+            Tags: [{ Key: "Name", Value: "not-ready" }],
+          },
+          {
+            FileSystemId: "fs-deleting",
+            LifeCycleState: "deleting",
+            Tags: [],
+          },
+        ],
+      });
+      const result = await discoverEfsFileSystems();
+      expect(result).toHaveLength(1);
+      expect(result[0]!.value).toBe("fs-available");
+    });
+
+    it("falls back to file system ID as label when no Name tag", async () => {
+      mockEfsSend.mockResolvedValueOnce({
+        FileSystems: [
+          {
+            FileSystemId: "fs-0abcdef1234567890",
+            LifeCycleState: "available",
+            Tags: [],
+          },
+        ],
+      });
+      const result = await discoverEfsFileSystems();
+      expect(result[0]!.value).toBe("fs-0abcdef1234567890");
+      expect(result[0]!.label).toContain("fs-0abcdef1234567890");
+    });
+
+    it("returns [] when API returns null", async () => {
+      mockEfsSend.mockResolvedValueOnce(null);
+      const result = await discoverEfsFileSystems();
+      expect(result).toEqual([]);
+    });
+
+    it("returns [] when reader credentials are absent", async () => {
+      const savedKey = process.env["ASSIGNEE_READER_ACCESS_KEY_ID"];
+      const savedSecret = process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"];
+      delete process.env["ASSIGNEE_READER_ACCESS_KEY_ID"];
+      delete process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"];
+      const result = await discoverEfsFileSystems();
+      expect(result).toEqual([]);
+      expect(mockEfsSend).not.toHaveBeenCalled();
+      process.env["ASSIGNEE_READER_ACCESS_KEY_ID"] = savedKey;
+      process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"] = savedSecret;
+    });
+  });
+
+  // ── discoverSnsTopics ──────────────────────────────────────────────────
+
+  describe("discoverSnsTopics", () => {
+    it("returns labelled options with topic name extracted from ARN", async () => {
+      mockSnsSend.mockResolvedValueOnce({
+        Topics: [
+          { TopicArn: "arn:aws:sns:us-east-1:210987654321:order-events" },
+          { TopicArn: "arn:aws:sns:us-east-1:210987654321:user-notifications" },
+        ],
+      });
+      const result = await discoverSnsTopics();
+      expect(result).toHaveLength(2);
+      expect(result[0]!.value).toBe(
+        "arn:aws:sns:us-east-1:210987654321:order-events",
+      );
+      expect(result[0]!.label).toContain("order-events");
+      expect(result[0]!.label).toContain(
+        "arn:aws:sns:us-east-1:210987654321:order-events",
+      );
+      expect(result[1]!.value).toBe(
+        "arn:aws:sns:us-east-1:210987654321:user-notifications",
+      );
+    });
+
+    it("handles GovCloud partition ARNs", async () => {
+      mockSnsSend.mockResolvedValueOnce({
+        Topics: [
+          {
+            TopicArn: "arn:aws-us-gov:sns:us-gov-west-1:210987654321:gov-topic",
+          },
+        ],
+      });
+      const result = await discoverSnsTopics();
+      expect(result[0]!.value).toContain("arn:aws-us-gov:sns");
+      expect(result[0]!.label).toContain("gov-topic");
+    });
+
+    it("returns [] when Topics is empty", async () => {
+      mockSnsSend.mockResolvedValueOnce({ Topics: [] });
+      const result = await discoverSnsTopics();
+      expect(result).toEqual([]);
+    });
+
+    it("returns [] when API returns null", async () => {
+      mockSnsSend.mockResolvedValueOnce(null);
+      const result = await discoverSnsTopics();
+      expect(result).toEqual([]);
+    });
+
+    it("returns [] when reader credentials are absent", async () => {
+      const savedKey = process.env["ASSIGNEE_READER_ACCESS_KEY_ID"];
+      const savedSecret = process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"];
+      delete process.env["ASSIGNEE_READER_ACCESS_KEY_ID"];
+      delete process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"];
+      const result = await discoverSnsTopics();
+      expect(result).toEqual([]);
+      expect(mockSnsSend).not.toHaveBeenCalled();
+      process.env["ASSIGNEE_READER_ACCESS_KEY_ID"] = savedKey;
+      process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"] = savedSecret;
+    });
+  });
+
+  // ── discoverKmsKeys ────────────────────────────────────────────────────
+
+  describe("discoverKmsKeys", () => {
+    it("returns customer-managed keys with alias labels", async () => {
+      // ListKeys returns all keys; ListAliases returns aliases for CMKs
+      mockKmsSend
+        .mockResolvedValueOnce({
+          Keys: [
+            {
+              KeyId: "aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb",
+              KeyArn:
+                "arn:aws:kms:us-east-1:210987654321:key/aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb",
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          Aliases: [
+            {
+              AliasName: "alias/my-app-key",
+              TargetKeyId: "aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb",
+            },
+          ],
+        });
+      const result = await discoverKmsKeys();
+      expect(result).toHaveLength(1);
+      expect(result[0]!.value).toBe(
+        "arn:aws:kms:us-east-1:210987654321:key/aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb",
+      );
+      expect(result[0]!.label).toContain("alias/my-app-key");
+      expect(result[0]!.label).toContain(
+        "arn:aws:kms:us-east-1:210987654321:key/aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb",
+      );
+    });
+
+    it("excludes AWS-managed keys (alias/aws/... aliases)", async () => {
+      mockKmsSend
+        .mockResolvedValueOnce({
+          Keys: [
+            {
+              KeyId: "aws-managed-key-id",
+              KeyArn:
+                "arn:aws:kms:us-east-1:210987654321:key/aws-managed-key-id",
+            },
+            {
+              KeyId: "customer-key-id",
+              KeyArn: "arn:aws:kms:us-east-1:210987654321:key/customer-key-id",
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          Aliases: [
+            {
+              AliasName: "alias/aws/s3",
+              TargetKeyId: "aws-managed-key-id",
+            },
+            {
+              AliasName: "alias/my-cmk",
+              TargetKeyId: "customer-key-id",
+            },
+          ],
+        });
+      const result = await discoverKmsKeys();
+      // The aws-managed key has no custom alias after filtering alias/aws/ entries
+      // The customer key maps to alias/my-cmk
+      const values = result.map((r) => r.value);
+      expect(values).not.toContain(
+        "arn:aws:kms:us-east-1:210987654321:key/aws-managed-key-id",
+      );
+      // Customer key with alias/my-cmk remains
+      expect(values).toContain(
+        "arn:aws:kms:us-east-1:210987654321:key/customer-key-id",
+      );
+    });
+
+    it("includes keys without custom aliases (bare CMKs)", async () => {
+      mockKmsSend
+        .mockResolvedValueOnce({
+          Keys: [
+            {
+              KeyId: "bare-key-id",
+              KeyArn: "arn:aws:kms:us-east-1:210987654321:key/bare-key-id",
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          Aliases: [], // No aliases at all
+        });
+      const result = await discoverKmsKeys();
+      expect(result).toHaveLength(1);
+      expect(result[0]!.value).toBe(
+        "arn:aws:kms:us-east-1:210987654321:key/bare-key-id",
+      );
+    });
+
+    it("returns [] when Keys is empty", async () => {
+      mockKmsSend
+        .mockResolvedValueOnce({ Keys: [] })
+        .mockResolvedValueOnce({ Aliases: [] });
+      const result = await discoverKmsKeys();
+      expect(result).toEqual([]);
+    });
+
+    it("returns [] when reader credentials are absent", async () => {
+      const savedKey = process.env["ASSIGNEE_READER_ACCESS_KEY_ID"];
+      const savedSecret = process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"];
+      delete process.env["ASSIGNEE_READER_ACCESS_KEY_ID"];
+      delete process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"];
+      const result = await discoverKmsKeys();
+      expect(result).toEqual([]);
+      expect(mockKmsSend).not.toHaveBeenCalled();
+      process.env["ASSIGNEE_READER_ACCESS_KEY_ID"] = savedKey;
+      process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"] = savedSecret;
     });
   });
 

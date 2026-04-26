@@ -75,10 +75,11 @@ export const logGroupPlugin: ResourcePlugin = {
     {
       name: CfnKey.KMS_KEY_ID,
       question: {
-        type: "string",
+        type: "enum",
         label: "KMS Key ARN for encryption (optional)",
         placeholder: "arn:aws:kms:us-east-1:123456789012:key/...",
         hint: "ARN of a KMS key to encrypt log data at rest. CloudWatch Logs encrypts data by default with AWS-managed keys, but a customer-managed KMS key gives you control over key rotation and access policies. Recommended for production environments with sensitive data.",
+        fetcher: "discover-kms-keys",
         validate: (value: unknown) => {
           if (!value) return undefined;
           const s = String(value);

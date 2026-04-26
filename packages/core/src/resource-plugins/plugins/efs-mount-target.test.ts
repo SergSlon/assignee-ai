@@ -48,6 +48,22 @@ describe("efsMountTargetPlugin", () => {
     });
   });
 
+  it("FileSystemId uses discover-efs-file-systems fetcher", () => {
+    const field = efsMountTargetPlugin.commonFields.find(
+      (f) => f.name === "FileSystemId",
+    )!;
+    expect(field.question.type).toBe("enum");
+    expect(field.question.fetcher).toBe("discover-efs-file-systems");
+  });
+
+  it("SubnetId uses discover-subnets fetcher", () => {
+    const field = efsMountTargetPlugin.commonFields.find(
+      (f) => f.name === CfnKey.SUBNET_ID,
+    )!;
+    expect(field.question.type).toBe("enum");
+    expect(field.question.fetcher).toBe("discover-subnets");
+  });
+
   describe("SubnetId validation", () => {
     const field = efsMountTargetPlugin.commonFields.find(
       (f) => f.name === CfnKey.SUBNET_ID,

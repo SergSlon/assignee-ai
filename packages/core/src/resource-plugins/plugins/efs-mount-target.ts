@@ -29,10 +29,11 @@ export const efsMountTargetPlugin: ResourcePlugin = {
       name: "FileSystemId",
       required: true,
       question: {
-        type: "string",
+        type: "enum",
         label: "EFS file system ID",
         placeholder: "fs-0123456789abcdef0",
         hint: "The ID of the EFS::FileSystem resource this mount target attaches to. Cannot be changed after creation.",
+        fetcher: "discover-efs-file-systems",
         validate: (value: unknown) => {
           if (!value) return "FileSystemId is required";
           const s = String(value);
@@ -46,10 +47,11 @@ export const efsMountTargetPlugin: ResourcePlugin = {
       name: CfnKey.SUBNET_ID,
       required: true,
       question: {
-        type: "string",
+        type: "enum",
         label: "Subnet ID",
         placeholder: "subnet-0123456789abcdef0",
         hint: "The subnet this mount target lives in. One mount target per AZ is required for multi-AZ access; EC2/Lambda/ECS workloads in the same subnet (or peered subnet in the same AZ) can mount via NFSv4. Cannot be changed after creation.",
+        fetcher: "discover-subnets",
         validate: (value: unknown) => {
           if (!value) return "SubnetId is required";
           const s = String(value);

@@ -15,6 +15,12 @@ import {
   discoverRdsEngineVersions,
   discoverRdsInstanceClasses,
   discoverLambdaRuntimes,
+  discoverRouteTables,
+  discoverInternetGateways,
+  discoverNatGateways,
+  discoverEfsFileSystems,
+  discoverSnsTopics,
+  discoverKmsKeys,
 } from "../aws-resource-discovery/index.js";
 import { fieldFetchKey } from "./show-if.js";
 
@@ -32,6 +38,12 @@ const fetcherMap: Record<
   [DiscoveryCacheKey.RDS_ENGINE_VERSIONS]: discoverRdsEngineVersions,
   [DiscoveryCacheKey.RDS_INSTANCE_CLASSES]: discoverRdsInstanceClasses,
   [DiscoveryCacheKey.LAMBDA_RUNTIMES]: discoverLambdaRuntimes,
+  [DiscoveryCacheKey.ROUTE_TABLES]: discoverRouteTables,
+  [DiscoveryCacheKey.INTERNET_GATEWAYS]: discoverInternetGateways,
+  [DiscoveryCacheKey.NAT_GATEWAYS]: discoverNatGateways,
+  [DiscoveryCacheKey.EFS_FILE_SYSTEMS]: discoverEfsFileSystems,
+  [DiscoveryCacheKey.SNS_TOPICS]: discoverSnsTopics,
+  [DiscoveryCacheKey.KMS_KEYS]: discoverKmsKeys,
 };
 
 /** Human-readable spinner messages per fetcher ID. */
@@ -45,6 +57,12 @@ const fetcherSpinnerMessages: Record<string, string> = {
   [DiscoveryCacheKey.RDS_INSTANCE_CLASSES]:
     "Fetching available database instance classes from AWS...",
   [DiscoveryCacheKey.LAMBDA_RUNTIMES]: "Loading Lambda runtime options...",
+  [DiscoveryCacheKey.ROUTE_TABLES]: "Discovering route tables...",
+  [DiscoveryCacheKey.INTERNET_GATEWAYS]: "Discovering internet gateways...",
+  [DiscoveryCacheKey.NAT_GATEWAYS]: "Discovering NAT gateways...",
+  [DiscoveryCacheKey.EFS_FILE_SYSTEMS]: "Discovering EFS file systems...",
+  [DiscoveryCacheKey.SNS_TOPICS]: "Discovering SNS topics...",
+  [DiscoveryCacheKey.KMS_KEYS]: "Discovering KMS keys...",
 };
 
 /**

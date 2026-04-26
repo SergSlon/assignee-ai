@@ -18,10 +18,11 @@ export const routePlugin: ResourcePlugin = {
       name: CfnKey.ROUTE_TABLE_ID,
       required: true,
       question: {
-        type: "string",
+        type: "enum",
         label: "Route Table ID",
         hint: "The ID of the route table this route belongs to. Use a Ref to the route table logical ID.",
         placeholder: "rtb-0123456789abcdef0",
+        fetcher: "discover-route-tables",
         validate: (value: unknown) => {
           if (!value) return undefined;
           if (!/^rtb-[a-f0-9]+$/.test(String(value)))
@@ -80,10 +81,11 @@ export const routePlugin: ResourcePlugin = {
     {
       name: CfnKey.GATEWAY_ID,
       question: {
-        type: "string",
+        type: "enum",
         label: "Internet Gateway ID",
         hint: "The ID of the InternetGateway target. Use a Ref to the IGW logical ID in the plan.",
         placeholder: "igw-0123456789abcdef0",
+        fetcher: "discover-internet-gateways",
         validate: (value: unknown) => {
           if (!value) return undefined;
           if (!/^igw-[a-f0-9]+$/.test(String(value)))
@@ -99,10 +101,11 @@ export const routePlugin: ResourcePlugin = {
     {
       name: CfnKey.NAT_GATEWAY_ID,
       question: {
-        type: "string",
+        type: "enum",
         label: "NAT Gateway ID",
         hint: "The ID of the NatGateway target. Use a Ref to the NatGateway logical ID in the plan.",
         placeholder: "nat-0123456789abcdef0",
+        fetcher: "discover-nat-gateways",
         validate: (value: unknown) => {
           if (!value) return undefined;
           if (!/^nat-[a-f0-9]+$/.test(String(value)))

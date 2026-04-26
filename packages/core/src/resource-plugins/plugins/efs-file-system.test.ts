@@ -212,6 +212,11 @@ describe("efsFileSystemPlugin", () => {
       });
     });
 
+    it("uses discover-kms-keys fetcher", () => {
+      expect(field.question.type).toBe("enum");
+      expect(field.question.fetcher).toBe("discover-kms-keys");
+    });
+
     it("accepts empty (falls back to AWS-managed key)", () => {
       expect(validate("")).toBeUndefined();
     });

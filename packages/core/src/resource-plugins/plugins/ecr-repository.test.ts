@@ -196,6 +196,14 @@ describe("ecrRepositoryPlugin", () => {
     });
   });
 
+  it("KmsKey uses discover-kms-keys fetcher", () => {
+    const field = ecrRepositoryPlugin.advancedFields.find(
+      (f) => f.name === "KmsKey",
+    )!;
+    expect(field.question.type).toBe("enum");
+    expect(field.question.fetcher).toBe("discover-kms-keys");
+  });
+
   describe("KmsKey validation", () => {
     const field = ecrRepositoryPlugin.advancedFields.find(
       (f) => f.name === "KmsKey",

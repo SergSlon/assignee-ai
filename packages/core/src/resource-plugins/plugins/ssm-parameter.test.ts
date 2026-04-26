@@ -84,6 +84,14 @@ describe("ssmParameterPlugin", () => {
     });
   });
 
+  it("KmsKeyId uses discover-kms-keys fetcher", () => {
+    const field = ssmParameterPlugin.advancedFields.find(
+      (f) => f.name === "KmsKeyId",
+    )!;
+    expect(field.question.type).toBe("enum");
+    expect(field.question.fetcher).toBe("discover-kms-keys");
+  });
+
   it("Tier is an enum with Standard and Advanced options", () => {
     const field = ssmParameterPlugin.advancedFields.find(
       (f) => f.name === "Tier",
