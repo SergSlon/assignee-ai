@@ -4,7 +4,7 @@
  */
 
 import * as clack from "@clack/prompts";
-import { isAccessDeniedError } from "../../index.js";
+import { isAccessDeniedError, hasAssigneeCredentials } from "../../index.js";
 import type { ResourceField } from "../../index.js";
 import { DiscoveryCacheKey } from "../aws-resource-discovery/index.js";
 import {
@@ -83,6 +83,18 @@ export async function resolveDynamicFields(
 ): Promise<ResourceField[]> {
   const dynamicFields = fields.filter((f) => f.question.fetcher);
   if (dynamicFields.length === 0) return fields;
+
+  // Warn ONCE if reader credentials are absent — all dynamic fetches will
+  // return empty, causing per-field fallback to manual entry. This surfaces
+  // the real root cause rather than a silent cascade of per-field warnings.
+  if (!hasAssigneeCredentials("reader")) {
+    clack.log.warn(
+      "Reader credentials not configured (ASSIGNEE_READER_ACCESS_KEY_ID / ASSIGNEE_READER_SECRET_ACCESS_KEY). " +
+        "Live discovery (subnets, security groups, key pairs, AMIs…) is disabled. " +
+        "To enable dropdowns, set the reader env vars or run `assignee setup`. " +
+        "Falling back to manual entry for all discovered fields.",
+    );
+  }
 
   const fetchResults = new Map<
     string,

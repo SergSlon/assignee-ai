@@ -53,6 +53,14 @@ export const EC2_RULES: IntentRule[] = [
         value: [],
         reason:
           "SSH bundle: a security group with inbound port 22 will be auto-created by the companion resource system",
+        autoProvision: true,
+      },
+      {
+        fieldName: CfnKey.SUBNET_ID,
+        value: ResourceDefault.SUBNET_PLACEHOLDER,
+        reason:
+          "SSH bundle: subnet will be resolved to the default VPC's first subnet at provisioning time",
+        autoProvision: true,
       },
     ],
   },

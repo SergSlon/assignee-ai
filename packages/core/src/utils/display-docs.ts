@@ -137,7 +137,15 @@ export async function fetchDocText(
       DOC_TIMEOUT_MS,
     );
   } catch (err: unknown) {
-    if (err instanceof Error && err.message.includes("No matching sections")) {
+    // The AWS Documentation MCP server returns two different error messages
+    // when a page has no sub-sections. Both signal "use read_documentation":
+    //   - "No matching sections were found" (older server version)
+    //   - "This document does not contain subsections" (newer server version)
+    const isNoSubsections =
+      err instanceof Error &&
+      (err.message.includes("No matching sections") ||
+        err.message.includes("does not contain subsections"));
+    if (isNoSubsections) {
       const fullReadTool = tools.find(
         (t) => t.name === ToolName.READ_DOCUMENTATION,
       );

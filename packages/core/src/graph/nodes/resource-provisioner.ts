@@ -31,6 +31,7 @@ import { safeCloneDesiredState } from "./resource-provisioner/state.js";
 import { runStateGuard } from "./resource-provisioner/state-guard.js";
 import { allocateNatGatewayEip } from "./resource-provisioner/eip-allocator.js";
 import { ensureSshKeypair } from "./resource-provisioner/ssh-keypair.js";
+import { ensureSubnet } from "./resource-provisioner/subnet.js";
 import { cleanupAllocatedResources } from "./resource-provisioner/cleanup.js";
 import {
   createResourceWithCloudFrontRetry,
@@ -121,6 +122,20 @@ export async function resourceProvisionerNode(
     return sshRes.partial;
   }
   const sshKeyCreatedName = sshRes.sshKeyCreatedName;
+
+  // Pre-hook: resolve SUBNET_PLACEHOLDER to the default VPC's first subnet.
+  const subnetRes = await ensureSubnet(state, desiredState);
+  if (!subnetRes.ok) {
+    await cleanupAllocatedResources(state, {
+      eipReleased: freshlyAllocatedEipIds,
+      sshDeleted: sshKeyCreatedName,
+    });
+    return {
+      executionStatus: ExecutionStatus.FAILED,
+      errorMessage: subnetRes.errorMessage,
+      desiredState,
+    };
+  }
 
   // Inject mandatory tags (NFR-14).
   const propertiesWithTags = injectMandatoryTags(
