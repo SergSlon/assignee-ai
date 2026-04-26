@@ -1,0 +1,82 @@
+name: CodeQL
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CodeQL static analysis — MASTER-015b (HIGH).
+#
+# Scans JavaScript/TypeScript sources for security vulnerabilities (injection,
+# unsafe deserialisation, prototype pollution, hard-coded secrets, etc.) and
+# uploads results to GitHub's Security tab.
+#
+# Triggers:
+#   - push to main (catch newly-introduced vulnerabilities)
+#   - pull_request against main (block at PR review time)
+#   - weekly schedule (catch CVEs introduced via dependency updates between
+#     active development windows; Mondays 08:00 UTC)
+#
+# SHA-pin policy (W7 / `feedback_supply_chain`): all `uses:` references are
+# pinned to a 40-char commit SHA with the v-tag in a trailing comment.
+# Dependabot (`.github/dependabot.yml`) bumps these SHAs in weekly grouped
+# PRs.
+#
+# TODO: SHA-pin verification — confirm the SHAs below match the latest v3
+# patch tag of github/codeql-action (https://github.com/github/codeql-action/releases).
+# Dependabot will keep them current after the first weekly run.
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly Mondays 08:00 UTC — runs even when the repo is quiet so a
+    # dormant CVE in a dependency doesn't sit undiscovered.
+    - cron: '0 8 * * 1'
+
+# CodeQL needs to write results to the Security tab; everything else is read-only.
+permissions:
+  security-events: write
+  contents: read
+  actions: read
+
+# Cancel in-flight CodeQL runs when a new push to the same ref lands —
+# the latest commit is the one we care about, and CodeQL runs are slow.
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (javascript-typescript)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # `javascript-typescript` covers both .js and .ts sources in a single
+        # database build — no need for separate language entries.
+        language: ['javascript-typescript']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Initialize CodeQL
+        # TODO: SHA-pin github/codeql-action/init at v3.x.y latest patch.
+        # Current pin tracks v3.27.0 — dependabot will bump to v3 latest weekly.
+        uses: github/codeql-action/init@4f3212b61783c3c68e8309a0f18a699764811cda # v3.27.0
+        with:
+          languages: ${{ matrix.language }}
+          # `security-and-quality` includes the security suite + a curated
+          # set of code-quality queries; `security-extended` is broader but
+          # noisier. Start with the default `security-and-quality` and tune
+          # downward if FP rate becomes a problem.
+          queries: security-and-quality
+
+      - name: Perform CodeQL Analysis
+        # TODO: SHA-pin github/codeql-action/analyze at v3.x.y latest patch.
+        # Current pin tracks v3.27.0 — dependabot will bump to v3 latest weekly.
+        uses: github/codeql-action/analyze@4f3212b61783c3c68e8309a0f18a699764811cda # v3.27.0
+        with:
+          category: "/language:${{ matrix.language }}"

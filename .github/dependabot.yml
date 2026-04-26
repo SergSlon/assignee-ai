@@ -1,0 +1,83 @@
+# Dependabot configuration — MASTER-015a (HIGH).
+#
+# Weekly cadence keeps the dependency churn predictable. Grouped updates
+# prevent PR flooding when an SDK family bumps multiple packages in one
+# release. CodeOwners-driven reviewer selection means the right humans
+# get pinged automatically.
+#
+# Per `feedback_supply_chain`: every dependency PR must pass the full
+# CI gate (build + test + coverage) before merge. Dependabot does NOT
+# auto-merge — that's a deliberate choice so a transitive supply-chain
+# attack can't slip through unattended.
+#
+# Reviewers/assignees: omitted here so dependabot defers to CODEOWNERS
+# at the repository root for review routing (rather than baking specific
+# usernames into this config).
+
+version: 2
+
+updates:
+  # ------------------------------------------------------------------
+  # npm — covers the entire pnpm workspace (root + apps/* + packages/*)
+  # because dependabot walks workspaces transparently for npm/pnpm.
+  # ------------------------------------------------------------------
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    target-branch: "main"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "npm"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    groups:
+      aws-sdk:
+        patterns:
+          - "@aws-sdk/*"
+          - "aws-sdk"
+      ai-sdk:
+        patterns:
+          - "@ai-sdk/*"
+          - "@langchain/*"
+      dev-deps:
+        patterns:
+          - "@types/*"
+          - "vitest"
+          - "@vitest/*"
+          - "eslint"
+          - "eslint-*"
+          - "@eslint/*"
+          - "@typescript-eslint/*"
+          - "prettier"
+          - "tsx"
+
+  # ------------------------------------------------------------------
+  # github-actions — keeps SHA-pinned action references current.
+  # Single group: action bumps are usually independent so consolidating
+  # into one PR reduces review overhead.
+  # ------------------------------------------------------------------
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    target-branch: "main"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "chore(actions)"
+      include: "scope"
+    groups:
+      github-actions:
+        patterns:
+          - "*"

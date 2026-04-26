@@ -163,6 +163,36 @@ jobs:
           fi
           echo "Nightly account is clean — zero Assignee-managed resources."
 
+      - name: Upload nightly cost ledger
+        # P070 / MASTER-002: The FinOps monthly-budget workflow
+        # (.github/workflows/finops-monthly-budget.yml) downloads
+        # artifacts named `nightly-cost-ledger-<run_number>` to compute
+        # the rolling 30-day CI spend against the configured monthly
+        # ceiling. Without this upload step the consumer workflow
+        # silently returns `no-data` and the budget gate passes forever.
+        #
+        # Runs on every nightly (success or failure) so a green nightly
+        # also contributes its cost ledger to the rolling window.
+        # `if-no-files-found: warn` lets a run that produced no ledger
+        # (e.g. doctor preflight failed before the suite ran) succeed
+        # without uploading — finops-aggregate.mjs treats that run as
+        # absent in its rolling-window calculation, which is correct.
+        #
+        # retention-days is 35 — slightly larger than the 30-day rolling
+        # window so the consumer workflow always has the full window
+        # available even if it runs a few days late.
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: nightly-cost-ledger-${{ github.run_number }}
+          # Glob matches the per-day JSONL files emitted by the CLI to
+          # ~/.assignee/logs/nightly-cost-YYYY-MM-DD.jsonl (verified
+          # against scripts/finops-aggregate.mjs discoverLedgerFiles
+          # and apps/cli/src/e2e/nightly-destroy-smoke.test.ts).
+          path: ~/.assignee/logs/nightly-cost-*.jsonl
+          if-no-files-found: warn
+          retention-days: 35
+
       - name: Scrub logs before upload
         # W6-04: Redact telemetry/PII from logs before attaching to CI artefacts.
         if: failure()

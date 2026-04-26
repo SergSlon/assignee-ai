@@ -1,0 +1,95 @@
+name: CI Security
+
+# MASTER-003: dedicated workflow for the audit-* lint scripts under
+# `scripts/audit-*.ts`. Three of the eight audits (action-pins,
+# secrets-inherit, overrides) already run inside `ci-core.yml` and stay
+# there because they gate the same matrix as the build/test pipeline.
+#
+# The remaining FIVE audits enforce repo-wide invariants that don't
+# depend on OS / Node version — running them once per push/PR (rather
+# than per matrix cell) keeps CI minutes minimal while still failing
+# the merge if any audit regresses. Hence: a separate, single-job
+# workflow distinct from `ci-core.yml`.
+#
+# Each audit gets its own `name:` step so failures are greppable in
+# the GitHub Actions UI without having to expand the run log.
+#
+# Per `docs/explanation/ci-gates.md`: every script here is a BLOCKING
+# gate — the job fails the workflow if any step's exit code is non-zero
+# (default `set -e` semantics).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same ref to keep PR feedback fast and
+# avoid wasting Actions minutes on stale commits.
+concurrency:
+  group: ci-security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit-scripts:
+    name: audit-scripts (security lints)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+        with:
+          version: 10.32.1
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          # No `.nvmrc` in repo root; pin to '22' to match the canonical
+          # cell in `ci.yml` / `ci-core.yml`.
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # `audit-iam-policies.ts` imports from `packages/core/dist/index.js`
+      # (operatorPolicy / readerPolicy / auditorPolicy / SUPPORTED_TYPES_ARRAY
+      # / getRequiredIamActions). Build only @assignee/core — same minimal
+      # build the mock-fixture-drift workflow uses for an analogous import.
+      - name: Build core package (provides operator/reader/auditor policies)
+        run: npx turbo build --filter=@assignee/core
+
+      - name: audit-codeowners (W9-02 — CODEOWNERS well-formed + global catch-all)
+        # Lints repo-root CODEOWNERS for syntactic validity and catch-all rule.
+        # Pure file-system check; no creds required.
+        run: pnpm exec tsx scripts/audit-codeowners.ts
+
+      - name: audit-homebrew-pin (W7-03 — formula template uses envsubst placeholders)
+        # `--check-template` validates `homebrew/assignee.rb` uses ${SHA_*}
+        # placeholders and contains no hardcoded sha256 values. The
+        # `--check-manifest` mode (called from release.yml) is NOT run
+        # here — the signed manifest only exists at release time.
+        run: pnpm exec tsx scripts/audit-homebrew-pin.ts --check-template
+
+      - name: audit-iam-policies (operator/reader/auditor cover every supported type)
+        # Cross-checks code-generated IAM policies against per-type
+        # `getRequiredIamActions()`; flags any missing permission.
+        # Requires the @assignee/core build performed above.
+        run: pnpm exec tsx scripts/audit-iam-policies.ts
+
+      - name: audit-no-suppress (W6-02 — no `|| true` masking on assignee CLI lines)
+        # Scans `.github/actions/*/action.yml` for `|| true` immediately
+        # after an `assignee` invocation or ASSIGNEE_OUTPUT capture.
+        # Exits 1 on any masking finding.
+        run: pnpm exec tsx scripts/audit-no-suppress.ts
+
+      - name: audit-patterns-cleartext (W1-01 — patterns.json has no cleartext credentials)
+        # Scans `~/.assignee/memory/patterns.json` for credential-like
+        # strings using the SENSITIVE_KEY_NAMES allowlist. On a fresh
+        # CI runner the file is absent — script exits 0 (documented),
+        # so this gate catches regressions only when a developer
+        # commits a leaked patterns.json or future tooling generates one.
+        run: pnpm exec tsx scripts/audit-patterns-cleartext.ts

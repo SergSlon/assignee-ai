@@ -207,7 +207,10 @@ jobs:
   # --------------------------------------------------------------------------
   publish-npm:
     needs: publish-dry-run
-    if: inputs.confirm == 'YES_PUBLISH' && env.ASSIGNEE_RELEASE_PUBLISH == '1'
+    # job-level `if:` cannot read `env.*` (GH Actions context-availability:
+    # env is excluded from jobs.<job_id>.if). Use `vars.*` (repository
+    # variables) so the gate actually evaluates instead of always-false.
+    if: inputs.confirm == 'YES_PUBLISH' && vars.ASSIGNEE_RELEASE_PUBLISH == '1'
     env:
       ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH || secrets.ASSIGNEE_RELEASE_PUBLISH || '' }}
     runs-on: ubuntu-latest
@@ -255,7 +258,8 @@ jobs:
   # --------------------------------------------------------------------------
   package-binaries:
     needs: cross-platform-build
-    if: inputs.confirm == 'YES_PUBLISH' && env.ASSIGNEE_RELEASE_PUBLISH == '1'
+    # job-level `if:` cannot read `env.*` — use `vars.*` (see publish-npm).
+    if: inputs.confirm == 'YES_PUBLISH' && vars.ASSIGNEE_RELEASE_PUBLISH == '1'
     env:
       ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH || secrets.ASSIGNEE_RELEASE_PUBLISH || '' }}
     runs-on: ubuntu-latest
@@ -371,7 +375,8 @@ jobs:
   # --------------------------------------------------------------------------
   github-release:
     needs: [publish-npm, package-binaries, generate-release-notes]
-    if: inputs.confirm == 'YES_PUBLISH' && env.ASSIGNEE_RELEASE_PUBLISH == '1'
+    # job-level `if:` cannot read `env.*` — use `vars.*` (see publish-npm).
+    if: inputs.confirm == 'YES_PUBLISH' && vars.ASSIGNEE_RELEASE_PUBLISH == '1'
     env:
       ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH || secrets.ASSIGNEE_RELEASE_PUBLISH || '' }}
     runs-on: ubuntu-latest
@@ -413,7 +418,8 @@ jobs:
   # --------------------------------------------------------------------------
   smoke-test:
     needs: github-release
-    if: inputs.confirm == 'YES_PUBLISH' && env.ASSIGNEE_RELEASE_PUBLISH == '1'
+    # job-level `if:` cannot read `env.*` — use `vars.*` (see publish-npm).
+    if: inputs.confirm == 'YES_PUBLISH' && vars.ASSIGNEE_RELEASE_PUBLISH == '1'
     env:
       ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH || secrets.ASSIGNEE_RELEASE_PUBLISH || '' }}
     runs-on: ubuntu-latest
@@ -499,6 +505,36 @@ jobs:
           spdx-tools validate assignee-${{ inputs.tag }}-sbom.spdx.json
           echo "SBOM validation passed."
 
+      - name: Scan SBOM for vulnerabilities (Grype)
+        # MASTER-015c: anchore/scan-action runs Grype against the generated
+        # SBOM. Fails the release on HIGH or CRITICAL findings — caller
+        # MUST address (or document and waive) before publish proceeds.
+        # Runs unconditionally (DRY-RUN exercises the scan); not gated by
+        # ASSIGNEE_RELEASE_PUBLISH so we catch CVEs even on dry-run cycles.
+        # TODO: SHA-pin anchore/scan-action at v6.x.y latest patch.
+        # Current pin tracks v6.5.1 — dependabot will bump weekly.
+        id: scan
+        uses: anchore/scan-action@7c05671ae9be166aeb155bad2d7df9121823df32 # v6.5.1
+        with:
+          sbom: assignee-${{ inputs.tag }}-sbom.spdx.json
+          severity-cutoff: high
+          fail-build: true
+          acs-report-enable: true
+          output-format: sarif
+
+      - name: Upload Grype SARIF to GitHub Security
+        # MASTER-015c: surface scan-action findings in the Security tab even
+        # when the scan passes (so HIGH/CRITICAL trends are visible).
+        # `if: always()` so the SARIF uploads even when scan-action fails
+        # the build — operators need to see WHY it failed.
+        if: always() && steps.scan.outputs.sarif != ''
+        # TODO: SHA-pin github/codeql-action/upload-sarif at v3.x.y latest patch.
+        # Current pin tracks v3.27.0 — dependabot will bump weekly.
+        uses: github/codeql-action/upload-sarif@4f3212b61783c3c68e8309a0f18a699764811cda # v3.27.0
+        with:
+          sarif_file: ${{ steps.scan.outputs.sarif }}
+          category: grype-sbom-scan
+
       - name: Attach SBOM to GitHub Release
         # DRY-RUN default: SKIPPED unless ASSIGNEE_RELEASE_PUBLISH=1.
         if: env.ASSIGNEE_RELEASE_PUBLISH == '1'
@@ -522,7 +558,8 @@ jobs:
   # --------------------------------------------------------------------------
   generate-provenance:
     needs: [smoke-test, generate-sbom]
-    if: inputs.confirm == 'YES_PUBLISH' && env.ASSIGNEE_RELEASE_PUBLISH == '1'
+    # job-level `if:` cannot read `env.*` — use `vars.*` (see publish-npm).
+    if: inputs.confirm == 'YES_PUBLISH' && vars.ASSIGNEE_RELEASE_PUBLISH == '1'
     env:
       ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH || secrets.ASSIGNEE_RELEASE_PUBLISH || '' }}
     runs-on: ubuntu-latest
@@ -622,10 +659,13 @@ jobs:
   # --------------------------------------------------------------------------
   update-homebrew:
     needs: [smoke-test, generate-provenance]
+    # job-level `if:` cannot read `env.*` — use `vars.*` (see publish-npm).
+    # Both ASSIGNEE_RELEASE_PUBLISH and ASSIGNEE_TAP_PUBLISH must be set as
+    # repository variables (Settings → Variables → Actions) to enable.
     if: >
       inputs.confirm == 'YES_PUBLISH' &&
-      env.ASSIGNEE_RELEASE_PUBLISH == '1' &&
-      env.ASSIGNEE_TAP_PUBLISH == '1'
+      vars.ASSIGNEE_RELEASE_PUBLISH == '1' &&
+      vars.ASSIGNEE_TAP_PUBLISH == '1'
     env:
       ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH || secrets.ASSIGNEE_RELEASE_PUBLISH || '' }}
       ASSIGNEE_TAP_PUBLISH: ${{ vars.ASSIGNEE_TAP_PUBLISH || secrets.ASSIGNEE_TAP_PUBLISH || '' }}
