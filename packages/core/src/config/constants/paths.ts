@@ -28,11 +28,5 @@ export const FileName = {
   ORG_POLICY: "org-policy.yaml",
 } as const;
 
-/** @deprecated Use FileName.PROVISIONS */
-export const PROVISIONS_FILE = FileName.PROVISIONS;
-
-/** @deprecated Use FileName.FAILURES */
-export const FAILURES_FILE = FileName.FAILURES;
-
 /** Prefix for checkpoint files: checkpoint-<runId>.json */
 export const CHECKPOINT_FILE_PREFIX = "checkpoint-" as const;

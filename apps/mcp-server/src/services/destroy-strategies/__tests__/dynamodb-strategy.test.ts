@@ -37,7 +37,7 @@ vi.mock("@aws-sdk/client-dynamodb", () => {
   return { DynamoDBClient, UpdateTableCommand, DescribeTableCommand };
 });
 
-import { dynamodbStrategy } from "../dynamodb-strategy.js";
+import { dynamodbTableStrategy as dynamodbStrategy } from "@assignee/core";
 import { makeDestroyContext } from "./test-helpers.js";
 
 const TABLE_NAME = "assignee-orders-prod";

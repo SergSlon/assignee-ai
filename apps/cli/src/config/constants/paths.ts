@@ -7,7 +7,5 @@ export {
   CHECKPOINT_DIR,
   BASELINES_DIR,
   FileName,
-  PROVISIONS_FILE,
-  FAILURES_FILE,
   CHECKPOINT_FILE_PREFIX,
 } from "@assignee/core";

@@ -31,7 +31,8 @@ export async function buildLlmClient(
   const baseLlm = new LlmAdapter({
     modelString:
       process.env[EnvVar.ASSIGNEE_LLM_DEFAULT] ??
-      process.env[EnvVar.ASSIGNEE_MODEL],
+      // Back-compat: read legacy ASSIGNEE_MODEL env var (deprecated alias).
+      process.env["ASSIGNEE_MODEL"],
     guardrailId: process.env[EnvVar.BEDROCK_GUARDRAIL_ID],
     guardrailVersion: process.env[EnvVar.BEDROCK_GUARDRAIL_VERSION],
   });
@@ -39,7 +40,8 @@ export async function buildLlmClient(
     baseLlm,
     opts.recorder,
     process.env[EnvVar.ASSIGNEE_LLM_DEFAULT] ??
-      process.env[EnvVar.ASSIGNEE_MODEL] ??
+      // Back-compat: read legacy ASSIGNEE_MODEL env var (deprecated alias).
+      process.env["ASSIGNEE_MODEL"] ??
       "bedrock/amazon.nova-lite-v1:0",
   );
 }

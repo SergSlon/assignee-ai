@@ -29,7 +29,6 @@ export {
 export {
   renderHitlConfirm,
   renderHitlCompoundConfirm,
-  renderApplyNowConfirm,
   renderAdvancedConfirm,
   renderOptionPrompt,
   BACK_SENTINEL,

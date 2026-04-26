@@ -391,11 +391,14 @@ async function driveFlow(
 }> {
   const promptedFieldNames: string[] = [];
 
-  vi.mocked(promptWithHelp).mockImplementation(async (field: ResourceField) => {
-    promptedFieldNames.push(field.name);
-    const override = forced[field.name];
-    return override !== undefined ? override : generateDefaultAnswer(field);
-  });
+  vi.mocked(promptWithHelp).mockImplementation(
+    async (options: { field: ResourceField }) => {
+      const field = options.field;
+      promptedFieldNames.push(field.name);
+      const override = forced[field.name];
+      return override !== undefined ? override : generateDefaultAnswer(field);
+    },
+  );
 
   // Always opt into the advanced tier so advanced showIf children get a chance.
   vi.mocked(clack.confirm).mockResolvedValue(true);

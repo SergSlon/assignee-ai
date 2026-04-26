@@ -81,13 +81,10 @@ export {
 export { ResourceFieldName } from "../../constants/resource-fields.js";
 
 // Filesystem path + filename constants.
-// NOTE: `PROVISIONS_FILE` is ALSO exported from `list-resources/provision-log.ts`
-// (pre-existing SSOT); both resolve to the same "provisions.json".
 export {
   CHECKPOINT_DIR,
   BASELINES_DIR,
   FileName,
-  FAILURES_FILE,
   CHECKPOINT_FILE_PREFIX,
 } from "../../config/constants/paths.js";
 

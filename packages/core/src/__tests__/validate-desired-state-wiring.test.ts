@@ -37,7 +37,7 @@ import {
   createPricingMockTools,
   McpMocks,
 } from "../test-fixtures/mcp-mock-responses.js";
-import { INVALID_DESIRED_STATE_CODE } from "../graph/nodes/validate-desired-state.js";
+import { ErrorCode } from "../constants/errors.js";
 
 // ── Module-level mocks ──────────────────────────────────────────────────────
 
@@ -143,7 +143,6 @@ const _displayStubs = vi.hoisted(() => ({
   stopSpinner: vi.fn(),
   renderOptionPrompt: vi.fn(),
   renderAdvancedConfirm: vi.fn().mockResolvedValue(false),
-  renderApplyNowConfirm: vi.fn().mockResolvedValue(false),
   renderSecurityWarnings: vi.fn(),
   renderResourceTable: vi.fn(),
   renderEmptyList: vi.fn(),
@@ -301,7 +300,7 @@ describe("validateDesiredStateNode — graph wiring (Epic 94 R1 A-01)", () => {
     // AssigneeError without the CLI envelope path noticing until an
     // e2e run.
     expect(result.error).toBeInstanceOf(AssigneeError);
-    expect(result.error?.code).toBe(INVALID_DESIRED_STATE_CODE);
+    expect(result.error?.code).toBe(ErrorCode.INVALID_DESIRED_STATE);
   });
 
   it("an IPv4-shaped bucket name fails with INVALID_DESIRED_STATE", async () => {
@@ -323,7 +322,7 @@ describe("validateDesiredStateNode — graph wiring (Epic 94 R1 A-01)", () => {
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(result.errorMessage).toContain("IPv4");
     expect(result.error).toBeInstanceOf(AssigneeError);
-    expect(result.error?.code).toBe(INVALID_DESIRED_STATE_CODE);
+    expect(result.error?.code).toBe(ErrorCode.INVALID_DESIRED_STATE);
   });
 
   it("an xn-- prefix fails with INVALID_DESIRED_STATE", async () => {
@@ -345,7 +344,7 @@ describe("validateDesiredStateNode — graph wiring (Epic 94 R1 A-01)", () => {
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(result.errorMessage).toContain("xn--");
     expect(result.error).toBeInstanceOf(AssigneeError);
-    expect(result.error?.code).toBe(INVALID_DESIRED_STATE_CODE);
+    expect(result.error?.code).toBe(ErrorCode.INVALID_DESIRED_STATE);
   });
 
   it("adjacent dots ('app..logs') fail with INVALID_DESIRED_STATE", async () => {
@@ -375,7 +374,7 @@ describe("validateDesiredStateNode — graph wiring (Epic 94 R1 A-01)", () => {
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(result.errorMessage).toContain("adjacent dots");
     expect(result.error).toBeInstanceOf(AssigneeError);
-    expect(result.error?.code).toBe(INVALID_DESIRED_STATE_CODE);
+    expect(result.error?.code).toBe(ErrorCode.INVALID_DESIRED_STATE);
   });
 
   it("a valid bucket name passes through without triggering the validator", async () => {

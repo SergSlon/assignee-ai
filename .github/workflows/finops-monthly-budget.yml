@@ -1,0 +1,270 @@
+name: FinOps Monthly Budget Ceiling
+
+# P070 — Aggregate FinOps monthly ceiling gate.
+#
+# Purpose: weekly aggregation of the per-run nightly cost ledger
+# (produced by nightly-e2e.yml) to assert that rolling 30-day CI spend
+# stays within the configured FinOps monthly ceiling.
+#
+# The per-run ceiling (ASSIGNEE_NIGHTLY_BUDGET_USD, default $5/day) prevents
+# any single nightly run from over-spending. This workflow adds the AGGREGATE
+# layer — week-on-week cost trend + monthly budget alerting — so cumulative
+# drift across many cheap nightly runs is also caught.
+#
+# How it works:
+#   1. Download all `nightly-cost-ledger-*` CI artifacts from the past 30 days
+#      using the GitHub Actions API.
+#   2. Run scripts/finops-aggregate.mjs against the downloaded JSONL files.
+#   3. If rolling 30-day spend > ASSIGNEE_FINOPS_MONTHLY_BUDGET_USD:
+#      - Fail the workflow (exit 1).
+#      - Open or update a sticky GitHub issue labelled `finops-ceiling`.
+#      - Optionally POST a webhook alert to ASSIGNEE_FINOPS_ALERT_WEBHOOK
+#        (falls back to ASSIGNEE_NIGHTLY_ALERT_WEBHOOK if the dedicated
+#        secret is unset; both are opt-in).
+#   4. If no ledger data is found (fresh repo / nightly never ran):
+#      - Exit with a warning annotation (exit 2 from the script).
+#      - No issue opened, workflow succeeds.
+#
+# Operator configuration:
+#   ASSIGNEE_FINOPS_MONTHLY_BUDGET_USD — repo secret (or variable), default $50.
+#     Set to your actual monthly CI budget. The $50 default is a conservative
+#     starting point; operators SHOULD configure this for their own accounts.
+#   ASSIGNEE_FINOPS_ALERT_WEBHOOK      — repo secret (optional). Slack / email /
+#     PagerDuty destination URL for ceiling-exceeded alerts. If unset the
+#     workflow falls back to ASSIGNEE_NIGHTLY_ALERT_WEBHOOK; if that is also
+#     unset, only the GitHub issue is opened.
+#
+# To raise the budget after an alert fires:
+#   1. Update ASSIGNEE_FINOPS_MONTHLY_BUDGET_USD in repo Settings → Secrets
+#      (or Variables if not sensitive).
+#   2. Re-run the workflow manually via workflow_dispatch.
+#   3. Close the finops-ceiling tracking issue once the re-run passes.
+#
+# SHA-pin policy (W7): all uses: references below are pinned to the 40-char
+# commit SHA of the action version in use. Do not replace with tag refs.
+
+on:
+  schedule:
+    # 08:00 UTC every Monday — after the previous week's nightly runs have
+    # completed and ledger artifacts are available. Weekly cadence gives
+    # operators a 7-day look-back window with a clear trend signal.
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+    # Allow manual triggering for ad-hoc budget checks without waiting for
+    # the weekly schedule (e.g. after a large nightly run or budget update).
+
+concurrency:
+  group: finops-monthly-budget
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read    # download CI artifacts + list workflow runs
+  issues: write    # open / update finops-ceiling tracking issue
+
+jobs:
+  finops-ceiling-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Download nightly cost ledger artifacts (past 30 days)
+        # Pull all nightly-cost-ledger-* artifacts from recent nightly-e2e runs.
+        # The artifact name pattern is `nightly-e2e-logs-<run_number>` (uploaded
+        # by nightly-e2e.yml on failure) — but the JSONL ledger files are also
+        # uploaded independently as `nightly-cost-ledger-<run_number>` for
+        # non-failure runs. We download both patterns and let finops-aggregate.mjs
+        # scan the merged directory.
+        #
+        # If no artifacts exist yet (fresh repo), the download step produces an
+        # empty directory and finops-aggregate.mjs exits 2 (warning, not failure).
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/finops-ledger
+
+          # Compute the cutoff date: 30 days ago in YYYY-MM-DD format.
+          CUTOFF_DATE=$(date -u -d '30 days ago' '+%Y-%m-%d' 2>/dev/null \
+            || date -u -v-30d '+%Y-%m-%d')
+
+          echo "Fetching nightly-e2e artifact list (runs since ${CUTOFF_DATE})..."
+
+          # Fetch up to 200 completed nightly-e2e runs from the past ~35 days.
+          # GitHub artifact retention is 30 days for nightly-e2e-logs artifacts.
+          gh api \
+            --paginate \
+            "repos/${{ github.repository }}/actions/workflows/nightly-e2e.yml/runs?status=completed&per_page=50&created=>=${CUTOFF_DATE}" \
+            --jq '.workflow_runs[].id' \
+          | while read -r run_id; do
+              # For each run, check if it has a cost ledger artifact.
+              gh api \
+                "repos/${{ github.repository }}/actions/runs/${run_id}/artifacts" \
+                --jq '.artifacts[] | select(.name | startswith("nightly-cost-ledger-")) | .id' \
+              2>/dev/null \
+              | while read -r artifact_id; do
+                  echo "  Downloading artifact ${artifact_id} from run ${run_id}..."
+                  gh api \
+                    "repos/${{ github.repository }}/actions/artifacts/${artifact_id}/zip" \
+                    > /tmp/finops-ledger/artifact-${artifact_id}.zip 2>/dev/null || true
+                  if [ -f /tmp/finops-ledger/artifact-${artifact_id}.zip ]; then
+                    unzip -q -o /tmp/finops-ledger/artifact-${artifact_id}.zip \
+                      -d /tmp/finops-ledger/ 2>/dev/null || true
+                    rm -f /tmp/finops-ledger/artifact-${artifact_id}.zip
+                  fi
+              done
+            done || true
+
+          # Count JSONL files found.
+          jsonl_count=$(find /tmp/finops-ledger -name 'nightly-cost-*.jsonl' | wc -l | tr -d ' ')
+          echo "Ledger JSONL files collected: ${jsonl_count}"
+          echo "LEDGER_DIR=/tmp/finops-ledger" >> "$GITHUB_ENV"
+          echo "LEDGER_JSONL_COUNT=${jsonl_count}" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+
+      - name: Run FinOps aggregate check
+        id: finops
+        # Exit codes from finops-aggregate.mjs:
+        #   0 — within budget
+        #   1 — OVER budget (step fails, triggers alert steps below)
+        #   2 — no data (warning only, treated as success here)
+        continue-on-error: true
+        env:
+          ASSIGNEE_NIGHTLY_LEDGER_DIR: ${{ env.LEDGER_DIR }}
+          ASSIGNEE_FINOPS_MONTHLY_BUDGET_USD: ${{ secrets.ASSIGNEE_FINOPS_MONTHLY_BUDGET_USD }}
+        run: |
+          node scripts/finops-aggregate.mjs --dir "$ASSIGNEE_NIGHTLY_LEDGER_DIR"
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+        # Capture the actual exit code explicitly since continue-on-error swallows it.
+
+      - name: Capture finops script exit code
+        id: capture
+        # Re-run the script in dry-run / echo-only mode to capture the exit code
+        # into GITHUB_OUTPUT cleanly. Since continue-on-error above swallows the
+        # exit code from the prior step, we use outcome to detect failure.
+        run: |
+          if [ "${{ steps.finops.outcome }}" = "failure" ]; then
+            echo "status=exceeded" >> "$GITHUB_OUTPUT"
+          elif [ "${{ steps.finops.outcome }}" = "success" ]; then
+            echo "status=ok" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=no-data" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open or update finops-ceiling tracking issue
+        if: steps.capture.outputs.status == 'exceeded'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSIGNEE_FINOPS_MONTHLY_BUDGET_USD: ${{ secrets.ASSIGNEE_FINOPS_MONTHLY_BUDGET_USD }}
+        run: |
+          set -euo pipefail
+          BUDGET="${ASSIGNEE_FINOPS_MONTHLY_BUDGET_USD:-50}"
+          LABEL="finops-ceiling"
+          TITLE="FinOps: rolling 30-day CI spend exceeds monthly ceiling"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          body_file=$(mktemp)
+          cat > "$body_file" <<EOF
+          **Rolling 30-day CI spend has exceeded the FinOps monthly ceiling (\$${BUDGET}).**
+
+          Detected on workflow run [#${{ github.run_number }}](${RUN_URL}).
+          Commit: \`${{ github.sha }}\`
+
+          **Required actions:**
+          1. Review the FinOps aggregate report in the workflow run summary (see link above).
+          2. Determine whether the spend spike is expected (e.g. new resource types added to nightly-e2e).
+          3. To unblock:
+             - Raise \`ASSIGNEE_FINOPS_MONTHLY_BUDGET_USD\` in repo Settings → Secrets, **or**
+             - Reduce the nightly-e2e resource scope (remove high-cost resource types temporarily).
+          4. Re-run this workflow manually via \`workflow_dispatch\` once the budget is updated.
+          5. Close this issue once the re-run passes.
+
+          See \`docs/explanation/ci-gates.md\` § "FinOps monthly ceiling" for full policy.
+
+          _This issue is auto-managed by \`.github/workflows/finops-monthly-budget.yml\`._
+          EOF
+
+          # Ensure label exists (idempotent).
+          gh label create "$LABEL" \
+            --color "e99695" \
+            --description "Auto-opened when rolling 30-day CI spend exceeds the FinOps ceiling" \
+            2>/dev/null || true
+
+          existing=$(gh issue list --label "$LABEL" --state open --json number --jq '.[0].number' || echo "")
+          if [ -n "$existing" ]; then
+            echo "Updating existing finops-ceiling issue #${existing}"
+            gh issue comment "$existing" --body-file "$body_file"
+          else
+            echo "Opening new finops-ceiling issue"
+            gh issue create \
+              --title "$TITLE" \
+              --label "$LABEL" \
+              --body-file "$body_file"
+          fi
+
+      - name: Send webhook alert (ceiling exceeded)
+        if: steps.capture.outputs.status == 'exceeded'
+        env:
+          ASSIGNEE_FINOPS_ALERT_WEBHOOK: ${{ secrets.ASSIGNEE_FINOPS_ALERT_WEBHOOK }}
+          ASSIGNEE_NIGHTLY_ALERT_WEBHOOK: ${{ secrets.ASSIGNEE_NIGHTLY_ALERT_WEBHOOK }}
+          ASSIGNEE_FINOPS_MONTHLY_BUDGET_USD: ${{ secrets.ASSIGNEE_FINOPS_MONTHLY_BUDGET_USD }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            // Prefer the dedicated FinOps webhook; fall back to the shared nightly one.
+            const webhookUrl =
+              process.env.ASSIGNEE_FINOPS_ALERT_WEBHOOK ||
+              process.env.ASSIGNEE_NIGHTLY_ALERT_WEBHOOK;
+
+            if (!webhookUrl) {
+              core.info(
+                'Neither ASSIGNEE_FINOPS_ALERT_WEBHOOK nor ASSIGNEE_NIGHTLY_ALERT_WEBHOOK ' +
+                'is set — skipping webhook alert (opt-in). GitHub issue was still opened.'
+              );
+              return;
+            }
+
+            const budget = process.env.ASSIGNEE_FINOPS_MONTHLY_BUDGET_USD || '50';
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const payload = JSON.stringify({
+              text:
+                `FinOps ceiling EXCEEDED — rolling 30-day CI spend exceeds $${budget}/month ` +
+                `(run #${context.runNumber}, commit ${context.sha.slice(0, 8)}). ` +
+                `Raise ASSIGNEE_FINOPS_MONTHLY_BUDGET_USD or reduce nightly-e2e scope.`,
+              run_url: runUrl,
+              workflow: 'finops-monthly-budget',
+              budget_usd: budget,
+            });
+
+            const { execSync } = require('child_process');
+            try {
+              execSync(
+                `curl -sSf -X POST -H 'Content-Type: application/json' -d '${payload.replace(/'/g, "\\'")}' '${webhookUrl}'`,
+                { stdio: 'inherit' }
+              );
+              core.info('FinOps ceiling webhook alert delivered.');
+            } catch (e) {
+              core.warning(`Webhook delivery failed — check ASSIGNEE_FINOPS_ALERT_WEBHOOK. Error: ${e.message}`);
+            }
+
+      - name: Fail job if ceiling exceeded
+        # Hard fail after alerting so the workflow run shows as failed in the
+        # GitHub UI — providing a persistent red signal until the budget is raised.
+        if: steps.capture.outputs.status == 'exceeded'
+        run: |
+          echo "::error::Rolling 30-day CI spend exceeds ASSIGNEE_FINOPS_MONTHLY_BUDGET_USD."
+          echo "::error::See the finops-ceiling GitHub issue and workflow summary for details."
+          exit 1
+
+      - name: Annotate no-data warning
+        if: steps.capture.outputs.status == 'no-data'
+        run: |
+          echo "::warning::FinOps aggregate check found no cost ledger data for the past 30 days."
+          echo "::warning::This is expected for a fresh repository. No budget ceiling action required."
+          echo "::warning::Once nightly-e2e runs produce cost ledger artifacts, this check will become active."

@@ -38,7 +38,7 @@ vi.mock("@aws-sdk/client-ec2", () => {
   };
 });
 
-import { routeTableStrategy } from "../route-table-strategy.js";
+import { ec2RouteTableStrategy as routeTableStrategy } from "@assignee/core";
 import { makeDestroyContext } from "./test-helpers.js";
 
 const RT_ID = "rtb-0123456789abcdef0";

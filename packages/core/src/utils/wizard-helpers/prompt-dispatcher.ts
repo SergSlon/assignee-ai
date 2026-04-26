@@ -74,46 +74,8 @@ function isHelp(answer: unknown): boolean {
  */
 export async function promptWithHelp(
   options: PromptWithHelpOptions,
-): Promise<unknown>;
-/**
- * @deprecated Pass a `PromptWithHelpOptions` object instead of
- * positional parameters. Kept for a short transition only and
- * removed when all call-sites migrate.
- */
-export async function promptWithHelp(
-  field: ResourceField,
-  resolved: ResolvedFieldConfig,
-  resourceType: string,
-  tools: StructuredTool[],
-  llmClient?: LlmPort,
-  userIntent?: string,
-  showBack?: boolean,
-  answers?: Record<string, unknown>,
-): Promise<unknown>;
-export async function promptWithHelp(
-  fieldOrOptions: ResourceField | PromptWithHelpOptions,
-  resolved?: ResolvedFieldConfig,
-  resourceType?: string,
-  tools?: StructuredTool[],
-  llmClient?: LlmPort,
-  userIntent?: string,
-  showBack = false,
-  answers?: Record<string, unknown>,
 ): Promise<unknown> {
-  // Normalize positional / options-object callers into a single options bundle.
-  const opts: PromptWithHelpOptions =
-    "field" in fieldOrOptions
-      ? fieldOrOptions
-      : {
-          field: fieldOrOptions,
-          resolved: resolved!,
-          resourceType: resourceType!,
-          tools: tools!,
-          llmClient,
-          userIntent,
-          showBack,
-          answers,
-        };
+  const opts = options;
 
   let cachedHint: string | null = null;
   while (true) {

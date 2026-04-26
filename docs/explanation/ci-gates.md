@@ -6,18 +6,19 @@ and its acceptable-miss window.
 
 ## Gate inventory
 
-| Gate                                            | Trigger                          | Blocks merge?                           | Notes                                                                                                                               |
-| ----------------------------------------------- | -------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | --- | ------------------------------------------------------------ |
-| `pnpm build`                                    | Every PR + push                  | **Yes**                                 | TypeScript must compile in all four packages                                                                                        |
-| Prettier format check                           | Every PR + push                  | **Yes**                                 | Catches `--no-verify` bypass of the pre-commit `lint-staged` formatter (P077); `pnpm exec prettier --check "**/*.{ts,tsx,json,md}"` |
-| `pnpm test` (vitest, no coverage)               | Every PR                         | **Yes**                                 | All unit + integration tests must pass                                                                                              |
-| `pnpm -r test:coverage` (vitest, with coverage) | Every PR                         | **Yes**                                 | Per-file coverage floors enforced; exits non-zero below floor                                                                       |
-| Destroy-strategy ≥ 80% per-file                 | Every PR (coverage gate)         | **Yes**                                 | `packages/core/src/destroy-strategies/**` per-file floor                                                                            |
-| `scripts/audit-no-suppress.ts`                  | Every PR                         | **Yes**                                 | Asserts no `                                                                                                                        |     | true`on assignee CLI lines in`.github/actions/\*/action.yml` |
-| `pnpm citation-lint`                            | Every PR with doc changes        | **Yes**                                 | Broken `file:line` citations in docs are a BLOCKER (see `feedback_citation_lint_guardrail`)                                         |
-| **Nightly E2E destroy smoke**                   | Scheduled (nightly, `RUN_E2E=1`) | **No — acceptable-miss window applies** | Real-AWS provision + destroy per type; see policy below                                                                             |
-| **Mock fixture drift check**                    | Scheduled (nightly, 06:00 UTC)   | **No — acceptable-miss window applies** | CFN DescribeType vs fixture diff; GitHub issue on every failure; webhook after 3 consecutive                                        |
-| Pricing MCP zero-hardcoded-prices               | Every PR                         | **Yes**                                 | `scripts/check-mock-fixture-drift.mts` + pricing-decomposer-coverage test                                                           |
+| Gate                                            | Trigger                           | Blocks merge?                                                 | Notes                                                                                                                               |
+| ----------------------------------------------- | --------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | --- | ------------------------------------------------------------ |
+| `pnpm build`                                    | Every PR + push                   | **Yes**                                                       | TypeScript must compile in all four packages                                                                                        |
+| Prettier format check                           | Every PR + push                   | **Yes**                                                       | Catches `--no-verify` bypass of the pre-commit `lint-staged` formatter (P077); `pnpm exec prettier --check "**/*.{ts,tsx,json,md}"` |
+| `pnpm test` (vitest, no coverage)               | Every PR                          | **Yes**                                                       | All unit + integration tests must pass                                                                                              |
+| `pnpm -r test:coverage` (vitest, with coverage) | Every PR                          | **Yes**                                                       | Per-file coverage floors enforced; exits non-zero below floor                                                                       |
+| Destroy-strategy ≥ 80% per-file                 | Every PR (coverage gate)          | **Yes**                                                       | `packages/core/src/destroy-strategies/**` per-file floor                                                                            |
+| `scripts/audit-no-suppress.ts`                  | Every PR                          | **Yes**                                                       | Asserts no `                                                                                                                        |     | true`on assignee CLI lines in`.github/actions/\*/action.yml` |
+| `pnpm citation-lint`                            | Every PR with doc changes         | **Yes**                                                       | Broken `file:line` citations in docs are a BLOCKER (see `feedback_citation_lint_guardrail`)                                         |
+| **Nightly E2E destroy smoke**                   | Scheduled (nightly, `RUN_E2E=1`)  | **No — acceptable-miss window applies**                       | Real-AWS provision + destroy per type; see policy below                                                                             |
+| **Mock fixture drift check**                    | Scheduled (nightly, 06:00 UTC)    | **No — acceptable-miss window applies**                       | CFN DescribeType vs fixture diff; GitHub issue on every failure; webhook after 3 consecutive                                        |
+| Pricing MCP zero-hardcoded-prices               | Every PR                          | **Yes**                                                       | `scripts/check-mock-fixture-drift.mts` + pricing-decomposer-coverage test                                                           |
+| **FinOps monthly ceiling**                      | Scheduled (weekly, Mon 08:00 UTC) | **No — alerting only; operator must raise budget to unblock** | Rolling 30-day spend vs `ASSIGNEE_FINOPS_MONTHLY_BUDGET_USD`; sticky GitHub issue + webhook on breach                               |
 
 ## Nightly E2E gate — merge policy
 
@@ -72,6 +73,52 @@ estimated remaining resources would breach the cap.
 The cost ledger is written to `~/.assignee/logs/nightly-cost-YYYY-MM-DD.jsonl`
 and uploaded as a CI artifact. The weekly rollup script
 `scripts/cost-ledger-rollup.ts` aggregates these into a per-week total.
+
+#### FinOps monthly ceiling
+
+The per-run cap (`ASSIGNEE_NIGHTLY_BUDGET_USD`) prevents any single nightly run
+from over-spending, but cumulative drift — many cheap nightly runs that each stay
+under the per-run cap — is not caught by the per-run gate alone. The FinOps
+monthly ceiling adds that aggregate layer.
+
+**How it works** — `.github/workflows/finops-monthly-budget.yml` runs every
+Monday at 08:00 UTC. It:
+
+1. Downloads all `nightly-cost-ledger-*` CI artifacts from the past 30 days.
+2. Runs `scripts/finops-aggregate.mjs` to sum the rolling 30-day spend from the
+   per-run JSONL ledger files.
+3. If spend exceeds `ASSIGNEE_FINOPS_MONTHLY_BUDGET_USD` (default: $50):
+   - Opens or updates a sticky GitHub issue labelled `finops-ceiling`.
+   - Fires a webhook alert to `ASSIGNEE_FINOPS_ALERT_WEBHOOK` (falls back to
+     `ASSIGNEE_NIGHTLY_ALERT_WEBHOOK` if the dedicated secret is unset; both are
+     opt-in). If neither is set, only the GitHub issue is opened.
+   - **Fails the workflow** — providing a persistent red signal in the Actions UI
+     until the budget is raised or the scope is reduced.
+4. If no ledger data is found (fresh repository), a warning annotation is emitted
+   and the workflow succeeds — this is not treated as a failure.
+
+**Operator configuration:**
+
+| Secret / Variable                    | Description                                              | Default |
+| ------------------------------------ | -------------------------------------------------------- | ------- |
+| `ASSIGNEE_FINOPS_MONTHLY_BUDGET_USD` | Rolling 30-day CI spend ceiling in USD                   | `50`    |
+| `ASSIGNEE_FINOPS_ALERT_WEBHOOK`      | Webhook destination for ceiling-exceeded alerts (opt-in) | unset   |
+
+The $50 default is a conservative starting point. **Operators should set their
+own value** based on their actual nightly-e2e scope and resource portfolio. Set
+the value via repo Settings → Secrets (if sensitive) or Settings → Variables
+(if non-sensitive).
+
+**To unblock after an alert:**
+
+1. Raise `ASSIGNEE_FINOPS_MONTHLY_BUDGET_USD` in repo Settings → Secrets, **or**
+   reduce the nightly-e2e resource scope (remove high-cost types temporarily).
+2. Re-run the `finops-monthly-budget` workflow manually via `workflow_dispatch`.
+3. Close the `finops-ceiling` tracking issue once the re-run passes.
+
+**Cost figures are never hardcoded** — `scripts/finops-aggregate.mjs` reads all
+USD amounts from the JSONL ledger files, which are populated from the Pricing MCP
+at runtime. (Per `feedback_no_hardcoded_prices`.)
 
 ## Mock fixture drift gate — alert policy
 
@@ -147,5 +194,8 @@ New quality gates MUST be:
 - `feedback_citation_lint_guardrail` — citation lint after doc changes
 - `.github/workflows/nightly-e2e.yml` — nightly E2E workflow (secret: `ASSIGNEE_NIGHTLY_ALERT_WEBHOOK`)
 - `.github/workflows/mock-fixture-drift.yml` — drift check workflow (secrets: `ASSIGNEE_DRIFT_ALERT_WEBHOOK`, `ASSIGNEE_NIGHTLY_ALERT_WEBHOOK`)
+- `.github/workflows/finops-monthly-budget.yml` — FinOps monthly ceiling workflow (secrets: `ASSIGNEE_FINOPS_MONTHLY_BUDGET_USD`, `ASSIGNEE_FINOPS_ALERT_WEBHOOK`, `ASSIGNEE_NIGHTLY_ALERT_WEBHOOK`)
+- `scripts/finops-aggregate.mjs` — rolling 30-day cost aggregation script
+- `scripts/cost-ledger-rollup.ts` — weekly per-run cost ledger rollup
 - `packages/core/src/destroy-strategies/destroy-only-tagged-invariant.test.ts`
 - `apps/cli/src/e2e/nightly-destroy-smoke.test.ts`

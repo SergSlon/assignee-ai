@@ -2119,7 +2119,7 @@ describe("renderHitlConfirm — non-TTY mode", () => {
   });
 });
 
-describe("renderApplyNowConfirm — TTY mode", () => {
+describe("renderHitlConfirm — TTY mode", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     Object.defineProperty(process.stdin, "isTTY", {
@@ -2136,15 +2136,15 @@ describe("renderApplyNowConfirm — TTY mode", () => {
 
   it("user approves — returns true", async () => {
     vi.mocked(confirm).mockResolvedValueOnce(true);
-    const { renderApplyNowConfirm } = await import("./display.js");
-    const result = await renderApplyNowConfirm(mockState);
+    const { renderHitlConfirm } = await import("./display.js");
+    const result = await renderHitlConfirm(mockState);
     expect(result).toBe(true);
   });
 
   it("user rejects — returns false", async () => {
     vi.mocked(confirm).mockResolvedValueOnce(false);
-    const { renderApplyNowConfirm } = await import("./display.js");
-    const result = await renderApplyNowConfirm(mockState);
+    const { renderHitlConfirm } = await import("./display.js");
+    const result = await renderHitlConfirm(mockState);
     expect(result).toBe(false);
   });
 
@@ -2153,14 +2153,14 @@ describe("renderApplyNowConfirm — TTY mode", () => {
       Symbol("cancel") as unknown as boolean,
     );
     vi.mocked(isCancel).mockReturnValueOnce(true);
-    const { renderApplyNowConfirm } = await import("./display.js");
-    await expect(renderApplyNowConfirm(mockState)).rejects.toThrow(
+    const { renderHitlConfirm } = await import("./display.js");
+    await expect(renderHitlConfirm(mockState)).rejects.toThrow(
       "Operation cancelled by user.",
     );
   });
 });
 
-describe("renderApplyNowConfirm — non-TTY mode", () => {
+describe("renderHitlConfirm — non-TTY mode", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     Object.defineProperty(process.stdin, "isTTY", {
@@ -2176,8 +2176,8 @@ describe("renderApplyNowConfirm — non-TTY mode", () => {
   });
 
   it("returns false without prompting", async () => {
-    const { renderApplyNowConfirm } = await import("./display.js");
-    const result = await renderApplyNowConfirm(mockState);
+    const { renderHitlConfirm } = await import("./display.js");
+    const result = await renderHitlConfirm(mockState);
     expect(result).toBe(false);
     expect(confirm).not.toHaveBeenCalled();
   });

@@ -190,4 +190,208 @@ describe("drift-detail view", () => {
     expect(output).toContain("ERROR");
     expect(output).toContain("Access denied to resource");
   });
+
+  // ── Branch-coverage uplift (P066 R10b-01) ────────────────────────────────
+
+  it("renders DELETED status through statusColor (branch: DriftStatus.DELETED)", () => {
+    const result: DriftResult = {
+      ...baseDriftResult,
+      status: DriftStatus.DELETED,
+    };
+    const output = renderDriftDetail(result, { noColor: true });
+    expect(output).toContain("DELETED");
+  });
+
+  it("renders BASELINE_MISSING status through statusColor (branch: DriftStatus.BASELINE_MISSING)", () => {
+    const result: DriftResult = {
+      ...baseDriftResult,
+      status: DriftStatus.BASELINE_MISSING,
+    };
+    const output = renderDriftDetail(result, { noColor: true });
+    expect(output).toContain("BASELINE_MISSING");
+  });
+
+  it("statusColor default branch: unknown status string passes through unchanged", () => {
+    const result = {
+      ...baseDriftResult,
+      // Use unknown cast chain to inject an unexpected status value
+      status: "UNKNOWN_STATUS",
+    } as unknown as DriftResult;
+    const output = renderDriftDetail(result, { noColor: true });
+    expect(output).toContain("UNKNOWN_STATUS");
+  });
+
+  it("renders DELETED status with chalk color when noColor=false", () => {
+    const result: DriftResult = {
+      ...baseDriftResult,
+      status: DriftStatus.DELETED,
+    };
+    // When noColor=false the function routes through chalk.gray — just assert
+    // the status string is present somewhere in the output (ANSI may surround it).
+    const output = renderDriftDetail(result, { noColor: false });
+    expect(output).toContain("DELETED");
+  });
+
+  it("renders ERROR status with chalk color when noColor=false (branch: chalk.yellow path)", () => {
+    const result: DriftResult = {
+      ...baseDriftResult,
+      status: DriftStatus.ERROR,
+      errorMessage: "some error",
+    };
+    const output = renderDriftDetail(result, { noColor: false });
+    expect(output).toContain("ERROR");
+  });
+
+  it("renders BASELINE_MISSING status with chalk color when noColor=false", () => {
+    const result: DriftResult = {
+      ...baseDriftResult,
+      status: DriftStatus.BASELINE_MISSING,
+    };
+    const output = renderDriftDetail(result, { noColor: false });
+    expect(output).toContain("BASELINE_MISSING");
+  });
+
+  it("detects cfnLogical-only provenance when stack-name tag is absent (branch: cfnLogical path)", () => {
+    const result: DriftResult = {
+      ...baseDriftResult,
+      actualState: {
+        BucketName: "my-app-bucket",
+        Tags: [
+          // Only the logical-id tag — no stack-name
+          { Key: "aws:cloudformation:logical-id", Value: "MyLogicalBucket" },
+        ],
+      },
+    };
+    const output = renderDriftDetail(result, { noColor: true });
+    expect(output).toContain(
+      "Last modified by: CloudFormation (logical ID: MyLogicalBucket)",
+    );
+  });
+
+  it("returns undefined provenance when Tags array has no CFN keys", () => {
+    const result: DriftResult = {
+      ...baseDriftResult,
+      actualState: {
+        BucketName: "my-app-bucket",
+        Tags: [{ Key: "env", Value: "prod" }],
+      },
+    };
+    const output = renderDriftDetail(result, { noColor: true });
+    expect(output).not.toContain("Last modified by:");
+  });
+
+  it("returns undefined provenance when Tags is not an array (branch: !Array.isArray)", () => {
+    const result: DriftResult = {
+      ...baseDriftResult,
+      actualState: {
+        BucketName: "my-app-bucket",
+        Tags: "not-an-array" as unknown as [],
+      },
+    };
+    const output = renderDriftDetail(result, { noColor: true });
+    expect(output).not.toContain("Last modified by:");
+  });
+
+  it("renders ADDED_EXTERNALLY without value when actualValue is absent (branch: val === '(absent)')", () => {
+    const result: DriftResult = {
+      ...baseDriftResult,
+      status: DriftStatus.DRIFTED,
+      driftedFields: [
+        {
+          path: "SomeExternalField",
+          desiredValue: undefined,
+          actualValue: undefined,
+          changeType: ChangeType.ADDED_EXTERNALLY,
+        },
+      ],
+    };
+    const output = renderDriftDetail(result, { noColor: true });
+    expect(output).toContain("added externally");
+    // The value line should NOT be rendered when formatValue returns "(absent)"
+    expect(output).not.toContain("(absent)");
+  });
+
+  it("formatValue renders null as '(null)' (branch: value === null)", () => {
+    const result: DriftResult = {
+      ...baseDriftResult,
+      status: DriftStatus.DRIFTED,
+      driftedFields: [
+        {
+          path: "NullField",
+          desiredValue: null,
+          actualValue: "present",
+          changeType: ChangeType.MODIFIED,
+        },
+      ],
+    };
+    const output = renderDriftDetail(result, { noColor: true });
+    expect(output).toContain("(null)");
+  });
+
+  it("formatValue truncates long JSON objects to 200 chars (branch: json.length > 200)", () => {
+    const bigObj: Record<string, string> = {};
+    for (let i = 0; i < 50; i++) {
+      bigObj[`key${i}`] = `value${i}`;
+    }
+    const result: DriftResult = {
+      ...baseDriftResult,
+      status: DriftStatus.DRIFTED,
+      driftedFields: [
+        {
+          path: "LargeField",
+          desiredValue: bigObj,
+          actualValue: "small",
+          changeType: ChangeType.MODIFIED,
+        },
+      ],
+    };
+    const output = renderDriftDetail(result, { noColor: true });
+    expect(output).toContain("...");
+  });
+
+  it("verbose mode skips drifted paths when listing matching fields", () => {
+    const result: DriftResult = {
+      ...baseDriftResult,
+      status: DriftStatus.DRIFTED,
+      driftedFields: [
+        {
+          path: "VersioningConfiguration",
+          desiredValue: "Enabled",
+          actualValue: "Suspended",
+          changeType: ChangeType.MODIFIED,
+        },
+      ],
+      desiredState: {
+        BucketName: "my-app-bucket",
+        VersioningConfiguration: "Enabled",
+        Region: "us-east-1",
+      },
+      actualState: {
+        BucketName: "my-app-bucket",
+        VersioningConfiguration: "Suspended",
+        Region: "us-east-1",
+      },
+    };
+    const output = renderDriftDetail(result, { noColor: true, verbose: true });
+    // Matching fields shown
+    expect(output).toContain("Matching fields:");
+    expect(output).toContain("BucketName");
+    expect(output).toContain("Region");
+    // Drifted field NOT shown in the matching section
+    const matchingSection = output.slice(output.indexOf("Matching fields:"));
+    expect(matchingSection).not.toContain("VersioningConfiguration");
+  });
+
+  it("no verbose section when desiredState or actualState is absent", () => {
+    const result: DriftResult = {
+      resourceType: "AWS::S3::Bucket",
+      resourceId: "bucket",
+      status: DriftStatus.IN_SYNC,
+      driftedFields: [],
+      checkedAt: "2026-03-24T10:00:00.000Z",
+      // desiredState and actualState intentionally omitted
+    };
+    const output = renderDriftDetail(result, { noColor: true, verbose: true });
+    expect(output).not.toContain("Matching fields:");
+  });
 });

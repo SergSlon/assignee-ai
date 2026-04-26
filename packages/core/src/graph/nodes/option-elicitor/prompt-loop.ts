@@ -100,16 +100,16 @@ export async function runPromptLoop(
       clack.log.info(`${progressLabel} ${clampedIndex + 1} of ${total}`);
     }
 
-    const answer = await promptWithHelp(
+    const answer = await promptWithHelp({
       field,
-      res,
+      resolved: res,
       resourceType,
       tools,
       llmClient,
       userIntent,
-      history.length > 0,
-      elicitedOptions,
-    );
+      showBack: history.length > 0,
+      answers: elicitedOptions,
+    });
 
     if (answer === BACK_SENTINEL) {
       const back = handleBackSentinel(

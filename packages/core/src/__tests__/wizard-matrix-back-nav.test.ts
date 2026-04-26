@@ -414,7 +414,8 @@ describe("AC #3 — back navigation consistency through a real plugin", () => {
     const callLog: Array<{ name: string; value: unknown }> = [];
     let stepCount = 0;
     vi.mocked(promptWithHelp).mockImplementation(
-      async (field: ResourceField) => {
+      async (options: { field: ResourceField }) => {
+        const field = options.field;
         stepCount++;
         // Step 3: user picks Back from the third field.
         if (stepCount === 3) {
@@ -490,10 +491,9 @@ describe("AC #3 — back navigation consistency through a real plugin", () => {
 
     // AC #4: option-elicitor MUST pass showBack=false on the very first
     // visible field (so renderOptionPrompt doesn't render the Back option
-    // when there's no history to pop). The 7th positional arg to
-    // promptWithHelp is `showBack`.
+    // when there's no history to pop). The options object's showBack property.
     const firstCall = vi.mocked(promptWithHelp).mock.calls[0];
     expect(firstCall).toBeDefined();
-    expect(firstCall![6]).toBe(false);
+    expect(firstCall![0].showBack).toBeFalsy();
   });
 });

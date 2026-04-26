@@ -96,13 +96,3 @@ export async function renderAdvancedConfirm(): Promise<boolean> {
   }
   return result === true;
 }
-
-/**
- * Story 50-2: `renderApplyNowConfirm` was collapsed into `renderHitlConfirm`.
- * Kept as a thin alias for external callers/tests until they migrate.
- *
- * @deprecated use `renderHitlConfirm` directly — both entry points now share
- *             the same unified "Apply now? (<type>, est. <cost>)" message.
- * @see Story 10.3, FR-20, Story 50-2
- */
-export const renderApplyNowConfirm = renderHitlConfirm;

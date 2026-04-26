@@ -14,12 +14,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
-import {
-  ASSIGNEE_DIR,
-  PROVISIONS_FILE,
-  FAILURES_FILE,
-  FileName,
-} from "../../config/constants/paths.js";
+import { ASSIGNEE_DIR, FileName } from "../../config/constants/paths.js";
 import {
   ProvisionLogSchema,
   FailureLogSchema,
@@ -43,23 +38,23 @@ export class MemoryService extends FileStore {
 
   async readProvisions(): Promise<ProvisionRecord[]> {
     const [err, raw] = await safeTry(
-      fs.readFile(this.filePath(PROVISIONS_FILE), "utf-8"),
+      fs.readFile(this.filePath(FileName.PROVISIONS), "utf-8"),
     );
     if (err) return [];
     try {
       const parsed = ProvisionLogSchema.safeParse(JSON.parse(raw));
       if (parsed.success) return parsed.data;
-      await this.backupCorruptFile(PROVISIONS_FILE);
+      await this.backupCorruptFile(FileName.PROVISIONS);
       return [];
     } catch {
-      await this.backupCorruptFile(PROVISIONS_FILE);
+      await this.backupCorruptFile(FileName.PROVISIONS);
       return [];
     }
   }
 
   async appendProvision(record: ProvisionRecord): Promise<void> {
     await this.ensureDir();
-    const target = this.filePath(PROVISIONS_FILE);
+    const target = this.filePath(FileName.PROVISIONS);
     const acquired = await this.acquireLock(target);
     if (!acquired) {
       process.stderr.write(
@@ -80,23 +75,23 @@ export class MemoryService extends FileStore {
 
   async readFailures(): Promise<FailureRecord[]> {
     const [err, raw] = await safeTry(
-      fs.readFile(this.filePath(FAILURES_FILE), "utf-8"),
+      fs.readFile(this.filePath(FileName.FAILURES), "utf-8"),
     );
     if (err) return [];
     try {
       const parsed = FailureLogSchema.safeParse(JSON.parse(raw));
       if (parsed.success) return parsed.data;
-      await this.backupCorruptFile(FAILURES_FILE);
+      await this.backupCorruptFile(FileName.FAILURES);
       return [];
     } catch {
-      await this.backupCorruptFile(FAILURES_FILE);
+      await this.backupCorruptFile(FileName.FAILURES);
       return [];
     }
   }
 
   async appendFailure(record: FailureRecord): Promise<void> {
     await this.ensureDir();
-    const target = this.filePath(FAILURES_FILE);
+    const target = this.filePath(FileName.FAILURES);
     const acquired = await this.acquireLock(target);
     if (!acquired) {
       process.stderr.write(
@@ -119,7 +114,7 @@ export class MemoryService extends FileStore {
    */
   async clearFailuresForType(resourceType: string): Promise<void> {
     await this.ensureDir();
-    const target = this.filePath(FAILURES_FILE);
+    const target = this.filePath(FileName.FAILURES);
     const acquired = await this.acquireLock(target);
     if (!acquired) {
       process.stderr.write(
@@ -224,7 +219,7 @@ export class MemoryService extends FileStore {
   ): Promise<number> {
     return rotateRecords({
       store: this,
-      target: this.filePath(PROVISIONS_FILE),
+      target: this.filePath(FileName.PROVISIONS),
       read: () => this.readProvisions(),
       sortByTimestamp: (r) => new Date(r.timestamp).getTime(),
       maxRecords,
@@ -237,7 +232,7 @@ export class MemoryService extends FileStore {
   async rotateFailures(maxRecords = 100): Promise<number> {
     return rotateRecords({
       store: this,
-      target: this.filePath(FAILURES_FILE),
+      target: this.filePath(FileName.FAILURES),
       read: () => this.readFailures(),
       maxRecords,
       label: "failures.json",

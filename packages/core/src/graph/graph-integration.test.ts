@@ -154,7 +154,6 @@ const _displayStubs = vi.hoisted(() => ({
   stopSpinner: vi.fn(),
   renderOptionPrompt: vi.fn(),
   renderAdvancedConfirm: vi.fn().mockResolvedValue(false),
-  renderApplyNowConfirm: vi.fn().mockResolvedValue(false),
   renderSecurityWarnings: vi.fn(),
   renderResourceTable: vi.fn(),
   renderEmptyList: vi.fn(),

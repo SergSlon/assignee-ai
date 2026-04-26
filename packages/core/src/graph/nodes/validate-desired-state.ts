@@ -53,18 +53,6 @@ import {
   validateEcrRepositoryName,
 } from "./validate-desired-state/name-validators.js";
 
-/**
- * Machine-readable error code emitted when the `validateDesiredStateNode`
- * fails. Surfaces through the CLI's `--output json` envelope as
- * `error.code === "INVALID_DESIRED_STATE"` so CI/automation can detect
- * plan-time validation failures without string-matching the human message.
- *
- * @deprecated Use `ErrorCode.INVALID_DESIRED_STATE` from
- * `@assignee/core/constants/errors` instead. This re-export is kept for
- * backwards-compatibility with existing tests that import it by name.
- */
-export const INVALID_DESIRED_STATE_CODE = ErrorCode.INVALID_DESIRED_STATE;
-
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -376,6 +364,6 @@ export async function validateDesiredStateNode(
     // path surfaces `error.code: "INVALID_DESIRED_STATE"`. Downstream
     // `formatErrorResult` already reads `state.error` through
     // `defaultErrorMessageRegistry.resolve(...)`.
-    error: new AssigneeError(errorMessage, INVALID_DESIRED_STATE_CODE),
+    error: new AssigneeError(errorMessage, ErrorCode.INVALID_DESIRED_STATE),
   };
 }

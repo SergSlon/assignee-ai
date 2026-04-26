@@ -59,16 +59,6 @@ export function createPricingMockTools(
   return [createMockTool(ToolName.GET_PRICING, pricingResponse)];
 }
 
-/**
- * @deprecated Use createPricingMockTools() instead.
- */
-export function createCoreMockTools(
-  _schemaResponse?: unknown,
-  pricingResponse = McpMocks.pricing.s3Storage.success,
-): StructuredTool[] {
-  return [createMockTool(ToolName.GET_PRICING, pricingResponse)];
-}
-
 export function createDocMockTools(
   searchResponse: unknown = McpMocks.docSearch.s3BucketName.success,
   readSectionsResponse: unknown = McpMocks.docReadSections.s3BucketName.success,

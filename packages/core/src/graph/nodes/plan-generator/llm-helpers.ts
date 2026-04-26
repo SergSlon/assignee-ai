@@ -486,24 +486,509 @@ export function validateCloudFrontOrigins(
   return null;
 }
 
+// ── Plan-time validators — additional resource types (P085) ─────────────────
+//
+// Each validator below follows the same contract: returns `null` on pass or
+// a `[ERROR] … [FIX] …` string on fail.  Structural cross-property checks
+// only — per-field name/charset validation lives in validate-desired-state.ts.
+
+/**
+ * IAM::Role — AssumeRolePolicyDocument is required by CloudFormation.
+ * Without it CloudControl rejects with "required property missing".
+ */
+export function validateIamRoleShape(
+  desiredState: Record<string, unknown>,
+): string | null {
+  if (!("AssumeRolePolicyDocument" in desiredState)) {
+    return (
+      "[ERROR] AWS::IAM::Role is missing required property AssumeRolePolicyDocument. " +
+      "[FIX] Add an AssumeRolePolicyDocument that grants the trust principal (e.g. lambda.amazonaws.com or ec2.amazonaws.com) the sts:AssumeRole action."
+    );
+  }
+  return null;
+}
+
+/**
+ * Lambda::Function — Code must specify exactly one source:
+ *   - S3 source: S3Bucket + S3Key (ImageUri must be absent)
+ *   - Container: ImageUri (S3Bucket/S3Key/ZipFile must be absent)
+ *   - Inline: ZipFile (S3Bucket/S3Key/ImageUri must be absent)
+ * Having S3Bucket without S3Key (or vice-versa) is also invalid.
+ */
+export function validateLambdaCodeShape(
+  desiredState: Record<string, unknown>,
+): string | null {
+  const code = desiredState["Code"];
+  if (!code || typeof code !== "object" || Array.isArray(code)) return null;
+  const c = code as Record<string, unknown>;
+  const hasS3Bucket = "S3Bucket" in c;
+  const hasS3Key = "S3Key" in c;
+  const hasZipFile = "ZipFile" in c;
+  const hasImageUri = "ImageUri" in c;
+
+  const sourceCount = [hasS3Bucket || hasS3Key, hasZipFile, hasImageUri].filter(
+    Boolean,
+  ).length;
+
+  if (sourceCount > 1) {
+    return (
+      "[ERROR] Lambda Code specifies multiple sources (S3/ZipFile/ImageUri). " +
+      "[FIX] Choose exactly one: S3Bucket+S3Key for S3 deployment, ZipFile for inline code, or ImageUri for container image."
+    );
+  }
+
+  if (hasS3Bucket && !hasS3Key) {
+    return (
+      "[ERROR] Lambda Code.S3Bucket is set but S3Key is missing. " +
+      "[FIX] Add Code.S3Key with the object key (path) of the deployment package in the S3 bucket."
+    );
+  }
+
+  if (hasS3Key && !hasS3Bucket) {
+    return (
+      "[ERROR] Lambda Code.S3Key is set but S3Bucket is missing. " +
+      "[FIX] Add Code.S3Bucket with the name of the S3 bucket containing the deployment package."
+    );
+  }
+
+  return null;
+}
+
+/**
+ * EC2::Instance — ImageId is required; without it CloudControl fails
+ * with a cryptic "required property" error.
+ */
+export function validateEc2InstanceShape(
+  desiredState: Record<string, unknown>,
+): string | null {
+  if (!desiredState["ImageId"]) {
+    return (
+      "[ERROR] AWS::EC2::Instance is missing required property ImageId. " +
+      "[FIX] Provide a valid AMI ID (e.g. ami-0abcdef1234567890). Use aws ec2 describe-images or the SSM Parameter Store path /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2 to find current AMI IDs."
+    );
+  }
+  return null;
+}
+
+/**
+ * SQS::Queue — FifoQueue: true requires the QueueName to end with ".fifo".
+ * Conversely, a ".fifo" suffix on a non-FIFO queue is also invalid.
+ */
+export function validateSqsQueueShape(
+  desiredState: Record<string, unknown>,
+): string | null {
+  const isFifo = desiredState["FifoQueue"] === true;
+  const name = desiredState["QueueName"];
+  const nameStr = typeof name === "string" ? name : null;
+
+  if (isFifo && nameStr && !nameStr.endsWith(".fifo")) {
+    return (
+      `[ERROR] SQS Queue has FifoQueue: true but QueueName "${nameStr}" does not end with ".fifo". ` +
+      `[FIX] Rename the queue to "${nameStr}.fifo" or remove FifoQueue: true to create a standard queue.`
+    );
+  }
+
+  if (!isFifo && nameStr && nameStr.endsWith(".fifo")) {
+    return (
+      `[ERROR] SQS Queue QueueName "${nameStr}" ends with ".fifo" but FifoQueue is not set to true. ` +
+      `[FIX] Either set FifoQueue: true (and add ContentBasedDeduplication or DeduplicationScope) or remove the ".fifo" suffix.`
+    );
+  }
+
+  return null;
+}
+
+/**
+ * SNS::Topic — FifoTopic: true requires the TopicName to end with ".fifo".
+ * Conversely, a ".fifo" suffix on a non-FIFO topic is invalid.
+ */
+export function validateSnsTopicShape(
+  desiredState: Record<string, unknown>,
+): string | null {
+  const isFifo = desiredState["FifoTopic"] === true;
+  const name = desiredState["TopicName"];
+  const nameStr = typeof name === "string" ? name : null;
+
+  if (isFifo && nameStr && !nameStr.endsWith(".fifo")) {
+    return (
+      `[ERROR] SNS Topic has FifoTopic: true but TopicName "${nameStr}" does not end with ".fifo". ` +
+      `[FIX] Rename the topic to "${nameStr}.fifo" or remove FifoTopic: true.`
+    );
+  }
+
+  if (!isFifo && nameStr && nameStr.endsWith(".fifo")) {
+    return (
+      `[ERROR] SNS Topic TopicName "${nameStr}" ends with ".fifo" but FifoTopic is not set to true. ` +
+      `[FIX] Either set FifoTopic: true or remove the ".fifo" suffix from the TopicName.`
+    );
+  }
+
+  return null;
+}
+
+const VALID_SSM_TYPES = new Set(["String", "StringList", "SecureString"]);
+
+/**
+ * SSM::Parameter — Type must be one of: String, StringList, SecureString.
+ * The LLM sometimes emits "AWS::SSM::Parameter::Value<String>" (CFN reference
+ * syntax) or lowercased variants. Both are rejected by CloudControl.
+ */
+export function validateSsmParameterShape(
+  desiredState: Record<string, unknown>,
+): string | null {
+  const type = desiredState["Type"];
+  if (type !== undefined && !VALID_SSM_TYPES.has(type as string)) {
+    return (
+      `[ERROR] SSM Parameter Type "${String(type)}" is not a valid value. ` +
+      `[FIX] Set Type to one of: String, StringList, SecureString.`
+    );
+  }
+  return null;
+}
+
+// Valid RetentionInDays values per AWS CloudWatch Logs API.
+const VALID_LOG_RETENTION_DAYS = new Set([
+  1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827,
+  2192, 2557, 2922, 3288, 3653,
+]);
+
+/**
+ * Logs::LogGroup — RetentionInDays, if supplied, must be one of the
+ * discrete values CloudWatch Logs accepts. Arbitrary integers are rejected.
+ */
+export function validateLogsLogGroupShape(
+  desiredState: Record<string, unknown>,
+): string | null {
+  const retention = desiredState["RetentionInDays"];
+  if (
+    retention !== undefined &&
+    !VALID_LOG_RETENTION_DAYS.has(retention as number)
+  ) {
+    return (
+      `[ERROR] CloudWatch Logs RetentionInDays value ${String(retention)} is not a valid AWS-accepted value. ` +
+      `[FIX] Use one of the accepted values: 1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827, 2192, 2557, 2922, 3288, 3653. ` +
+      `Omit RetentionInDays to retain logs indefinitely.`
+    );
+  }
+  return null;
+}
+
+const VALID_APIGWV2_PROTOCOLS = new Set(["HTTP", "WEBSOCKET"]);
+
+/**
+ * ApiGatewayV2::Api — ProtocolType must be HTTP or WEBSOCKET.
+ */
+export function validateApiGatewayV2ApiShape(
+  desiredState: Record<string, unknown>,
+): string | null {
+  const protocol = desiredState["ProtocolType"];
+  if (
+    protocol !== undefined &&
+    !VALID_APIGWV2_PROTOCOLS.has(protocol as string)
+  ) {
+    return (
+      `[ERROR] ApiGatewayV2 Api ProtocolType "${String(protocol)}" is not valid. ` +
+      `[FIX] Set ProtocolType to "HTTP" (for REST/HTTP APIs) or "WEBSOCKET" (for WebSocket APIs).`
+    );
+  }
+  return null;
+}
+
+/**
+ * SecretsManager::Secret — SecretString and GenerateSecretString are mutually
+ * exclusive. CloudControl rejects a secret that specifies both.
+ */
+export function validateSecretsManagerSecretShape(
+  desiredState: Record<string, unknown>,
+): string | null {
+  if (
+    "SecretString" in desiredState &&
+    "GenerateSecretString" in desiredState
+  ) {
+    return (
+      "[ERROR] SecretsManager Secret has both SecretString and GenerateSecretString set. " +
+      "[FIX] Remove one: use SecretString to supply a known secret value, or GenerateSecretString to have Secrets Manager auto-generate one."
+    );
+  }
+  return null;
+}
+
+/**
+ * EC2::VPC — CidrBlock is required. Without it CloudControl rejects with
+ * "Required property CidrBlock missing".
+ */
+export function validateEc2VpcShape(
+  desiredState: Record<string, unknown>,
+): string | null {
+  if (!desiredState["CidrBlock"]) {
+    return (
+      "[ERROR] AWS::EC2::VPC is missing required property CidrBlock. " +
+      "[FIX] Provide a valid CIDR block (e.g. 10.0.0.0/16)."
+    );
+  }
+  return null;
+}
+
+/**
+ * EC2::Subnet — CidrBlock and VpcId are both required.
+ */
+export function validateEc2SubnetShape(
+  desiredState: Record<string, unknown>,
+): string | null {
+  if (!desiredState["CidrBlock"]) {
+    return (
+      "[ERROR] AWS::EC2::Subnet is missing required property CidrBlock. " +
+      "[FIX] Provide a valid CIDR block that fits within the parent VPC (e.g. 10.0.1.0/24)."
+    );
+  }
+  if (!desiredState["VpcId"]) {
+    return (
+      "[ERROR] AWS::EC2::Subnet is missing required property VpcId. " +
+      "[FIX] Set VpcId to the ID or logical reference of the parent VPC (e.g. !Ref MyVPC or vpc-0abc1234)."
+    );
+  }
+  return null;
+}
+
+/**
+ * RDS::DBSubnetGroup — SubnetIds must contain at least 2 subnet IDs.
+ * AWS requires multi-AZ subnet coverage for DB subnet groups.
+ */
+export function validateRdsDbSubnetGroupShape(
+  desiredState: Record<string, unknown>,
+): string | null {
+  const subnetIds = desiredState["SubnetIds"];
+  if (Array.isArray(subnetIds) && subnetIds.length < 2) {
+    return (
+      `[ERROR] RDS DBSubnetGroup SubnetIds has ${subnetIds.length} entry — AWS requires at least 2 subnets in different Availability Zones. ` +
+      "[FIX] Add at least one more subnet from a different AZ to satisfy the multi-AZ coverage requirement."
+    );
+  }
+  return null;
+}
+
+const VALID_CW_COMPARISON_OPERATORS = new Set([
+  "GreaterThanOrEqualToThreshold",
+  "GreaterThanThreshold",
+  "LessThanThreshold",
+  "LessThanOrEqualToThreshold",
+  "LessThanLowerOrGreaterThanUpperThreshold",
+  "LessThanLowerThreshold",
+  "GreaterThanUpperThreshold",
+]);
+
+/**
+ * CloudWatch::Alarm — ComparisonOperator must be one of the valid enum values.
+ * LLMs frequently emit shortened forms like "GreaterThan" or ">=" which
+ * CloudControl rejects.
+ */
+export function validateCloudWatchAlarmShape(
+  desiredState: Record<string, unknown>,
+): string | null {
+  const op = desiredState["ComparisonOperator"];
+  if (op !== undefined && !VALID_CW_COMPARISON_OPERATORS.has(op as string)) {
+    return (
+      `[ERROR] CloudWatch Alarm ComparisonOperator "${String(op)}" is not a valid value. ` +
+      `[FIX] Use one of: GreaterThanOrEqualToThreshold, GreaterThanThreshold, LessThanThreshold, LessThanOrEqualToThreshold, LessThanLowerOrGreaterThanUpperThreshold, LessThanLowerThreshold, GreaterThanUpperThreshold.`
+    );
+  }
+  return null;
+}
+
+const VALID_ELB_SCHEMES = new Set(["internet-facing", "internal"]);
+
+/**
+ * ElasticLoadBalancingV2::LoadBalancer — Scheme must be "internet-facing"
+ * or "internal". LLMs frequently emit "public", "private", or "external".
+ */
+export function validateElbv2LoadBalancerShape(
+  desiredState: Record<string, unknown>,
+): string | null {
+  const scheme = desiredState["Scheme"];
+  if (scheme !== undefined && !VALID_ELB_SCHEMES.has(scheme as string)) {
+    return (
+      `[ERROR] ElasticLoadBalancingV2 LoadBalancer Scheme "${String(scheme)}" is not valid. ` +
+      `[FIX] Set Scheme to "internet-facing" (public load balancer) or "internal" (private, VPC-only).`
+    );
+  }
+  return null;
+}
+
+/**
+ * EFS::FileSystem — KmsKeyId must not be set unless Encrypted is also true.
+ * Setting KmsKeyId without Encrypted: true silently enables encryption in
+ * some SDK versions but is rejected by CloudFormation.
+ */
+export function validateEfsFileSystemShape(
+  desiredState: Record<string, unknown>,
+): string | null {
+  if ("KmsKeyId" in desiredState && desiredState["Encrypted"] !== true) {
+    return (
+      "[ERROR] EFS FileSystem sets KmsKeyId but Encrypted is not true. " +
+      "[FIX] Add Encrypted: true alongside KmsKeyId, or remove KmsKeyId to use the default AWS-managed EFS key when encryption is enabled."
+    );
+  }
+  return null;
+}
+
+/**
+ * Events::Rule — at least one of EventPattern or ScheduleExpression must
+ * be provided; an EventBridge rule without either cannot match any events.
+ */
+export function validateEventsRuleShape(
+  desiredState: Record<string, unknown>,
+): string | null {
+  const hasPattern = "EventPattern" in desiredState;
+  const hasSchedule = "ScheduleExpression" in desiredState;
+  if (!hasPattern && !hasSchedule) {
+    return (
+      "[ERROR] Events::Rule is missing both EventPattern and ScheduleExpression. " +
+      "[FIX] Provide at least one: EventPattern (JSON match filter) or ScheduleExpression (cron/rate expression, e.g. rate(5 minutes))."
+    );
+  }
+  return null;
+}
+
+/**
+ * KMS::Key — KeyPolicy is required. Without a key policy CloudControl
+ * rejects the resource with "KeyPolicy is required".
+ */
+export function validateKmsKeyShape(
+  desiredState: Record<string, unknown>,
+): string | null {
+  if (!("KeyPolicy" in desiredState)) {
+    return (
+      "[ERROR] AWS::KMS::Key is missing required property KeyPolicy. " +
+      "[FIX] Add a KeyPolicy document that grants at least the root account administrator access: " +
+      '{ "Version": "2012-10-17", "Statement": [{ "Effect": "Allow", "Principal": { "AWS": "arn:aws:iam::<account-id>:root" }, "Action": "kms:*", "Resource": "*" }] }.'
+    );
+  }
+  return null;
+}
+
+/**
+ * EC2::SecurityGroup — VpcId is required for VPC security groups (the vast
+ * majority of use cases since EC2-Classic retirement in August 2022).
+ * We validate presence to catch the common LLM omission.
+ */
+export function validateEc2SecurityGroupShape(
+  desiredState: Record<string, unknown>,
+): string | null {
+  if (!desiredState["VpcId"]) {
+    return (
+      "[ERROR] AWS::EC2::SecurityGroup is missing required property VpcId. " +
+      "[FIX] Set VpcId to the ID or logical reference of the parent VPC. EC2-Classic (VpcId-free) was retired in August 2022."
+    );
+  }
+  return null;
+}
+
+/**
+ * EC2::RouteTable — VpcId is required.
+ */
+export function validateEc2RouteTableShape(
+  desiredState: Record<string, unknown>,
+): string | null {
+  if (!desiredState["VpcId"]) {
+    return (
+      "[ERROR] AWS::EC2::RouteTable is missing required property VpcId. " +
+      "[FIX] Set VpcId to the ID or logical reference of the VPC that will own this route table."
+    );
+  }
+  return null;
+}
+
+/**
+ * EC2::NatGateway — SubnetId and AllocationId/ConnectivityType are required
+ * for public NAT gateways. At minimum SubnetId must always be specified.
+ */
+export function validateEc2NatGatewayShape(
+  desiredState: Record<string, unknown>,
+): string | null {
+  if (!desiredState["SubnetId"]) {
+    return (
+      "[ERROR] AWS::EC2::NatGateway is missing required property SubnetId. " +
+      "[FIX] Set SubnetId to the ID of the public subnet where the NAT gateway will be placed."
+    );
+  }
+  // Public NAT gateway (default) requires AllocationId; private does not.
+  const connectivityType = desiredState["ConnectivityType"];
+  const isPrivate = connectivityType === "private";
+  if (!isPrivate && !desiredState["AllocationId"]) {
+    return (
+      "[ERROR] AWS::EC2::NatGateway is missing AllocationId (required for public NAT gateways). " +
+      "[FIX] Create an Elastic IP (AWS::EC2::EIP) and reference its AllocationId here, or set ConnectivityType: private for a private NAT gateway."
+    );
+  }
+  return null;
+}
+
+// ── Plan-shape validator registry (P085) ─────────────────────────────────────
+//
+// Each entry maps a resource type to a list of validator functions. All
+// validators in the list run in order; the first non-null result is returned.
+// Adding a new type: (1) write the validator above, (2) register it here.
+
+type PlanShapeValidator = (state: Record<string, unknown>) => string | null;
+
+const PLAN_SHAPE_VALIDATORS: Record<string, PlanShapeValidator[]> = {
+  [RESOURCE_TYPES.DYNAMODB_TABLE]: [validateDynamoDbKeySchema],
+  [RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION]: [validateCloudFrontOrigins],
+  [RESOURCE_TYPES.IAM_ROLE]: [validateIamRoleShape],
+  [RESOURCE_TYPES.LAMBDA_FUNCTION]: [validateLambdaCodeShape],
+  [RESOURCE_TYPES.EC2_INSTANCE]: [validateEc2InstanceShape],
+  [RESOURCE_TYPES.SQS_QUEUE]: [validateSqsQueueShape],
+  [RESOURCE_TYPES.SNS_TOPIC]: [validateSnsTopicShape],
+  [RESOURCE_TYPES.SSM_PARAMETER]: [validateSsmParameterShape],
+  [RESOURCE_TYPES.LOGS_LOG_GROUP]: [validateLogsLogGroupShape],
+  [RESOURCE_TYPES.APIGATEWAYV2_API]: [validateApiGatewayV2ApiShape],
+  [RESOURCE_TYPES.SECRETSMANAGER_SECRET]: [validateSecretsManagerSecretShape],
+  [RESOURCE_TYPES.EC2_VPC]: [validateEc2VpcShape],
+  [RESOURCE_TYPES.EC2_SUBNET]: [validateEc2SubnetShape],
+  [RESOURCE_TYPES.RDS_DB_SUBNET_GROUP]: [validateRdsDbSubnetGroupShape],
+  [RESOURCE_TYPES.CLOUDWATCH_ALARM]: [validateCloudWatchAlarmShape],
+  [RESOURCE_TYPES.ELBV2_LOAD_BALANCER]: [validateElbv2LoadBalancerShape],
+  [RESOURCE_TYPES.EFS_FILE_SYSTEM]: [validateEfsFileSystemShape],
+  [RESOURCE_TYPES.EVENTS_RULE]: [validateEventsRuleShape],
+  [RESOURCE_TYPES.KMS_KEY]: [validateKmsKeyShape],
+  // R10b-04 follow-up: EC2_SECURITY_GROUP / EC2_ROUTE_TABLE /
+  // EC2_NAT_GATEWAY validators were registered but they enforce
+  // required-field presence (VpcId, SubnetId, AllocationId) that the
+  // LLM legitimately omits in `--json` mode (where the wizard does
+  // not run to fill them). Pre-existing probes
+  // (e.g. e96.W3.N2 bp-sg-high-risk-fires-on-3306) assert that BP
+  // rules fire for "Create a security group allowing 0.0.0.0/0 on
+  // port 3306" — which has no VpcId in the intent. The strict
+  // validator made the plan FAIL at validate-desired-state before
+  // BP rules could evaluate, breaking that probe.
+  //
+  // Per `feedback_lazy_credential_resolution_in_mcp` (preserve
+  // original semantics on additive checks): the validators remain
+  // EXPORTED (and unit-tested) so opt-in callers can still invoke
+  // them, but they are NOT registered in PLAN_SHAPE_VALIDATORS — so
+  // the plan-shape gate doesn't reject these types when the wizard
+  // hasn't run. CCAPI will reject at apply-time with the canonical
+  // AWS error if VpcId is genuinely missing.
+};
+
 /**
  * Runs every plan-time validator appropriate to the resource type. Returns
  * `null` on pass (all validators pass OR no validator applies), or the
  * first validator's error message on fail.
  *
  * Kept as a single entrypoint so the `plan-generator.ts` façade wires in
- * one call; the set of validators grows by editing this function.
+ * one call; the set of validators grows by registering entries in
+ * `PLAN_SHAPE_VALIDATORS` above.
  */
 export function validatePlanShape(
   desiredState: Record<string, unknown>,
   resourceType: string,
 ): string | null {
-  switch (resourceType) {
-    case RESOURCE_TYPES.DYNAMODB_TABLE:
-      return validateDynamoDbKeySchema(desiredState);
-    case RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION:
-      return validateCloudFrontOrigins(desiredState);
-    default:
-      return null;
+  const validators = PLAN_SHAPE_VALIDATORS[resourceType];
+  if (!validators) return null;
+  for (const v of validators) {
+    const err = v(desiredState);
+    if (err !== null) return err;
   }
+  return null;
 }

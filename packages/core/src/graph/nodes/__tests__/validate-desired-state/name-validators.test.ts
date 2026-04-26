@@ -23,9 +23,9 @@ import {
   validateEcrRepositoryName,
   validateDesiredState,
   validateDesiredStateNode,
-  INVALID_DESIRED_STATE_CODE,
 } from "../../validate-desired-state.js";
 import { AssigneeError } from "../../../../errors.js";
+import { ErrorCode } from "../../../../constants/errors.js";
 import { ExecutionStatus } from "../../../../schema/graph-state.js";
 import type { AgentState } from "../../../graph-state.js";
 
@@ -116,7 +116,7 @@ describe("validateDesiredStateNode — AWS::Lambda::Function", () => {
     expect(patch.errorMessage).toContain("[ERROR]");
     expect(patch.errorMessage).toContain("[FIX]");
     expect(patch.error).toBeInstanceOf(AssigneeError);
-    expect(patch.error?.code).toBe(INVALID_DESIRED_STATE_CODE);
+    expect(patch.error?.code).toBe(ErrorCode.INVALID_DESIRED_STATE);
   });
 
   it("passes through when FunctionName is absent (no-op)", async () => {
@@ -209,7 +209,7 @@ describe("validateDesiredStateNode — AWS::DynamoDB::Table", () => {
     const patch = await validateDesiredStateNode(state);
     expect(patch.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(patch.error).toBeInstanceOf(AssigneeError);
-    expect(patch.error?.code).toBe(INVALID_DESIRED_STATE_CODE);
+    expect(patch.error?.code).toBe(ErrorCode.INVALID_DESIRED_STATE);
   });
 });
 
@@ -290,7 +290,7 @@ describe("validateDesiredStateNode — AWS::EC2::SecurityGroup", () => {
     expect(patch.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(patch.errorMessage).toContain("[ERROR]");
     expect(patch.error).toBeInstanceOf(AssigneeError);
-    expect(patch.error?.code).toBe(INVALID_DESIRED_STATE_CODE);
+    expect(patch.error?.code).toBe(ErrorCode.INVALID_DESIRED_STATE);
   });
 
   it('sets FAILED on "sg-" prefixed GroupName', async () => {
@@ -300,7 +300,7 @@ describe("validateDesiredStateNode — AWS::EC2::SecurityGroup", () => {
     });
     const patch = await validateDesiredStateNode(state);
     expect(patch.executionStatus).toBe(ExecutionStatus.FAILED);
-    expect(patch.error?.code).toBe(INVALID_DESIRED_STATE_CODE);
+    expect(patch.error?.code).toBe(ErrorCode.INVALID_DESIRED_STATE);
   });
 });
 
@@ -378,7 +378,7 @@ describe("validateDesiredStateNode — AWS::IAM::Role", () => {
     expect(patch.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(patch.errorMessage).toContain("[ERROR]");
     expect(patch.error).toBeInstanceOf(AssigneeError);
-    expect(patch.error?.code).toBe(INVALID_DESIRED_STATE_CODE);
+    expect(patch.error?.code).toBe(ErrorCode.INVALID_DESIRED_STATE);
   });
 });
 
@@ -470,7 +470,7 @@ describe("validateDesiredStateNode — AWS::RDS::DBInstance", () => {
     expect(patch.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(patch.errorMessage).toContain("[ERROR]");
     expect(patch.error).toBeInstanceOf(AssigneeError);
-    expect(patch.error?.code).toBe(INVALID_DESIRED_STATE_CODE);
+    expect(patch.error?.code).toBe(ErrorCode.INVALID_DESIRED_STATE);
   });
 
   it("sets FAILED on identifier ending with hyphen", async () => {
@@ -480,7 +480,7 @@ describe("validateDesiredStateNode — AWS::RDS::DBInstance", () => {
     });
     const patch = await validateDesiredStateNode(state);
     expect(patch.executionStatus).toBe(ExecutionStatus.FAILED);
-    expect(patch.error?.code).toBe(INVALID_DESIRED_STATE_CODE);
+    expect(patch.error?.code).toBe(ErrorCode.INVALID_DESIRED_STATE);
   });
 });
 
@@ -564,7 +564,7 @@ describe("validateDesiredStateNode — AWS::SQS::Queue", () => {
     expect(patch.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(patch.errorMessage).toContain("[ERROR]");
     expect(patch.error).toBeInstanceOf(AssigneeError);
-    expect(patch.error?.code).toBe(INVALID_DESIRED_STATE_CODE);
+    expect(patch.error?.code).toBe(ErrorCode.INVALID_DESIRED_STATE);
   });
 });
 
@@ -641,7 +641,7 @@ describe("validateDesiredStateNode — AWS::SNS::Topic", () => {
     expect(patch.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(patch.errorMessage).toContain("[ERROR]");
     expect(patch.error).toBeInstanceOf(AssigneeError);
-    expect(patch.error?.code).toBe(INVALID_DESIRED_STATE_CODE);
+    expect(patch.error?.code).toBe(ErrorCode.INVALID_DESIRED_STATE);
   });
 });
 
@@ -731,7 +731,7 @@ describe("validateDesiredStateNode — AWS::KMS::Alias", () => {
     expect(patch.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(patch.errorMessage).toContain("[ERROR]");
     expect(patch.error).toBeInstanceOf(AssigneeError);
-    expect(patch.error?.code).toBe(INVALID_DESIRED_STATE_CODE);
+    expect(patch.error?.code).toBe(ErrorCode.INVALID_DESIRED_STATE);
   });
 
   it("sets FAILED on reserved alias/aws prefix", async () => {
@@ -741,7 +741,7 @@ describe("validateDesiredStateNode — AWS::KMS::Alias", () => {
     });
     const patch = await validateDesiredStateNode(state);
     expect(patch.executionStatus).toBe(ExecutionStatus.FAILED);
-    expect(patch.error?.code).toBe(INVALID_DESIRED_STATE_CODE);
+    expect(patch.error?.code).toBe(ErrorCode.INVALID_DESIRED_STATE);
   });
 });
 
@@ -847,7 +847,7 @@ describe("validateDesiredStateNode — AWS::ECR::Repository", () => {
     expect(patch.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(patch.errorMessage).toContain("[ERROR]");
     expect(patch.error).toBeInstanceOf(AssigneeError);
-    expect(patch.error?.code).toBe(INVALID_DESIRED_STATE_CODE);
+    expect(patch.error?.code).toBe(ErrorCode.INVALID_DESIRED_STATE);
   });
 
   it("sets FAILED on invalid path component", async () => {
@@ -857,7 +857,7 @@ describe("validateDesiredStateNode — AWS::ECR::Repository", () => {
     });
     const patch = await validateDesiredStateNode(state);
     expect(patch.executionStatus).toBe(ExecutionStatus.FAILED);
-    expect(patch.error?.code).toBe(INVALID_DESIRED_STATE_CODE);
+    expect(patch.error?.code).toBe(ErrorCode.INVALID_DESIRED_STATE);
   });
 });
 
