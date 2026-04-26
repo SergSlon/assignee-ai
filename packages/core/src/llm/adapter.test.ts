@@ -1,4 +1,12 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type MockInstance,
+} from "vitest";
 import { z } from "zod";
 import { LlmError } from "../errors.js";
 
@@ -340,6 +348,109 @@ describe("LlmAdapter", () => {
       });
       const [err] = await adapter.generateText("Hello");
       expect(err).toBeNull();
+    });
+  });
+
+  // ── P018: Guardrail-missing warning ────────────────────────────────────
+  describe("guardrail-missing warning (P018)", () => {
+    let stderrSpy: MockInstance;
+
+    beforeEach(() => {
+      stderrSpy = vi
+        .spyOn(process.stderr, "write")
+        .mockImplementation(() => true);
+      // Ensure disable flag is clear before each test
+      delete process.env["BEDROCK_GUARDRAIL_DISABLE"];
+    });
+
+    afterEach(() => {
+      stderrSpy.mockRestore();
+      delete process.env["BEDROCK_GUARDRAIL_DISABLE"];
+    });
+
+    it("emits warning when Bedrock provider has no guardrailId configured", () => {
+      new LlmAdapter({ modelString: "bedrock/amazon.nova-lite-v1:0" });
+
+      expect(stderrSpy).toHaveBeenCalledTimes(1);
+      const written = String(stderrSpy.mock.calls[0]?.[0] ?? "");
+      expect(written).toContain(
+        "WARNING: Bedrock invocations are running WITHOUT a Guardrail",
+      );
+      expect(written).toContain("BEDROCK_GUARDRAIL_ID");
+      expect(written).toContain("BEDROCK_GUARDRAIL_DISABLE=1");
+      expect(written).toContain("assignee doctor");
+    });
+
+    it("does NOT emit warning when guardrailId is provided", () => {
+      new LlmAdapter({
+        modelString: "bedrock/amazon.nova-lite-v1:0",
+        guardrailId: "abcd1234efgh",
+        guardrailVersion: "1",
+      });
+
+      expect(stderrSpy).not.toHaveBeenCalled();
+    });
+
+    it("does NOT emit warning when BEDROCK_GUARDRAIL_DISABLE=1", () => {
+      process.env["BEDROCK_GUARDRAIL_DISABLE"] = "1";
+      new LlmAdapter({ modelString: "bedrock/amazon.nova-lite-v1:0" });
+
+      expect(stderrSpy).not.toHaveBeenCalled();
+    });
+
+    it("does NOT emit warning when BEDROCK_GUARDRAIL_DISABLE=true", () => {
+      process.env["BEDROCK_GUARDRAIL_DISABLE"] = "true";
+      new LlmAdapter({ modelString: "bedrock/amazon.nova-lite-v1:0" });
+
+      expect(stderrSpy).not.toHaveBeenCalled();
+    });
+
+    it("does NOT emit warning for non-bedrock providers (anthropic)", () => {
+      new LlmAdapter({ modelString: "anthropic/claude-sonnet-4-5" });
+
+      expect(stderrSpy).not.toHaveBeenCalled();
+    });
+
+    it("does NOT emit warning for non-bedrock providers (openai)", () => {
+      new LlmAdapter({ modelString: "openai/gpt-4o" });
+
+      expect(stderrSpy).not.toHaveBeenCalled();
+    });
+
+    it("does NOT emit warning for non-bedrock providers (google)", () => {
+      new LlmAdapter({ modelString: "google/gemini-2.0-flash" });
+
+      expect(stderrSpy).not.toHaveBeenCalled();
+    });
+
+    it("emits warning once per adapter instance (not per invocation)", () => {
+      // Warning fires at constructor time — not on each generateText call
+      new LlmAdapter({ modelString: "bedrock/amazon.nova-lite-v1:0" });
+      expect(stderrSpy).toHaveBeenCalledTimes(1);
+      // Resetting to check construction creates exactly one warning per instance
+      stderrSpy.mockClear();
+      new LlmAdapter({ modelString: "bedrock/amazon.nova-lite-v1:0" });
+      expect(stderrSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("isGuardrailDisabled returns true for '1'", () => {
+      process.env["BEDROCK_GUARDRAIL_DISABLE"] = "1";
+      expect(LlmAdapter.isGuardrailDisabled()).toBe(true);
+    });
+
+    it("isGuardrailDisabled returns true for 'true'", () => {
+      process.env["BEDROCK_GUARDRAIL_DISABLE"] = "true";
+      expect(LlmAdapter.isGuardrailDisabled()).toBe(true);
+    });
+
+    it("isGuardrailDisabled returns false when unset", () => {
+      delete process.env["BEDROCK_GUARDRAIL_DISABLE"];
+      expect(LlmAdapter.isGuardrailDisabled()).toBe(false);
+    });
+
+    it("isGuardrailDisabled returns false for arbitrary truthy strings (non-standard opt-out)", () => {
+      process.env["BEDROCK_GUARDRAIL_DISABLE"] = "yes";
+      expect(LlmAdapter.isGuardrailDisabled()).toBe(false);
     });
   });
 
