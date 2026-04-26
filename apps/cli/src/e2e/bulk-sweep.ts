@@ -16,7 +16,7 @@ import {
   ResourceGroupsTaggingAPIClient,
   GetResourcesCommand,
 } from "@aws-sdk/client-resource-groups-tagging-api";
-import { operatorCredentials } from "../config/operator-credentials.js";
+import { requireAssigneeCredentials } from "../config/aws-credentials.js";
 
 export interface SweepResource {
   arn: string;
@@ -43,12 +43,13 @@ export interface SweepResource {
 export async function planBulkSweep(opts: {
   region: string;
 }): Promise<{ resources: SweepResource[] }> {
-  const creds = operatorCredentials();
+  const creds = requireAssigneeCredentials("operator");
   const client = new ResourceGroupsTaggingAPIClient({
     region: opts.region,
     credentials: {
       accessKeyId: creds.accessKeyId,
       secretAccessKey: creds.secretAccessKey,
+      ...(creds.sessionToken ? { sessionToken: creds.sessionToken } : {}),
     },
   });
 

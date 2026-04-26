@@ -19,11 +19,10 @@ vi.mock("@aws-sdk/client-s3", () => {
 });
 
 // Mock operator credentials
-vi.mock("../../config/operator-credentials.js", () => ({
-  operatorCredentials: vi.fn().mockReturnValue({
-    accessKeyId: "AKIAFAKEKEY",
-    secretAccessKey: "fakeSecretKey",
-    region: "us-east-1",
+vi.mock("../../config/aws-credentials.js", () => ({
+  requireAssigneeCredentials: vi.fn().mockReturnValue({
+    accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+    secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
   }),
 }));
 
@@ -31,14 +30,13 @@ describe("createS3BucketSdkDirect", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     // vi.clearAllMocks() resets mockReturnValue/mockImplementation, so
-    // re-apply both the operatorCredentials() return-value contract AND
+    // re-apply both the requireAssigneeCredentials() return-value contract AND
     // the S3Client send-mock for every test.
-    const { operatorCredentials } =
-      await import("../../config/operator-credentials.js");
-    vi.mocked(operatorCredentials).mockReturnValue({
-      accessKeyId: "AKIAFAKEKEY",
-      secretAccessKey: "fakeSecretKey",
-      region: "us-east-1",
+    const { requireAssigneeCredentials } =
+      await import("../../config/aws-credentials.js");
+    vi.mocked(requireAssigneeCredentials).mockReturnValue({
+      accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+      secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
     });
     const { S3Client } = await import("@aws-sdk/client-s3");
     vi.mocked(S3Client).mockImplementation(

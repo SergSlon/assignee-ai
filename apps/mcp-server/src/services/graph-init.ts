@@ -15,7 +15,7 @@
  * module load does NOT touch the AWS SDK credential chain. Operator
  * credentials are resolved only when an MCP tool handler invokes the
  * graph and the graph's node calls
- * `operatorCredentials()` / `createCloudControlClient()` on-demand.
+ * `requireAssigneeCredentials("operator")` / `createCloudControlClient()` on-demand.
  *
  * @see Epic 20, Story 20.1, Story 20.2
  * @see Story 50-4 Wave 5 Pass I handoff

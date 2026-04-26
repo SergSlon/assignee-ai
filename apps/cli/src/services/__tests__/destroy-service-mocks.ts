@@ -67,14 +67,12 @@ export {
   mockEc2Send,
 };
 
-// ── Mock operator credentials ─────────────────────────────────────────────────
-vi.mock("../../config/operator-credentials.js", () => ({
-  operatorCredentials: () => ({
-    accessKeyId: "AKIAIOSFODNN7EXAMPLE",
-    secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-    region: "us-east-1",
-  }),
-}));
+// ── Operator credentials ──────────────────────────────────────────────────────
+// destroy-service.ts uses requireAssigneeCredentials("operator") from
+// aws-credentials.js. Credentials are supplied via ASSIGNEE_OPERATOR_* env
+// vars set in setupDestroyServiceMocks() beforeEach — no vi.mock needed here
+// because the pre-delete hooks test missing-credentials behavior by deleting
+// those env vars, and a static mock would prevent that test from working.
 
 // ── Mock resolve-arn (Wave 11 P2-2 cross-account guard) ─────────────────
 // classifyNotFoundShortCircuit dynamic-imports getOperatorAccountId from

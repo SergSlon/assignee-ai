@@ -27,7 +27,7 @@ import {
   type ResolvedResource,
 } from "../../services/resource-resolver.js";
 import { pickFromMatches } from "./multi-match-prompt.js";
-import { operatorCredentials } from "../../config/operator-credentials.js";
+import { tryAssigneeCredentials } from "../../config/aws-credentials.js";
 import { AWS_REGION, UserMessage } from "../../config/constants.js";
 import { ErrorCode } from "../../constants/errors.js";
 import { destroySingleResource } from "../../services/destroy-service.js";
@@ -40,7 +40,13 @@ export async function singleDestroyAction(
   opts: { yes?: boolean },
 ): Promise<void> {
   // ── Initialize AWS clients ────────────────────────────────────────
-  const awsConfig = operatorCredentials();
+  const opCreds = tryAssigneeCredentials("operator");
+  const awsConfig = {
+    accessKeyId: opCreds?.accessKeyId ?? "",
+    secretAccessKey: opCreds?.secretAccessKey ?? "",
+    ...(opCreds?.sessionToken ? { sessionToken: opCreds.sessionToken } : {}),
+    region: AWS_REGION,
+  };
   let taggingClient;
   try {
     taggingClient = createTaggingClient(awsConfig);
@@ -53,11 +59,7 @@ export async function singleDestroyAction(
   // ── Resolve resource ────────────────────────────────────────────
   startSpinner("Resolving resource...");
 
-  const resolution = await resolveResource(
-    resource,
-    taggingClient,
-    awsConfig.region || AWS_REGION,
-  );
+  const resolution = await resolveResource(resource, taggingClient, AWS_REGION);
 
   stopSpinner();
 

@@ -59,11 +59,10 @@ vi.mock("../../utils/display.js", () => ({
   updateSpinner: vi.fn(),
 }));
 
-vi.mock("../../config/operator-credentials.js", () => ({
-  operatorCredentials: vi.fn(() => ({
+vi.mock("../../config/aws-credentials.js", () => ({
+  tryAssigneeCredentials: vi.fn(() => ({
     accessKeyId: "AKIAIOSFODNN7EXAMPLE",
     secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-    region: "us-east-1",
   })),
 }));
 

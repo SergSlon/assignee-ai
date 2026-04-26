@@ -69,7 +69,7 @@ import {
   renderDestroyScheduled,
 } from "./destroy/result-formatter.js";
 import { resourceConfirmationToken } from "./destroy/typed-confirm.js";
-import { operatorCredentials } from "../config/operator-credentials.js";
+import { tryAssigneeCredentials } from "../config/aws-credentials.js";
 import { AWS_REGION } from "../config/constants.js";
 import { getCostSavingsEstimate } from "../services/billing.js";
 import { getBillingMcpToolsAsync } from "../services/mcp-client.js";
@@ -304,7 +304,13 @@ async function resolveForDestroy(
   resource: string,
   yes: boolean | undefined,
 ): Promise<ResolvedResource> {
-  const awsConfig = operatorCredentials();
+  const opCreds = tryAssigneeCredentials("operator");
+  const awsConfig = {
+    accessKeyId: opCreds?.accessKeyId ?? "",
+    secretAccessKey: opCreds?.secretAccessKey ?? "",
+    ...(opCreds?.sessionToken ? { sessionToken: opCreds.sessionToken } : {}),
+    region: AWS_REGION,
+  };
   let taggingClient;
   try {
     taggingClient = createTaggingClient(awsConfig);
@@ -385,17 +391,17 @@ async function scheduleKmsKeyDeletion(
 ): Promise<Date> {
   const { KMSClient, ScheduleKeyDeletionCommand } =
     await import("@aws-sdk/client-kms");
-  const awsConfig = operatorCredentials();
+  const awsCreds = tryAssigneeCredentials("operator");
   const kms = new KMSClient({
-    region: resolved.region || awsConfig.region || AWS_REGION,
-    ...(awsConfig.accessKeyId && awsConfig.secretAccessKey
+    region: resolved.region || AWS_REGION,
+    ...(awsCreds
       ? {
           credentials: {
-            accessKeyId: awsConfig.accessKeyId,
-            secretAccessKey: awsConfig.secretAccessKey,
+            accessKeyId: awsCreds.accessKeyId,
+            secretAccessKey: awsCreds.secretAccessKey,
             // W2-01: pass session token for STS/SSO short-term credentials.
-            ...(awsConfig.sessionToken
-              ? { sessionToken: awsConfig.sessionToken }
+            ...(awsCreds.sessionToken
+              ? { sessionToken: awsCreds.sessionToken }
               : {}),
           },
         }
@@ -441,17 +447,17 @@ async function deleteSecret(
 ): Promise<Date | undefined> {
   const { SecretsManagerClient, DeleteSecretCommand } =
     await import("@aws-sdk/client-secrets-manager");
-  const awsConfig = operatorCredentials();
+  const awsCreds = tryAssigneeCredentials("operator");
   const client = new SecretsManagerClient({
-    region: resolved.region || awsConfig.region || AWS_REGION,
-    ...(awsConfig.accessKeyId && awsConfig.secretAccessKey
+    region: resolved.region || AWS_REGION,
+    ...(awsCreds
       ? {
           credentials: {
-            accessKeyId: awsConfig.accessKeyId,
-            secretAccessKey: awsConfig.secretAccessKey,
+            accessKeyId: awsCreds.accessKeyId,
+            secretAccessKey: awsCreds.secretAccessKey,
             // W2-01: pass session token for STS/SSO short-term credentials.
-            ...(awsConfig.sessionToken
-              ? { sessionToken: awsConfig.sessionToken }
+            ...(awsCreds.sessionToken
+              ? { sessionToken: awsCreds.sessionToken }
               : {}),
           },
         }
@@ -500,17 +506,17 @@ async function deleteSecret(
 async function deleteEventBus(resolved: ResolvedResource): Promise<void> {
   const { EventBridgeClient, DeleteEventBusCommand } =
     await import("@aws-sdk/client-eventbridge");
-  const awsConfig = operatorCredentials();
+  const awsCreds = tryAssigneeCredentials("operator");
   const client = new EventBridgeClient({
-    region: resolved.region || awsConfig.region || AWS_REGION,
-    ...(awsConfig.accessKeyId && awsConfig.secretAccessKey
+    region: resolved.region || AWS_REGION,
+    ...(awsCreds
       ? {
           credentials: {
-            accessKeyId: awsConfig.accessKeyId,
-            secretAccessKey: awsConfig.secretAccessKey,
+            accessKeyId: awsCreds.accessKeyId,
+            secretAccessKey: awsCreds.secretAccessKey,
             // W2-01: pass session token for STS/SSO short-term credentials.
-            ...(awsConfig.sessionToken
-              ? { sessionToken: awsConfig.sessionToken }
+            ...(awsCreds.sessionToken
+              ? { sessionToken: awsCreds.sessionToken }
               : {}),
           },
         }

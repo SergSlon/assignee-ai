@@ -28,7 +28,7 @@ import {
   CreateBucketCommand,
   BucketLocationConstraint,
 } from "@aws-sdk/client-s3";
-import { operatorCredentials } from "../../config/operator-credentials.js";
+import { requireAssigneeCredentials } from "../../config/aws-credentials.js";
 import { AWS_REGION } from "../../config/constants/aws.js";
 
 /** Synthetic requestToken sentinel — signals immediate success to the poller. */
@@ -69,7 +69,7 @@ export async function createS3BucketSdkDirect(
     );
   }
 
-  const creds = operatorCredentials();
+  const creds = requireAssigneeCredentials("operator");
   const client = new S3Client({
     region,
     credentials: {

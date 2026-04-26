@@ -68,12 +68,12 @@ export interface VpcExistenceClient {
 export async function defaultVpcExistenceClientFactory(): Promise<VpcExistenceClient> {
   const { DescribeVpcsCommand } = await import("@aws-sdk/client-ec2");
   const { createEC2Client } = await import("@/aws/ec2-client-factory.js");
-  const { operatorCredentials } =
-    await import("@/config/operator-credentials.js");
-  const creds = operatorCredentials();
+  const { tryAssigneeCredentials } =
+    await import("@/config/aws-credentials.js");
+  const creds = tryAssigneeCredentials("operator");
   const config: EC2ClientConfig = {
     region: AWS_REGION,
-    ...(creds.accessKeyId && creds.secretAccessKey
+    ...(creds
       ? {
           credentials: {
             accessKeyId: creds.accessKeyId,

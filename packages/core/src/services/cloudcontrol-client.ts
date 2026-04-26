@@ -26,7 +26,7 @@ export interface AwsConfig {
  * Throws ConfigurationError immediately if any credential field is missing or empty.
  *
  * Uses ASSIGNEE_OPERATOR_* env vars for CloudControl provisioning.
- * Callers should use operatorCredentials() to read env vars and pass via AwsConfig.
+ * Callers should use requireAssigneeCredentials("operator") to read env vars and pass via AwsConfig.
  */
 export function createCloudControlClient(
   config: AwsConfig,

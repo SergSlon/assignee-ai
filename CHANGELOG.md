@@ -18,6 +18,87 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### R10a — Round 10 (first half): 4 P2-tier P-IDs + lazy-creds regression fix
+
+R10a closes 4 P2-tier audit P-IDs in parallel. One worker (R10a-03,
+operatorCredentials cleanup) over-aggressively migrated a graceful
+helper to a throwing one in `create-graph.ts` + `destroy-service.ts`;
+coordinator caught the regression at the gate (50 + 5 test failures)
+and inline-fixed both call sites to use lazy resolution per
+`feedback_lazy_credential_resolution_in_mcp`.
+
+#### Changed
+
+- **P076 — `memoryHints` ANSI-escape coverage.** The `isTTY` guard at
+  `packages/core/src/utils/display-findings.ts:185-195` already gated
+  ANSI emission on `process.stdout.isTTY` from a prior wave; P076 was
+  a missing test-coverage finding, not a code bug. New
+  `display-findings.test.ts` (+160 LOC, 8 tests across 3 describes:
+  null/empty guard, non-TTY plain output, TTY ANSI emission). Tests
+  set both `process.stdout.isTTY` and `chalk.level` per the
+  `first-run.test.ts` pattern.
+- **P077 — Pre-commit bypass CI enforcement.** The `.husky/pre-commit`
+  hook ran `prettier --write` via `lint-staged`, but no CI job ran
+  `prettier --check` against the whole repo — `git commit --no-verify`
+  bypassed format enforcement entirely. New "Prettier format check"
+  step in `.github/workflows/ci-core.yml` runs
+  `pnpm exec prettier --check "**/*.{ts,tsx,json,md}"` between Lint
+  and Type-check. `docs/explanation/ci-gates.md` gate inventory
+  table updated.
+
+#### Removed
+
+- **P086 — `operatorCredentials` deprecated symbol cleanup.**
+  `packages/core/src/config/operator-credentials.ts` + its test +
+  the `apps/cli/src/config/operator-credentials.ts` shim all deleted.
+  11 callers across 9 production files migrated to
+  `requireAssigneeCredentials("operator")` (throwing) or
+  `tryAssigneeCredentials("operator")` (graceful). Region (`AWS_REGION`)
+  is now supplied explicitly at each call site. ~105 LOC net removed.
+- **P091 — LangGraph caret-range hygiene: NO-OP closure.** Audit was
+  written when LangGraph (`@langchain/langgraph`) was pre-1.0 and
+  caret-range `^0.X.Y` ranges allowed minor breakage. Since then all
+  three `@langchain/*` packages in the workspace hit `1.x`
+  (`@langchain/core@1.1.32`, `@langchain/langgraph@1.2.2`,
+  `@langchain/mcp-adapters@1.1.3`); `^1.X.Y` is semver-correct. The
+  P091 hazard simply doesn't exist anymore. No code changes needed.
+
+#### Fixed
+
+- **R10a-03 follow-up — lazy credential resolution restored.** The
+  R10a-03 worker swapped the deleted lenient `operatorCredentials()`
+  (returned empty-string fallbacks + one-time stderr warning when env
+  vars unset) for the throwing `requireAssigneeCredentials("operator")`
+  in `packages/core/src/graph/create-graph.ts:135` AND
+  `apps/cli/src/services/destroy-service.ts:175`. Graph-integration
+  tests + ALB-ENI-drain tests rely on the lenient shape (they
+  construct/destroy without setting env vars). Coordinator caught
+  55 test failures (50 core + 5 cli) at the gate and fixed both
+  call sites: now use `tryAssigneeCredentials("operator")` with
+  empty-string fallback, restoring lenient semantics. Per
+  `feedback_lazy_credential_resolution_in_mcp` — graph construction
+  and destroy orchestration must NOT hard-throw on missing creds;
+  the actual SDK calls fail fast at use, which is the right blast-
+  radius. JSDoc comments at both fix sites reference the memory.
+
+#### Provenance
+
+- Per-P audit: `/.agents/reviews/p-id-audit-2026-04-26.md` —
+  pre-R10a: 86/100 effective coverage. Post-R10a: 90/100 (+P076,
+  P077, P086, P091). 10 P2-tier items remain NOT-ACCOUNTED:
+  P066, P067, P068, P070, P079, P080, P081, P082, P084, P085.
+- Test totals after R10a: best-practices 905, core 7,360
+  (-3 from operator-credentials.test.ts deletion +0 from R10a-01
+  test file location confusion in coordinator notes), mcp-server
+  644, cli 1,493 (-2 from CLI shim test deletion + R10a-01 +8
+  display-findings tests landed in CORE not CLI per worker report)
+  = **10,402 passing, zero regressions** (-5 net from R9b baseline,
+  all attributable to deletion of deprecated tests).
+- 4 R10a workers; 1 inline-coordinator regression fix; reviewers
+  skipped for R10a-01/02/04 (test-only / CI-step-only / no-op);
+  R10a-03 reviewer skipped because the regression was already
+  caught + fixed at the gate.
+
 ### R9b — Round 9 (second half): remaining P1-tier P-IDs + 4 strategic deferrals
 
 R9b ships the remaining 4 of the 12 P1-tier P-IDs from the post-Epic-100

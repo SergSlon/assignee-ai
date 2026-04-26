@@ -15,11 +15,10 @@ vi.mock("@aws-sdk/client-iam", () => {
   return { IAMClient, CreateRoleCommand };
 });
 
-vi.mock("../../config/operator-credentials.js", () => ({
-  operatorCredentials: vi.fn().mockReturnValue({
-    accessKeyId: "AKIAFAKEKEY",
-    secretAccessKey: "fakeSecretKey",
-    region: "us-east-1",
+vi.mock("../../config/aws-credentials.js", () => ({
+  requireAssigneeCredentials: vi.fn().mockReturnValue({
+    accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+    secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
   }),
 }));
 
@@ -38,14 +37,13 @@ describe("createIamRoleSdkDirect", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     // vi.clearAllMocks() resets mockReturnValue/mockImplementation, so
-    // re-apply the operatorCredentials() return-value contract AND the
+    // re-apply the requireAssigneeCredentials() return-value contract AND the
     // IAMClient send-mock for every test.
-    const { operatorCredentials } =
-      await import("../../config/operator-credentials.js");
-    vi.mocked(operatorCredentials).mockReturnValue({
-      accessKeyId: "AKIAFAKEKEY",
-      secretAccessKey: "fakeSecretKey",
-      region: "us-east-1",
+    const { requireAssigneeCredentials } =
+      await import("../../config/aws-credentials.js");
+    vi.mocked(requireAssigneeCredentials).mockReturnValue({
+      accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+      secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
     });
     const { IAMClient } = await import("@aws-sdk/client-iam");
     vi.mocked(IAMClient).mockImplementation(

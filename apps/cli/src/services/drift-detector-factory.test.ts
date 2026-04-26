@@ -8,8 +8,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // ── Mocks ───────────────────────────────────────────────────────────────────
 
-vi.mock("../config/operator-credentials.js", () => ({
-  operatorCredentials: vi.fn(),
+vi.mock("../config/aws-credentials.js", () => ({
+  tryAssigneeCredentials: vi.fn(),
 }));
 
 vi.mock("./cloudcontrol-client.js", () => ({
@@ -41,44 +41,10 @@ describe("createDriftDetectorFromEnv", () => {
     vi.restoreAllMocks();
   });
 
-  it("returns undefined when accessKeyId is empty", async () => {
-    const { operatorCredentials } =
-      await import("../config/operator-credentials.js");
-    vi.mocked(operatorCredentials).mockReturnValue({
-      accessKeyId: "",
-      secretAccessKey: "secret",
-      region: "us-east-1",
-    });
-
-    const { createDriftDetectorFromEnv } =
-      await import("./drift-detector-factory.js");
-    const result = createDriftDetectorFromEnv();
-    expect(result).toBeUndefined();
-  });
-
-  it("returns undefined when secretAccessKey is empty", async () => {
-    const { operatorCredentials } =
-      await import("../config/operator-credentials.js");
-    vi.mocked(operatorCredentials).mockReturnValue({
-      accessKeyId: "AKID",
-      secretAccessKey: "",
-      region: "us-east-1",
-    });
-
-    const { createDriftDetectorFromEnv } =
-      await import("./drift-detector-factory.js");
-    const result = createDriftDetectorFromEnv();
-    expect(result).toBeUndefined();
-  });
-
-  it("returns undefined when both credentials are empty", async () => {
-    const { operatorCredentials } =
-      await import("../config/operator-credentials.js");
-    vi.mocked(operatorCredentials).mockReturnValue({
-      accessKeyId: "",
-      secretAccessKey: "",
-      region: "us-east-1",
-    });
+  it("returns undefined when credentials are missing (tryAssigneeCredentials returns undefined)", async () => {
+    const { tryAssigneeCredentials } =
+      await import("../config/aws-credentials.js");
+    vi.mocked(tryAssigneeCredentials).mockReturnValue(undefined);
 
     const { createDriftDetectorFromEnv } =
       await import("./drift-detector-factory.js");
@@ -87,15 +53,14 @@ describe("createDriftDetectorFromEnv", () => {
   });
 
   it("returns detector and port when credentials are valid", async () => {
-    const { operatorCredentials } =
-      await import("../config/operator-credentials.js");
+    const { tryAssigneeCredentials } =
+      await import("../config/aws-credentials.js");
     const { createCloudControlClient } =
       await import("./cloudcontrol-client.js");
 
-    vi.mocked(operatorCredentials).mockReturnValue({
-      accessKeyId: "AKID123",
-      secretAccessKey: "SECRET456",
-      region: "us-east-1",
+    vi.mocked(tryAssigneeCredentials).mockReturnValue({
+      accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+      secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
     });
 
     const fakeClient = { send: vi.fn() };
@@ -116,15 +81,14 @@ describe("createDriftDetectorFromEnv", () => {
   });
 
   it("returns undefined when createCloudControlClient throws", async () => {
-    const { operatorCredentials } =
-      await import("../config/operator-credentials.js");
+    const { tryAssigneeCredentials } =
+      await import("../config/aws-credentials.js");
     const { createCloudControlClient } =
       await import("./cloudcontrol-client.js");
 
-    vi.mocked(operatorCredentials).mockReturnValue({
-      accessKeyId: "AKID123",
-      secretAccessKey: "SECRET456",
-      region: "us-east-1",
+    vi.mocked(tryAssigneeCredentials).mockReturnValue({
+      accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+      secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
     });
 
     vi.mocked(createCloudControlClient).mockImplementation(() => {

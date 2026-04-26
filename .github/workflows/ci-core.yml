@@ -86,6 +86,14 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Prettier format check
+        # P077: enforce the same formatting gate that the pre-commit lint-staged hook
+        # applies, so `git commit --no-verify` bypass is caught by CI before merge.
+        # lint-staged runs `prettier --write` on staged files; this step runs
+        # `prettier --check` across the whole tree — any file that was committed
+        # without the hook will show a diff and fail the build.
+        run: pnpm exec prettier --check "**/*.{ts,tsx,json,md}"
+
       - name: Type-check
         run: pnpm check-types
 

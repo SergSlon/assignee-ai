@@ -44,7 +44,8 @@ import { fixApplicatorNode } from "./nodes/fix-applicator/orchestrator.js";
 import { createCloudControlClient } from "../services/cloudcontrol-client.js";
 import { CloudControlAdapter } from "../aws/cloudcontrol-adapter.js";
 import { LlmAdapter } from "../llm/adapter.js";
-import { operatorCredentials } from "../config/operator-credentials.js";
+import { tryAssigneeCredentials } from "../config/aws-credentials.js";
+import { AWS_REGION } from "../config/constants/aws.js";
 import { EnvVar } from "../constants/env-vars.js";
 import type { LlmPort } from "../index.js";
 import {
@@ -131,7 +132,23 @@ export function createGraph(
   tools: StructuredTool[] = [],
   options: CreateGraphOptions = {},
 ) {
-  const opCreds = operatorCredentials();
+  // R10a-03 follow-up (per `feedback_lazy_credential_resolution_in_mcp`):
+  // graph construction MUST use lazy credential resolution. The earlier
+  // `operatorCredentials()` returned empty-string fallbacks + a one-time
+  // stderr warning when env vars were missing — graph-integration tests
+  // rely on that lenient shape (they construct graphs without setting
+  // env vars and stub the SDK clients). R10a-03 swapped in
+  // `requireAssigneeCredentials` which throws, breaking 50 tests.
+  // Restore lenient semantics here; downstream SDK calls fail fast on
+  // actual use, which is the correct blast-radius for missing creds —
+  // not at graph construction time.
+  const tryCreds = tryAssigneeCredentials("operator");
+  const opCreds = {
+    accessKeyId: tryCreds?.accessKeyId ?? "",
+    secretAccessKey: tryCreds?.secretAccessKey ?? "",
+    ...(tryCreds?.sessionToken ? { sessionToken: tryCreds.sessionToken } : {}),
+    region: AWS_REGION,
+  };
   const cloudClient = createCloudControlClient(opCreds);
 
   // Story 9.7: Attach recording middleware to CloudControl client when recording enabled
