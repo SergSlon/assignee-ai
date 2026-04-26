@@ -26,6 +26,7 @@ import {
   checkBestPractices,
   type BpCheckDeps,
 } from "./checks/best-practices.js";
+import { checkLogs, type LogsCheckDeps } from "./checks/logs.js";
 import type { CheckStatus, DoctorReport, DoctorSection } from "./types.js";
 import { buildSummary, statusToExit } from "./formatter.js";
 import { worse } from "./util.js";
@@ -38,6 +39,7 @@ export interface RunDoctorDeps {
   cacheDeps?: CacheCheckDeps;
   configDeps?: ConfigCheckDeps;
   bpDeps?: BpCheckDeps;
+  logsDeps?: LogsCheckDeps;
   /** Skip the Bedrock invoke (fast path used by tests / CI smoke). */
   skipBedrock?: boolean;
   /** Skip the MCP launch probe (fast path used by tests). */
@@ -75,6 +77,7 @@ export async function runDoctor(
   const cache = checkCache(deps.cacheDeps);
   const config = checkConfig(deps.configDeps);
   const bp = checkBestPractices(deps.bpDeps);
+  const logs = checkLogs(deps.logsDeps);
 
   // Story 50-7: Story 44.1's checkLlmRouting section was removed along
   // with the RoutingLlmAdapter (no in-repo YAML used the `llm:` key).
@@ -86,6 +89,7 @@ export async function runDoctor(
     cache,
     config,
     bp,
+    logs,
   ];
 
   const overall = sections.reduce<CheckStatus>(

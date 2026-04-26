@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { RESOURCE_TYPES, ResourceDefault, CfnKey } from "../index.js";
 import { getIntentDefaults, applyIntentOverrides } from "./intent-defaults.js";
-import type { ResourceField } from "../index.js";
+import type { ResourceField, ResolvedFieldConfig } from "../index.js";
+import { applyFieldGates } from "../graph/nodes/option-elicitor/field-gates.js";
+import { FieldPolicy } from "../constants/field-policy.js";
 
 describe("getIntentDefaults", () => {
   // ── Task 3.1 / AC #3: Lambda API handler defaults ─────────────────────
@@ -461,5 +463,143 @@ describe("getIntentDefaults — user-asserted values suppress defaults", () => {
     expect(result).toContainEqual(
       expect.objectContaining({ fieldName: "InstanceType", value: "t3.small" }),
     );
+  });
+});
+
+// ── autoProvision flag — SSH bundle wizard skip ────────────────────────────
+
+describe("autoProvision flag on SSH KeyName override", () => {
+  it("EC2 SSH KeyName override has autoProvision: true", () => {
+    const overrides = getIntentDefaults(
+      "Create an EC2 with SSH",
+      RESOURCE_TYPES.EC2_INSTANCE,
+    );
+    const keyNameOverride = overrides.find(
+      (o) => o.fieldName === CfnKey.KEY_NAME,
+    )!;
+    expect(keyNameOverride.autoProvision).toBe(true);
+  });
+
+  it("EC2 InstanceType override does NOT have autoProvision", () => {
+    const overrides = getIntentDefaults(
+      "Create an EC2 for web server",
+      RESOURCE_TYPES.EC2_INSTANCE,
+    );
+    const instanceTypeOverride = overrides.find(
+      (o) => o.fieldName === "InstanceType",
+    )!;
+    expect(instanceTypeOverride.autoProvision).toBeUndefined();
+  });
+
+  it("EC2 AssociatePublicIpAddress override does NOT have autoProvision (it is a boolean pre-injection)", () => {
+    const overrides = getIntentDefaults(
+      "Create an EC2 with SSH",
+      RESOURCE_TYPES.EC2_INSTANCE,
+    );
+    const publicIpOverride = overrides.find(
+      (o) => o.fieldName === CfnKey.ASSOCIATE_PUBLIC_IP,
+    )!;
+    // Public IP is a boolean — injected via the boolean path, not autoProvision
+    expect(publicIpOverride.autoProvision).toBeUndefined();
+  });
+
+  /**
+   * Simulates the wizard gate: when the orchestrator pre-injects the SSH
+   * placeholder into elicitedOptions (mimicking the autoProvision path in
+   * preInjectIntentBooleans), applyFieldGates must skip the KeyName prompt.
+   *
+   * This is the end-to-end invariant: intent "Create a EC2 with SSH"
+   * → autoProvision = true → orchestrator pre-injects SSH_KEY_PLACEHOLDER
+   * → applyFieldGates sees elicitedOptions[KeyName] is set
+   * → ASK_IF_NOT_SET gate fires → kind = "skip"
+   * → wizard never prompts the user for KeyName.
+   */
+  it("wizard gate skips KeyName when SSH placeholder pre-injected into elicitedOptions", () => {
+    const keyNameField: ResourceField = {
+      name: CfnKey.KEY_NAME,
+      question: {
+        type: "enum",
+        label: "EC2 Key Pair",
+        hint: "Required for SSH access. Leave blank to use SSM Session Manager instead.",
+        options: [],
+        initialValue: ResourceDefault.SSH_KEY_PLACEHOLDER,
+      },
+    };
+    const resolved: ResolvedFieldConfig = {
+      policy: FieldPolicy.ASK_IF_NOT_SET,
+      value: undefined,
+      source: "plugin_default",
+    };
+    // Simulate preInjectIntentBooleans injecting the SSH placeholder
+    const elicitedOptions: Record<string, unknown> = {
+      [CfnKey.KEY_NAME]: ResourceDefault.SSH_KEY_PLACEHOLDER,
+    };
+
+    const result = applyFieldGates(
+      keyNameField,
+      resolved,
+      elicitedOptions,
+      false,
+    );
+
+    // Must skip — not proceed — so user never sees the prompt
+    expect(result.kind).toBe("skip");
+    // Placeholder value preserved in elicitedOptions for the provisioner
+    expect(elicitedOptions[CfnKey.KEY_NAME]).toBe(
+      ResourceDefault.SSH_KEY_PLACEHOLDER,
+    );
+  });
+
+  /**
+   * Confirms that without pre-injection (no autoProvision), the KeyName
+   * field WOULD be prompted — demonstrating the original bug condition.
+   */
+  it("wizard gate proceeds for KeyName when elicitedOptions is empty (pre-bug baseline)", () => {
+    const keyNameField: ResourceField = {
+      name: CfnKey.KEY_NAME,
+      question: {
+        type: "enum",
+        label: "EC2 Key Pair",
+        hint: "Required for SSH access.",
+        options: [],
+        initialValue: ResourceDefault.SSH_KEY_PLACEHOLDER,
+      },
+    };
+    const resolved: ResolvedFieldConfig = {
+      policy: FieldPolicy.ASK_IF_NOT_SET,
+      value: undefined,
+      source: "plugin_default",
+    };
+    // No pre-injection — this is what happened before the fix
+    const elicitedOptions: Record<string, unknown> = {};
+
+    const result = applyFieldGates(
+      keyNameField,
+      resolved,
+      elicitedOptions,
+      false,
+    );
+
+    // Without pre-injection, the gate proceeds (original bug)
+    expect(result.kind).toBe("proceed");
+  });
+
+  /**
+   * End-to-end provisioner path: the SSH placeholder emitted by the wizard
+   * (via autoProvision pre-injection) matches what ssh-keypair.ts expects.
+   * Verifies the contract between intent-defaults and the provisioner.
+   */
+  it("SSH_KEY_PLACEHOLDER matches the value ssh-keypair.ts checks at provision time", () => {
+    const overrides = getIntentDefaults(
+      "Create a EC2 with SSH",
+      RESOURCE_TYPES.EC2_INSTANCE,
+    );
+    const keyNameOverride = overrides.find(
+      (o) => o.fieldName === CfnKey.KEY_NAME,
+    )!;
+    // The provisioner checks: desiredState[CfnKey.KEY_NAME] === ResourceDefault.SSH_KEY_PLACEHOLDER
+    // If this value changes, ssh-keypair.ts will stop triggering auto-create.
+    expect(keyNameOverride.value).toBe(ResourceDefault.SSH_KEY_PLACEHOLDER);
+    expect(ResourceDefault.SSH_KEY_PLACEHOLDER).toBe("assignee-ssh-key");
   });
 });

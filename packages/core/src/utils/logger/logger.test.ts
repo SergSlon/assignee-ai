@@ -790,9 +790,16 @@ describe("logger", () => {
       expect(resolveLogRetentionDays()).toBe(DEFAULT_LOG_RETENTION_DAYS);
     });
 
-    it("honors a valid positive integer env var", () => {
+    it("honors a valid positive integer env var above the floor", () => {
+      process.env["ASSIGNEE_LOG_RETENTION_DAYS"] = "60";
+      expect(resolveLogRetentionDays()).toBe(60);
+    });
+
+    it("clamps values below the 30-day floor up to 30 (P045 floor enforcement)", () => {
+      // P045: env var cannot reduce retention below the 30-day minimum floor.
+      // Setting "7" results in 30 (the floor), not 7.
       process.env["ASSIGNEE_LOG_RETENTION_DAYS"] = "7";
-      expect(resolveLogRetentionDays()).toBe(7);
+      expect(resolveLogRetentionDays()).toBe(30);
     });
 
     it("falls back to default for zero, negative, or non-numeric values", () => {
@@ -804,9 +811,15 @@ describe("logger", () => {
       expect(resolveLogRetentionDays()).toBe(DEFAULT_LOG_RETENTION_DAYS);
     });
 
-    it("floors fractional values", () => {
+    it("floors fractional values above the floor", () => {
+      process.env["ASSIGNEE_LOG_RETENTION_DAYS"] = "45.9";
+      expect(resolveLogRetentionDays()).toBe(45);
+    });
+
+    it("floors fractional values below the 30d floor → clamps to 30 (P045)", () => {
       process.env["ASSIGNEE_LOG_RETENTION_DAYS"] = "7.9";
-      expect(resolveLogRetentionDays()).toBe(7);
+      // Math.floor(7.9) = 7; 7 < 30 → clamped to 30
+      expect(resolveLogRetentionDays()).toBe(30);
     });
   });
 

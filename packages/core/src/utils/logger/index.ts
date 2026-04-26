@@ -35,8 +35,12 @@ export {
 } from "./paths.js";
 export {
   DEFAULT_LOG_RETENTION_DAYS,
+  MINIMUM_LOG_RETENTION_DAYS,
+  DEFAULT_AUDIT_RETENTION_DAYS,
+  MINIMUM_AUDIT_RETENTION_DAYS,
   LOG_PRUNE_MARKER,
   resolveLogRetentionDays,
+  resolveAuditRetentionDays,
   pruneOldLogs,
   autoPruneLogsIfDue,
   type PruneResult,

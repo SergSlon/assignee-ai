@@ -275,8 +275,16 @@ function applyCategoryHints(
 
 /**
  * Story 10.5: pre-inject boolean toggles from intent so showIf gates on
- * dependent fields open without a manual prompt. Returns a fresh
- * elicitedOptions map seeded with those booleans.
+ * dependent fields open without a manual prompt.
+ *
+ * Also pre-injects `autoProvision` fields (e.g. EC2 SSH KeyName) so the
+ * ASK_IF_NOT_SET gate in applyFieldGates sees a value and skips the prompt
+ * entirely. The provisioner receives the value at apply time and handles the
+ * actual resource creation (e.g. ssh-keypair.ts for KeyName placeholder).
+ * Users can still override via `--set fieldName=value` — presetFields are
+ * injected earlier (applyPresetFields) and overwrite this map.
+ *
+ * Returns a fresh elicitedOptions map seeded with those values.
  */
 function preInjectIntentBooleans(
   intentOverrides: IntentDefaultOverride[],
@@ -285,10 +293,13 @@ function preInjectIntentBooleans(
   const commonFieldNames = new Set(commonFields.map((f) => f.name));
   const elicitedOptions: Record<string, unknown> = {};
   for (const override of intentOverrides) {
-    if (
-      (override.value === true || override.value === false) &&
-      commonFieldNames.has(override.fieldName)
-    ) {
+    if (!commonFieldNames.has(override.fieldName)) continue;
+    if (override.value === true || override.value === false) {
+      elicitedOptions[override.fieldName] = override.value;
+    } else if (override.autoProvision === true) {
+      // Pre-inject auto-provision sentinels (strings/objects) so the
+      // ASK_IF_NOT_SET gate skips the prompt. The provisioner consumes
+      // the sentinel value at apply time.
       elicitedOptions[override.fieldName] = override.value;
     }
   }

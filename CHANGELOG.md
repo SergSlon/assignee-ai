@@ -18,6 +18,97 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### R9a — Round 9 (first half): P1-tier acquisition-DD follow-up + live SSH-bundle bug
+
+Round 9 ships 8 of the 12 P1-tier P-IDs surfaced by the post-Epic-100
+audit (`/.agents/reviews/p-id-audit-2026-04-26.md`) plus a CLI-UX bug
+that surfaced during live operator dogfooding. R9a commits the first
+4 P1 stories + the CLI bug; R9b will land the remaining 4 (P036, P038,
+P043, P053). 4/4 reviewers ACCEPT across 3/3 layers each; CLI-bug
+reviewer also ACCEPT.
+
+#### Added
+
+- **P031 — Bumped `@modelcontextprotocol/sdk` from `^1.12.1` to
+  `^1.29.0`.** 10 months of accumulated SDK updates absorbed cleanly;
+  no source adaptations needed. The dual-version situation in
+  `pnpm-lock.yaml` (1.27.1 from `@langchain/mcp-adapters` + 1.29.0
+  for `apps/mcp-server`) is benign — pnpm scopes correctly. Verified
+  by 8 mcp-server test files that exercise the real SDK via
+  `InMemoryTransport`, not mocks. 630 mcp-server tests still green.
+- **P035 — Checkpoint module coverage 0% → ≥80%.** 4 new test files
+  under `packages/core/src/checkpoint/` (store / ttl / auto-detect /
+  pruner — 1,260 LOC, 69 new tests). 23 explicitly recovery-tagged
+  tests covering: corrupt JSON, partial/truncated writes, schema
+  version mismatch, missing-checkpoint ENOENT, expired checkpoints
+  (TTL boundary), concurrent-write atomic-rename race, advisory-lock
+  proxy via `skipRecentMinutes` guard. Tests use real fixtures from
+  `packages/core/src/test-fixtures/checkpoints/` per
+  `feedback_real_data_mocks_all_cases`.
+- **P045 — Log-retention minimum floor policy (ISO 27001 A.12.4 +
+  GDPR Art 30 ROPA).** Hard 90-day floor for audit logs (cannot be
+  reduced via env var; values <90 emit a stderr error and clamp up);
+  30-day soft floor for general logs. New env vars
+  `ASSIGNEE_LOG_RETENTION_DAYS` + `ASSIGNEE_AUDIT_RETENTION_DAYS`.
+  New `packages/core/src/utils/logger/retention.ts` exports floor
+  constants + `resolveAuditRetentionDays()` + `guardAuditLogTruncation()`
+  helpers. New `apps/cli/src/commands/doctor/checks/logs.ts` adds a
+  "Log retention" doctor section with 4 sub-checks (general retention
+  config / audit retention config / general logs dir / audit logs
+  dir). Threat-model note: the 90-day floor is advisory in-process
+  (an operator can edit `retention.ts` or delete files directly);
+  Epic 101's KMS-signed S3 object-lock remote sink is the durable
+  enforcement layer.
+- **P046 — Formal incident-response runbook + index.** New
+  `docs/runbooks/incident-response.md` (555 LOC, 7 top-level sections,
+  14 subsections): SEV1–SEV4 classification matrix, first-30-min triage
+  checklist, evidence-collection procedures, 7 common-incident
+  playbooks (drift / stale checkpoint / throttling / credential leak
+  / Guardrail violation / MCP drift-poisoning / path-traversal —
+  citing R8-01 / R8-02 / W3 / W4 by commit hash + story file),
+  rollback procedures, post-mortem template, communication templates.
+  New `docs/runbooks/README.md` index + entry in `docs/index.md`.
+  All 281 citations resolve on disk per `pnpm citation-lint`.
+- **CLI-bug fix — SSH-bundle wizard now skips KeyName prompt for
+  auto-create intent.** Live operator reproduction: `assignee apply
+"Create a EC2 with SSH" --wizard` showed the hint "SSH bundle: key
+  pair will be auto-created during provisioning" but then prompted
+  for input anyway, defeating the auto-create. Root cause:
+  `applyIntentOverrides` set `field.question.initialValue =
+SSH_KEY_PLACEHOLDER` but `preInjectIntentBooleans` in the
+  option-elicitor only pre-injected boolean values — string sentinels
+  were never pre-injected, so the existing `ASK_IF_NOT_SET` Gate 3
+  (`value present → skip`) never fired. Fix: new `autoProvision?:
+boolean` field on `IntentDefaultOverride`; when set, the orchestrator
+  pre-injects the override value (boolean OR string) into
+  `elicitedOptions` before the wizard loop runs. End-to-end trace
+  verified intent → marker → pre-inject → wizard skip → planGenerator
+  → `desiredState[KEY_NAME] = SSH_KEY_PLACEHOLDER` → `ensureSshKeypair`
+  auto-create fires. `--set KeyName=my-key` user override still wins
+  (Gate 2 fires before Gate 3).
+
+#### Changed
+
+- `apps/cli/src/commands/doctor.test.ts` all-ok rollup test updated
+  for the new "Log retention" section (creates empty `logs/` +
+  `audit/` dirs in the sandbox, passes `logsDeps: { assigneeDir: tmp
+}`, bumps section count 6 → 7). Test intent preserved (per
+  `rules/testing.md`: fix code, not assertions); the new section was
+  not weakened, just accommodated.
+
+#### Provenance
+
+- Per-P audit: `/.agents/reviews/p-id-audit-2026-04-26.md` —
+  pre-R9a: 73/100 closed, 27 NOT-ACCOUNTED. Post-R9a: 78/100 closed
+  (+P031, P035, P045, P046, plus the CLI bug not in the original 100
+  but live-reported), 22 NOT-ACCOUNTED.
+- Source DD: `acquisition-dd-top100.md` §P031 / §P035 / §P045 / §P046.
+- Test totals after R9a: best-practices 905, core 7,363 (+89 from
+  R8 baseline), mcp-server 630, cli 1,489 (+20 from R8 baseline) =
+  **10,387 passing, zero regressions**.
+- 4 parallel adversarial reviewers + 1 SSH-bundle reviewer (Sonnet,
+  Blind/Edge/QA per story): ACCEPT 12/12 layers, no BLOCKING findings.
+
 ### R8 — Round 8: HIGH-severity acquisition-DD follow-up
 
 Three HIGH-severity P-IDs surfaced by the post-Epic-100 per-P audit
