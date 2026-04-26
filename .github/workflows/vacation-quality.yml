@@ -11,7 +11,7 @@ name: vacation-quality
 # - pnpm --filter assignee pre-close-probes --strict-multi-variation
 # - pnpm --filter assignee pre-close-probes --tripwire-only
 # - pnpm citation-lint
-# - pnpm --filter assignee doc-lint
+# - pnpm doc-lint
 #
 # Explicitly NOT run (require AWS creds / session context):
 # - pnpm -r test:coverage (too slow for a daily gate, runs at epic close)
@@ -86,7 +86,7 @@ jobs:
 
       - name: Doc lint
         id: doc-lint
-        run: pnpm --filter assignee doc-lint || true
+        run: pnpm doc-lint
 
       - name: Open issue on failure
         if: failure()
