@@ -16,6 +16,20 @@ export const ResourceDefault = {
   RDS_ENGINE_POSTGRES: "postgres",
   /** Placeholder KeyName injected when user intent mentions SSH but no key pair is specified. */
   SSH_KEY_PLACEHOLDER: "assignee-ssh-key",
+  /**
+   * Placeholder SubnetId injected by the SSH-bundle intent rule.
+   * Resolved at provision time to the first subnet in the account's default
+   * VPC via `ensureSubnet` in resource-provisioner/subnet.ts.
+   */
+  SUBNET_PLACEHOLDER: "assignee-default-subnet",
+  /**
+   * Placeholder sentinel for SecurityGroupIds on the SSH-bundle intent rule.
+   * The companion resource system (ec2-instance/config.ts) auto-creates a
+   * security group when this sentinel (or any empty/placeholder array) is
+   * present. The value is pre-injected as an empty array so the wizard skips
+   * the Security Groups prompt.
+   */
+  SG_PLACEHOLDER: "assignee-default-sg",
 } as const;
 
 /**

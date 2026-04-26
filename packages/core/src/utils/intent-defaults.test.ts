@@ -602,4 +602,105 @@ describe("autoProvision flag on SSH KeyName override", () => {
     expect(keyNameOverride.value).toBe(ResourceDefault.SSH_KEY_PLACEHOLDER);
     expect(ResourceDefault.SSH_KEY_PLACEHOLDER).toBe("assignee-ssh-key");
   });
+
+  // ── SubnetId autoProvision marker (R9b-CLI-bug Fix 2) ────────────────────
+
+  it("EC2 SSH intent SubnetId override has autoProvision: true and SUBNET_PLACEHOLDER value", () => {
+    const overrides = getIntentDefaults(
+      "Create a EC2 with SSH",
+      RESOURCE_TYPES.EC2_INSTANCE,
+    );
+    const subnetOverride = overrides.find(
+      (o) => o.fieldName === CfnKey.SUBNET_ID,
+    )!;
+    expect(subnetOverride).toBeDefined();
+    expect(subnetOverride.value).toBe(ResourceDefault.SUBNET_PLACEHOLDER);
+    expect(subnetOverride.autoProvision).toBe(true);
+    expect(subnetOverride.reason).toContain("SSH bundle");
+  });
+
+  it("EC2 SSH intent SecurityGroupIds override has autoProvision: true and empty array value", () => {
+    const overrides = getIntentDefaults(
+      "Create a EC2 with SSH",
+      RESOURCE_TYPES.EC2_INSTANCE,
+    );
+    const sgOverride = overrides.find(
+      (o) => o.fieldName === CfnKey.SECURITY_GROUP_IDS,
+    )!;
+    expect(sgOverride).toBeDefined();
+    expect(sgOverride.value).toEqual([]);
+    expect(sgOverride.autoProvision).toBe(true);
+    expect(sgOverride.reason).toContain("SSH bundle");
+  });
+
+  it("wizard gate skips SubnetId when SUBNET_PLACEHOLDER pre-injected into elicitedOptions", () => {
+    const subnetField: ResourceField = {
+      name: CfnKey.SUBNET_ID,
+      question: {
+        type: "enum",
+        label: "Subnet",
+        hint: "Determines which VPC and availability zone the instance launches in.",
+        options: [],
+        initialValue: ResourceDefault.SUBNET_PLACEHOLDER,
+      },
+    };
+    const resolved: ResolvedFieldConfig = {
+      policy: FieldPolicy.ASK_IF_NOT_SET,
+      value: undefined,
+      source: "plugin_default",
+    };
+    // Simulate preInjectIntentBooleans injecting the subnet placeholder
+    const elicitedOptions: Record<string, unknown> = {
+      [CfnKey.SUBNET_ID]: ResourceDefault.SUBNET_PLACEHOLDER,
+    };
+
+    const result = applyFieldGates(
+      subnetField,
+      resolved,
+      elicitedOptions,
+      false,
+    );
+
+    // Must skip — not proceed — so user never sees the Subnet prompt
+    expect(result.kind).toBe("skip");
+    // Placeholder value preserved for the provisioner
+    expect(elicitedOptions[CfnKey.SUBNET_ID]).toBe(
+      ResourceDefault.SUBNET_PLACEHOLDER,
+    );
+  });
+
+  it("wizard gate skips SecurityGroupIds when empty array pre-injected into elicitedOptions", () => {
+    const sgField: ResourceField = {
+      name: CfnKey.SECURITY_GROUP_IDS,
+      question: {
+        type: "multi",
+        label: "Security Groups",
+        hint: "Firewall rules controlling inbound/outbound traffic.",
+        options: [],
+      },
+    };
+    const resolved: ResolvedFieldConfig = {
+      policy: FieldPolicy.ASK_IF_NOT_SET,
+      value: undefined,
+      source: "plugin_default",
+    };
+    // Simulate preInjectIntentBooleans injecting the empty array sentinel
+    const elicitedOptions: Record<string, unknown> = {
+      [CfnKey.SECURITY_GROUP_IDS]: [],
+    };
+
+    const result = applyFieldGates(sgField, resolved, elicitedOptions, false);
+
+    // Must skip — empty array is not undefined so Gate 3 fires
+    expect(result.kind).toBe("skip");
+    expect(elicitedOptions[CfnKey.SECURITY_GROUP_IDS]).toEqual([]);
+  });
+
+  it("SUBNET_PLACEHOLDER and SG_PLACEHOLDER are distinct literal values", () => {
+    expect(ResourceDefault.SUBNET_PLACEHOLDER).toBe("assignee-default-subnet");
+    expect(ResourceDefault.SG_PLACEHOLDER).toBe("assignee-default-sg");
+    expect(ResourceDefault.SUBNET_PLACEHOLDER).not.toBe(
+      ResourceDefault.SSH_KEY_PLACEHOLDER,
+    );
+  });
 });

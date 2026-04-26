@@ -1243,6 +1243,42 @@ describe("renderDocHelp", () => {
     );
   });
 
+  it("falls back to read_documentation when read_sections throws 'does not contain subsections'", async () => {
+    // Live-reproduced error from aws-documentation-mcp-server on SubnetId page:
+    // "This document does not contain subsections. Please use the read_documentation
+    //  tool instead to get the full document content."
+    const searchTool = makeTool("search_documentation", () =>
+      Promise.resolve(
+        "See https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ec2-instance.html for details",
+      ),
+    );
+    const readTool = makeTool("read_sections", () =>
+      Promise.reject(
+        new Error(
+          "This document does not contain subsections. Please use the read_documentation tool instead to get the full document content.",
+        ),
+      ),
+    );
+    const readDocTool = makeTool("read_documentation", () =>
+      Promise.resolve(
+        "SubnetId: The ID of the subnet to launch the instance into.",
+      ),
+    );
+
+    const { renderDocHelp } = await import("./display.js");
+    await renderDocHelp("SubnetId", "AWS::EC2::Instance", [
+      searchTool,
+      readTool,
+      readDocTool,
+    ]);
+
+    expect(readDocTool.invoke).toHaveBeenCalledOnce();
+    expect(vi.mocked(note)).toHaveBeenCalledWith(
+      expect.stringContaining("SubnetId"),
+      expect.stringContaining("📖 SubnetId"),
+    );
+  });
+
   // ── Story 7.9: LLM synthesis tests ──────────────────────────────────────────
 
   describe("with llmClient", () => {
