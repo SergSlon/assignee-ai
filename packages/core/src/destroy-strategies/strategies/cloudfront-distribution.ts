@@ -46,8 +46,7 @@ export const cloudfrontDistributionStrategy: DestroyStrategy = {
         DeleteDistributionCommand,
       } = await import("@aws-sdk/client-cloudfront");
       // L-A12: use requireAssigneeCredentials("operator") for a
-      // consistent friendly error if operatorCredentials() returns
-      // an object missing keys.
+      // consistent error on missing credentials (throws MissingAssigneeCredentialsError).
       let cfCreds;
       try {
         cfCreds = requireAssigneeCredentials("operator");

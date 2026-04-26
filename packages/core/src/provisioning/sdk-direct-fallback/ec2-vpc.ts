@@ -17,7 +17,7 @@
  */
 
 import { EC2Client, CreateVpcCommand, type Tenancy } from "@aws-sdk/client-ec2";
-import { operatorCredentials } from "../../config/operator-credentials.js";
+import { requireAssigneeCredentials } from "../../config/aws-credentials.js";
 import { AWS_REGION } from "../../config/constants/aws.js";
 
 /** Synthetic requestToken sentinel — signals immediate success to the poller. */
@@ -63,7 +63,7 @@ export async function createEc2VpcSdkDirect(
       ? (desiredState["InstanceTenancy"] as Tenancy)
       : "default";
 
-  const creds = operatorCredentials();
+  const creds = requireAssigneeCredentials("operator");
   const client = new EC2Client({
     region,
     credentials: {

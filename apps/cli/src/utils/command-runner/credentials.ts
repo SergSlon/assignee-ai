@@ -81,7 +81,7 @@ export function resolveCredentials(silent: boolean): void {
 /**
  * Async variant — resolves AWS_PROFILE / --profile via the fromIni() provider
  * chain and promotes the resulting credentials to ASSIGNEE_OPERATOR_* env vars
- * so the rest of the pipeline (requireAssigneeCredentials, operatorCredentials)
+ * so the rest of the pipeline (requireAssigneeCredentials, tryAssigneeCredentials)
  * finds them in the expected variables.
  *
  * This must be called BEFORE any SDK client is constructed when profile-based

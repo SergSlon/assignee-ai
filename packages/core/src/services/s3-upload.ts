@@ -1,7 +1,7 @@
 /**
  * S3 Upload Service — uploads local files to an S3 bucket for static website hosting.
  *
- * Uses ASSIGNEE_OPERATOR_* credentials via operatorCredentials(), consistent with
+ * Uses ASSIGNEE_OPERATOR_* credentials via requireAssigneeCredentials("operator"), consistent with
  * all other AWS SDK clients in the CLI.
  *
  * @see Story 37.3 — S3 Static Site Upload

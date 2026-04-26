@@ -26,7 +26,7 @@ import {
   type DestroyStrategy,
 } from "./destroy-strategies/index.js";
 import { ProvisioningErrorKind } from "./provisioning-port.js";
-import { operatorCredentials } from "../config/operator-credentials.js";
+import { tryAssigneeCredentials } from "../config/aws-credentials.js";
 import { AWS_REGION } from "../config/constants.js";
 
 export interface DestroyResult {
@@ -171,8 +171,17 @@ export async function destroySingleResource(
     requestedRegion === "global" || !requestedRegion
       ? AWS_REGION
       : requestedRegion;
+  // R10a-03 follow-up (per `feedback_lazy_credential_resolution_in_mcp`):
+  // graceful resolution. Strategy post-destroy hooks (e.g. ALB ENI
+  // drain) catch downstream creds-missing failures via `warnDestroy`
+  // and continue — failing here would short-circuit the primary delete.
+  const lazyCreds = tryAssigneeCredentials("operator");
   const awsConfig: AwsConfig = {
-    ...operatorCredentials(),
+    accessKeyId: lazyCreds?.accessKeyId ?? "",
+    secretAccessKey: lazyCreds?.secretAccessKey ?? "",
+    ...(lazyCreds?.sessionToken
+      ? { sessionToken: lazyCreds.sessionToken }
+      : {}),
     region: effectiveRegion,
   };
 

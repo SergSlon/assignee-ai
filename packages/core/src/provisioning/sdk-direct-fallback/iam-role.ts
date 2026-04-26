@@ -18,7 +18,7 @@
  */
 
 import { IAMClient, CreateRoleCommand } from "@aws-sdk/client-iam";
-import { operatorCredentials } from "../../config/operator-credentials.js";
+import { requireAssigneeCredentials } from "../../config/aws-credentials.js";
 import { AWS_REGION } from "../../config/constants/aws.js";
 
 /** Synthetic requestToken sentinel — signals immediate success to the poller. */
@@ -78,7 +78,7 @@ export async function createIamRoleSdkDirect(
       ? desiredState["Description"]
       : undefined;
 
-  const creds = operatorCredentials();
+  const creds = requireAssigneeCredentials("operator");
   const client = new IAMClient({
     region,
     credentials: {

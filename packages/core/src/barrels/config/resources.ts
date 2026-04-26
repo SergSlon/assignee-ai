@@ -29,9 +29,6 @@ export {
   ARN_IDENTIFIED_RESOURCE_TYPES,
 } from "../../config/arn-helpers.js";
 
-// Config — operator credential reader (Story 50-4 Wave 5 Pass G)
-export { operatorCredentials } from "../../config/operator-credentials.js";
-
 // Config — AWS SDK provider chain (W2-02 / P004 → L5-S05)
 export {
   resolveOperatorCredentialProvider,

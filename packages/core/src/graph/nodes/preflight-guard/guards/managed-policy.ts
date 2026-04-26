@@ -40,12 +40,12 @@ export async function verifyManagedPolicyArns(
   if (arns.length === 0) return null;
   try {
     const { IAMClient, GetPolicyCommand } = await import("@aws-sdk/client-iam");
-    const { operatorCredentials } =
-      await import("@/config/operator-credentials.js");
-    const creds = operatorCredentials();
+    const { tryAssigneeCredentials } =
+      await import("@/config/aws-credentials.js");
+    const creds = tryAssigneeCredentials("operator");
     const iam = new IAMClient({
       region: "us-east-1",
-      ...(creds.accessKeyId && creds.secretAccessKey
+      ...(creds
         ? {
             credentials: {
               accessKeyId: creds.accessKeyId,

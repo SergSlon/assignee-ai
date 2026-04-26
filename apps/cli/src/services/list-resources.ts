@@ -22,7 +22,7 @@ import {
   type RgtaMapping,
 } from "@assignee/core";
 import { AWS_REGION } from "../config/constants.js";
-import { operatorCredentials } from "../config/operator-credentials.js";
+import { tryAssigneeCredentials } from "../config/aws-credentials.js";
 import { TAG_KEY_MANAGED_BY, TAG_VALUE_MANAGED_BY } from "../utils/tags.js";
 import { fetchBillingData } from "./billing.js";
 import { fetchManagedIamRoles } from "./iam-role-inventory.js";
@@ -47,10 +47,10 @@ export async function fetchManagedResources(
   mcpTools?: StructuredTool[],
 ): Promise<ManagedResource[]> {
   const resolvedRegion = region ?? AWS_REGION;
-  const opCreds = operatorCredentials();
+  const opCreds = tryAssigneeCredentials("operator");
   const client = new ResourceGroupsTaggingAPIClient({
     region: resolvedRegion,
-    ...(opCreds.accessKeyId && opCreds.secretAccessKey
+    ...(opCreds
       ? {
           credentials: {
             accessKeyId: opCreds.accessKeyId,

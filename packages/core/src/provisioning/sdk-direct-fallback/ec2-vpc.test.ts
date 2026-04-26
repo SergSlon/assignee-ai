@@ -19,11 +19,10 @@ vi.mock("@aws-sdk/client-ec2", () => {
   return { EC2Client, CreateVpcCommand };
 });
 
-vi.mock("../../config/operator-credentials.js", () => ({
-  operatorCredentials: vi.fn().mockReturnValue({
-    accessKeyId: "AKIAFAKEKEY",
-    secretAccessKey: "fakeSecretKey",
-    region: "us-east-1",
+vi.mock("../../config/aws-credentials.js", () => ({
+  requireAssigneeCredentials: vi.fn().mockReturnValue({
+    accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+    secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
   }),
 }));
 
@@ -31,12 +30,11 @@ describe("createEc2VpcSdkDirect", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     // Re-apply mocks after clearAllMocks resets return values + implementations.
-    const { operatorCredentials } =
-      await import("../../config/operator-credentials.js");
-    vi.mocked(operatorCredentials).mockReturnValue({
-      accessKeyId: "AKIAFAKEKEY",
-      secretAccessKey: "fakeSecretKey",
-      region: "us-east-1",
+    const { requireAssigneeCredentials } =
+      await import("../../config/aws-credentials.js");
+    vi.mocked(requireAssigneeCredentials).mockReturnValue({
+      accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+      secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
     });
     const { EC2Client } = await import("@aws-sdk/client-ec2");
     vi.mocked(EC2Client).mockImplementation(
