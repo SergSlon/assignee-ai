@@ -71,6 +71,15 @@ export const EnvVar = {
   ASSIGNEE_BP_REQUIRE_SIGNATURE: "ASSIGNEE_BP_REQUIRE_SIGNATURE",
   ASSIGNEE_LOG_DIR: "ASSIGNEE_LOG_DIR",
   ASSIGNEE_LOG_RETENTION_DAYS: "ASSIGNEE_LOG_RETENTION_DAYS",
+  /**
+   * Override the minimum audit-log retention floor (default 90 days).
+   * Values BELOW 90 are rejected at config-load time with a clear error —
+   * the 90-day floor is a hard compliance requirement (ISO 27001 A.12.4 +
+   * GDPR Art 30 ROPA). Only values ≥ 90 are accepted.
+   * @see P045 — acquisition-DD finding
+   * @see docs/explanation/log-retention.md
+   */
+  ASSIGNEE_AUDIT_RETENTION_DAYS: "ASSIGNEE_AUDIT_RETENTION_DAYS",
 
   // ── Distributed tracing / OTLP exporter ──────────────────────
   /**

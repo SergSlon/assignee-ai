@@ -41,6 +41,7 @@ export const EC2_RULES: IntentRule[] = [
         fieldName: CfnKey.KEY_NAME,
         value: ResourceDefault.SSH_KEY_PLACEHOLDER,
         reason: "SSH bundle: key pair will be auto-created during provisioning",
+        autoProvision: true,
       },
       {
         fieldName: CfnKey.ASSOCIATE_PUBLIC_IP,

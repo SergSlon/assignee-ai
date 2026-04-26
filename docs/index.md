@@ -39,6 +39,15 @@ the backlog of pending how-tos.
 | [mcp-server.md](mcp-server.md)                                   | Expose assignee.ai as an MCP server to your IDE                  |
 | [testing-guide.md](testing-guide.md)                             | Run the project's test suite and add new tests                   |
 
+## [Runbooks](runbooks/) — operator how-tos
+
+Step-by-step operational guides for on-call engineers. See
+[`runbooks/README.md`](runbooks/README.md) for the full index.
+
+| Doc                                                            | Goal                                                                        |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| [runbooks/incident-response.md](runbooks/incident-response.md) | Incident classification, triage checklist, playbooks, rollback, post-mortem |
+
 ## [Reference](reference/) — information-oriented
 
 Dry, precise, lookup-style information. Skim the tables; search for specifics.

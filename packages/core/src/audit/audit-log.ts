@@ -35,6 +35,10 @@ import { randomBytes } from "node:crypto";
 import { computeChainLink, GENESIS_HMAC } from "./hmac-chain.js";
 import { getCurrentRole } from "../rbac/role-context.js";
 import { defaultFileAdvisoryLock } from "../locks/file-advisory-lock.js";
+import {
+  MINIMUM_AUDIT_RETENTION_DAYS,
+  resolveAuditRetentionDays,
+} from "../utils/logger/retention.js";
 
 // ── Paths ──────────────────────────────────────────────────────────────
 
@@ -165,6 +169,78 @@ export async function readAuditLog(
   logFile: string = DEFAULT_AUDIT_LOG_FILE,
 ): Promise<Array<AuditLogLine>> {
   return readAuditLogRaw(logFile);
+}
+
+// ── Retention floor (P045) ─────────────────────────────────────────────
+
+/**
+ * Check whether an audit entry's timestamp is within the mandatory retention
+ * window (resolved via ASSIGNEE_AUDIT_RETENTION_DAYS, minimum 90 days).
+ *
+ * Returns `true` when the entry must be retained (i.e. CANNOT be deleted),
+ * `false` when it is older than the effective floor and may be removed.
+ *
+ * Used as a guard in any code path that would truncate or delete audit
+ * records — call this before any such operation and refuse if it returns true.
+ */
+export function isAuditEntryWithinRetentionFloor(
+  entry: AuditEntry,
+  now: Date = new Date(),
+): boolean {
+  const effectiveDays = resolveAuditRetentionDays();
+  const floorMs = effectiveDays * 24 * 60 * 60 * 1000;
+  const entryTime = new Date(entry.timestamp).getTime();
+  if (Number.isNaN(entryTime)) {
+    // Unparseable timestamp — treat as retained (safe default).
+    return true;
+  }
+  return now.getTime() - entryTime < floorMs;
+}
+
+/**
+ * Attempt to truncate/rotate the audit log at `logFile`, refusing if any
+ * retained record (younger than the effective retention floor) would be lost.
+ *
+ * Returns:
+ *   `{ ok: true }` — truncation is safe; no protected records exist.
+ *   `{ ok: false, reason: string }` — truncation is BLOCKED because protected
+ *     records exist. The caller must NOT delete or truncate the file.
+ *
+ * The effective floor is MINIMUM_AUDIT_RETENTION_DAYS (90) or higher if
+ * ASSIGNEE_AUDIT_RETENTION_DAYS is set to a larger value.
+ */
+export async function guardAuditLogTruncation(
+  logFile: string = DEFAULT_AUDIT_LOG_FILE,
+  now: Date = new Date(),
+): Promise<{ ok: boolean; reason?: string }> {
+  const entries = await readAuditLog(logFile);
+  const effectiveDays = resolveAuditRetentionDays();
+  const retained: AuditEntry[] = [];
+
+  for (const line of entries) {
+    if ("preLegacy" in line) continue;
+    if (isAuditEntryWithinRetentionFloor(line, now)) {
+      retained.push(line);
+    }
+  }
+
+  if (retained.length === 0) {
+    return { ok: true };
+  }
+
+  const oldest = retained.reduce((a, b) =>
+    new Date(a.timestamp) < new Date(b.timestamp) ? a : b,
+  );
+
+  return {
+    ok: false,
+    reason:
+      `Cannot truncate audit log: ${retained.length} record(s) are within the` +
+      ` mandatory ${effectiveDays}-day retention floor` +
+      ` (minimum: ${MINIMUM_AUDIT_RETENTION_DAYS} days, ISO 27001 A.12.4 + GDPR Art 30 ROPA).` +
+      ` Oldest protected record: ${oldest.timestamp} (index ${oldest.index}).` +
+      ` Set ASSIGNEE_AUDIT_RETENTION_DAYS to a value ≥ ${MINIMUM_AUDIT_RETENTION_DAYS} to configure the window.`,
+  };
 }
 
 // ── Sync check (used in tests) ─────────────────────────────────────────

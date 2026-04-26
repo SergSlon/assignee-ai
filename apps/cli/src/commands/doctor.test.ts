@@ -669,6 +669,11 @@ describe("runDoctor", () => {
     const tmp = mkdtempSync(join(tmpdir(), "doctor-e2e-ok-"));
     const cacheDir = join(tmp, "cache");
     mkdirSync(cacheDir);
+    // R9a-03 (P045) added Log-retention as a 7th doctor section. The check
+    // reads ${assigneeDir}/{logs,audit}; if either dir is missing it warns.
+    // Create empty dirs in the sandbox so the all-ok rollup assertion holds.
+    mkdirSync(join(tmp, "logs"));
+    mkdirSync(join(tmp, "audit"));
     writeFileSync(join(tmp, "assignee.yaml"), "region: us-east-1\n");
 
     try {
@@ -685,12 +690,14 @@ describe("runDoctor", () => {
         },
         cacheDeps: { homeDir: cacheDir },
         configDeps: { cwd: tmp },
+        logsDeps: { assigneeDir: tmp },
       });
 
       expect(report.version).toBe("9.9.9");
-      // Story 50-3 removed the MCP version drift section → 6 sections total
-      // (credentials, bedrock, mcp, cache, config, best-practices).
-      expect(report.sections).toHaveLength(6);
+      // Story 50-3 removed the MCP version drift section → 6 sections.
+      // R9a-03 (P045) added "Log retention" → 7 sections total
+      // (credentials, bedrock, mcp, cache, config, best-practices, log retention).
+      expect(report.sections).toHaveLength(7);
       // Skip flags should produce 'warn' rather than 0/SUCCESS — they're
       // unverified, not "ok".
       expect(report.exitCode).toBe(2);

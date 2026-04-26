@@ -16,6 +16,14 @@ export interface IntentDefaultOverride {
    * @see Story 18.12
    */
   categoryHint?: string;
+  /**
+   * When true, the wizard MUST skip this field without prompting the user.
+   * The value will be pre-injected into elicitedOptions so the provisioner
+   * receives it at apply time (e.g. SSH_KEY_PLACEHOLDER triggers auto-create).
+   * The user can still override via `--set fieldName=value`.
+   * @see EC2 SSH bundle — KeyName auto-create
+   */
+  autoProvision?: boolean;
 }
 
 /** Rule definition for keyword-to-override mapping. Exported for matrix tests. */

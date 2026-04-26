@@ -3,6 +3,17 @@
  *
  * Lifted from `apps/cli/src/utils/logger/retention.ts` in Story 50-4
  * Wave 5 Pass A.
+ *
+ * P045: Minimum retention floors are enforced here.
+ *   - General logs:  MINIMUM_LOG_RETENTION_DAYS = 30 days (operational)
+ *   - Audit logs:    MINIMUM_AUDIT_RETENTION_DAYS = 90 days (ISO 27001 A.12.4 + GDPR Art 30 ROPA)
+ *
+ * The ASSIGNEE_LOG_RETENTION_DAYS env var can increase the general floor but
+ * cannot reduce it below 30. ASSIGNEE_AUDIT_RETENTION_DAYS can increase the
+ * audit floor but values < 90 are rejected at resolve time with a process.stderr
+ * error and the hard floor is applied as a safety fallback.
+ *
+ * @see docs/explanation/log-retention.md
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -10,8 +21,29 @@ import { EnvVar } from "../../constants/env-vars.js";
 
 /**
  * Default retention window for persistent log files, in days.
+ * NOTE: The old default was 14; P045 raises the minimum floor to 30.
  */
-export const DEFAULT_LOG_RETENTION_DAYS = 14;
+export const DEFAULT_LOG_RETENTION_DAYS = 30;
+
+/**
+ * Hard minimum retention floor for general (operational) logs — 30 days.
+ * Operators cannot set ASSIGNEE_LOG_RETENTION_DAYS below this value.
+ * @see P045 acquisition-DD finding
+ */
+export const MINIMUM_LOG_RETENTION_DAYS = 30;
+
+/**
+ * Hard minimum retention floor for audit logs — 90 days.
+ * Operators cannot set ASSIGNEE_AUDIT_RETENTION_DAYS below this value.
+ * ISO 27001 A.12.4 and GDPR Art 30 ROPA compliance requirement.
+ * @see P045 acquisition-DD finding
+ */
+export const MINIMUM_AUDIT_RETENTION_DAYS = 90;
+
+/**
+ * Default retention window for audit log entries, in days.
+ */
+export const DEFAULT_AUDIT_RETENTION_DAYS = 90;
 
 /**
  * Marker file written inside the log dir after a successful prune so we can
@@ -23,9 +55,15 @@ export const LOG_PRUNE_MARKER = ".last-prune";
 const AUTO_PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Resolve the retention window in days. Honors ASSIGNEE_LOG_RETENTION_DAYS;
- * falls back to DEFAULT_LOG_RETENTION_DAYS for any non-finite / non-positive
- * value (including 0, negatives, NaN, non-numeric strings).
+ * Resolve the retention window in days for general operational logs.
+ *
+ * Honors ASSIGNEE_LOG_RETENTION_DAYS; falls back to DEFAULT_LOG_RETENTION_DAYS
+ * for any non-finite / non-positive value (including 0, negatives, NaN,
+ * non-numeric strings).
+ *
+ * P045 floor enforcement: values below MINIMUM_LOG_RETENTION_DAYS (30) are
+ * silently clamped UP to the floor. The env var can only EXTEND, never shrink,
+ * the minimum retention period.
  */
 export function resolveLogRetentionDays(): number {
   const raw = process.env[EnvVar.ASSIGNEE_LOG_RETENTION_DAYS];
@@ -34,7 +72,40 @@ export function resolveLogRetentionDays(): number {
   if (!Number.isFinite(parsed) || parsed <= 0) {
     return DEFAULT_LOG_RETENTION_DAYS;
   }
-  return Math.floor(parsed);
+  const floored = Math.floor(parsed);
+  // P045: enforce minimum floor — silently clamp upward.
+  return Math.max(floored, MINIMUM_LOG_RETENTION_DAYS);
+}
+
+/**
+ * Resolve the retention window in days for audit logs.
+ *
+ * Honors ASSIGNEE_AUDIT_RETENTION_DAYS; rejects values below the 90-day
+ * compliance floor (ISO 27001 A.12.4 + GDPR Art 30 ROPA) with a clear
+ * stderr error. Values < 90 apply the floor and continue — never crash the
+ * process, but always warn.
+ *
+ * Returns a value ≥ MINIMUM_AUDIT_RETENTION_DAYS (90).
+ */
+export function resolveAuditRetentionDays(): number {
+  const raw = process.env[EnvVar.ASSIGNEE_AUDIT_RETENTION_DAYS];
+  if (raw === undefined || raw.length === 0)
+    return DEFAULT_AUDIT_RETENTION_DAYS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_AUDIT_RETENTION_DAYS;
+  }
+  const floored = Math.floor(parsed);
+  if (floored < MINIMUM_AUDIT_RETENTION_DAYS) {
+    // P045: hard compliance rejection — write to stderr and apply the floor.
+    process.stderr.write(
+      `[assignee] ERROR: ASSIGNEE_AUDIT_RETENTION_DAYS=${floored} is below the` +
+        ` mandatory 90-day compliance floor (ISO 27001 A.12.4 + GDPR Art 30 ROPA).` +
+        ` Applying the 90-day floor. Set a value ≥ 90 to suppress this error.\n`,
+    );
+    return MINIMUM_AUDIT_RETENTION_DAYS;
+  }
+  return floored;
 }
 
 /**
