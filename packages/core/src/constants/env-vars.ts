@@ -27,6 +27,15 @@ export const EnvVar = {
   BEDROCK_MODEL_ID: "BEDROCK_MODEL_ID",
   BEDROCK_GUARDRAIL_ID: "BEDROCK_GUARDRAIL_ID",
   BEDROCK_GUARDRAIL_VERSION: "BEDROCK_GUARDRAIL_VERSION",
+  /**
+   * When set to "1" or "true", suppresses the startup warning that fires
+   * when Bedrock is the active provider but no Guardrail has been
+   * configured. This is an explicit operator opt-out: the operator
+   * acknowledges that LLM-generated content may include PII, harmful
+   * topics, or jailbreak responses without a Guardrail in place.
+   * @see P018 — acquisition-DD finding, L5 Aiko L5.3 S12
+   */
+  BEDROCK_GUARDRAIL_DISABLE: "BEDROCK_GUARDRAIL_DISABLE",
 
   // ── Per-node LLM routing (Story 44.1) ─────────────────────────
   ASSIGNEE_LLM_DEFAULT: "ASSIGNEE_LLM_DEFAULT",

@@ -120,6 +120,40 @@ export async function checkBedrock(
       status: "ok",
       detail: `${guardrailId}:${guardrailVersion ?? "1"} (configured)`,
     });
+  } else if (wantsBedrock) {
+    // P018 (acquisition-DD L5 Aiko L5.3 S12): HIGH-severity finding when
+    // Bedrock is active and no Guardrail is configured.
+    // Skip this finding if the operator has explicitly opted out with
+    // BEDROCK_GUARDRAIL_DISABLE=1 — treat as informed acceptance.
+    const guardrailDisabled = process.env[EnvVar.BEDROCK_GUARDRAIL_DISABLE];
+    const isDisabled =
+      guardrailDisabled === "1" || guardrailDisabled === "true";
+    if (!isDisabled) {
+      subs.push({
+        label: "Guardrail [HIGH]",
+        status: "warn",
+        detail:
+          "No Bedrock Guardrail configured. A Guardrail is a runtime content " +
+          "policy that blocks PII leakage, harmful topics, and jailbreak " +
+          "responses from reaching your infrastructure automation. Without " +
+          "one, LLM-generated content is unfiltered.\n" +
+          "  • To enable: set BEDROCK_GUARDRAIL_ID=<id> and " +
+          "BEDROCK_GUARDRAIL_VERSION=<version> (or 1).\n" +
+          "  • To create a guardrail: " +
+          "aws bedrock create-guardrail --name assignee-guardrail " +
+          "--blocked-input-messaging 'Blocked by policy' " +
+          "--blocked-outputs-messaging 'Blocked by policy'\n" +
+          "  • To suppress this warning (not recommended): " +
+          "set BEDROCK_GUARDRAIL_DISABLE=1.",
+      });
+    } else {
+      subs.push({
+        label: "Guardrail",
+        status: "ok",
+        detail:
+          "not configured — BEDROCK_GUARDRAIL_DISABLE=1 set (operator accepted risk)",
+      });
+    }
   }
 
   return {

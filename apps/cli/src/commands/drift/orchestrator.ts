@@ -9,12 +9,14 @@
  */
 import * as fs from "node:fs/promises";
 import { DriftStatus, type DriftResult } from "@assignee/core";
+import { ProcessExitCode } from "../../constants/errors.js";
 import { MemoryService } from "../../services/memory.js";
 import { createDriftDetectorFromEnv } from "../../services/drift-detector-factory.js";
 import { buildDriftReport } from "../../views/drift-report.js";
 import { renderDriftTable, renderSummary } from "./report-formatter.js";
 import { runSingleResourceDetail } from "./single-resource.js";
 import { parseConcurrency, runBatchDriftCheck } from "./live-progress.js";
+import { validateOutputPath } from "../../utils/safe-output-path.js";
 import type { DriftOpts } from "./types.js";
 
 export async function runDrift(
@@ -107,8 +109,19 @@ export async function runDrift(
     const jsonOutput = JSON.stringify({ ok: true, ...report }, null, 2) + "\n";
 
     if (opts.outputFile) {
-      await fs.writeFile(opts.outputFile, jsonOutput, "utf-8");
-      process.stderr.write(`Report written to ${opts.outputFile}\n`);
+      const pathCheck = validateOutputPath(opts.outputFile);
+      if (!pathCheck.ok) {
+        process.stderr.write(
+          `assignee drift: --output-file rejected: ${pathCheck.reason}\n`,
+        );
+        process.exitCode = ProcessExitCode.GENERIC_ERROR;
+        return;
+      }
+      // Use the resolved absolute path for the write so the reported path
+      // in the success message is unambiguous.
+      const writePath = pathCheck.resolvedPath ?? opts.outputFile;
+      await fs.writeFile(writePath, jsonOutput, "utf-8");
+      process.stderr.write(`Report written to ${writePath}\n`);
     } else {
       process.stdout.write(jsonOutput);
     }

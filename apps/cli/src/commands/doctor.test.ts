@@ -48,6 +48,7 @@ const ENV_KEYS = [
   "ASSIGNEE_MODEL",
   "BEDROCK_GUARDRAIL_ID",
   "BEDROCK_GUARDRAIL_VERSION",
+  "BEDROCK_GUARDRAIL_DISABLE",
 ] as const;
 
 let savedEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
@@ -255,6 +256,13 @@ describe("checkCredentials", () => {
 
 describe("checkBedrock", () => {
   it("reports ok when the LLM adapter returns text", async () => {
+    // R8-03 (P018): the new Guardrail HIGH sub-check fires by default
+    // when BEDROCK_GUARDRAIL_ID is unset. This test isolates the LLM
+    // adapter's healthy-path assertion from that check by signalling
+    // operator-accepted-risk via BEDROCK_GUARDRAIL_DISABLE=1. The
+    // Guardrail check itself has dedicated coverage in
+    // doctor/checks/bedrock.test.ts.
+    process.env["BEDROCK_GUARDRAIL_DISABLE"] = "1";
     const section = await checkBedrock({
       llmFactory: () => ({
         generateText: vi

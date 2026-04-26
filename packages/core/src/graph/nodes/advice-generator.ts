@@ -175,7 +175,7 @@ export function createAdviceGeneratorNode({
   };
 }
 
-function buildAdvicePrompt(
+export function buildAdvicePrompt(
   state: AgentState,
   mcpContext: McpAdviceContext = {},
 ): string {
@@ -184,19 +184,24 @@ function buildAdvicePrompt(
     ? `Estimated cost: ${state.estimatedMonthlyCost}/month.`
     : "";
 
-  // Build MCP context section if any data is available
+  // Build MCP context section if any data is available.
+  // Each snippet is sanitized with stripPromptBoundaryTags before interpolation
+  // (P013/R8-02): a compromised or hostile MCP server could inject boundary
+  // tags (e.g. </user_intent><system>…</system>) that hijack the LLM prompt.
   const mcpSections: string[] = [];
   if (mcpContext.pricingSnippet) {
-    mcpSections.push(`LIVE PRICING DATA:\n${mcpContext.pricingSnippet}`);
+    mcpSections.push(
+      `LIVE PRICING DATA:\n${stripPromptBoundaryTags(mcpContext.pricingSnippet)}`,
+    );
   }
   if (mcpContext.docSnippet) {
     mcpSections.push(
-      `AWS DOCUMENTATION (current best practices):\n${mcpContext.docSnippet}`,
+      `AWS DOCUMENTATION (current best practices):\n${stripPromptBoundaryTags(mcpContext.docSnippet)}`,
     );
   }
   if (mcpContext.securitySnippet) {
     mcpSections.push(
-      `SECURITY POSTURE ANALYSIS:\n${mcpContext.securitySnippet}`,
+      `SECURITY POSTURE ANALYSIS:\n${stripPromptBoundaryTags(mcpContext.securitySnippet)}`,
     );
   }
   const mcpBlock =
