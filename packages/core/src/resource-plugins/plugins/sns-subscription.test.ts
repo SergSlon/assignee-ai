@@ -51,6 +51,14 @@ describe("snsSubscriptionPlugin", () => {
     expect(endpoint?.required).toBe(true);
   });
 
+  it("TopicArn uses discover-sns-topics fetcher", () => {
+    const field = snsSubscriptionPlugin.commonFields.find(
+      (f) => f.name === CfnKey.TOPIC_ARN,
+    )!;
+    expect(field.question.type).toBe("enum");
+    expect(field.question.fetcher).toBe("discover-sns-topics");
+  });
+
   describe("TopicArn validation", () => {
     const field = snsSubscriptionPlugin.commonFields.find(
       (f) => f.name === CfnKey.TOPIC_ARN,

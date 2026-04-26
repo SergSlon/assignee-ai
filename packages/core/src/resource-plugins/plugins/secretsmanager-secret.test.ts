@@ -87,6 +87,14 @@ describe("secretsManagerSecretPlugin", () => {
     expect(field?.question.initialValue).toBe("");
   });
 
+  it("KmsKeyId uses discover-kms-keys fetcher", () => {
+    const field = secretsManagerSecretPlugin.commonFields.find(
+      (f) => f.name === "KmsKeyId",
+    )!;
+    expect(field.question.type).toBe("enum");
+    expect(field.question.fetcher).toBe("discover-kms-keys");
+  });
+
   describe("KmsKeyId validation", () => {
     const field = secretsManagerSecretPlugin.commonFields.find(
       (f) => f.name === "KmsKeyId",

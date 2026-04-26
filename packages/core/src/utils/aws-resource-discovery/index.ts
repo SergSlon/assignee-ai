@@ -15,9 +15,15 @@ export {
   discoverSubnets,
   discoverSecurityGroups,
   discoverKeyPairs,
+  discoverRouteTables,
+  discoverInternetGateways,
+  discoverNatGateways,
 } from "./ec2-network.js";
 export {
   discoverRdsEngineVersions,
   discoverRdsInstanceClasses,
 } from "./rds.js";
 export { discoverLambdaRuntimes } from "./lambda.js";
+export { discoverEfsFileSystems } from "./efs.js";
+export { discoverSnsTopics } from "./sns.js";
+export { discoverKmsKeys } from "./kms.js";

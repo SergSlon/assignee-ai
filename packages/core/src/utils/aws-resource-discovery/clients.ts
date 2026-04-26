@@ -21,6 +21,9 @@
 import { createEC2Client, type EC2Client } from "../../aws/index.js";
 import { RDSClient } from "@aws-sdk/client-rds";
 import { SSMClient } from "@aws-sdk/client-ssm";
+import { EFSClient } from "@aws-sdk/client-efs";
+import { KMSClient } from "@aws-sdk/client-kms";
+import { SNSClient } from "@aws-sdk/client-sns";
 import { AWS_REGION } from "../../config/constants/aws.js";
 import {
   tryAssigneeCredentials,
@@ -53,6 +56,33 @@ export function createRdsClient(): RDSClient | undefined {
   const creds = readerCredsOrUndefined();
   if (!creds) return undefined;
   return new RDSClient({
+    region: AWS_REGION,
+    credentials: creds,
+  });
+}
+
+export function createEfsClient(): EFSClient | undefined {
+  const creds = readerCredsOrUndefined();
+  if (!creds) return undefined;
+  return new EFSClient({
+    region: AWS_REGION,
+    credentials: creds,
+  });
+}
+
+export function createKmsClient(): KMSClient | undefined {
+  const creds = readerCredsOrUndefined();
+  if (!creds) return undefined;
+  return new KMSClient({
+    region: AWS_REGION,
+    credentials: creds,
+  });
+}
+
+export function createSnsClient(): SNSClient | undefined {
+  const creds = readerCredsOrUndefined();
+  if (!creds) return undefined;
+  return new SNSClient({
     region: AWS_REGION,
     credentials: creds,
   });

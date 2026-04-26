@@ -140,6 +140,14 @@ describe("logGroupPlugin", () => {
     });
   });
 
+  it("KmsKeyId uses discover-kms-keys fetcher", () => {
+    const field = logGroupPlugin.commonFields.find(
+      (f) => f.name === "KmsKeyId",
+    )!;
+    expect(field.question.type).toBe("enum");
+    expect(field.question.fetcher).toBe("discover-kms-keys");
+  });
+
   describe("KmsKeyId validation", () => {
     const field = logGroupPlugin.commonFields.find(
       (f) => f.name === "KmsKeyId",

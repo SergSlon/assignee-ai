@@ -134,11 +134,12 @@ export const ssmParameterPlugin: ResourcePlugin = {
     {
       name: CfnKey.KMS_KEY_ID,
       question: {
-        type: "string",
+        type: "enum",
         label: "KMS Key ID",
         placeholder: "arn:aws:kms:...",
         hint: "ARN of a custom KMS key for SecureString encryption. Leave blank to use the default AWS-managed key (aws/ssm).",
         showIf: { field: CfnKey.SSM_TYPE, value: "SecureString" },
+        fetcher: "discover-kms-keys",
         validate: (value: unknown) => {
           if (!value) return undefined;
           const s = String(value);

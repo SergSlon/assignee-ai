@@ -1,11 +1,15 @@
 /**
- * EC2 network-resource discovery: VPC subnets, security groups, key pairs.
+ * EC2 network-resource discovery: VPC subnets, security groups, key pairs,
+ * route tables, internet gateways, and NAT gateways.
  */
 
 import {
   DescribeSubnetsCommand,
   DescribeSecurityGroupsCommand,
   DescribeKeyPairsCommand,
+  DescribeRouteTablesCommand,
+  DescribeInternetGatewaysCommand,
+  DescribeNatGatewaysCommand,
 } from "@aws-sdk/client-ec2";
 import { DiscoveryCacheKey } from "../../config/discovery-keys.js";
 import { withTimeout } from "../timeout.js";
@@ -97,5 +101,84 @@ export async function discoverKeyPairs(): Promise<DiscoveryOption[]> {
       }
     }
     return options;
+  });
+}
+
+/**
+ * Discovers EC2 route tables from the account.
+ * Shows VPC association and Name tag.
+ */
+export async function discoverRouteTables(): Promise<DiscoveryOption[]> {
+  return cachedDiscover(DiscoveryCacheKey.ROUTE_TABLES, async () => {
+    const ec2 = createEc2Client();
+    if (!ec2) return []; // Graceful no-op: reader creds not configured
+    const result = await withTimeout(
+      ec2.send(new DescribeRouteTablesCommand({})),
+      DISCOVERY_TIMEOUT_MS,
+    );
+    if (!result?.RouteTables) return [];
+
+    return result.RouteTables.map((rt) => {
+      const nameTag = rt.Tags?.find((t) => t.Key === "Name")?.Value;
+      const vpcId = rt.VpcId ?? "no-vpc";
+      const label = nameTag
+        ? `${nameTag} (${rt.RouteTableId}, vpc: ${vpcId})`
+        : `${rt.RouteTableId} (vpc: ${vpcId})`;
+      return { value: rt.RouteTableId!, label };
+    }).filter((o) => o.value);
+  });
+}
+
+/**
+ * Discovers EC2 Internet Gateways from the account.
+ * Shows attachment VPC and Name tag.
+ */
+export async function discoverInternetGateways(): Promise<DiscoveryOption[]> {
+  return cachedDiscover(DiscoveryCacheKey.INTERNET_GATEWAYS, async () => {
+    const ec2 = createEc2Client();
+    if (!ec2) return []; // Graceful no-op: reader creds not configured
+    const result = await withTimeout(
+      ec2.send(new DescribeInternetGatewaysCommand({})),
+      DISCOVERY_TIMEOUT_MS,
+    );
+    if (!result?.InternetGateways) return [];
+
+    return result.InternetGateways.map((igw) => {
+      const nameTag = igw.Tags?.find((t) => t.Key === "Name")?.Value;
+      const attachedVpc = igw.Attachments?.[0]?.VpcId ?? "detached";
+      const label = nameTag
+        ? `${nameTag} (${igw.InternetGatewayId}, vpc: ${attachedVpc})`
+        : `${igw.InternetGatewayId} (vpc: ${attachedVpc})`;
+      return { value: igw.InternetGatewayId!, label };
+    }).filter((o) => o.value);
+  });
+}
+
+/**
+ * Discovers EC2 NAT Gateways from the account.
+ * Shows subnet, state, and Name tag.
+ */
+export async function discoverNatGateways(): Promise<DiscoveryOption[]> {
+  return cachedDiscover(DiscoveryCacheKey.NAT_GATEWAYS, async () => {
+    const ec2 = createEc2Client();
+    if (!ec2) return []; // Graceful no-op: reader creds not configured
+    const result = await withTimeout(
+      ec2.send(
+        new DescribeNatGatewaysCommand({
+          Filter: [{ Name: "state", Values: ["available"] }],
+        }),
+      ),
+      DISCOVERY_TIMEOUT_MS,
+    );
+    if (!result?.NatGateways) return [];
+
+    return result.NatGateways.map((nat) => {
+      const nameTag = nat.Tags?.find((t) => t.Key === "Name")?.Value;
+      const subnetId = nat.SubnetId ?? "unknown-subnet";
+      const label = nameTag
+        ? `${nameTag} (${nat.NatGatewayId}, subnet: ${subnetId})`
+        : `${nat.NatGatewayId} (subnet: ${subnetId})`;
+      return { value: nat.NatGatewayId!, label };
+    }).filter((o) => o.value);
   });
 }

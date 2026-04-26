@@ -21,7 +21,7 @@ describe("routePlugin", () => {
     }
   });
 
-  it("RouteTableId field exists and is required", () => {
+  it("RouteTableId field exists, is required, and uses discover-route-tables fetcher", () => {
     // Tier C: strengthened — find!() + toMatchObject
     const field = routePlugin.commonFields.find(
       (f) => f.name === "RouteTableId",
@@ -29,8 +29,22 @@ describe("routePlugin", () => {
     expect(field).toMatchObject({
       name: "RouteTableId",
       required: true,
-      question: { type: "string" },
+      question: { type: "enum", fetcher: "discover-route-tables" },
     });
+  });
+
+  it("GatewayId uses discover-internet-gateways fetcher", () => {
+    const field = routePlugin.commonFields.find((f) => f.name === "GatewayId")!;
+    expect(field.question.type).toBe("enum");
+    expect(field.question.fetcher).toBe("discover-internet-gateways");
+  });
+
+  it("NatGatewayId uses discover-nat-gateways fetcher", () => {
+    const field = routePlugin.commonFields.find(
+      (f) => f.name === "NatGatewayId",
+    )!;
+    expect(field.question.type).toBe("enum");
+    expect(field.question.fetcher).toBe("discover-nat-gateways");
   });
 
   it("DestinationCidrBlock field has default 0.0.0.0/0", () => {

@@ -68,11 +68,12 @@ export const secretsManagerSecretPlugin: ResourcePlugin = {
     {
       name: CfnKey.KMS_KEY_ID,
       question: {
-        type: "string",
+        type: "enum",
         label: "KMS Key ID or ARN",
         placeholder: "arn:aws:kms:... or alias/my-key",
         initialValue: "",
         hint: "ARN or alias of a KMS key for encryption. Default uses the AWS-managed key (aws/secretsmanager). Use a customer-managed key (CMK) for full control over key rotation, auditing, and cross-account access.",
+        fetcher: "discover-kms-keys",
         validate: (value: unknown) => {
           if (!value) return undefined;
           const s = String(value);

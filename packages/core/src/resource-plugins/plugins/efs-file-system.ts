@@ -176,12 +176,13 @@ export const efsFileSystemPlugin: ResourcePlugin = {
     {
       name: CfnKey.KMS_KEY_ID,
       question: {
-        type: "string",
+        type: "enum",
         label: "KMS Key ID, ARN, or alias (customer-managed)",
         placeholder: "arn:aws:kms:... or alias/my-key",
         initialValue: "",
         hint: "Optional. Leave blank to use the AWS-managed key (aws/elasticfilesystem, free). Specify a customer-managed KMS key for full rotation/audit/cross-account control. Only applies when Encrypted=true. Cannot be changed after creation.",
         showIf: { field: CfnKey.ENCRYPTED, value: true },
+        fetcher: "discover-kms-keys",
         validate: (value: unknown) => {
           if (!value) return undefined;
           const s = String(value);

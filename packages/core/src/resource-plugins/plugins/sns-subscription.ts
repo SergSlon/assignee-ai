@@ -40,10 +40,11 @@ export const snsSubscriptionPlugin: ResourcePlugin = {
       name: CfnKey.TOPIC_ARN,
       required: true,
       question: {
-        type: "string",
+        type: "enum",
         label: "Topic ARN",
         placeholder: "arn:aws:sns:us-east-1:123456789012:my-topic",
         hint: "Required + createOnly. ARN of the SNS topic to subscribe to. Use a Ref to an SNS::Topic logical ID in the same plan, or paste an existing topic ARN. Changing this replaces the subscription.",
+        fetcher: "discover-sns-topics",
         validate: (value: unknown) => {
           if (!value) return "Topic ARN is required";
           const s = String(value);
