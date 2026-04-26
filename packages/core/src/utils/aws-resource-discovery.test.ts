@@ -1083,6 +1083,50 @@ describe("aws-resource-discovery", () => {
       process.env["ASSIGNEE_READER_ACCESS_KEY_ID"] = savedKey;
       process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"] = savedSecret;
     });
+
+    // LOW-1: filter IGW attachments by State==="available" before picking VpcId
+    it("LOW-1: shows 'detached' label when only a detaching attachment exists", async () => {
+      // An IGW being detached from a VPC will have State="detaching"
+      // — the label must show "detached", not the stale VPC ID.
+      mockEc2Send.mockResolvedValueOnce({
+        InternetGateways: [
+          {
+            InternetGatewayId: "igw-detaching1",
+            Attachments: [
+              // Only non-available attachment — should be ignored
+              { VpcId: "vpc-being-detached", State: "detaching" },
+            ],
+            Tags: [{ Key: "Name", Value: "my-igw" }],
+          },
+        ],
+      });
+      const result = await discoverInternetGateways();
+      expect(result).toHaveLength(1);
+      // Must show "detached" — not the stale vpc-being-detached VpcId
+      expect(result[0]!.label).toContain("detached");
+      expect(result[0]!.label).not.toContain("vpc-being-detached");
+    });
+
+    it("LOW-1: shows the available VPC when an available attachment exists alongside a detaching one", async () => {
+      mockEc2Send.mockResolvedValueOnce({
+        InternetGateways: [
+          {
+            InternetGatewayId: "igw-mixed1",
+            Attachments: [
+              // Available attachment — should be used for the label
+              { VpcId: "vpc-active-001", State: "available" },
+              // Stale detaching attachment — must be ignored
+              { VpcId: "vpc-stale-999", State: "detaching" },
+            ],
+            Tags: [],
+          },
+        ],
+      });
+      const result = await discoverInternetGateways();
+      expect(result).toHaveLength(1);
+      expect(result[0]!.label).toContain("vpc-active-001");
+      expect(result[0]!.label).not.toContain("vpc-stale-999");
+    });
   });
 
   // ── discoverNatGateways ─────────────────────────────────────────────────
@@ -1398,6 +1442,128 @@ describe("aws-resource-discovery", () => {
       expect(mockKmsSend).not.toHaveBeenCalled();
       process.env["ASSIGNEE_READER_ACCESS_KEY_ID"] = savedKey;
       process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"] = savedSecret;
+    });
+
+    // HIGH-1: graceful degradation when ListAliases fails (AccessDenied)
+    it("HIGH-1: returns keys with bare-ARN labels when ListAliases fails (AccessDenied)", async () => {
+      mockKmsSend
+        .mockResolvedValueOnce({
+          // ListKeys — succeeds with one key, not truncated
+          Keys: [
+            {
+              KeyId: "cmk-id-001",
+              KeyArn: "arn:aws:kms:us-east-1:210987654321:key/cmk-id-001",
+            },
+          ],
+          Truncated: false,
+        })
+        .mockRejectedValueOnce(
+          // ListAliases — fails with AccessDenied
+          new Error(
+            "AccessDeniedException: User is not authorized to list aliases",
+          ),
+        );
+
+      const result = await discoverKmsKeys();
+      // Key must still appear — bare ARN label because aliases are unavailable
+      expect(result).toHaveLength(1);
+      expect(result[0]!.value).toBe(
+        "arn:aws:kms:us-east-1:210987654321:key/cmk-id-001",
+      );
+      // Label is the bare ARN (no alias prefix) — degraded mode
+      expect(result[0]!.label).toBe(
+        "arn:aws:kms:us-east-1:210987654321:key/cmk-id-001",
+      );
+    });
+
+    // HIGH-2: pagination — multi-page ListKeys
+    // Note: listAllKeys and listAllAliases run concurrently via Promise.allSettled,
+    // so mock responses interleave. The order is: listAllKeys fires call 1, then
+    // listAllAliases fires call 2 (concurrently), then listAllKeys fires call 3
+    // (page 2 continuation). We set up mocks in that exact interleaved order.
+    it("HIGH-2: paginates ListKeys across multiple pages (interleaved with ListAliases)", async () => {
+      mockKmsSend
+        .mockResolvedValueOnce({
+          // Call 1: listAllKeys page 1 — truncated (allSettled start)
+          Keys: [
+            {
+              KeyId: "key-page1",
+              KeyArn: "arn:aws:kms:us-east-1:210987654321:key/key-page1",
+            },
+          ],
+          Truncated: true,
+          NextMarker: "marker-page2",
+        })
+        .mockResolvedValueOnce({
+          // Call 2: listAllAliases page 1 — not truncated (allSettled start, concurrent)
+          Aliases: [
+            { AliasName: "alias/page1-key", TargetKeyId: "key-page1" },
+            { AliasName: "alias/page2-key", TargetKeyId: "key-page2" },
+          ],
+          Truncated: false,
+        })
+        .mockResolvedValueOnce({
+          // Call 3: listAllKeys page 2 — not truncated (continuation after Truncated=true)
+          Keys: [
+            {
+              KeyId: "key-page2",
+              KeyArn: "arn:aws:kms:us-east-1:210987654321:key/key-page2",
+            },
+          ],
+          Truncated: false,
+        });
+
+      const result = await discoverKmsKeys();
+      // Both keys from both pages must appear
+      expect(result).toHaveLength(2);
+      const values = result.map((r) => r.value);
+      expect(values).toContain(
+        "arn:aws:kms:us-east-1:210987654321:key/key-page1",
+      );
+      expect(values).toContain(
+        "arn:aws:kms:us-east-1:210987654321:key/key-page2",
+      );
+    });
+
+    it("HIGH-2: paginates ListAliases to catch aliases on tail pages", async () => {
+      // Non-truncated ListKeys, so the only interleaving is:
+      // Call 1: listAllKeys page1 (not truncated — only one page)
+      // Call 2: listAllAliases page1 (truncated)
+      // Call 3: listAllAliases page2 (not truncated)
+      mockKmsSend
+        .mockResolvedValueOnce({
+          // Call 1: ListKeys — single page, one CMK
+          Keys: [
+            {
+              KeyId: "target-key-id",
+              KeyArn: "arn:aws:kms:us-east-1:210987654321:key/target-key-id",
+            },
+          ],
+          Truncated: false,
+        })
+        .mockResolvedValueOnce({
+          // Call 2: ListAliases page 1 — aws-managed alias on this page (truncated)
+          Aliases: [
+            { AliasName: "alias/aws/s3", TargetKeyId: "aws-managed-key" },
+          ],
+          Truncated: true,
+          NextMarker: "alias-marker-2",
+        })
+        .mockResolvedValueOnce({
+          // Call 3: ListAliases page 2 — CMK alias on the tail page
+          Aliases: [
+            {
+              AliasName: "alias/tail-page-alias",
+              TargetKeyId: "target-key-id",
+            },
+          ],
+          Truncated: false,
+        });
+
+      const result = await discoverKmsKeys();
+      // The tail-page alias must be picked up
+      expect(result).toHaveLength(1);
+      expect(result[0]!.label).toContain("alias/tail-page-alias");
     });
   });
 

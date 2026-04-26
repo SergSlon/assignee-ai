@@ -580,6 +580,38 @@ describe("validateLambdaCodeShape", () => {
     expect(err).not.toBeNull();
     expect(err).toContain("S3Key is missing");
   });
+
+  // MED-2: S3ObjectVersion without S3Bucket+S3Key
+  it("MED-2: returns an error when S3ObjectVersion is set without S3Bucket+S3Key", () => {
+    const err = validateLambdaCodeShape({
+      Code: { S3ObjectVersion: "abc123" },
+    });
+    expect(err).not.toBeNull();
+    expect(err).toContain("S3ObjectVersion");
+    expect(err).toContain("S3Bucket");
+    expect(err).toContain("S3Key");
+    expect(err).toContain("[FIX]");
+  });
+
+  it("MED-2: returns an error when S3ObjectVersion+S3Bucket is set but S3Key is missing", () => {
+    const err = validateLambdaCodeShape({
+      Code: { S3ObjectVersion: "abc123", S3Bucket: "my-bucket" },
+    });
+    expect(err).not.toBeNull();
+    expect(err).toContain("S3ObjectVersion");
+  });
+
+  it("MED-2: returns null when S3ObjectVersion, S3Bucket, and S3Key are all present", () => {
+    expect(
+      validateLambdaCodeShape({
+        Code: {
+          S3Bucket: "my-bucket",
+          S3Key: "fn.zip",
+          S3ObjectVersion: "version-1",
+        },
+      }),
+    ).toBeNull();
+  });
 });
 
 // ── validateEc2InstanceShape ──────────────────────────────────────────────────
@@ -908,17 +940,44 @@ describe("validateEc2VpcShape", () => {
     expect(validateEc2VpcShape({ CidrBlock: "10.0.0.0/16" })).toBeNull();
   });
 
-  it("returns an error when CidrBlock is missing", () => {
+  // HIGH-1: IPAM-allocated VPC passes without CidrBlock
+  it("returns null when Ipv4IpamPoolId is set (IPAM-allocated VPC)", () => {
+    expect(
+      validateEc2VpcShape({
+        Ipv4IpamPoolId: "ipam-pool-0123456789abcdef0",
+        Ipv4NetmaskLength: 24,
+      }),
+    ).toBeNull();
+  });
+
+  it("returns null when Ipv6IpamPoolId is set (IPv6 IPAM VPC)", () => {
+    expect(
+      validateEc2VpcShape({
+        Ipv6IpamPoolId: "ipam-pool-abcdef0123456789",
+        Ipv6NetmaskLength: 56,
+      }),
+    ).toBeNull();
+  });
+
+  it("returns an error when CidrBlock, Ipv4IpamPoolId, and Ipv6IpamPoolId are all missing", () => {
     const err = validateEc2VpcShape({ EnableDnsSupport: true });
     expect(err).not.toBeNull();
-    expect(err).toContain("CidrBlock");
+    expect(err).toContain("[ERROR]");
     expect(err).toContain("[FIX]");
   });
 
-  it("dispatches via validatePlanShape", () => {
+  it("dispatches via validatePlanShape — errors when no CIDR source", () => {
     const err = validatePlanShape({}, RESOURCE_TYPES.EC2_VPC);
     expect(err).not.toBeNull();
-    expect(err).toContain("CidrBlock");
+  });
+
+  it("dispatches via validatePlanShape — passes for IPAM VPC", () => {
+    expect(
+      validatePlanShape(
+        { Ipv4IpamPoolId: "ipam-pool-0123456789abcdef0" },
+        RESOURCE_TYPES.EC2_VPC,
+      ),
+    ).toBeNull();
   });
 });
 
@@ -934,25 +993,59 @@ describe("validateEc2SubnetShape", () => {
     ).toBeNull();
   });
 
-  it("returns an error when CidrBlock is missing", () => {
-    const err = validateEc2SubnetShape({ VpcId: "vpc-0abc1234" });
-    expect(err).not.toBeNull();
-    expect(err).toContain("CidrBlock");
+  // HIGH-2: IPv6-native subnet passes without CidrBlock
+  it("returns null when Ipv6Native:true and VpcId are set (IPv6-native subnet)", () => {
+    expect(
+      validateEc2SubnetShape({
+        Ipv6Native: true,
+        VpcId: "vpc-0abc1234",
+      }),
+    ).toBeNull();
   });
 
-  it("returns an error when VpcId is missing", () => {
+  it("returns null when Ipv6CidrBlock and VpcId are set", () => {
+    expect(
+      validateEc2SubnetShape({
+        Ipv6CidrBlock: "2001:db8::/64",
+        VpcId: "vpc-0abc1234",
+      }),
+    ).toBeNull();
+  });
+
+  it("returns an error when CidrBlock, Ipv6Native, and Ipv6CidrBlock are all missing", () => {
+    const err = validateEc2SubnetShape({ VpcId: "vpc-0abc1234" });
+    expect(err).not.toBeNull();
+    expect(err).toContain("[ERROR]");
+    expect(err).toContain("[FIX]");
+  });
+
+  it("returns an error when VpcId is missing (even with CidrBlock)", () => {
     const err = validateEc2SubnetShape({ CidrBlock: "10.0.1.0/24" });
     expect(err).not.toBeNull();
     expect(err).toContain("VpcId");
   });
 
-  it("dispatches via validatePlanShape (missing CidrBlock)", () => {
+  it("returns an error when VpcId is missing (IPv6-native subnet)", () => {
+    const err = validateEc2SubnetShape({ Ipv6Native: true });
+    expect(err).not.toBeNull();
+    expect(err).toContain("VpcId");
+  });
+
+  it("dispatches via validatePlanShape — errors when no CIDR source", () => {
     const err = validatePlanShape(
       { VpcId: "vpc-0abc1234" },
       RESOURCE_TYPES.EC2_SUBNET,
     );
     expect(err).not.toBeNull();
-    expect(err).toContain("CidrBlock");
+  });
+
+  it("dispatches via validatePlanShape — passes for IPv6-native subnet", () => {
+    expect(
+      validatePlanShape(
+        { Ipv6Native: true, VpcId: "vpc-0abc1234" },
+        RESOURCE_TYPES.EC2_SUBNET,
+      ),
+    ).toBeNull();
   });
 });
 
@@ -991,6 +1084,8 @@ describe("validateRdsDbSubnetGroupShape", () => {
     expect(err).not.toBeNull();
     expect(err).toContain("1");
     expect(err).toContain("[FIX]");
+    // LOW-1: error message must mention different AZs
+    expect(err).toContain("Availability Zone");
   });
 
   it("dispatches via validatePlanShape", () => {
@@ -1138,6 +1233,23 @@ describe("validateEfsFileSystemShape", () => {
     expect(err).toContain("KmsKeyId");
   });
 
+  // LOW-2: empty-string KmsKeyId is treated as absent — no error
+  it("LOW-2: returns null when KmsKeyId is an empty string (treated as absent)", () => {
+    // An empty-string KmsKeyId means "no custom key specified", which is
+    // semantically the same as omitting the property — do NOT trigger the
+    // "KmsKeyId without Encrypted" error.
+    expect(
+      validateEfsFileSystemShape({
+        KmsKeyId: "",
+        PerformanceMode: "generalPurpose",
+      }),
+    ).toBeNull();
+  });
+
+  it("LOW-2: returns null when KmsKeyId is a whitespace-only string", () => {
+    expect(validateEfsFileSystemShape({ KmsKeyId: "   " })).toBeNull();
+  });
+
   it("dispatches via validatePlanShape", () => {
     const err = validatePlanShape(
       { KmsKeyId: "arn:aws:kms:us-east-1:123456789012:key/mrk-abc123" },
@@ -1221,20 +1333,24 @@ describe("validateKmsKeyShape", () => {
     ).toBeNull();
   });
 
-  it("returns an error when KeyPolicy is absent", () => {
-    const err = validateKmsKeyShape({ Description: "My key" });
-    expect(err).not.toBeNull();
-    expect(err).toContain("KeyPolicy");
-    expect(err).toContain("[FIX]");
+  // MED-1: validateKmsKeyShape no longer enforces KeyPolicy. AWS applies a
+  // sensible default key policy when KeyPolicy is omitted. Requiring it here
+  // would be stricter than AWS itself and block "create KMS key" intents.
+  // The validator is kept exported for opt-in use but always returns null.
+  it("returns null when KeyPolicy is absent (MED-1: AWS supplies default policy)", () => {
+    // Previously returned an error — now passes because AWS applies a
+    // default key policy granting root administrator access.
+    const result = validateKmsKeyShape({ Description: "My key" });
+    expect(result).toBeNull();
   });
 
-  it("dispatches via validatePlanShape", () => {
-    const err = validatePlanShape(
+  it("dispatches via validatePlanShape — returns null (KMS_KEY no strict KeyPolicy check)", () => {
+    // MED-1: validatePlanShape for KMS_KEY now returns null even without KeyPolicy.
+    const result = validatePlanShape(
       { Description: "My key" },
       RESOURCE_TYPES.KMS_KEY,
     );
-    expect(err).not.toBeNull();
-    expect(err).toContain("KeyPolicy");
+    expect(result).toBeNull();
   });
 });
 

@@ -95,18 +95,20 @@ describe("ensureSubnet", () => {
 
   // ── Happy path ─────────────────────────────────────────────────────────────
 
-  it("resolves placeholder to the first subnet in the default VPC", async () => {
+  it("resolves placeholder to the first AVAILABLE subnet in the default VPC", async () => {
     mockTryCredentials.mockReturnValue(READER_CREDS);
     mockEc2Send
       .mockResolvedValueOnce({
-        // DescribeVpcs response — one default VPC
-        Vpcs: [{ VpcId: "vpc-0abc1234default" }],
+        // DescribeVpcs response — one default VPC in available state
+        Vpcs: [{ VpcId: "vpc-0abc1234default", State: "available" }],
       })
       .mockResolvedValueOnce({
-        // DescribeSubnets response — two subnets; picks the first
+        // DescribeSubnets response — pending subnet first, then available;
+        // HIGH-1: must skip the pending one and pick the available subnet
         Subnets: [
-          { SubnetId: "subnet-0first123" },
-          { SubnetId: "subnet-0second456" },
+          { SubnetId: "subnet-0pending", State: "pending" },
+          { SubnetId: "subnet-0first123", State: "available" },
+          { SubnetId: "subnet-0second456", State: "available" },
         ],
       });
 
@@ -115,7 +117,98 @@ describe("ensureSubnet", () => {
     };
     const r = await ensureSubnet(baseState(), desiredState);
     expect(r.ok).toBe(true);
+    // Must skip pending subnet and resolve to first available
     expect(desiredState[CfnKey.SUBNET_ID]).toBe("subnet-0first123");
+  });
+
+  it("emits a private-subnet WARNING but still resolves when MapPublicIpOnLaunch=false (HIGH-2)", async () => {
+    mockTryCredentials.mockReturnValue(READER_CREDS);
+    mockEc2Send
+      .mockResolvedValueOnce({
+        Vpcs: [{ VpcId: "vpc-0abc1234default", State: "available" }],
+      })
+      .mockResolvedValueOnce({
+        Subnets: [
+          {
+            SubnetId: "subnet-0private1",
+            State: "available",
+            MapPublicIpOnLaunch: false,
+          },
+        ],
+      });
+
+    const stderrWrites: string[] = [];
+    const origWrite = process.stderr.write.bind(process.stderr);
+    vi.spyOn(process.stderr, "write").mockImplementation(
+      (chunk: string | Uint8Array) => {
+        stderrWrites.push(typeof chunk === "string" ? chunk : "");
+        return origWrite(chunk);
+      },
+    );
+
+    const desiredState: Record<string, unknown> = {
+      [CfnKey.SUBNET_ID]: ResourceDefault.SUBNET_PLACEHOLDER,
+    };
+    const r = await ensureSubnet(baseState(), desiredState);
+
+    vi.restoreAllMocks();
+
+    // Must succeed (not fail) even for private subnets
+    expect(r.ok).toBe(true);
+    expect(desiredState[CfnKey.SUBNET_ID]).toBe("subnet-0private1");
+    // Must warn about private subnet
+    const warnText = stderrWrites.join("");
+    expect(warnText).toContain("MapPublicIpOnLaunch=false");
+    expect(warnText).toContain("--set SubnetId=");
+  });
+
+  it("HIGH-2: does NOT warn when MapPublicIpOnLaunch=true", async () => {
+    mockTryCredentials.mockReturnValue(READER_CREDS);
+    mockEc2Send
+      .mockResolvedValueOnce({
+        Vpcs: [{ VpcId: "vpc-0abc1234default", State: "available" }],
+      })
+      .mockResolvedValueOnce({
+        Subnets: [
+          {
+            SubnetId: "subnet-0public1",
+            State: "available",
+            MapPublicIpOnLaunch: true,
+          },
+        ],
+      });
+
+    const stderrWrites: string[] = [];
+    vi.spyOn(process.stderr, "write").mockImplementation(
+      (chunk: string | Uint8Array) => {
+        stderrWrites.push(typeof chunk === "string" ? chunk : "");
+        return true;
+      },
+    );
+
+    const desiredState: Record<string, unknown> = {
+      [CfnKey.SUBNET_ID]: ResourceDefault.SUBNET_PLACEHOLDER,
+    };
+    const r = await ensureSubnet(baseState(), desiredState);
+    vi.restoreAllMocks();
+
+    expect(r.ok).toBe(true);
+    expect(desiredState[CfnKey.SUBNET_ID]).toBe("subnet-0public1");
+    const warnText = stderrWrites.join("");
+    expect(warnText).not.toContain("MapPublicIpOnLaunch=false");
+  });
+
+  it("HIGH-3: no-ops when SubnetId is already a resolved value (retry path)", async () => {
+    mockTryCredentials.mockReturnValue(READER_CREDS);
+    const desiredState: Record<string, unknown> = {
+      [CfnKey.SUBNET_ID]: "subnet-0alreadyresolved",
+    };
+    const r = await ensureSubnet(baseState(), desiredState);
+    expect(r.ok).toBe(true);
+    // No AWS calls made — using cached value
+    expect(mockEc2Send).not.toHaveBeenCalled();
+    // Cached value unchanged
+    expect(desiredState[CfnKey.SUBNET_ID]).toBe("subnet-0alreadyresolved");
   });
 
   // ── Error paths ────────────────────────────────────────────────────────────
@@ -135,10 +228,54 @@ describe("ensureSubnet", () => {
     }
   });
 
+  it("MED-1: returns error when default VPC is in deleting state", async () => {
+    mockTryCredentials.mockReturnValue(READER_CREDS);
+    mockEc2Send.mockResolvedValueOnce({
+      Vpcs: [{ VpcId: "vpc-0deleting", State: "deleting" }],
+    });
+
+    const desiredState: Record<string, unknown> = {
+      [CfnKey.SUBNET_ID]: ResourceDefault.SUBNET_PLACEHOLDER,
+    };
+    const r = await ensureSubnet(baseState(), desiredState);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.errorMessage).toContain("vpc-0deleting");
+      expect(r.errorMessage).toContain('"deleting"');
+      expect(r.errorMessage).toContain("available");
+    }
+  });
+
+  it("HIGH-1: returns error when all subnets are in pending/deleting state", async () => {
+    mockTryCredentials.mockReturnValue(READER_CREDS);
+    mockEc2Send
+      .mockResolvedValueOnce({
+        Vpcs: [{ VpcId: "vpc-0abc1234", State: "available" }],
+      })
+      .mockResolvedValueOnce({
+        Subnets: [
+          { SubnetId: "subnet-0pending1", State: "pending" },
+          { SubnetId: "subnet-0deleting1", State: "deleting" },
+        ],
+      });
+
+    const desiredState: Record<string, unknown> = {
+      [CfnKey.SUBNET_ID]: ResourceDefault.SUBNET_PLACEHOLDER,
+    };
+    const r = await ensureSubnet(baseState(), desiredState);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.errorMessage).toContain("available");
+      expect(r.errorMessage).toContain("vpc-0abc1234");
+    }
+  });
+
   it("returns actionable error when default VPC has no subnets", async () => {
     mockTryCredentials.mockReturnValue(READER_CREDS);
     mockEc2Send
-      .mockResolvedValueOnce({ Vpcs: [{ VpcId: "vpc-0nosubnets" }] })
+      .mockResolvedValueOnce({
+        Vpcs: [{ VpcId: "vpc-0nosubnets", State: "available" }],
+      })
       .mockResolvedValueOnce({ Subnets: [] });
 
     const desiredState: Record<string, unknown> = {
@@ -148,7 +285,7 @@ describe("ensureSubnet", () => {
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.errorMessage).toContain("vpc-0nosubnets");
-      expect(r.errorMessage).toContain("no subnets");
+      expect(r.errorMessage).toContain("available");
     }
   });
 

@@ -145,7 +145,17 @@ export async function discoverInternetGateways(): Promise<DiscoveryOption[]> {
 
     return result.InternetGateways.map((igw) => {
       const nameTag = igw.Tags?.find((t) => t.Key === "Name")?.Value;
-      const attachedVpc = igw.Attachments?.[0]?.VpcId ?? "detached";
+      // LOW-1: filter attachments by State==="available" before picking [0].
+      // An IGW can have attachments in "detaching" state; using [0] without
+      // the filter would show a stale VPC label until the attachment is gone.
+      // Note: the AWS SDK AttachmentStatus enum uses "attached" for non-IGW
+      // resources, but the IGW attachment state is "available" at runtime
+      // per AWS docs ("available when attached to a VPC"). We cast to string
+      // to work around the SDK type mismatch.
+      const availableAttachment = igw.Attachments?.find(
+        (a) => (a.State as string) === "available",
+      );
+      const attachedVpc = availableAttachment?.VpcId ?? "detached";
       const label = nameTag
         ? `${nameTag} (${igw.InternetGatewayId}, vpc: ${attachedVpc})`
         : `${igw.InternetGatewayId} (vpc: ${attachedVpc})`;

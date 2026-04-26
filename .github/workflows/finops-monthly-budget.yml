@@ -144,16 +144,19 @@ jobs:
 
       - name: Capture finops script exit code
         id: capture
-        # Re-run the script in dry-run / echo-only mode to capture the exit code
-        # into GITHUB_OUTPUT cleanly. Since continue-on-error above swallows the
-        # exit code from the prior step, we use outcome to detect failure.
+        # Map the explicit exit_code output from the finops step to a semantic
+        # status label. Using exit_code (written before continue-on-error
+        # swallows the step result) avoids conflating exit 1 (budget exceeded)
+        # with exit 2 (no data / fresh repo) — both produce outcome=failure
+        # but must trigger different downstream actions.
         run: |
-          if [ "${{ steps.finops.outcome }}" = "failure" ]; then
+          EXIT="${{ steps.finops.outputs.exit_code }}"
+          if [ "$EXIT" = "1" ]; then
             echo "status=exceeded" >> "$GITHUB_OUTPUT"
-          elif [ "${{ steps.finops.outcome }}" = "success" ]; then
-            echo "status=ok" >> "$GITHUB_OUTPUT"
-          else
+          elif [ "$EXIT" = "2" ]; then
             echo "status=no-data" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=ok" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Open or update finops-ceiling tracking issue
