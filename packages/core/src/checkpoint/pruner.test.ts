@@ -337,8 +337,15 @@ describe("pruneExpiredCheckpoints", () => {
     await writeCheckpoint(tmpDir, fresh2);
     await writeCheckpoint(tmpDir, fresh3);
     const expiredPath = await writeCheckpoint(tmpDir, expired);
-    // With skipRecentMinutes=0, the mtime guard is effectively disabled
-    // (any mtime age ≥ 0 ms qualifies for pruning)
+    // With skipRecentMinutes=0, the mtime guard's threshold is 0 ms.
+    // Pin the expired file's mtime explicitly to a known past time so the
+    // `now - mtime < 0` check is deterministic — under coverage
+    // instrumentation, fs-mtime vs Date.now() can drift by a few ms,
+    // making `now - mtime` momentarily negative on macOS and accidentally
+    // triggering the skip guard. Setting mtime 1s into the past removes
+    // the race window.
+    const onePastSec = new Date(Date.now() - 1_000);
+    await fs.utimes(expiredPath, onePastSec, onePastSec);
     const result = await pruneExpiredCheckpoints(tmpDir, {
       skipRecentMinutes: 0,
     });

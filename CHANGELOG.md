@@ -18,6 +18,136 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### R9b — Round 9 (second half): remaining P1-tier P-IDs + 4 strategic deferrals
+
+R9b ships the remaining 4 of the 12 P1-tier P-IDs from the post-Epic-100
+audit, plus explicit deferred-records for the 4 strategic items that
+don't fit a single-wave fix. With R9b landed, **all 12 P1-tier items
+are accounted for** (8 closed in code, 4 deferred to dedicated work).
+4/4 reviewers; 2 BLOCKED on first pass (R9b-02 docs / R9b-03 workflow
+correctness) — both fixed inline with surgical patches; final reviewer
+state ACCEPT 4/4.
+
+#### Added
+
+- **P036 — E2E compound-pattern grid filled (websocket-api +
+  vpc-public-only).** The two skeleton-only `describe.skip` files
+  (`apps/cli/src/e2e/e94-websocket-render.test.ts` +
+  `e94-vpc-public-only.test.ts`) now ship 6 real Section A tests
+  (3 per pattern, mock-mode, always-runs) covering pattern detection,
+  compound-dispatcher queue shape, and pattern `defaultOptions`
+  literals. Section B (`RUN_E2E=1` real-AWS) spawns the built CLI
+  binary. Negative tests confirm: bare "Create a VPC" returns null
+  (no compound match); "Create an HTTP api" doesn't false-trigger
+  websocket. Compound-pattern test grid: was 9 of 11 covered; now
+  11 of 11.
+- **P053 — Audit-log silent-swallow regression test (W6-02
+  follow-up).** New `apps/mcp-server/src/utils/__tests__/audit-log.test.ts`
+  (+195 LOC, 14 tests). Pins both halves of the silent-swallow
+  contract: when `fs.appendFile` fails, the audit-log function
+  does NOT throw to the caller AND fires `mcpLogError` on stderr
+  with `{tool, runId, errorClass}` at `level=error`. Vector
+  clarification: NOT HTTP Bearer (MCP uses `StdioServerTransport`
+  — no HTTP today); the actual silent-swallow vector is at the
+  filesystem boundary. The runtime fix shipped in W6-02 (`65f3d91`);
+  R9b-04 closes the deferred regression test.
+
+#### Changed
+
+- **P043 — Nightly-e2e + mock-fixture-drift alerting hardened
+  (W6-02 follow-up).** Three concrete fixes:
+  - `nightly-e2e.yml`: replaced naive `curl`-on-every-failure with
+    `actions/github-script` that queries the workflow-runs API and
+    requires **3 consecutive failures** before firing the webhook
+    or opening a sticky GitHub issue. Implements the
+    "acceptable-miss window" policy that was documented but never
+    enforced.
+  - `mock-fixture-drift.yml`: added webhook step (was missing
+    entirely; only GitHub-issue tracking existed). Webhook prefers
+    `ASSIGNEE_DRIFT_ALERT_WEBHOOK`, falls back to
+    `ASSIGNEE_NIGHTLY_ALERT_WEBHOOK`. Tracking-issue branch now
+    fires on EVERY failure (was gated on
+    `hashFiles('mock-fixture-drift-report.json') != ''` — runtime
+    errors were silent in the issue tracker but counted toward
+    the webhook threshold; the inconsistency is fixed).
+  - `docs/explanation/ci-gates.md`: corrected stale env-var name
+    (`ASSIGNEE_NIGHTLY_ALERT_CHANNEL` → `ASSIGNEE_NIGHTLY_ALERT_WEBHOOK`),
+    added drift gate inventory row, added "Mock fixture drift gate
+    — alert policy" section, clarified that issues now open on
+    every failure.
+
+#### Removed
+
+- **P038 — Dead per-node LLM env-var slots removed.**
+  `ASSIGNEE_LLM_PLAN_GENERATOR`, `ASSIGNEE_LLM_INTENT_PARSER`,
+  `ASSIGNEE_LLM_ADVICE_GENERATOR`, `ASSIGNEE_LLM_WORKLOAD_CLASSIFIER`
+  were defined in Story 44.1 but the factory sites that would read
+  them were never built. Zero-source-reference grep confirmed.
+  Deleted from `packages/core/src/constants/env-vars.ts` with a
+  JSDoc descope note explaining the deletion + revival contract
+  ("wire factory sites first, then re-add the slots"). Doc cleanup:
+  `docs/configuration.md` LLM section + env-var table reduced to
+  the single working `ASSIGNEE_LLM_DEFAULT` slot;
+  `docs/explanation/ai-architecture.md` per-node-routing section
+  rewritten to reflect the deletion + revival path;
+  `docs/engineering/changelog-history.md` annotated with the R9b-02
+  removal note.
+
+#### Deferred (explicit acquisition-DD records — strategic items not shippable in a single wave)
+
+- **P027 — AWS-only structural lock-in (HARD_NO multi-cloud;
+  CONDITIONAL AWS).** Source DD: "12-24 mo if funded" — strategic
+  long-tail. Deferred to **Epic 104+** (no Epic assigned yet). The
+  CONDITIONAL-AWS posture is documented in
+  `docs/explanation/ai-architecture.md` + `docs/explanation/invariants.md`;
+  multi-cloud port (Azure / GCP) requires a parallel architecture
+  - dedicated provider-port abstraction layer.
+- **P028 — Type-coverage ceiling (38 of 1,400+ supported types).**
+  Source DD: "130 eng-wk; Epic 16 unlocks". The plugin / Epic-16
+  revival is already deferred to **Epic 103** per the Epic 100
+  closeout (`epic-100-closeout.md` §"Acknowledged deferrals to
+  follow-on epics"). Type-coverage expansion is downstream of that
+  revival and shares the same eng-week budget.
+- **P032 — AWS SDK sprawl (23 modules, €20-36k/yr priceable).**
+  Dep-refactor scope. Each AWS SDK module migration requires
+  per-resource-type code adaptation + reviewer time; not parallel-
+  safe inside a wave-shaped story (would create cross-lane file
+  conflicts on every resource-plugin file). Deferred to a
+  **dedicated dep-refactor session** (target: post-Epic-101 once
+  the identity-squad lands and stabilises the resource-plugin
+  surface).
+- **P033 — AI-layer dep duplication (8× `@ai-sdk/*` + LangChain) +
+  CRA CVE inflation.** Same shape as P032 — dep-dedup requires
+  careful provider-by-provider testing of the LangChain/AI-SDK
+  bridges; not parallel-safe. Deferred to the same dep-refactor
+  session as P032.
+
+#### Provenance
+
+- Per-P audit: `/.agents/reviews/p-id-audit-2026-04-26.md` —
+  pre-R9b: 78/100 closed, 22 NOT-ACCOUNTED. Post-R9b: 82/100 closed
+  (+P036, P038, P043, P053) + 4 explicit-deferred (P027/P028/P032/P033)
+  = **86/100 effective coverage**, 14 NOT-ACCOUNTED P2-tier.
+- All 12 P1-tier items now accounted for (8 shipped in R9 + 4
+  explicit-deferred with rationale). Only P2-tier remains.
+- R9b-02 reviewer BLOCK + coordinator inline doc fix: 3 doc files
+  updated (`docs/configuration.md` LLM section + env-var table;
+  `docs/explanation/ai-architecture.md` per-node section;
+  `docs/engineering/changelog-history.md` annotation).
+- R9b-03 reviewer BLOCK + coordinator inline workflow fix: dead
+  `allFailed` variable removed from `nightly-e2e.yml`; tracking-issue
+  guard parity restored in `mock-fixture-drift.yml` (issue opens
+  for runtime errors too, with a dedicated runtime-error body
+  branch); `ci-gates.md` doc claim updated to match.
+- Test totals after R9b: best-practices 905, core 7,363
+  (unchanged — R9b-02 deletion + R9b-04 tests in mcp-server),
+  mcp-server 644 (+14 from R9b-04 audit-log tests), cli 1,495
+  (+6 from R9b-01 Section A tests previously skipped) =
+  **10,407 passing, zero regressions**.
+- 4 parallel adversarial reviewers (Sonnet, Blind/Edge/QA per
+  story): final ACCEPT 4/4 after coordinator inline fixes for the
+  2 BLOCKED items.
+
 ### R9a — Round 9 (first half): P1-tier acquisition-DD follow-up + live SSH-bundle bug
 
 Round 9 ships 8 of the 12 P1-tier P-IDs surfaced by the post-Epic-100
