@@ -167,40 +167,31 @@ Pass-through section for organization-wide policies. Keys are domain-specific (e
 
 > **Note:** The `llm` config-file section is planned but does **not** exist in the current config schema (`packages/core/src/config/config-schema.ts`). Per-node LLM routing is currently driven entirely by the `ASSIGNEE_LLM_*` environment variables listed below. The YAML example describes the intended future design — reading `llm.*` keys from `.assignee/config.yaml` is a no-op today.
 
-Per-node LLM model routing. By default, all pipeline nodes use the same model (`ASSIGNEE_LLM_DEFAULT` or the built-in default `bedrock/amazon.nova-lite-v1:0`). Set `ASSIGNEE_LLM_<CALLSITE>` env vars to assign different models to different pipeline stages — for example, a smart model for plan generation and a cheap/fast model for intent classification.
+LLM model selection. By default, all pipeline nodes use the same model (`ASSIGNEE_LLM_DEFAULT` or the built-in default `bedrock/amazon.nova-lite-v1:0`).
 
 ```yaml
-# .assignee/config.yaml
+# .assignee/config.yaml — only `default` is honoured today
 llm:
-  default: bedrock/us.amazon.nova-lite-v1:0 # fallback for unconfigured callsites
-  plan_generator: anthropic/claude-sonnet-4-5 # smart model for CFN JSON generation
-  intent_parser: bedrock/us.amazon.nova-micro-v1:0 # fast model for classification
-  advice_generator: bedrock/us.amazon.nova-micro-v1:0
-  workload_classifier: bedrock/us.amazon.nova-micro-v1:0
+  default: bedrock/us.amazon.nova-lite-v1:0
 ```
 
-| Key                       | Type   | Default                            | Description                                   |
-| ------------------------- | ------ | ---------------------------------- | --------------------------------------------- |
-| `llm.default`             | string | `ASSIGNEE_LLM_DEFAULT` or built-in | Fallback model for callsites not listed below |
-| `llm.plan_generator`      | string | falls back to `llm.default`        | Model for CloudFormation plan generation      |
-| `llm.intent_parser`       | string | falls back to `llm.default`        | Model for resource type classification        |
-| `llm.advice_generator`    | string | falls back to `llm.default`        | Model for inline advice hints                 |
-| `llm.workload_classifier` | string | falls back to `llm.default`        | Model for workload profile classification     |
+| Key           | Type   | Default                            | Description                               |
+| ------------- | ------ | ---------------------------------- | ----------------------------------------- |
+| `llm.default` | string | `ASSIGNEE_LLM_DEFAULT` or built-in | Model used by every pipeline LLM callsite |
 
 Each value must be in `provider/model-id` format. Supported providers: `bedrock`, `anthropic`, `openai`, `google`, `ollama`.
 
-**Precedence (today):** Only the `ASSIGNEE_LLM_*` env vars are honored. When config-file support lands, the `llm` section will follow the same precedence as other sections (env vars > project config > user config), with per-key merging so a user-level `llm.default` and a project-level `llm.plan_generator` would both take effect.
+**Per-node routing — designed but not wired (R9b-02 / Epic 100 P038).**
+The four per-callsite slots (`llm.plan_generator`, `llm.intent_parser`,
+`llm.advice_generator`, `llm.workload_classifier`) and their matching
+`ASSIGNEE_LLM_*` env-var twins were defined in Story 44.1 but the factory
+sites that would read them were never built. The dead env-var constants
+were removed in R9b-02; setting the keys (or env vars) has no effect
+today. See the descope note in
+[`packages/core/src/constants/env-vars.ts`](../packages/core/src/constants/env-vars.ts)
+for revival guidance — wire the factory sites first, then re-add the slots.
 
-**Environment variable overrides (authoritative today):** Each callsite is configured via `ASSIGNEE_LLM_<CALLSITE>` (uppercased):
-
-```bash
-ASSIGNEE_LLM_PLAN_GENERATOR=anthropic/claude-sonnet-4-5 assignee plan "Create an EC2 instance"
-ASSIGNEE_LLM_DEFAULT=openai/gpt-4o assignee plan "Create an S3 bucket"
-```
-
-**Lazy adapter creation:** Each distinct model string creates one LLM adapter instance, shared across all callsites that map to the same model. If `intent_parser` and `advice_generator` both point to `bedrock/us.amazon.nova-micro-v1:0`, they share a single adapter.
-
-**Diagnostics:** Run `assignee doctor` to see the resolved routing table when `llm.*` config is present.
+**Diagnostics:** Run `assignee doctor` to see the resolved model.
 
 ### Data Registries (Epic 46)
 
@@ -240,11 +231,7 @@ The `DataSource` type and `formatLabelWithSource()` helper live in `@assignee/co
 | `ASSIGNEE_READER_SECRET_ACCESS_KEY`   | Secret key for the reader IAM user (MCP)                                                                                                                                                                                                                         | -                                               |
 | `ASSIGNEE_AUDITOR_ACCESS_KEY_ID`      | Access key for the auditor IAM user (MCP)                                                                                                                                                                                                                        | -                                               |
 | `ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY`  | Secret key for the auditor IAM user (MCP)                                                                                                                                                                                                                        | -                                               |
-| `ASSIGNEE_LLM_DEFAULT`                | Override the default LLM model for all callsites (see `llm` section)                                                                                                                                                                                             | -                                               |
-| `ASSIGNEE_LLM_PLAN_GENERATOR`         | Override the LLM model for plan generation                                                                                                                                                                                                                       | -                                               |
-| `ASSIGNEE_LLM_INTENT_PARSER`          | Override the LLM model for intent parsing                                                                                                                                                                                                                        | -                                               |
-| `ASSIGNEE_LLM_ADVICE_GENERATOR`       | Override the LLM model for advice generation                                                                                                                                                                                                                     | -                                               |
-| `ASSIGNEE_LLM_WORKLOAD_CLASSIFIER`    | Override the LLM model for workload classification                                                                                                                                                                                                               | -                                               |
+| `ASSIGNEE_LLM_DEFAULT`                | Override the default LLM model for every pipeline callsite (per-node `ASSIGNEE_LLM_PLAN_GENERATOR` / `_INTENT_PARSER` / `_ADVICE_GENERATOR` / `_WORKLOAD_CLASSIFIER` slots were removed in R9b-02 — never wired; see `llm` section)                              | -                                               |
 | `ASSIGNEE_VERBOSITY`                  | Set to `verbose` to enable structured log output                                                                                                                                                                                                                 | -                                               |
 | `ASSIGNEE_LOG_LEVEL`                  | Set to `debug` to enable structured log output                                                                                                                                                                                                                   | -                                               |
 | `ASSIGNEE_SAAS_URL`                   | SaaS API base URL for org policy fetch. Must start with `https://` or `http://localhost` — other schemes are rejected at startup.                                                                                                                                | `https://app.assignee.ai`                       |

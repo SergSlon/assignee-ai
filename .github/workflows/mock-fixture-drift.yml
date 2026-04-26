@@ -51,6 +51,7 @@ permissions:
   contents: read
   id-token: write       # required for OIDC aws-actions/configure-aws-credentials
   issues: write         # drift failure opens / updates a tracking issue
+  actions: read         # read workflow run history for consecutive-failure check
 
 jobs:
   drift-check:
@@ -155,16 +156,23 @@ jobs:
             echo "Download the \`mock-fixture-drift-report-${{ github.run_number }}\` artifact for the full diff."
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # R9b-03 (P043): tracking issue opens on EVERY failure (drift OR
+      # runtime error), not only when the report file exists. Runtime
+      # errors (exit 1: bad creds, network blip) leave operators blind
+      # without an issue; the body distinguishes the two failure modes
+      # so the auto-pruner / triager can tell them apart.
       - name: Open or update tracking issue
-        if: failure() && hashFiles('mock-fixture-drift-report.json') != ''
+        if: failure()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           title="Mock fixture drift detected (CFN schemas)"
           label="mock-fixture-drift"
-          # Build the comment body from the drift report.
+          # Build the comment body. Two paths: drift-report present (exit 2)
+          # vs. runtime-error path (exit 1; no report on disk).
           body_file=$(mktemp)
+          if [ -f mock-fixture-drift-report.json ]; then
           {
             echo "Nightly drift check failed on run ${{ github.run_number }}."
             echo ""
@@ -191,6 +199,21 @@ jobs:
             echo ""
             echo "Artifact: \`mock-fixture-drift-report-${{ github.run_number }}\` on this workflow run."
           } > "$body_file"
+          else
+          {
+            echo "**Mock fixture drift workflow failed without producing a drift report.**"
+            echo ""
+            echo "This typically indicates a runtime error rather than a CFN-schema drift:"
+            echo "credential resolution, network outage, AWS API throttling, or a bug in"
+            echo "the drift checker itself. Inspect the workflow run logs to triage."
+            echo ""
+            echo "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "Commit: \`${{ github.sha }}\`"
+            echo ""
+            echo "If runtime errors persist for ≥3 consecutive runs the webhook"
+            echo "alert will also fire — see the next workflow step."
+          } > "$body_file"
+          fi
 
           # Dedupe: if an open issue with the label exists, comment; else create.
           existing=$(gh issue list --label "$label" --state open --json number --jq '.[0].number' || echo "")
@@ -201,3 +224,77 @@ jobs:
             echo "Opening new drift issue"
             gh issue create --title "$title" --label "$label" --body-file "$body_file"
           fi
+
+      - name: Check consecutive failures and alert (webhook)
+        # P043: Flake-tolerance policy for mock-fixture-drift — single failures may
+        # be transient (AWS DescribeType API hiccup). Only 3 consecutive failures
+        # trigger the webhook alert. GitHub issue tracking (above step) fires on
+        # every failure for full audit trail; the webhook is the escalation path.
+        #
+        # Uses ASSIGNEE_DRIFT_ALERT_WEBHOOK (separate routing from nightly-e2e).
+        # Falls back to ASSIGNEE_NIGHTLY_ALERT_WEBHOOK if the dedicated secret is
+        # unset, so a single webhook configuration covers both workflows.
+        # Both are opt-in — if neither is set the webhook is skipped gracefully.
+        if: failure()
+        env:
+          ASSIGNEE_DRIFT_ALERT_WEBHOOK: ${{ secrets.ASSIGNEE_DRIFT_ALERT_WEBHOOK }}
+          ASSIGNEE_NIGHTLY_ALERT_WEBHOOK: ${{ secrets.ASSIGNEE_NIGHTLY_ALERT_WEBHOOK }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            // Fetch the last 3 completed runs of this workflow (excluding the current one).
+            const { data: runsData } = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'mock-fixture-drift.yml',
+              status: 'completed',
+              per_page: 4,
+            });
+
+            const previousRuns = runsData.workflow_runs
+              .filter(r => r.id !== context.runId)
+              .slice(0, 3);
+
+            let consecutiveCount = 1;
+            for (const r of previousRuns) {
+              if (r.conclusion === 'failure') consecutiveCount++;
+              else break;
+            }
+
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            core.info(`Consecutive mock-fixture-drift failures (including this run): ${consecutiveCount}`);
+
+            if (consecutiveCount < 3) {
+              core.info(`Only ${consecutiveCount} consecutive failure(s) — within acceptable-miss window; suppressing webhook alert.`);
+              return;
+            }
+
+            core.warning(`${consecutiveCount} consecutive mock-fixture-drift failures — escalating webhook alert.`);
+
+            // Prefer dedicated drift webhook; fall back to shared nightly webhook.
+            const webhookUrl = process.env.ASSIGNEE_DRIFT_ALERT_WEBHOOK ||
+                               process.env.ASSIGNEE_NIGHTLY_ALERT_WEBHOOK;
+
+            if (!webhookUrl) {
+              core.info('Neither ASSIGNEE_DRIFT_ALERT_WEBHOOK nor ASSIGNEE_NIGHTLY_ALERT_WEBHOOK is set — skipping webhook (opt-in).');
+              return;
+            }
+
+            const payload = JSON.stringify({
+              text: `Mock fixture drift FAILED ${consecutiveCount}x consecutive (run #${context.runNumber}, commit ${context.sha.slice(0,8)}) — re-baseline required`,
+              run_url: runUrl,
+              consecutive_failures: consecutiveCount,
+              workflow: 'mock-fixture-drift',
+            });
+
+            const { execSync } = require('child_process');
+            try {
+              execSync(
+                `curl -sSf -X POST -H 'Content-Type: application/json' -d '${payload.replace(/'/g, "\\'")}' '${webhookUrl}'`,
+                { stdio: 'inherit' }
+              );
+              core.info('Drift alert webhook delivered.');
+            } catch (e) {
+              core.warning(`Drift alert webhook delivery failed. Error: ${e.message}`);
+            }

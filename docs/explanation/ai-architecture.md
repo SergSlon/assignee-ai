@@ -119,19 +119,15 @@ Each node is classified by what it _consumes_. The point is to show that only th
 
 A model string is formatted `provider/model-id` (e.g., `bedrock/us.amazon.nova-lite-v1:0` or `anthropic/claude-sonnet-4-5`). Parsing + validation lives in `packages/core/src/llm/model-parser.ts`.
 
-### Per-node routing — **designed, not yet wired**
+### Per-node routing — **designed, not wired, dead env-vars removed (R9b-02)**
 
-The constant registry at `packages/core/src/constants/env-vars.ts:31-36` defines five env-var slots:
+The constant registry at [`packages/core/src/constants/env-vars.ts`](../../packages/core/src/constants/env-vars.ts) defines a single LLM-routing slot today:
 
 ```typescript
 ASSIGNEE_LLM_DEFAULT;
-ASSIGNEE_LLM_PLAN_GENERATOR;
-ASSIGNEE_LLM_INTENT_PARSER;
-ASSIGNEE_LLM_ADVICE_GENERATOR;
-ASSIGNEE_LLM_WORKLOAD_CLASSIFIER;
 ```
 
-but **only `ASSIGNEE_LLM_DEFAULT` is consumed at HEAD.** Story 50-7 dropped the `RoutingLlmAdapter` branch after the project's in-repo YAML stopped using it; see the comment at `packages/core/src/graph/create-graph.ts:72-75`. A single `LlmAdapter` is instantiated at graph construction (`create-graph.ts:76-84`) and injected into all three LLM-calling nodes:
+Story 50-7 dropped the `RoutingLlmAdapter` branch after the project's in-repo YAML stopped using it; see the comment at `packages/core/src/graph/create-graph.ts:72-75`. A single `LlmAdapter` is instantiated at graph construction (`create-graph.ts:76-84`) and injected into all three LLM-calling nodes:
 
 ```typescript
 const llmAdapter = new LlmAdapter({
@@ -141,7 +137,7 @@ const llmAdapter = new LlmAdapter({
 // ...passed to intent_parser / plan_generator / advice_generator nodes
 ```
 
-The per-callsite env vars are preserved in the constant registry because future per-node routing is intended — but today, setting `ASSIGNEE_LLM_PLAN_GENERATOR=anthropic/claude-sonnet-4-5` has no effect. `docs/configuration.md` has a "planned — not yet implemented" note for the config-file `llm:` section; the env-var-level story is the same. This doc mentions it explicitly so future readers don't mistake intent for behavior.
+The four per-callsite slots (`ASSIGNEE_LLM_PLAN_GENERATOR`, `ASSIGNEE_LLM_INTENT_PARSER`, `ASSIGNEE_LLM_ADVICE_GENERATOR`, `ASSIGNEE_LLM_WORKLOAD_CLASSIFIER`) were defined in Story 44.1 alongside `_DEFAULT` but the factory sites that would read them were never built — they were dead code. The post-Epic-100 audit (P038) flagged the dead-code env-var slots; **R9b-02 deleted them** to remove the misleading surface. If per-node routing is revived, wire the factory sites first, then re-add the slots — see the descope note in `env-vars.ts` for the revival contract. Until then, only `ASSIGNEE_LLM_DEFAULT` affects model selection.
 
 ### Sanitize-by-default
 

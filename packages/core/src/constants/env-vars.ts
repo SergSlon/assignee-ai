@@ -37,12 +37,20 @@ export const EnvVar = {
    */
   BEDROCK_GUARDRAIL_DISABLE: "BEDROCK_GUARDRAIL_DISABLE",
 
-  // ── Per-node LLM routing (Story 44.1) ─────────────────────────
+  // ── LLM routing ───────────────────────────────────────────────
+  /**
+   * Selects the default LLM model ID for all pipeline nodes. This is the
+   * only wired routing env-var today.
+   *
+   * NOTE: Per-node overrides (PLAN_GENERATOR, INTENT_PARSER,
+   * ADVICE_GENERATOR, WORKLOAD_CLASSIFIER) were defined in Story 44.1 but
+   * never implemented — the factory sites that would read those vars were
+   * never built. Those four constants have been deleted (acquisition-DD
+   * finding P038, Epic 100 R9b). If per-node routing is revived, add it
+   * as a new story and wire the factory sites before re-adding env-var
+   * slots here.
+   */
   ASSIGNEE_LLM_DEFAULT: "ASSIGNEE_LLM_DEFAULT",
-  ASSIGNEE_LLM_PLAN_GENERATOR: "ASSIGNEE_LLM_PLAN_GENERATOR",
-  ASSIGNEE_LLM_INTENT_PARSER: "ASSIGNEE_LLM_INTENT_PARSER",
-  ASSIGNEE_LLM_ADVICE_GENERATOR: "ASSIGNEE_LLM_ADVICE_GENERATOR",
-  ASSIGNEE_LLM_WORKLOAD_CLASSIFIER: "ASSIGNEE_LLM_WORKLOAD_CLASSIFIER",
 
   // ── CLI configuration ─────────────────────────────────────────
   /** @deprecated Use {@link ASSIGNEE_LLM_DEFAULT} instead. Kept for back-compat. */

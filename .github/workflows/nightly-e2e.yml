@@ -55,6 +55,8 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read    # read workflow run history for consecutive-failure check
+  issues: write    # open / update alert issue on 3 consecutive failures
 
 jobs:
   nightly-e2e:
@@ -185,24 +187,133 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
-      - name: Alert on failure
-        # W6-02: On nightly-e2e failure, dispatch an alert to the configured webhook.
-        # ASSIGNEE_NIGHTLY_ALERT_WEBHOOK is a secret-configurable URL (Slack /
-        # email / PagerDuty). If the secret is unset, the curl is skipped
-        # gracefully — alerting is opt-in per deployment preference.
-        if: failure() && env.ASSIGNEE_NIGHTLY_ALERT_WEBHOOK != ''
+      - name: Check consecutive failures and alert
+        # P043 / W6-02: Flake-tolerance policy — single nightly failures within a
+        # 48-hour window are treated as infrastructure flakes. Only 3 consecutive
+        # failures trigger the alert (webhook + GitHub issue). This implements the
+        # policy documented in docs/explanation/ci-gates.md § Acceptable-miss window.
+        #
+        # If ASSIGNEE_NIGHTLY_ALERT_WEBHOOK is unset the webhook curl is skipped;
+        # the GitHub issue is always opened/updated (no secret required).
+        if: failure()
         env:
           ASSIGNEE_NIGHTLY_ALERT_WEBHOOK: ${{ secrets.ASSIGNEE_NIGHTLY_ALERT_WEBHOOK }}
-        run: |
-          set -euo pipefail
-          payload=$(cat <<EOF
-          {
-            "text": "Nightly E2E FAILED on run ${{ github.run_number }} (commit ${{ github.sha }})",
-            "run_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          }
-          EOF
-          )
-          curl -sSf -X POST -H 'Content-Type: application/json' \
-            -d "$payload" \
-            "$ASSIGNEE_NIGHTLY_ALERT_WEBHOOK" \
-            || echo "::warning::Alert webhook delivery failed — check ASSIGNEE_NIGHTLY_ALERT_WEBHOOK"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            // Fetch the last 3 completed runs of this workflow (excluding the current one).
+            const { data: runsData } = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'nightly-e2e.yml',
+              status: 'completed',
+              per_page: 4,   // current run may or may not be in the list; fetch 4 to be safe
+            });
+
+            // Filter to the 3 most recent runs that are NOT the current run.
+            const previousRuns = runsData.workflow_runs
+              .filter(r => r.id !== context.runId)
+              .slice(0, 3);
+
+            // Count consecutive failures including the current one.
+            // Walking previousRuns newest-first; break on first non-failure.
+            let consecutiveCount = 1;
+            for (const r of previousRuns) {
+              if (r.conclusion === 'failure') consecutiveCount++;
+              else break;
+            }
+
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const sha = context.sha;
+            const runNumber = context.runNumber;
+
+            core.info(`Consecutive nightly-e2e failures (including this run): ${consecutiveCount}`);
+
+            if (consecutiveCount < 3) {
+              core.info(`Only ${consecutiveCount} consecutive failure(s) — within acceptable-miss window; suppressing alert.`);
+              return;
+            }
+
+            // 3+ consecutive failures — escalate.
+            core.warning(`${consecutiveCount} consecutive nightly-e2e failures — escalating alert.`);
+
+            // 1. Webhook (optional — skip if secret is unset).
+            const webhookUrl = process.env.ASSIGNEE_NIGHTLY_ALERT_WEBHOOK;
+            if (webhookUrl) {
+              const payload = JSON.stringify({
+                text: `Nightly E2E FAILED ${consecutiveCount}x consecutive (run #${runNumber}, commit ${sha.slice(0,8)}) — BLOCKER on merging to main`,
+                run_url: runUrl,
+                consecutive_failures: consecutiveCount,
+              });
+              const { execSync } = require('child_process');
+              try {
+                execSync(
+                  `curl -sSf -X POST -H 'Content-Type: application/json' -d '${payload.replace(/'/g, "\\'")}' '${webhookUrl}'`,
+                  { stdio: 'inherit' }
+                );
+                core.info('Alert webhook delivered.');
+              } catch (e) {
+                core.warning(`Alert webhook delivery failed — check ASSIGNEE_NIGHTLY_ALERT_WEBHOOK. Error: ${e.message}`);
+              }
+            } else {
+              core.info('ASSIGNEE_NIGHTLY_ALERT_WEBHOOK not set — skipping webhook (opt-in).');
+            }
+
+            // 2. GitHub issue — open new or comment on existing.
+            const label = 'nightly-e2e-alert';
+            const title = 'Nightly E2E: 3+ consecutive failures — BLOCKER';
+            const body = [
+              `**${consecutiveCount} consecutive nightly-e2e failures detected.**`,
+              '',
+              `Latest failing run: [#${runNumber}](${runUrl})`,
+              `Commit: \`${sha}\``,
+              '',
+              '**Required actions (see ci-gates.md § Alert escalation):**',
+              '1. Check AWS Service Health Dashboard for the affected region.',
+              '2. Reproduce locally: `RUN_E2E=1 pnpm vitest run src/e2e/nightly-destroy-smoke.test.ts`',
+              '3. If code-related: open a P1 bug, assign to the last code-change owner.',
+              '4. If AWS transient: add a `# skip-reason: AWS incident <ID>` annotation in the CI run summary.',
+              '',
+              '_This issue is auto-managed by `.github/workflows/nightly-e2e.yml`._',
+            ].join('\n');
+
+            // Ensure label exists (idempotent).
+            try {
+              await github.rest.issues.getLabel({ owner: context.repo.owner, repo: context.repo.repo, name: label });
+            } catch {
+              await github.rest.issues.createLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: label,
+                color: 'd73a4a',
+                description: 'Auto-opened when nightly-e2e fails 3+ consecutive times',
+              });
+            }
+
+            const { data: openIssues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: label,
+              state: 'open',
+              per_page: 1,
+            });
+
+            if (openIssues.length > 0) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: openIssues[0].number,
+                body,
+              });
+              core.info(`Commented on existing alert issue #${openIssues[0].number}`);
+            } else {
+              const { data: newIssue } = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                labels: [label],
+                body,
+              });
+              core.info(`Opened new alert issue #${newIssue.number}`);
+            }
