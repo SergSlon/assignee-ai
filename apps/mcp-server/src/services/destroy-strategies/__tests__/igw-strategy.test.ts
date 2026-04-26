@@ -35,7 +35,7 @@ vi.mock("@aws-sdk/client-ec2", () => {
   };
 });
 
-import { igwStrategy } from "../igw-strategy.js";
+import { ec2InternetGatewayStrategy as igwStrategy } from "@assignee/core";
 import { makeDestroyContext } from "./test-helpers.js";
 
 const IGW_ID = "igw-0123456789abcdef0";

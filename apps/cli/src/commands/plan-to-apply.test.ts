@@ -1,11 +1,11 @@
 /**
  * Tests for the plan-to-apply single session flow (Story 10.3).
- * Tests renderApplyNowConfirm and the --no-apply flag behavior.
+ * Tests renderHitlConfirm (formerly renderHitlConfirm) and the --no-apply flag behavior.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import * as clack from "@clack/prompts";
-import { renderApplyNowConfirm } from "../utils/display.js";
+import { renderHitlConfirm } from "../utils/display.js";
 import type { RenderableState } from "../utils/display.js";
 import { LOG_ACTIONS } from "../utils/logger.js";
 
@@ -32,7 +32,7 @@ const mockState: RenderableState = {
   runId: "test-run-id",
 };
 
-describe("renderApplyNowConfirm", () => {
+describe("renderHitlConfirm", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -48,7 +48,7 @@ describe("renderApplyNowConfirm", () => {
     vi.mocked(clack.confirm).mockResolvedValue(true);
     vi.mocked(clack.isCancel).mockReturnValue(false);
 
-    const result = await renderApplyNowConfirm(mockState);
+    const result = await renderHitlConfirm(mockState);
     expect(result).toBe(true);
     expect(clack.confirm).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -77,7 +77,7 @@ describe("renderApplyNowConfirm", () => {
     vi.mocked(clack.confirm).mockResolvedValue(false);
     vi.mocked(clack.isCancel).mockReturnValue(false);
 
-    const result = await renderApplyNowConfirm(mockState);
+    const result = await renderHitlConfirm(mockState);
     expect(result).toBe(false);
 
     Object.defineProperty(process.stdin, "isTTY", {
@@ -99,7 +99,7 @@ describe("renderApplyNowConfirm", () => {
     );
     vi.mocked(clack.isCancel).mockReturnValue(true);
 
-    await expect(renderApplyNowConfirm(mockState)).rejects.toThrow(
+    await expect(renderHitlConfirm(mockState)).rejects.toThrow(
       "Operation cancelled by user.",
     );
 
@@ -116,7 +116,7 @@ describe("renderApplyNowConfirm", () => {
       writable: true,
     });
 
-    const result = await renderApplyNowConfirm(mockState);
+    const result = await renderHitlConfirm(mockState);
     expect(result).toBe(false);
     expect(clack.confirm).not.toHaveBeenCalled();
 
@@ -136,7 +136,7 @@ describe("renderApplyNowConfirm", () => {
     vi.mocked(clack.confirm).mockResolvedValue(false);
     vi.mocked(clack.isCancel).mockReturnValue(false);
 
-    await renderApplyNowConfirm(mockState);
+    await renderHitlConfirm(mockState);
     expect(clack.confirm).toHaveBeenCalledWith(
       expect.objectContaining({
         message: expect.stringContaining("$0.023/GB-month"),
@@ -159,7 +159,7 @@ describe("renderApplyNowConfirm", () => {
     vi.mocked(clack.confirm).mockResolvedValue(false);
     vi.mocked(clack.isCancel).mockReturnValue(false);
 
-    await renderApplyNowConfirm({
+    await renderHitlConfirm({
       ...mockState,
       estimatedMonthlyCost: undefined,
     });

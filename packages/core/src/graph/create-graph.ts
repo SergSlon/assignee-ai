@@ -167,7 +167,8 @@ export function createGraph(
     new LlmAdapter({
       modelString:
         process.env[EnvVar.ASSIGNEE_LLM_DEFAULT] ??
-        process.env[EnvVar.ASSIGNEE_MODEL],
+        // Back-compat: read legacy ASSIGNEE_MODEL env var (deprecated alias).
+        process.env["ASSIGNEE_MODEL"],
       guardrailId: process.env[EnvVar.BEDROCK_GUARDRAIL_ID],
       guardrailVersion: process.env[EnvVar.BEDROCK_GUARDRAIL_VERSION],
     });

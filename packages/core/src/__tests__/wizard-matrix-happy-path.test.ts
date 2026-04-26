@@ -238,7 +238,8 @@ describe.each(ALL_PLUGINS.map((p) => [p.resourceType, p] as const))(
       );
       const calledNames: string[] = [];
       vi.mocked(promptWithHelp).mockImplementation(
-        async (field: ResourceField) => {
+        async (options: { field: ResourceField }) => {
+          const field = options.field;
           calledNames.push(field.name);
           if (!expectedByName.has(field.name)) {
             throw new Error(
@@ -298,7 +299,8 @@ describe.each(ALL_PLUGINS.map((p) => [p.resourceType, p] as const))(
       const calledNames: string[] = [];
 
       vi.mocked(promptWithHelp).mockImplementation(
-        async (field: ResourceField) => {
+        async (options: { field: ResourceField }) => {
+          const field = options.field;
           calledNames.push(field.name);
           if (!expectedByName.has(field.name)) {
             throw new Error(
@@ -392,7 +394,8 @@ describe("wizard happy-path — L6-H1 populated-discovery branch", () => {
     let subnetFieldSawPopulatedEnum = false;
 
     vi.mocked(promptWithHelp).mockImplementation(
-      async (field: ResourceField) => {
+      async (options: { field: ResourceField }) => {
+        const field = options.field;
         // If this is the subnet field, return a discovered value; also assert
         // the field arrived here as an enum with discovered options.
         // Note: after resolveDynamicFields populates options, it clears the

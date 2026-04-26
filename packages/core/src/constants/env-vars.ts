@@ -53,8 +53,6 @@ export const EnvVar = {
   ASSIGNEE_LLM_DEFAULT: "ASSIGNEE_LLM_DEFAULT",
 
   // ── CLI configuration ─────────────────────────────────────────
-  /** @deprecated Use {@link ASSIGNEE_LLM_DEFAULT} instead. Kept for back-compat. */
-  ASSIGNEE_MODEL: "ASSIGNEE_MODEL",
   ASSIGNEE_VERBOSITY: "ASSIGNEE_VERBOSITY",
   ASSIGNEE_LOG_LEVEL: "ASSIGNEE_LOG_LEVEL",
   ASSIGNEE_RECORD: "ASSIGNEE_RECORD",

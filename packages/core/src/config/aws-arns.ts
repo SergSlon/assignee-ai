@@ -17,11 +17,6 @@ export const KMS_ALIAS_PREFIX = "alias/" as const;
  * `arn:<partition>:iam::aws:policy/`. Use with `awsManagedPolicyArn()`
  * to build partition-correct ARNs at runtime.
  *
- * Naming convention: `<LOGICAL_NAME>_PATH` is the path suffix;
- * the companion `_COMMERCIAL_ARN` field retains the historic
- * commercial-partition full ARN string for backward-compatibility
- * where callers already pin the commercial form in static contexts.
- *
  * @example
  *   awsManagedPolicyArn("aws-us-gov", AwsManagedPolicy.LAMBDA_BASIC_EXECUTION_PATH)
  *   // → "arn:aws-us-gov:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
@@ -32,20 +27,6 @@ export const AwsManagedPolicy = {
     "service-role/AWSLambdaBasicExecutionRole" as const,
   /** Path suffix for PowerUserAccess. */
   POWER_USER_ACCESS_PATH: "PowerUserAccess" as const,
-
-  /**
-   * @deprecated Use `awsManagedPolicyArn(partition, AwsManagedPolicy.LAMBDA_BASIC_EXECUTION_PATH)`.
-   * This constant is commercial-partition only and will produce incorrect ARNs
-   * in GovCloud (aws-us-gov), China (aws-cn), and ISO partitions.
-   */
-  LAMBDA_BASIC_EXECUTION:
-    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole" as const,
-  /**
-   * @deprecated Use `awsManagedPolicyArn(partition, AwsManagedPolicy.POWER_USER_ACCESS_PATH)`.
-   * This constant is commercial-partition only and will produce incorrect ARNs
-   * in GovCloud (aws-us-gov), China (aws-cn), and ISO partitions.
-   */
-  POWER_USER_ACCESS: "arn:aws:iam::aws:policy/PowerUserAccess" as const,
 } as const;
 
 /**

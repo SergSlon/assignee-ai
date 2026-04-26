@@ -60,8 +60,10 @@ vi.mock("@aws-sdk/client-ec2", () => {
   };
 });
 
-import { dynamodbStrategy } from "../dynamodb-strategy.js";
-import { igwStrategy } from "../igw-strategy.js";
+import {
+  dynamodbTableStrategy as dynamodbStrategy,
+  ec2InternetGatewayStrategy as igwStrategy,
+} from "@assignee/core";
 import { makeDestroyContext } from "./test-helpers.js";
 
 // ── Env-var isolation ───────────────────────────────────────────────────────

@@ -18,6 +18,5 @@ export {
   renderHitlConfirm,
   renderHitlCompoundConfirm,
   renderAdvancedConfirm,
-  renderApplyNowConfirm,
 } from "./confirms.js";
 export { renderOptionPrompt } from "./option-prompt.js";

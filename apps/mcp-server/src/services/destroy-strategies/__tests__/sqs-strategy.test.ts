@@ -17,7 +17,7 @@ import { describe, it, expect, vi } from "vitest";
 // We still assert the absence of any @aws-sdk/client-sqs import side-effects
 // by ensuring the strategy doesn't expose a preDestroy hook.
 
-import { sqsStrategy } from "../sqs-strategy.js";
+import { sqsQueueStrategy as sqsStrategy } from "@assignee/core";
 
 describe("sqsStrategy.resourceType", () => {
   it("targets AWS::SQS::Queue", () => {

@@ -49,7 +49,8 @@ export async function checkBedrock(
   const subs: DoctorSubCheck[] = [];
   const modelString =
     process.env[EnvVar.ASSIGNEE_LLM_DEFAULT] ??
-    process.env[EnvVar.ASSIGNEE_MODEL] ??
+    // Back-compat: read legacy ASSIGNEE_MODEL env var (deprecated alias).
+    process.env["ASSIGNEE_MODEL"] ??
     DEFAULT_MODEL;
   const guardrailId = process.env[EnvVar.BEDROCK_GUARDRAIL_ID];
   const guardrailVersion = process.env[EnvVar.BEDROCK_GUARDRAIL_VERSION];

@@ -565,6 +565,177 @@ describe("runProvisioningLoop", () => {
 
     expect(result.success).toBe(false);
   });
+
+  // ── Branch-coverage uplift (P066 R10b-01) ───────────────────────────────
+
+  it("surfaces errorMessage via renderError when status is failed with errorMessage (branch: !success && finalState.errorMessage)", async () => {
+    const { renderError } = await import("./display.js");
+    const mockGraph = {
+      invoke: vi.fn().mockResolvedValue(undefined),
+      getState: vi
+        .fn()
+        .mockResolvedValueOnce({ next: [] })
+        .mockResolvedValueOnce({
+          values: {
+            executionStatus: ExecutionStatus.FAILED,
+            errorMessage: "CloudControl rejected the resource",
+          },
+        }),
+    };
+    const config = { configurable: { thread_id: "test-run" } };
+    const phase1State = { executionStatus: ExecutionStatus.PENDING } as never;
+
+    const result = await runProvisioningLoop(
+      mockGraph as never,
+      config,
+      phase1State,
+    );
+
+    expect(result.success).toBe(false);
+    expect(renderError).toHaveBeenCalledWith(
+      "CloudControl rejected the resource",
+    );
+  });
+
+  it("renders fallback status message when failed with no errorMessage (branch: else if !success && status !== SUCCESS)", async () => {
+    const { renderError } = await import("./display.js");
+    const mockGraph = {
+      invoke: vi.fn().mockResolvedValue(undefined),
+      getState: vi
+        .fn()
+        .mockResolvedValueOnce({ next: [] })
+        .mockResolvedValueOnce({
+          values: {
+            executionStatus: ExecutionStatus.FAILED,
+            // no errorMessage
+          },
+        }),
+    };
+    const config = { configurable: { thread_id: "test-run" } };
+    const phase1State = { executionStatus: ExecutionStatus.PENDING } as never;
+
+    const result = await runProvisioningLoop(
+      mockGraph as never,
+      config,
+      phase1State,
+    );
+
+    expect(result.success).toBe(false);
+    expect(renderError).toHaveBeenCalledWith(
+      expect.stringContaining("Provisioning ended with status"),
+    );
+  });
+
+  it("breaks after MAX_PROVISION_LOOPS iterations (branch: loopCount > MAX_PROVISION_LOOPS)", async () => {
+    // Import MAX_PROVISION_LOOPS (50) so the assertion is correct even if
+    // the constant changes.
+    const { MAX_PROVISION_LOOPS } = await import("../config/constants.js");
+
+    // getState always returns {next: ["continue"]} inside the loop so the
+    // loop never exits naturally. After the loop body breaks at
+    // loopCount > MAX_PROVISION_LOOPS, the implementation calls getState
+    // ONE more time at provision-loop.ts:71 for the final state — that
+    // call must return {values: {...}} or `.values` is undefined and
+    // the cast at L73 throws TypeError.
+    //
+    // Math: the loop calls getState exactly MAX_PROVISION_LOOPS times
+    // (the (MAX+1)th iteration breaks BEFORE calling getState), then
+    // the post-break call at L71 makes call #(MAX+1). Queue exactly
+    // MAX in-loop mocks; the catch-all `mockResolvedValue` below fires
+    // for the post-break call.
+    const loopGetState = vi.fn();
+    for (let i = 0; i < MAX_PROVISION_LOOPS; i++) {
+      loopGetState.mockResolvedValueOnce({ next: ["continue"] });
+    }
+    // Final out-of-loop getState call (and any subsequent calls).
+    loopGetState.mockResolvedValue({
+      values: { executionStatus: ExecutionStatus.SUCCESS },
+    });
+
+    const mockGraph = {
+      invoke: vi.fn().mockResolvedValue(undefined),
+      getState: loopGetState,
+    };
+    const config = { configurable: { thread_id: "test-run" } };
+    const phase1State = {
+      runId: "test-run-id",
+      executionStatus: ExecutionStatus.PENDING,
+    } as never;
+
+    const result = await runProvisioningLoop(
+      mockGraph as never,
+      config,
+      phase1State,
+    );
+
+    // invoke should have been called exactly MAX_PROVISION_LOOPS times before
+    // the guard broke out.
+    expect(mockGraph.invoke).toHaveBeenCalledTimes(MAX_PROVISION_LOOPS);
+    expect(result).toBeDefined();
+  });
+
+  it("breaks with error when compound resource queue exhausted before loop ends (branch: resourcesProvisioned >= queue.length)", async () => {
+    const { renderError } = await import("./display.js");
+    // Phase 1 state with 1 resource, but getState keeps returning next:
+    // ["continue"] — the loop will detect the queue overflow on the 2nd
+    // iteration.
+    const mockGraph = {
+      invoke: vi.fn().mockResolvedValue(undefined),
+      getState: vi
+        .fn()
+        .mockResolvedValueOnce({ next: ["continue"] }) // iteration 1 → resourcesProvisioned becomes 1
+        .mockResolvedValueOnce({
+          // final state after break
+          values: {
+            executionStatus: ExecutionStatus.FAILED,
+            completedResources: [],
+          },
+        }),
+    };
+    const config = { configurable: { thread_id: "test-run" } };
+    const phase1State = {
+      resourcePattern: { patternId: "test" },
+      resourceQueue: [{ displayName: "OnlyResource" }], // 1 resource
+    } as never;
+
+    const result = await runProvisioningLoop(
+      mockGraph as never,
+      config,
+      phase1State,
+    );
+
+    expect(renderError).toHaveBeenCalledWith(
+      "Internal error: resource queue index out of bounds",
+    );
+    expect(result).toBeDefined();
+  });
+
+  it("compound resource label uses displayName for each item (branch: isCompound spinner label)", async () => {
+    const { startSpinner } = await import("./display.js");
+    const mockGraph = {
+      invoke: vi.fn().mockResolvedValue(undefined),
+      getState: vi
+        .fn()
+        .mockResolvedValueOnce({ next: [] })
+        .mockResolvedValueOnce({
+          values: {
+            executionStatus: ExecutionStatus.SUCCESS,
+            completedResources: [{ resourceId: "r1" }],
+          },
+        }),
+    };
+    const config = { configurable: { thread_id: "test-run" } };
+    const phase1State = {
+      resourcePattern: { patternId: "test" },
+      resourceQueue: [{ displayName: "MyBucket" }],
+    } as never;
+
+    await runProvisioningLoop(mockGraph as never, config, phase1State);
+
+    expect(startSpinner).toHaveBeenCalledWith(
+      expect.stringContaining("MyBucket"),
+    );
+  });
 });
 
 // ── Story 29.5 / NFR-05: cold-start timing wiring ──────────────────────────

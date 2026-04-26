@@ -6,8 +6,6 @@
  *   - `awsManagedPolicyArn(partition, path)` — happy path for all five
  *     canonical partitions + throw on unrecognised partition.
  *   - `AwsManagedPolicy` PATH constants — correct suffix values.
- *   - `AwsManagedPolicy` legacy full-ARN constants — retained for backward
- *     compat, equal to `awsManagedPolicyArn("aws", PATH)`.
  *
  * @see feedback_partition_aware_arn_matching (operator memory)
  */
@@ -168,35 +166,6 @@ describe("AwsManagedPolicy constants", () => {
       ).toBe(false);
       expect(AwsManagedPolicy.POWER_USER_ACCESS_PATH.startsWith("arn:")).toBe(
         false,
-      );
-    });
-  });
-
-  describe("legacy full-ARN constants (deprecated — commercial only)", () => {
-    it("LAMBDA_BASIC_EXECUTION equals awsManagedPolicyArn('aws', PATH)", () => {
-      expect(AwsManagedPolicy.LAMBDA_BASIC_EXECUTION).toBe(
-        awsManagedPolicyArn(
-          "aws",
-          AwsManagedPolicy.LAMBDA_BASIC_EXECUTION_PATH,
-        ),
-      );
-    });
-
-    it("POWER_USER_ACCESS equals awsManagedPolicyArn('aws', PATH)", () => {
-      expect(AwsManagedPolicy.POWER_USER_ACCESS).toBe(
-        awsManagedPolicyArn("aws", AwsManagedPolicy.POWER_USER_ACCESS_PATH),
-      );
-    });
-
-    it("LAMBDA_BASIC_EXECUTION contains arn:aws: prefix (commercial-only)", () => {
-      expect(AwsManagedPolicy.LAMBDA_BASIC_EXECUTION).toContain(
-        "arn:aws:iam::aws:policy/",
-      );
-    });
-
-    it("POWER_USER_ACCESS contains arn:aws: prefix (commercial-only)", () => {
-      expect(AwsManagedPolicy.POWER_USER_ACCESS).toContain(
-        "arn:aws:iam::aws:policy/",
       );
     });
   });

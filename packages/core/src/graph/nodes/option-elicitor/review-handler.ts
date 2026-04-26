@@ -105,18 +105,18 @@ export async function handleReviewSentinel(
   delete elicitedOptions[editField.name];
   cleanDependents(editField.name, fields, elicitedOptions);
 
-  const newAnswer = await promptWithHelp(
-    editField,
-    editResWithCurrent,
+  const newAnswer = await promptWithHelp({
+    field: editField,
+    resolved: editResWithCurrent,
     resourceType,
     tools,
     llmClient,
     userIntent,
     // showBack:false on the targeted re-prompt — BACK from here means
     // "cancel edit" and is treated as a no-op (we restore prior value).
-    false,
-    elicitedOptions,
-  );
+    showBack: false,
+    answers: elicitedOptions,
+  });
 
   if (
     newAnswer === BACK_SENTINEL ||

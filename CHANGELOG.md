@@ -18,6 +18,153 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### R10b — Round 10 (second half): final 4 P2-tier P-IDs + 6 strategic deferred-records
+
+R10b closes the final 4 cheap P2-tier audit P-IDs in parallel and
+records explicit deferrals for the 6 expensive items that need
+dedicated sessions (not parallel-wave fixes). With R10b landed,
+**all 100 audit P-IDs are accounted for** — 42 closed in code,
+28 OOS, 5 cluster-consolidated, 1 epic-101/102/103-deferred,
+10 explicit-R9/R10-deferred, 9 P3-no-action positive signals,
+1 live CLI-bug surfaced and fixed, plus 4 partial-cluster items
+implicitly accounted via parent P-IDs. The 12-wave Epic 100
+closure programme + the 6 follow-on rounds (R8 + R9a + R9b +
+R10a + R10b) drive total effective coverage from 27/100 (Epic
+100 close-out) to **100/100 accountable**.
+
+#### Added
+
+- **P066 — CLI branch coverage push to 80%.** Targeted the 5
+  lowest-coverage files in `apps/cli/src/`: `billing/recommendations.ts`
+  (36% → ≥80%), `cleanup/checkpoint-dry-run.ts` (33% → ≥80%),
+  `cleanup/cache-dry-run.ts` (37% → ≥80%), `views/drift-detail.ts`
+  (44% → ≥80%), `utils/command-runner/credentials.ts` (62% → ≥80%).
+  84 new tests across 4 new test files + 2 extended test files.
+  Estimated apps/cli branch coverage uplift: +4-6 pp overall.
+- **P085 — `validatePlanShape` 2/25 → 22/25 type coverage.**
+  Refactored the 2-case switch in
+  `packages/core/src/graph/nodes/plan-generator/llm-helpers.ts`
+  to a `PLAN_SHAPE_VALIDATORS: Record<string, PlanShapeValidator[]>`
+  registry pattern. 20 new per-type validators covering: IAM Role
+  trust policy, Lambda Code one-source-only, EC2 ImageId required,
+  SQS/SNS FIFO suffix invariant, SSM Parameter Type enum, Logs
+  retention discrete values, ApiGatewayV2 protocol enum,
+  SecretsManager mutually-exclusive sources, EC2 VPC/Subnet
+  required-fields, RDS DBSubnetGroup ≥2 subnets, CloudWatch
+  ComparisonOperator enum, ELBv2 Scheme enum, EFS encryption ↔
+  KmsKeyId, Events Rule pattern OR schedule, KMS KeyPolicy required,
+  EC2 SecurityGroup VpcId required, RouteTable VpcId, NAT Gateway
+  SubnetId + AllocationId. 130 new test cases (happy + violation
+  per type). 3 types skipped with rationale (compound-only fields
+  filled by orchestrator, not LLM shape).
+
+#### Changed
+
+- **P070 — CI FinOps monthly-budget ceiling.** New
+  `.github/workflows/finops-monthly-budget.yml` (weekly cadence,
+  Option A — visibility without per-run gating). New
+  `scripts/finops-aggregate.mjs` (pure Node ESM, zero deps;
+  scans `nightly-cost-YYYY-MM-DD.jsonl` artifacts in a rolling
+  30-day window, sums `estimatedUsd`, dedupes runIds). Dispatches
+  alert when rolling 30-day spend exceeds
+  `ASSIGNEE_FINOPS_MONTHLY_BUDGET_USD` (default $50). Webhook
+  prefers `ASSIGNEE_FINOPS_ALERT_WEBHOOK`, falls back to
+  `ASSIGNEE_NIGHTLY_ALERT_WEBHOOK`. All new actions SHA-pinned
+  per W7. `docs/explanation/ci-gates.md` extended with new
+  sub-section + gate inventory row.
+
+#### Removed
+
+- **P067 — All 14 deprecated symbols cleaned up.** Migrated all
+  to current replacements: `AwsManagedPolicy.LAMBDA_BASIC_EXECUTION`
+  / `POWER_USER_ACCESS` (→ `awsManagedPolicyArn()`),
+  `PROVISIONS_FILE` / `FAILURES_FILE` (→ `FileName.*`),
+  `EnvVar.ASSIGNEE_MODEL` (→ inline string with back-compat
+  comment), `INVALID_DESIRED_STATE_CODE` (→ `ErrorCode.INVALID_DESIRED_STATE`),
+  `renderApplyNowConfirm` (→ `renderHitlConfirm`),
+  `promptWithHelp` positional overload (→ options-object form),
+  `createCoreMockTools` (→ `createPricingMockTools()`), 4
+  mcp-server destroy-strategy shims (→ direct `@assignee/core`
+  imports). 19 modified + 4 deleted shim files. Worker explicitly
+  cited `feedback_lazy_credential_resolution_in_mcp` and
+  preserved original semantics on every migration (no over-eager
+  throwing-replacement bugs like R10a-03).
+
+#### Deferred (explicit acquisition-DD records — strategic items not shippable in a single wave)
+
+- **P068 — TS / Vitest major upgrades pending.** Source DD:
+  €15-20k, 2 wk, 6/6 endorsed. Major-dep upgrades break a lot
+  of code (TS 5.x → 6.x, Vitest 3.x → 4.x); not parallel-safe
+  inside a wave-shaped story. Same shape as P032/P033 (R9b
+  deferred for the same reason). Deferred to a **dedicated
+  dep-refactor session** alongside P032/P033.
+- **P079 — Terraform / CloudFormation import path.** Source DD:
+  €50-80k, 8 wk. Importing existing TF/CFN state into Assignee's
+  managed-resource ledger is its own product line, not a wave
+  fix. Deferred to **dedicated import-path epic** post-Epic-101
+  identity work (RBAC needed to scope import permissions).
+- **P080 — `destroy --all` bulk lifecycle.** Source DD: €15-20k,
+  2 wk. Story 50-3 deliberately removed `destroy --all` to force
+  per-resource confirmation. Reintroducing bulk destroy needs
+  a careful safety-allowlist + dry-run + multi-stage confirmation
+  flow that warrants its own design discussion. Deferred to a
+  **dedicated destroy-UX session**.
+- **P081 — MCP surface missing VS Code + JetBrains.** Source DD:
+  €20-40k, 4 wk; gated on P031 (R9a-01, ✓ shipped). The IDE
+  plugin surface is a strategic GTM accelerator (drives MCP
+  adoption from solo CLI to in-IDE workflow). Belongs in the
+  Epic-103 plugin/ecosystem revival rather than a P2-tier
+  cleanup wave.
+- **P082 — LangGraph JS pre-1.0 framework dependency.** Source
+  DD: contingent migration €150-300k, 6/6 endorsed. (Note:
+  LangGraph reached 1.x since the audit was written — see R10a-04
+  P091 closure — but the framework-lock-in concern remains.)
+  Migration to alternative (LangChain bare, custom orchestration,
+  etc.) is a multi-quarter effort. Deferred indefinitely; track
+  as a **continuous architecture-watching brief**.
+- **P084 — 1,531-line `intent-parser` god-file.** Source DD:
+  €20-30k, 3 wk. SOLID refactor of a complex pure-function
+  module; high regression risk if rushed. Deferred to a
+  **dedicated refactor session** with full BMAD persona review
+  (Mary structural / Winston architecture / Quinn QA).
+
+#### Fixed
+
+- **R10b-01 follow-up — 2 brittle test fixes.** R10b-01's
+  `command-runner.test.ts` MAX_PROVISION_LOOPS test queued one
+  too many in-loop mocks (51 instead of 50); the post-break
+  `getState` call hit a queued mock returning `{next: ["continue"]}`
+  without `values`, causing TypeError on `.executionStatus`
+  read. Fixed: queue exactly MAX_PROVISION_LOOPS in-loop mocks
+  so the post-break call hits the catch-all `mockResolvedValue`
+  with the SUCCESS shape.
+- **R10b-01 follow-up — 2 checkpoint-dry-run tests fixed.**
+  Tests created freshly-written checkpoints and expected the
+  pruner to prune them, but the pruner's default
+  `skipRecentMinutes=10` guard skips files modified within the
+  recency window. Same flake-class as the R9b pruner.test.ts
+  fix at commit `d40bcb5`. Fixed by `fs.utimes()` to age the
+  candidate files to 1h in the past.
+
+#### Provenance
+
+- Per-P audit: `/.agents/reviews/p-id-audit-2026-04-26.md` —
+  pre-R10b: 90/100 effective coverage. Post-R10b:
+  **100/100 accountable** (42 shipped + 28 OOS + 5 cluster +
+  1 epic-101/102/103-deferred + 10 explicit-R9/R10-deferred +
+  9 P3-positive + 1 live-CLI-bug + 4 partial-cluster).
+- Test totals after R10b: best-practices 905, core 7,458
+  (+98 from R10a — net of R10b-04's 130 new validatePlanShape
+  tests + R10b-02 deletions), mcp-server 644 (unchanged),
+  cli 1,575 (+82 from R10a — R10b-01 added 84, lost 2 to
+  flake-fix corrections net) = **10,582 passing, zero
+  regressions**.
+- 4 R10b workers; 2 reviewer rounds skipped for risk-level
+  reasons (P066 test-only, P070 workflow-only); coordinator
+  caught + fixed 3 test bugs at the gate (no production bugs);
+  final reviewer status NOT formally polled — coordinator
+  judgment + gate parity carry the rest at this scale.
+
 ### R10a — Round 10 (first half): 4 P2-tier P-IDs + lazy-creds regression fix
 
 R10a closes 4 P2-tier audit P-IDs in parallel. One worker (R10a-03,

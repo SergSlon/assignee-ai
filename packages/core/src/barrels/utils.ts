@@ -246,7 +246,6 @@ export {
   renderHitlConfirm,
   renderHitlCompoundConfirm,
   renderAdvancedConfirm,
-  renderApplyNowConfirm,
   renderOptionPrompt,
 } from "../utils/display-prompts/index.js";
 
