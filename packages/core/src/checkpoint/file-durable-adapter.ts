@@ -33,7 +33,7 @@ import {
 import { CheckpointError } from "../errors.js";
 import { isCheckpointExpired } from "./ttl.js";
 import { saveCheckpoint, loadCheckpoint } from "./store.js";
-import type { CheckpointerPort } from "./port.js";
+import type { CheckpointerPort } from "../ports/checkpoint-port.js";
 import { CHECKPOINT_FILE_PREFIX } from "./constants.js";
 
 /** Default checkpoint directory — mirrors the path used by store.ts callers. */

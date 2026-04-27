@@ -19,7 +19,7 @@
  * Telemetry is OFF by default (L1-F52 invariant): adapter activation
  * requires `ASSIGNEE_TELEMETRY_ADAPTER` opt-in. Absent → no-op.
  *
- * @see packages/core/src/telemetry/telemetry-port.ts
+ * @see packages/core/src/ports/telemetry-port.ts
  * @see packages/core/src/telemetry/in-memory-telemetry-adapter.ts
  * @see packages/core/src/telemetry/otel-allowlist.ts — field filtering
  */

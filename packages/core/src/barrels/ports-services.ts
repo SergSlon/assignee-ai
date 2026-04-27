@@ -35,6 +35,27 @@ export {
   type GetRequestStatusResult,
 } from "../ports/provisioning-port.js";
 
+// CheckpointerPort — hexagonal port for LangGraph HITL checkpoint adapters
+// (W4-01, MASTER-010 consolidation). Concrete adapters live in
+// `../checkpoint/` (in-memory + file-durable).
+export type { CheckpointerPort } from "../ports/checkpoint-port.js";
+
+// OIDCPort — identity verification port (W3-03, MASTER-010 consolidation).
+// Concrete in-memory adapter lives in `../identity/`.
+export type { Claims, OIDCPort } from "../ports/oidc-port.js";
+
+// AdvisoryLockPort — file/distributed advisory locking port (W4-03,
+// MASTER-010 consolidation). Concrete file adapter lives in `../locks/`.
+export type { AdvisoryLockPort } from "../ports/advisory-lock-port.js";
+
+// TelemetryPort — observability emission port (W4-05, MASTER-010
+// consolidation). Concrete in-memory adapter lives in `../telemetry/`.
+export {
+  isTelemetryEnabled,
+  emitFiltered,
+  type TelemetryPort,
+} from "../ports/telemetry-port.js";
+
 // Services — CloudFormation schema fetching (Story 31.1, 31.2)
 export {
   CloudFormationSchemaService,

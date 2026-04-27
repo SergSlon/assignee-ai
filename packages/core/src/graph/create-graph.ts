@@ -12,9 +12,9 @@
  */
 
 import { StateGraph, START, END, MemorySaver } from "@langchain/langgraph";
-import type { CheckpointerPort } from "../checkpoint/port.js";
-import type { TelemetryPort } from "../telemetry/telemetry-port.js";
-import { emitFiltered } from "../telemetry/telemetry-port.js";
+import type { CheckpointerPort } from "../ports/checkpoint-port.js";
+import type { TelemetryPort } from "../ports/telemetry-port.js";
+import { emitFiltered } from "../ports/telemetry-port.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import { GraphNode } from "../constants/graph-node.js";
 import { graphAnnotation } from "./graph-state.js";

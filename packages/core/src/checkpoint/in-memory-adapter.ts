@@ -15,7 +15,7 @@
  * format. This adapter implements the PlanCheckpoint port interface only.
  */
 
-import type { CheckpointerPort } from "./port.js";
+import type { CheckpointerPort } from "../ports/checkpoint-port.js";
 import type { PlanCheckpoint } from "../schema/checkpoint.js";
 import { isCheckpointExpired } from "./ttl.js";
 
