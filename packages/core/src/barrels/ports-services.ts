@@ -3,6 +3,17 @@ export type { LlmPort, LlmCallOptions } from "../ports/llm-port.js";
 // NOTE: MockLlmAdapter moved to `@assignee/core/testing` sub-path export
 // (Story 50-4) so production code never pulls in test doubles.
 
+// ConfigPort — abstraction over env-var / configuration lookup (MASTER-009).
+// Eliminates direct `process.env` reads scattered through core so
+// multi-tenant SaaS can inject tenant-scoped configuration adapters.
+// Default `ProcessEnvConfigAdapter` reads from `process.env`; SaaS
+// callers supply their own adapter at the composition root. NO module-
+// level singleton — every consumer takes a `ConfigPort` via DI.
+export {
+  ProcessEnvConfigAdapter,
+  type ConfigPort,
+} from "../config/config-port.js";
+
 // LLM provider identifiers (Story 50-4 Wave 5.1).
 // Concrete LlmAdapter remains in apps/cli pending future-wave lifts of
 // the dep closure (AWS_REGION, EnvVar, recordTokenUsage, logger). Apps
