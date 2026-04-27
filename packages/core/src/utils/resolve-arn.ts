@@ -36,11 +36,32 @@ import {
 } from "../config/aws-credentials.js";
 import { AWS_REGION } from "../config/constants/aws.js";
 import { STS_TIMEOUT_MS } from "../config/constants/timeouts.js";
+import {
+  type TenantId,
+  createLegacySingleTenantId,
+  tenantIdToKey,
+} from "../tenant/tenant-id.js";
+import { TenantScopedCache } from "../tenant/tenant-scoped-cache.js";
 
-/** Module-level cache: one STS lookup per CLI process. */
-let cachedAccountId: string | undefined;
-let cachedCallerArn: string | undefined;
-let cachedAccountIdLookup: Promise<string | undefined> | undefined;
+/**
+ * MASTER-008 (RW4a): per-tenant caches replacing the previous module-
+ * level singletons. The previous `let cachedAccountId: string | undefined`
+ * stamped tenant A's account ID into every subsequent tenant's display
+ * ARN — a security and correctness regression in any multi-tenant SaaS
+ * worker.
+ *
+ * Three caches:
+ *   - `accountIdCache` — STS-resolved 12-digit account ID per tenant.
+ *   - `callerArnCache` — the full caller ARN that came back with the
+ *     same STS response (piggybacks; never issues a second call).
+ *   - `inFlightLookup` — single-flight coalescing of concurrent
+ *     {@link getOperatorAccountId} calls per tenant. Without this, two
+ *     simultaneous result-formatter calls on the same tenant would
+ *     each issue a separate STS call.
+ */
+const accountIdCache = new TenantScopedCache<string>();
+const callerArnCache = new TenantScopedCache<string>();
+const inFlightLookup = new Map<string, Promise<string | undefined>>();
 
 /**
  * Returns the account ID associated with the operator credentials.
@@ -59,11 +80,19 @@ let cachedAccountIdLookup: Promise<string | undefined> | undefined;
  * so the helper still returns `undefined` rather than propagating —
  * the surface contract (undefined on failure) is preserved.
  */
-export async function getOperatorAccountId(): Promise<string | undefined> {
-  if (cachedAccountId !== undefined) return cachedAccountId;
-  if (cachedAccountIdLookup) return cachedAccountIdLookup;
+export async function getOperatorAccountId(
+  tenantId?: TenantId,
+): Promise<string | undefined> {
+  // TODO(SaaS): replace with caller-passed TenantId once
+  // result-formatter / preflight-guard thread it through.
+  const tid = tenantId ?? createLegacySingleTenantId();
+  const cached = accountIdCache.get(tid);
+  if (cached !== undefined) return cached;
+  const tidKey = tenantIdToKey(tid);
+  const inFlight = inFlightLookup.get(tidKey);
+  if (inFlight) return inFlight;
 
-  cachedAccountIdLookup = (async () => {
+  const lookup = (async () => {
     try {
       // Wave 10 P0-2: requireAssigneeCredentials throws
       // MissingAssigneeCredentialsError if ASSIGNEE_OPERATOR_* env
@@ -115,11 +144,11 @@ export async function getOperatorAccountId(): Promise<string | undefined> {
       }
 
       if (identity.Account) {
-        cachedAccountId = identity.Account;
+        accountIdCache.set(tid, identity.Account);
         if (identity.Arn) {
-          cachedCallerArn = identity.Arn;
+          callerArnCache.set(tid, identity.Arn);
         }
-        return cachedAccountId;
+        return identity.Account;
       }
       return undefined;
     } catch (err) {
@@ -132,10 +161,13 @@ export async function getOperatorAccountId(): Promise<string | undefined> {
     }
   })();
 
-  const result = await cachedAccountIdLookup;
-  // Reset the in-flight ref so a future failure can retry.
-  cachedAccountIdLookup = undefined;
-  return result;
+  inFlightLookup.set(tidKey, lookup);
+  try {
+    return await lookup;
+  } finally {
+    // Reset the in-flight ref so a future failure can retry.
+    inFlightLookup.delete(tidKey);
+  }
 }
 
 /**
@@ -151,23 +183,39 @@ export async function getOperatorAccountId(): Promise<string | undefined> {
  * Used by preflight-guard to supply `policy_source_arn` to the IAM MCP
  * server's `simulate_principal_policy` tool, which requires it.
  */
-export async function getOperatorCallerArn(): Promise<string | undefined> {
-  if (cachedCallerArn !== undefined) return cachedCallerArn;
+export async function getOperatorCallerArn(
+  tenantId?: TenantId,
+): Promise<string | undefined> {
+  const tid = tenantId ?? createLegacySingleTenantId();
+  const cached = callerArnCache.get(tid);
+  if (cached !== undefined) return cached;
   // Trigger the STS lookup if it hasn't happened yet — this populates
-  // cachedCallerArn as a side-effect.
-  await getOperatorAccountId();
-  return cachedCallerArn;
+  // callerArnCache as a side-effect of the same STS call that resolves
+  // the account ID.
+  await getOperatorAccountId(tid);
+  return callerArnCache.get(tid);
 }
 
 /**
  * Resets the cached account ID and caller ARN. Used by tests; production
  * code should never call this — the cache is correct for the duration of
  * one CLI process and the operator credentials cannot change mid-run.
+ *
+ * Tenant-scoped: pass `tenantId` to evict only that tenant's caches.
+ * No argument → wipe every tenant. Existing tests call this with no
+ * argument between cases (`resolve-arn.test.ts`,
+ * `preflight-guard.test.ts`), which still works.
  */
-export function resetAccountIdCache(): void {
-  cachedAccountId = undefined;
-  cachedCallerArn = undefined;
-  cachedAccountIdLookup = undefined;
+export function resetAccountIdCache(tenantId?: TenantId): void {
+  if (tenantId) {
+    accountIdCache.clear(tenantId);
+    callerArnCache.clear(tenantId);
+    inFlightLookup.delete(tenantIdToKey(tenantId));
+  } else {
+    accountIdCache.clear();
+    callerArnCache.clear();
+    inFlightLookup.clear();
+  }
 }
 
 /**
@@ -191,11 +239,12 @@ export async function resolveResourceArn(args: {
   resourceType: string;
   identifier: string | undefined;
   region?: string;
+  tenantId?: TenantId;
 }): Promise<string | undefined> {
   if (!args.identifier) return undefined;
   if (isArn(args.identifier)) return args.identifier;
 
-  const accountId = await getOperatorAccountId();
+  const accountId = await getOperatorAccountId(args.tenantId);
   // Wave 10 P1-2: strict guard. Previously this fell through to
   // buildResourceArn with accountId="" which produced malformed ARNs.
   // Returning undefined here lets the caller's `?? state.resourceArn`

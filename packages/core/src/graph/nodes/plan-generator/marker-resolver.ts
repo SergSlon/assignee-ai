@@ -18,6 +18,11 @@ import {
 } from "@/index.js";
 import { tryAssigneeCredentials } from "@/config/aws-credentials.js";
 import { extractIdentifierFromArn } from "@/config/arn-helpers.js";
+import {
+  type TenantId,
+  createLegacySingleTenantId,
+} from "@/tenant/tenant-id.js";
+import { TenantScopedCache } from "@/tenant/tenant-scoped-cache.js";
 
 /**
  * Lookup function returning the sorted list of AvailabilityZone names for a
@@ -42,17 +47,28 @@ export type AccountIdLookup = () => Promise<string>;
  */
 /**
  * Default account-ID lookup — calls STS GetCallerIdentity once per
- * process and caches. Used when no `accountIdLookup` is supplied via
+ * tenant and caches. Used when no `accountIdLookup` is supplied via
  * resolver options (production path). Unit tests supply a deterministic
  * lookup so they don't need STS credentials.
+ *
+ * MASTER-008 (RW4a): the cache is now keyed per-tenant. Previously a
+ * single module-level `ACCOUNT_ID_CACHE` returned tenant A's account
+ * to tenant B in a multi-tenant SaaS worker.
  */
-let ACCOUNT_ID_CACHE: string | undefined;
+const accountIdCache = new TenantScopedCache<string>();
 export function __resetAccountIdCacheForTests(): void {
-  ACCOUNT_ID_CACHE = undefined;
+  accountIdCache.clear();
 }
-export function defaultAccountIdLookup(region: string): AccountIdLookup {
+export function defaultAccountIdLookup(
+  region: string,
+  tenantId?: TenantId,
+): AccountIdLookup {
+  // TODO(SaaS): make tenantId required once `resolveCompoundMarkers` callers
+  // thread it through from graph state instead of falling back to env vars.
+  const tid = tenantId ?? { ...createLegacySingleTenantId(), region };
   return async () => {
-    if (ACCOUNT_ID_CACHE) return ACCOUNT_ID_CACHE;
+    const cached = accountIdCache.get(tid);
+    if (cached) return cached;
     const { STSClient, GetCallerIdentityCommand } =
       await import("@aws-sdk/client-sts");
     const creds = tryAssigneeCredentials("operator");
@@ -69,7 +85,7 @@ export function defaultAccountIdLookup(region: string): AccountIdLookup {
       if (!res.Account) {
         throw new Error("STS GetCallerIdentity returned no Account.");
       }
-      ACCOUNT_ID_CACHE = res.Account;
+      accountIdCache.set(tid, res.Account);
       return res.Account;
     } finally {
       sts.destroy();
@@ -77,9 +93,35 @@ export function defaultAccountIdLookup(region: string): AccountIdLookup {
   };
 }
 
-const AZ_CACHE: Map<string, string[]> = new Map();
-export async function defaultAzLookup(region: string): Promise<string[]> {
-  const cached = AZ_CACHE.get(region);
+/**
+ * Per-tenant region→AZ-list cache. AZ names are stable per (account,
+ * region) pair — different accounts may have different AZ visibility
+ * because of opt-in regions and per-account AZ name mapping
+ * (`use1-az1` for tenant A and tenant B map to physically different
+ * AZs even when the public name `us-east-1a` is identical). Scoping
+ * by tenant therefore matters even though the public name string
+ * usually matches.
+ */
+const azCache = new TenantScopedCache<Map<string, string[]>>();
+
+function getOrCreateAzMap(tenantId: TenantId): Map<string, string[]> {
+  let map = azCache.get(tenantId);
+  if (!map) {
+    map = new Map<string, string[]>();
+    azCache.set(tenantId, map);
+  }
+  return map;
+}
+
+export async function defaultAzLookup(
+  region: string,
+  tenantId?: TenantId,
+): Promise<string[]> {
+  // TODO(SaaS): make tenantId required once `resolveCompoundMarkers`
+  // threads it through from graph state.
+  const tid = tenantId ?? { ...createLegacySingleTenantId(), region };
+  const tenantMap = getOrCreateAzMap(tid);
+  const cached = tenantMap.get(region);
   if (cached) return cached;
   const operatorCreds = tryAssigneeCredentials("operator");
   if (!operatorCreds) {
@@ -106,16 +148,16 @@ export async function defaultAzLookup(region: string): Promise<string[]> {
         `DescribeAvailabilityZones returned no zones for region "${region}".`,
       );
     }
-    AZ_CACHE.set(region, zones);
+    tenantMap.set(region, zones);
     return zones;
   } finally {
     ec2.destroy();
   }
 }
 
-/** Test-only hook: clears the region→AZ cache so fixtures don't leak between tests. */
+/** Test-only hook: clears the per-tenant region→AZ cache so fixtures don't leak between tests. */
 export function __resetAzCacheForTests(): void {
-  AZ_CACHE.clear();
+  azCache.clear();
 }
 
 /**

@@ -29,6 +29,11 @@ import {
   getFreeTierMaps,
   type FreeTierNote,
 } from "./free-tier/maps.js";
+import {
+  type TenantId,
+  createLegacySingleTenantId,
+} from "../tenant/tenant-id.js";
+import { TenantScopedCache } from "../tenant/tenant-scoped-cache.js";
 
 // Preserve public API: re-export data-layer symbols so existing consumers
 // (`import { … } from "./free-tier.js"`) keep resolving post-extraction.
@@ -41,30 +46,68 @@ export {
   type FreeTierMaps,
 } from "./free-tier/maps.js";
 
-/** Module-level cache. `null` = not yet loaded; `undefined` = missing/invalid. */
-let cachedAccountDate: string | undefined | null = null;
+/**
+ * MASTER-008 (RW4a): per-tenant cache of the `aws_account_created`
+ * date read from `~/.assignee/config.yaml`.
+ *
+ * Two sentinel meanings:
+ *   - cache miss (no entry) → "not yet loaded"; the next read attempts
+ *     the file system.
+ *   - cache hit with `undefined` → "loaded but file/key absent or
+ *     unreadable"; subsequent reads short-circuit without re-touching
+ *     the disk.
+ *
+ * Distinguishing these via {@link TenantScopedCache.has} replaces the
+ * previous `null | undefined | string` triple-state on a module-local
+ * `let`. The previous code returned tenant A's account-creation date
+ * to tenant B for the lifetime of the process — wrong free-tier
+ * eligibility decisions for every subsequent tenant.
+ */
+const accountDateCache = new TenantScopedCache<string | undefined>();
 
 /**
- * Reads `aws_account_created` from `~/.assignee/config.yaml` (cached).
- * NEVER throws — returns `undefined` on any error.
+ * Reads `aws_account_created` from `~/.assignee/config.yaml` (cached
+ * per tenant). NEVER throws — returns `undefined` on any error.
+ *
+ * `tenantId` is optional during the migration: when omitted, falls back
+ * to {@link createLegacySingleTenantId} which reads
+ * `AWS_ACCOUNT_ID`/`AWS_REGION` from env. Single-tenant CLI mode is
+ * safe; multi-tenant SaaS callers MUST pass an explicit `tenantId`.
+ *
+ * TODO(SaaS): replace the legacy fallback once
+ * `preflight-guard/free-tier.ts` (the one production caller) threads
+ * tenantId through from graph state.
  */
-export function loadAccountCreatedDate(): string | undefined {
-  if (cachedAccountDate !== null) return cachedAccountDate;
+export function loadAccountCreatedDate(
+  tenantId?: TenantId,
+): string | undefined {
+  const tid = tenantId ?? createLegacySingleTenantId();
+  if (accountDateCache.has(tid)) return accountDateCache.get(tid);
+  let result: string | undefined;
   try {
     const configPath = join(homedir(), ASSIGNEE_DIR, FileName.CONFIG);
     const content = readFileSync(configPath, "utf-8");
     const parsed = parseYaml(content) as Record<string, unknown> | undefined;
     const dateValue = parsed?.["aws_account_created"];
-    cachedAccountDate = typeof dateValue === "string" ? dateValue : undefined;
+    result = typeof dateValue === "string" ? dateValue : undefined;
   } catch {
-    cachedAccountDate = undefined;
+    result = undefined;
   }
-  return cachedAccountDate;
+  accountDateCache.set(tid, result);
+  return result;
 }
 
-/** @internal Resets the cached account date. Testing only. */
-export function _resetAccountDateCache(): void {
-  cachedAccountDate = null;
+/**
+ * @internal Resets the cached account date. Testing only.
+ *
+ * Tenant-scoped: pass `tenantId` to evict only that tenant's cache.
+ * No argument → wipe every tenant. The `free-tier.test.ts` and the
+ * pricing-decomposer tests call this with no argument between cases,
+ * which still works (clears every cached tenant).
+ */
+export function _resetAccountDateCache(tenantId?: TenantId): void {
+  if (tenantId) accountDateCache.clear(tenantId);
+  else accountDateCache.clear();
 }
 
 /**
@@ -116,13 +159,18 @@ export function getFreeTierNote(
 }
 
 /**
- * IO entry: reads the YAML config (cached) then delegates to the pure
- * {@link getFreeTierNote} classifier. NEVER throws.
+ * IO entry: reads the YAML config (cached per tenant) then delegates
+ * to the pure {@link getFreeTierNote} classifier. NEVER throws.
+ *
+ * `tenantId` is optional during the migration; see
+ * {@link loadAccountCreatedDate} for the fallback semantics and the
+ * SaaS-mode TODO.
  */
 export function getFreeTierNoteWithConfig(
   resourceType: string,
+  tenantId?: TenantId,
 ): FreeTierNote | null {
-  return getFreeTierNote(resourceType, loadAccountCreatedDate());
+  return getFreeTierNote(resourceType, loadAccountCreatedDate(tenantId));
 }
 
 /** Whether `dateStr` is within 12 months from today. Day-level granularity. */
