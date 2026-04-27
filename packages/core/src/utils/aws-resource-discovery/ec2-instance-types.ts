@@ -2,6 +2,16 @@
  * EC2 instance-type discovery — groups current-generation instance types
  * by family category (burstable, general, compute, memory, …) so the
  * option-elicitor can present a two-step category → size selector.
+ *
+ * MASTER-008 (RW4a): the previous module-level
+ * `let instanceTypeCache: InstanceTypeCategory[] | null` returned
+ * tenant A's discovered instance types to tenant B for the lifetime
+ * of the process. Two AWS accounts in two different regions have
+ * different instance-type availability (graviton families are not in
+ * every region; some accounts have opt-in regions enabled), so the
+ * cross-tenant leak silently surfaced unavailable instance types in
+ * the option elicitor for the second tenant. Replaced with a
+ * {@link TenantScopedCache} keyed on (accountId, region, roleArn?).
  */
 
 import {
@@ -17,16 +27,33 @@ import {
   type DiscoveryOption,
   type InstanceTypeCategory,
 } from "./types.js";
+import {
+  type TenantId,
+  createLegacySingleTenantId,
+} from "../../tenant/tenant-id.js";
+import { TenantScopedCache } from "../../tenant/tenant-scoped-cache.js";
 
-let instanceTypeCache: InstanceTypeCategory[] | null = null;
+const instanceTypeCache = new TenantScopedCache<InstanceTypeCategory[]>();
 
 /**
  * Discovers available EC2 instance types from the account's region.
  * Groups them by family category for the two-step category select.
  * Returns [] on failure — caller falls back to hardcoded categories.
+ *
+ * `tenantId` is optional during the migration: when omitted, falls
+ * back to {@link createLegacySingleTenantId} which derives identity
+ * from `AWS_ACCOUNT_ID` / `AWS_REGION` env vars.
+ *
+ * TODO(SaaS): make `tenantId` required once
+ * `option-elicitor/parallel-enrichment.ts` (the one production caller)
+ * threads it through from graph state.
  */
-export async function discoverInstanceTypes(): Promise<InstanceTypeCategory[]> {
-  if (instanceTypeCache) return instanceTypeCache;
+export async function discoverInstanceTypes(
+  tenantId?: TenantId,
+): Promise<InstanceTypeCategory[]> {
+  const tid = tenantId ?? createLegacySingleTenantId();
+  const cached = instanceTypeCache.get(tid);
+  if (cached) return cached;
 
   try {
     const categories = await (async () => {
@@ -119,10 +146,21 @@ export async function discoverInstanceTypes(): Promise<InstanceTypeCategory[]> {
     })();
 
     if (categories.length > 0) {
-      instanceTypeCache = categories;
+      instanceTypeCache.set(tid, categories);
     }
     return categories;
   } catch {
     return [];
   }
+}
+
+/**
+ * @internal Resets the cached instance-type catalogue. Testing only.
+ *
+ * Tenant-scoped: pass `tenantId` to evict only that tenant's cache.
+ * No argument → wipe every tenant.
+ */
+export function _resetInstanceTypeCacheForTests(tenantId?: TenantId): void {
+  if (tenantId) instanceTypeCache.clear(tenantId);
+  else instanceTypeCache.clear();
 }
