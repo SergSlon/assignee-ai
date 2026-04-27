@@ -19,12 +19,38 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   # Skip deletions (push :branch)
   [ "$local_sha" = "0000000000000000000000000000000000000000" ] && continue
 
-  # Skip tag pushes — tags only mark historical commits, don't introduce code.
-  # Release workflow (release.yml) is tag-driven dispatch and must not be
-  # blocked by reviewer-token requirements that predate the BAN.
+  # Tag-push handling (R3-003 fix): a blanket tag exemption was a security
+  # regression of MASTER-004 — an operator could `git tag <unreviewed-sha>
+  # && git push origin <tag>` to bypass the reviewer-evidence gate. The
+  # exemption now fires ONLY when the tagged commit is reachable from
+  # origin/<default> (i.e. the commit was previously pushed via a branch
+  # and reviewer-checked at that time). Tags pointing to commits not yet
+  # on origin/<default> fall through to a single-commit reviewer-evidence
+  # check on the tagged SHA itself.
+  is_tag_push=0
   case "$local_ref" in
     refs/tags/*)
-      continue
+      default_branch_for_tag=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@')
+      if [ -z "$default_branch_for_tag" ]; then
+        for candidate in main master develop trunk; do
+          if git rev-parse --verify --quiet "refs/remotes/origin/$candidate" >/dev/null 2>&1; then
+            default_branch_for_tag=$candidate
+            break
+          fi
+        done
+      fi
+      default_branch_for_tag=${default_branch_for_tag:-main}
+      if git rev-parse --verify --quiet "refs/remotes/origin/$default_branch_for_tag" >/dev/null 2>&1 \
+         && git merge-base --is-ancestor "$local_sha" "refs/remotes/origin/$default_branch_for_tag" >/dev/null 2>&1; then
+        # Tagged commit is already on origin/<default> — was reviewer-checked
+        # when the branch carrying it was pushed. Safe to exempt.
+        continue
+      fi
+      # Tag points to a commit not yet on origin/<default>. Require
+      # reviewer evidence on the tagged commit itself; range is just
+      # that single commit.
+      range_args="$local_sha~..$local_sha"
+      is_tag_push=1
       ;;
   esac
 
@@ -35,7 +61,11 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   # commits 51..N on first push of a long branch — soft re-emergence of
   # BH-001. Failing closed forces the operator to fetch the default ref
   # or set ASSIGNEE_REVIEWER_BAN_BYPASS=1 with a justification.
-  if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+  #
+  # Skip this block entirely when range_args was already set by the
+  # tag-push case above — otherwise we'd overwrite the single-commit
+  # range and silently exempt the unpushed tagged commit.
+  if [ "$is_tag_push" = "0" ] && [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
     default_remote_branch=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@')
     if [ -z "$default_remote_branch" ]; then
       for candidate in main master develop trunk; do
@@ -57,7 +87,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       echo "OR set ASSIGNEE_REVIEWER_BAN_BYPASS=1 with a justification." >&2
       exit 1
     fi
-  else
+  elif [ "$is_tag_push" = "0" ]; then
     range_args="$remote_sha..$local_sha"
   fi
 
