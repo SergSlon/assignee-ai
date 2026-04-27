@@ -1234,16 +1234,17 @@ describe("resourceProvisionerNode", () => {
   });
 
   // ── LangGraph state immutability contract (Item F) ──────────────────────────
-  // LangGraph nodes MUST return new state objects via the reducer and never
-  // mutate the input state in place. resource-provisioner.ts currently violates
-  // this in two places:
-  //   1. EIP allocation path: `state.desiredState[CfnKey.ALLOCATION_ID] = ...`
-  //   2. SSH key failure path: `delete state.desiredState[CfnKey.KEY_NAME]`
-  //
-  // These tests are SKIPPED until Item F lands the code fix. Once the
-  // resource-provisioner returns a cloned desiredState (via the partial
-  // update returned to the reducer) instead of mutating the input, unskip
-  // these tests by changing `it.skip` to `it`.
+  // FIX LANDED 2026-04-26 (MASTER-013) — state.desiredState is now immutable;
+  // tests below verify. The orchestrator clones via `safeCloneDesiredState`
+  // (resource-provisioner.ts:80) before passing to any helper, and returns
+  // the cloned object to the reducer in every code path. The two historical
+  // mutation sites — `desiredState[CfnKey.ALLOCATION_ID] = …` in
+  // eip-allocator.ts and `delete desiredState[CfnKey.KEY_NAME]` in
+  // ssh-keypair.ts — now operate on the local clone, never on
+  // `state.desiredState`. Tests below assert (a) input reference identity
+  // is preserved, (b) input contents are deep-equal to the pre-call clone,
+  // and (c) the returned partial carries a NEW object with the resolved
+  // values via the reducer.
   describe("LangGraph state immutability (Item F)", () => {
     it("EIP allocation must NOT mutate the input state.desiredState in place", async () => {
       // DescribeAddresses returns no existing EIPs, then AllocateAddress + CreateTags succeed
