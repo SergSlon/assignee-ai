@@ -482,14 +482,25 @@ jobs:
     needs: cross-platform-build
     runs-on: ubuntu-latest
     permissions:
-      # security-events: write is REQUIRED for github/codeql-action/upload-sarif
-      # to push the Grype SARIF report to the GitHub Security tab. Workflow-level
-      # `permissions:` (contents+id-token) does NOT propagate to jobs that
-      # declare their own permissions block, and the default for jobs without
-      # a block is `contents: read` only — SARIF upload would 403.
+      # GH Actions semantics: a job-level `permissions:` block REPLACES the
+      # workflow-level block, it does NOT merge. Every permission this job
+      # needs MUST be declared explicitly here.
+      #
+      # contents: write — required by softprops/action-gh-release (Attach SBOM
+      #   to GitHub Release step). Without it the upload 403s. This is the
+      #   permission that the workflow-level block would have provided.
+      contents: write
+      # security-events: write — required by github/codeql-action/upload-sarif
+      #   to push the Grype SARIF report to the GitHub Security tab.
       security-events: write
-      # contents: read is needed for actions/checkout.
-      contents: read
+      # id-token: write — required for OIDC-based signed attestations. The
+      #   anchore/sbom-action and any future cosign/attest step in this job
+      #   relies on the workflow's OIDC identity; mirrors the workflow-level
+      #   declaration that the job-level block would otherwise mask.
+      id-token: write
+      # actions: read — workflow context lookups (download-artifact / job
+      #   metadata) made by the SBOM action when correlating the run.
+      actions: read
     # Job-level env so the step-level `if: env.ASSIGNEE_RELEASE_PUBLISH == '1'`
     # below (Attach SBOM to GitHub Release) actually evaluates against this
     # value. A step-level `env:` block does NOT influence the same step's
