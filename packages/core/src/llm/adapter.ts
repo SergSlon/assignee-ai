@@ -16,6 +16,10 @@ import type { LlmPort, LlmCallOptions } from "../ports/llm-port.js";
 import { AWS_REGION } from "../config/constants/aws.js";
 import { LlmProvider } from "../constants/llm-providers.js";
 import { EnvVar } from "../constants/env-vars.js";
+import {
+  ProcessEnvConfigAdapter,
+  type ConfigPort,
+} from "../config/config-port.js";
 import { recordTokenUsage, type RawLlmUsage } from "../utils/token-usage.js";
 import { redactAccountIdsInPrompt } from "../utils/redact.js";
 import {
@@ -74,9 +78,16 @@ export class LlmAdapter implements LlmPort {
     }
   }
 
-  /** Returns true if the operator has explicitly opted out of the guardrail warning. */
-  static isGuardrailDisabled(): boolean {
-    const val = process.env[EnvVar.BEDROCK_GUARDRAIL_DISABLE];
+  /**
+   * Returns true if the operator has explicitly opted out of the guardrail warning.
+   *
+   * MASTER-009: accepts an optional `ConfigPort` so SaaS callers can
+   * supply a tenant-scoped lookup. When omitted, falls back to a fresh
+   * `ProcessEnvConfigAdapter` (legacy single-tenant CLI behaviour).
+   */
+  static isGuardrailDisabled(config?: ConfigPort): boolean {
+    const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
+    const val = effectiveConfig.get(EnvVar.BEDROCK_GUARDRAIL_DISABLE);
     return val === "1" || val === "true";
   }
 

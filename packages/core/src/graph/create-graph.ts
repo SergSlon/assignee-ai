@@ -47,6 +47,10 @@ import { LlmAdapter } from "../llm/adapter.js";
 import { tryAssigneeCredentials } from "../config/aws-credentials.js";
 import { AWS_REGION } from "../config/constants/aws.js";
 import { EnvVar } from "../constants/env-vars.js";
+import {
+  ProcessEnvConfigAdapter,
+  type ConfigPort,
+} from "../config/config-port.js";
 import type { LlmPort } from "../index.js";
 import {
   isRecordingEnabled,
@@ -77,6 +81,12 @@ export interface CreateGraphOptions {
    * is excluded. Absent -> no-op (telemetry off by default).
    */
   telemetryAdapter?: TelemetryPort;
+  /**
+   * MASTER-009: optional ConfigPort. SaaS callers can supply a
+   * tenant-scoped configuration adapter; CLI callers may omit and
+   * the factory will fall back to a fresh `ProcessEnvConfigAdapter`.
+   */
+  config?: ConfigPort;
 }
 
 // W4-05 telemetry node wrapper
@@ -132,6 +142,11 @@ export function createGraph(
   tools: StructuredTool[] = [],
   options: CreateGraphOptions = {},
 ) {
+  // MASTER-009: ConfigPort threading — tenant-scoped lookup when supplied,
+  // else fall back to a fresh process-env adapter for legacy single-tenant
+  // CLI / test behaviour.
+  const effectiveConfig = options.config ?? new ProcessEnvConfigAdapter();
+
   // R10a-03 follow-up (per `feedback_lazy_credential_resolution_in_mcp`):
   // graph construction MUST use lazy credential resolution. The earlier
   // `operatorCredentials()` returned empty-string fallbacks + a one-time
@@ -142,7 +157,7 @@ export function createGraph(
   // Restore lenient semantics here; downstream SDK calls fail fast on
   // actual use, which is the correct blast-radius for missing creds —
   // not at graph construction time.
-  const tryCreds = tryAssigneeCredentials("operator");
+  const tryCreds = tryAssigneeCredentials("operator", effectiveConfig);
   const opCreds = {
     accessKeyId: tryCreds?.accessKeyId ?? "",
     secretAccessKey: tryCreds?.secretAccessKey ?? "",
@@ -152,7 +167,7 @@ export function createGraph(
   const cloudClient = createCloudControlClient(opCreds);
 
   // Story 9.7: Attach recording middleware to CloudControl client when recording enabled
-  if (options.recorder && isRecordingEnabled()) {
+  if (options.recorder && isRecordingEnabled(effectiveConfig)) {
     addRecordingMiddleware(cloudClient, options.recorder, "CloudControl");
   }
 
@@ -166,11 +181,11 @@ export function createGraph(
     options.llmClient ??
     new LlmAdapter({
       modelString:
-        process.env[EnvVar.ASSIGNEE_LLM_DEFAULT] ??
+        effectiveConfig.get(EnvVar.ASSIGNEE_LLM_DEFAULT) ??
         // Back-compat: read legacy ASSIGNEE_MODEL env var (deprecated alias).
-        process.env["ASSIGNEE_MODEL"],
-      guardrailId: process.env[EnvVar.BEDROCK_GUARDRAIL_ID],
-      guardrailVersion: process.env[EnvVar.BEDROCK_GUARDRAIL_VERSION],
+        effectiveConfig.get("ASSIGNEE_MODEL"),
+      guardrailId: effectiveConfig.get(EnvVar.BEDROCK_GUARDRAIL_ID),
+      guardrailVersion: effectiveConfig.get(EnvVar.BEDROCK_GUARDRAIL_VERSION),
     });
 
   const intentParserNode = createIntentParserNode({ llmClient: llmAdapter });

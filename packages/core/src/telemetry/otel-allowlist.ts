@@ -35,6 +35,10 @@ import {
   stripSensitiveFromElicited,
   ELICITED_REDACTED_VALUE,
 } from "../utils/redact.js";
+import {
+  ProcessEnvConfigAdapter,
+  type ConfigPort,
+} from "../config/config-port.js";
 
 // ── Privacy classification type ────────────────────────────────────────
 
@@ -221,9 +225,14 @@ export const FIELD_PRIVACY_MAP: ReadonlyMap<string, PrivacyClass> = new Map(
  * Opt-in requires `ASSIGNEE_OTEL_INCLUDE_PII=1`.
  *
  * Default: false (PII stripped).
+ *
+ * MASTER-009: accepts an optional `ConfigPort` so SaaS callers can
+ * supply a tenant-scoped lookup. When omitted, falls back to a fresh
+ * `ProcessEnvConfigAdapter` (legacy single-tenant CLI behaviour).
  */
-export function isPiiIncluded(): boolean {
-  return process.env[EnvVar.ASSIGNEE_OTEL_INCLUDE_PII] === "1";
+export function isPiiIncluded(config?: ConfigPort): boolean {
+  const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
+  return effectiveConfig.get(EnvVar.ASSIGNEE_OTEL_INCLUDE_PII) === "1";
 }
 
 // ── Filter function ────────────────────────────────────────────────────

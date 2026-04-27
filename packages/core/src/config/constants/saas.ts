@@ -13,6 +13,12 @@
 import { EnvVar } from "../../constants/env-vars.js";
 import { assertValidUrl } from "../../utils/url-validator.js";
 
+// MIGRATION-NOTE(M-009): the BEDROCK_MODEL_ID and SAAS_API_URL constants
+// below derive from `process.env` at module load. Multi-tenant SaaS will
+// need request-scoped lookup via `ConfigPort` — see deriveBedrockModelId()
+// and deriveSaasApiUrl() for the two reads. Single-tenant CLI captures the
+// value at module load — fine today.
+
 /**
  * W5-01: Bedrock model ID. When `BEDROCK_MODEL_ID` env var is set, use
  * that value verbatim. Otherwise derive a region-aware inference profile:

@@ -62,6 +62,9 @@ export const MAX_PROVISION_LOOPS = 50;
 /** Auto-cleanup throttle interval in ms (1 hour). */
 export const AUTO_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
+// MIGRATION-NOTE(M-009): process-lifetime config; multi-tenant SaaS will
+// need request-scoped lookup via `ConfigPort.getInt(EnvVar.ASSIGNEE_ORG_POLICY_TTL_MS, 300000)`.
+// Single-tenant CLI captures the value at module load — fine today.
 /** TTL in ms for cached org policy (default 5 minutes, env override). */
 export const ORG_POLICY_TTL_MS = parseInt(
   process.env[EnvVar.ASSIGNEE_ORG_POLICY_TTL_MS] ?? "300000",

@@ -20,6 +20,8 @@
  * @see feedback_lazy_credential_resolution_in_mcp.md
  */
 
+import { ProcessEnvConfigAdapter, type ConfigPort } from "./config-port.js";
+
 /** Minimal AWS credential identity shape (mirrors @aws-sdk/types AwsCredentialIdentity). */
 export interface AwsCredentialIdentity {
   accessKeyId: string;
@@ -70,7 +72,9 @@ export interface OperatorCredentialResult {
  */
 export async function resolveOperatorCredentialProvider(
   profile?: string,
+  config?: ConfigPort,
 ): Promise<OperatorCredentialResult> {
+  const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
   // Dynamic import — @aws-sdk/credential-providers is declared in the CLI
   // app's package.json and resolvable via the monorepo's shared node_modules.
   // The "as string" cast bypasses TypeScript's literal-string import-resolution
@@ -90,12 +94,16 @@ export async function resolveOperatorCredentialProvider(
   // command-runner/credentials.ts auto-promotes AWS_* to ASSIGNEE_OPERATOR_*
   // before any command runs. By the time we get here, if either set is present
   // it's in ASSIGNEE_OPERATOR_*. We therefore check only those vars.
-  const assigneeKey = process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"]?.trim();
-  const assigneeSecret =
-    process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"]?.trim();
+  const assigneeKey = effectiveConfig
+    .get("ASSIGNEE_OPERATOR_ACCESS_KEY_ID")
+    ?.trim();
+  const assigneeSecret = effectiveConfig
+    .get("ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY")
+    ?.trim();
   if (assigneeKey && assigneeSecret) {
     const sessionToken =
-      process.env["ASSIGNEE_OPERATOR_SESSION_TOKEN"]?.trim() || undefined;
+      effectiveConfig.get("ASSIGNEE_OPERATOR_SESSION_TOKEN")?.trim() ||
+      undefined;
     const staticCreds: AwsCredentialIdentity = {
       accessKeyId: assigneeKey,
       secretAccessKey: assigneeSecret,
@@ -109,7 +117,7 @@ export async function resolveOperatorCredentialProvider(
   }
 
   // ── Priority 3: Named profile (--profile flag or AWS_PROFILE) ─────────────
-  const resolvedProfile = profile ?? process.env["AWS_PROFILE"];
+  const resolvedProfile = profile ?? effectiveConfig.get("AWS_PROFILE");
   if (resolvedProfile) {
     const provider = fromIni({ profile: resolvedProfile });
     return {
@@ -122,7 +130,9 @@ export async function resolveOperatorCredentialProvider(
   // ── Priority 4: Default provider chain ────────────────────────────────────
   // fromNodeProviderChain includes: env, ini/config, SSO, IMDS, ECS, etc.
   const provider = fromNodeProviderChain({
-    clientConfig: { region: process.env["AWS_REGION"] || "us-east-1" },
+    clientConfig: {
+      region: effectiveConfig.get("AWS_REGION") || "us-east-1",
+    },
   });
 
   return {

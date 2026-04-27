@@ -12,37 +12,49 @@ import { AWS_REGION } from "../config/constants/aws.js";
 import { EnvVar } from "../constants/env-vars.js";
 import { LlmProvider } from "../constants/llm-providers.js";
 import { assertValidUrl } from "../utils/url-validator.js";
+import {
+  ProcessEnvConfigAdapter,
+  type ConfigPort,
+} from "../config/config-port.js";
 import type { ParsedModel } from "./model-parser.js";
 
 /**
  * Create a Vercel AI SDK LanguageModel for the given parsed model.
  * Dynamically imports the provider package to avoid loading unused SDKs.
+ *
+ * MASTER-009: accepts an optional `ConfigPort` so SaaS callers can
+ * supply a tenant-scoped lookup. When omitted, falls back to a fresh
+ * `ProcessEnvConfigAdapter` (legacy single-tenant CLI behaviour).
  */
 export async function createLanguageModel(
   parsed: ParsedModel,
+  config?: ConfigPort,
 ): Promise<LanguageModel> {
+  const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
   switch (parsed.provider) {
     case LlmProvider.ANTHROPIC: {
-      if (!process.env["ANTHROPIC_API_KEY"]) {
+      const apiKey = effectiveConfig.get("ANTHROPIC_API_KEY");
+      if (!apiKey) {
         throw new LlmError(
           `ANTHROPIC_API_KEY environment variable is required for ${LlmProvider.ANTHROPIC}/ models.`,
         );
       }
       const { createAnthropic } = await import("@ai-sdk/anthropic");
       const anthropic = createAnthropic({
-        apiKey: process.env["ANTHROPIC_API_KEY"],
+        apiKey,
       });
       return anthropic(parsed.modelId);
     }
 
     case LlmProvider.OPENAI: {
-      if (!process.env["OPENAI_API_KEY"]) {
+      const apiKey = effectiveConfig.get("OPENAI_API_KEY");
+      if (!apiKey) {
         throw new LlmError(
           `OPENAI_API_KEY environment variable is required for ${LlmProvider.OPENAI}/ models.`,
         );
       }
       const { createOpenAI } = await import("@ai-sdk/openai");
-      const openai = createOpenAI({ apiKey: process.env["OPENAI_API_KEY"] });
+      const openai = createOpenAI({ apiKey });
       return openai(parsed.modelId);
     }
 
@@ -50,15 +62,15 @@ export async function createLanguageModel(
       const { createAmazonBedrock } = await import("@ai-sdk/amazon-bedrock");
       const bedrock = createAmazonBedrock({
         region: AWS_REGION,
-        accessKeyId: process.env[EnvVar.OPERATOR_ACCESS_KEY],
-        secretAccessKey: process.env[EnvVar.OPERATOR_SECRET_KEY],
+        accessKeyId: effectiveConfig.get(EnvVar.OPERATOR_ACCESS_KEY),
+        secretAccessKey: effectiveConfig.get(EnvVar.OPERATOR_SECRET_KEY),
       });
       return bedrock(parsed.modelId);
     }
 
     case LlmProvider.OLLAMA: {
       const baseURL =
-        process.env["OLLAMA_BASE_URL"] ?? "http://localhost:11434/v1";
+        effectiveConfig.get("OLLAMA_BASE_URL") ?? "http://localhost:11434/v1";
       // W5-03 (P007-tech → L4-S09): validate OLLAMA_BASE_URL before use.
       // localhost http is allowed (that is the standard Ollama setup).
       assertValidUrl(baseURL, "OLLAMA_BASE_URL", { allowLocalhostHttp: true });
@@ -71,14 +83,15 @@ export async function createLanguageModel(
     }
 
     case LlmProvider.GOOGLE: {
-      if (!process.env["GOOGLE_GENERATIVE_AI_API_KEY"]) {
+      const apiKey = effectiveConfig.get("GOOGLE_GENERATIVE_AI_API_KEY");
+      if (!apiKey) {
         throw new LlmError(
           `GOOGLE_GENERATIVE_AI_API_KEY environment variable is required for ${LlmProvider.GOOGLE}/ models.`,
         );
       }
       const { createGoogleGenerativeAI } = await import("@ai-sdk/google");
       const google = createGoogleGenerativeAI({
-        apiKey: process.env["GOOGLE_GENERATIVE_AI_API_KEY"],
+        apiKey,
       });
       return google(parsed.modelId);
     }

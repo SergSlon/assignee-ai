@@ -10,6 +10,12 @@
 import { DEFAULT_AWS_REGION } from "../config-schema.js";
 import { EnvVar } from "../../constants/env-vars.js";
 
+// MIGRATION-NOTE(M-009): process-lifetime config; multi-tenant SaaS will
+// need request-scoped lookup via `ConfigPort.get(EnvVar.AWS_REGION)`. The
+// CLI today is single-tenant so the read at module load is benign — every
+// invocation gets its own process. Migrating away requires touching every
+// caller (LlmAdapter, S3 client factory, CloudControl client factory,
+// ARN resolver, …); deferred to a dedicated wave.
 export const AWS_REGION = process.env[EnvVar.AWS_REGION] ?? DEFAULT_AWS_REGION;
 
 /** ARN service identifier for API Gateway V2 execute endpoints. */

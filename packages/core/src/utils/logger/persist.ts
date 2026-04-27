@@ -14,6 +14,10 @@
 import * as fs from "node:fs";
 import { EnvVar } from "../../constants/env-vars.js";
 import { exportLogEvent } from "../../telemetry/otel-exporter.js";
+import {
+  ProcessEnvConfigAdapter,
+  type ConfigPort,
+} from "../../config/config-port.js";
 import { LOG_ACTIONS, LogLevel, type LogEvent } from "./actions.js";
 import {
   ensureLogDirCached,
@@ -33,13 +37,14 @@ import {
  *   2. `ASSIGNEE_LOG_LEVEL=debug` environment variable
  *   3. `ASSIGNEE_VERBOSITY=verbose` environment variable
  */
-function isVerbose(): boolean {
+function isVerbose(config?: ConfigPort): boolean {
   // CLI flag wins — scan process.argv directly so the check works even when
   // called before commander has finished parsing.
   if (process.argv.includes("--verbose")) return true;
-  const logLevel = process.env[EnvVar.ASSIGNEE_LOG_LEVEL];
+  const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
+  const logLevel = effectiveConfig.get(EnvVar.ASSIGNEE_LOG_LEVEL);
   if (logLevel === "debug") return true;
-  const verbosity = process.env[EnvVar.ASSIGNEE_VERBOSITY];
+  const verbosity = effectiveConfig.get(EnvVar.ASSIGNEE_VERBOSITY);
   if (verbosity === "verbose") return true;
   return false;
 }

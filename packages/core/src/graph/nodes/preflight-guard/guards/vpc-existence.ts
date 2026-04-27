@@ -47,6 +47,7 @@ import {
 import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
 import { EnvVar } from "@/constants/env-vars.js";
 import { AWS_REGION } from "@/config/constants/aws.js";
+import { ProcessEnvConfigAdapter } from "@/config/config-port.js";
 import type { GuardContext, GuardResult, PreflightGuard } from "../types.js";
 import { failResult, passResult, skipResult } from "../types.js";
 
@@ -253,7 +254,14 @@ export function buildVpcExistenceGuard(
             }
             // Story 48.3 parity: opt-in strict mode blocks on unknown;
             // default is WARN + pass to preserve local-CLI UX.
-            if (process.env[EnvVar.ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS] === "1") {
+            // MASTER-009: read via fresh ConfigPort adapter rather than
+            // reaching at process.env directly. TODO(SaaS): thread
+            // ConfigPort from graph state once W4 lands.
+            if (
+              new ProcessEnvConfigAdapter().get(
+                EnvVar.ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS,
+              ) === "1"
+            ) {
               const errMsg = err instanceof Error ? err.message : String(err);
               return failResult(
                 `Preflight unknown error while verifying VpcId ${vpcId} ` +
