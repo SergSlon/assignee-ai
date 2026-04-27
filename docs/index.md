@@ -14,14 +14,14 @@ Pick the quadrant that matches what you want to do.
 
 ## [Tutorials](tutorials/) — learning-oriented
 
-Step-by-step lessons to get you from zero to a working setup. Read these first
-if you are new to assignee.ai. See [`tutorials/README.md`](tutorials/README.md)
-for the quadrant overview and contribution guide.
+Step-by-step narrative lessons to get you from zero to a working setup.
+Read these first if you are new to assignee.ai. See
+[`tutorials/README.md`](tutorials/README.md) for the quadrant overview
+and contribution guide.
 
-| Doc                                          | What you'll learn                                                  |
-| -------------------------------------------- | ------------------------------------------------------------------ |
-| [how-to/quickstart.md](how-to/quickstart.md) | Install the CLI, bootstrap AWS, plan and apply your first resource |
-| [aws-bootstrap.md](aws-bootstrap.md)         | Set up an AWS account and IAM users end-to-end for assignee.ai     |
+| Doc                                                          | What you'll learn                                                                  |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| [tutorials/getting-started.md](tutorials/getting-started.md) | Your first ten minutes with assignee — install, init, plan, apply, verify, destroy |
 
 ## [How-to guides](how-to/) — task-oriented
 
@@ -29,15 +29,17 @@ Recipes for accomplishing specific goals. Assume you already know the basics.
 See [`how-to/README.md`](how-to/README.md) for the full guide list and
 the backlog of pending how-tos.
 
-| Doc                                                              | Goal                                                             |
-| ---------------------------------------------------------------- | ---------------------------------------------------------------- |
-| [drift-detection.md](drift-detection.md)                         | Detect and reconcile config drift between desired and live state |
-| [how-to/read-a-plan-box.md](how-to/read-a-plan-box.md)           | Decode every section of the `assignee plan` plan box             |
-| [how-to/sso-authentication.md](how-to/sso-authentication.md)     | Authenticate with AWS SSO / Identity Center profiles             |
-| [how-to/install-via-homebrew.md](how-to/install-via-homebrew.md) | Install the CLI via the Homebrew tap                             |
-| [how-to/release-process.md](how-to/release-process.md)           | Run or observe the CLI release pipeline                          |
-| [mcp-server.md](mcp-server.md)                                   | Expose assignee.ai as an MCP server to your IDE                  |
-| [testing-guide.md](testing-guide.md)                             | Run the project's test suite and add new tests                   |
+| Doc                                                              | Goal                                                               |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------ |
+| [how-to/quickstart.md](how-to/quickstart.md)                     | Install the CLI, bootstrap AWS, plan and apply your first resource |
+| [aws-bootstrap.md](aws-bootstrap.md)                             | Set up an AWS account and IAM users end-to-end for assignee.ai     |
+| [drift-detection.md](drift-detection.md)                         | Detect and reconcile config drift between desired and live state   |
+| [how-to/read-a-plan-box.md](how-to/read-a-plan-box.md)           | Decode every section of the `assignee plan` plan box               |
+| [how-to/sso-authentication.md](how-to/sso-authentication.md)     | Authenticate with AWS SSO / Identity Center profiles               |
+| [how-to/install-via-homebrew.md](how-to/install-via-homebrew.md) | Install the CLI via the Homebrew tap                               |
+| [how-to/release-process.md](how-to/release-process.md)           | Run or observe the CLI release pipeline                            |
+| [mcp-server.md](mcp-server.md)                                   | Expose assignee.ai as an MCP server to your IDE                    |
+| [testing-guide.md](testing-guide.md)                             | Run the project's test suite and add new tests                     |
 
 ## [Runbooks](runbooks/) — operator how-tos
 

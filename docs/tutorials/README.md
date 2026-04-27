@@ -11,9 +11,9 @@ reference completeness or theoretical depth.
 
 ## Current tutorials
 
-_(Pending — this quadrant is scaffolded but empty as of Epic 99 Wave 3.
-The canonical first tutorial will be a "first plan + apply + destroy"
-walk-through for a brand-new AWS account. Contribute tutorials here.)_
+| Doc                                      | What you'll learn                                                                  |
+| ---------------------------------------- | ---------------------------------------------------------------------------------- |
+| [getting-started.md](getting-started.md) | Your first ten minutes with assignee — install, init, plan, apply, verify, destroy |
 
 ---
 
