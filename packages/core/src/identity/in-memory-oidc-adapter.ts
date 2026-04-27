@@ -14,7 +14,7 @@
  *   });
  */
 
-import type { Claims, OIDCPort } from "./oidc-port.js";
+import type { Claims, OIDCPort } from "../ports/oidc-port.js";
 
 // ── Fixture shapes ─────────────────────────────────────────────────────
 

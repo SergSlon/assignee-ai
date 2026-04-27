@@ -19,7 +19,7 @@
 
 import * as fs from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
-import type { AdvisoryLockPort } from "./advisory-lock-port.js";
+import type { AdvisoryLockPort } from "../ports/advisory-lock-port.js";
 
 // ── Defaults ──────────────────────────────────────────────────────────
 

@@ -21,11 +21,11 @@
  * @see packages/core/src/telemetry/otel-allowlist.ts
  */
 
-import type { TelemetryEvent } from "./telemetry-event-schema.js";
+import type { TelemetryEvent } from "../telemetry/telemetry-event-schema.js";
 import {
   filterAllowlistedFields,
   filterSensitiveElicitedFields,
-} from "./otel-allowlist.js";
+} from "../telemetry/otel-allowlist.js";
 import {
   ProcessEnvConfigAdapter,
   type ConfigPort,

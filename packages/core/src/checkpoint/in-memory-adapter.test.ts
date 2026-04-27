@@ -11,7 +11,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { InMemoryCheckpointerAdapter } from "./in-memory-adapter.js";
 import { CHECKPOINT_VERSION } from "../schema/checkpoint.js";
 import type { PlanCheckpoint } from "../schema/checkpoint.js";
-import type { CheckpointerPort } from "./port.js";
+import type { CheckpointerPort } from "../ports/checkpoint-port.js";
 
 // ── Shared fixture factory ────────────────────────────────────────────
 

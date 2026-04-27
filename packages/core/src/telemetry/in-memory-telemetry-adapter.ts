@@ -11,7 +11,7 @@
  * This adapter NEVER makes network calls — it is safe to enable in CI.
  */
 
-import type { TelemetryPort } from "./telemetry-port.js";
+import type { TelemetryPort } from "../ports/telemetry-port.js";
 import type { TelemetryEvent } from "./telemetry-event-schema.js";
 
 /** Default maximum number of events retained in the ring-buffer. */

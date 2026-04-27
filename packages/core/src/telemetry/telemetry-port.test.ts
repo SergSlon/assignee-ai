@@ -16,7 +16,7 @@ import {
   isTelemetryEnabled,
   emitFiltered,
   type TelemetryPort,
-} from "./telemetry-port.js";
+} from "../ports/telemetry-port.js";
 import type { TelemetryEvent } from "./telemetry-event-schema.js";
 
 // ── Fixture factory ───────────────────────────────────────────────────
