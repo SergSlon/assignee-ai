@@ -1,5 +1,12 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type { ResourcePlugin } from "../types.js";
+import {
+  BUCKET_POLICY_PRESETS,
+  buildCloudFrontOacReadPolicy,
+  buildTlsOnlyPolicy,
+  buildCrossAccountDecryptPolicy,
+  buildPublicReadPolicy,
+} from "./_policy-templates/index.js";
 
 /**
  * ResourcePlugin for AWS::S3::BucketPolicy.
@@ -26,6 +33,18 @@ import type { ResourcePlugin } from "../types.js";
  *      automatically.
  *   2. Grant cross-account access to a specific IAM principal.
  *   3. Enforce TLS-only / encrypted-only access via Condition blocks.
+ *   4. Public-read with IP allowlist (rare; CloudFront is usually
+ *      better).
+ *
+ * Wizard UX (MASTER-011 part C, 2026-04-26):
+ * a `PolicyTemplate` enum field is asked first. The non-`custom-json`
+ * presets pre-fill `PolicyDocument` with a working JSON template
+ * (cloudfront-oac-read / tls-only / cross-account-decrypt /
+ * public-read) that the user can accept or tweak. The `custom-json`
+ * preset preserves the original raw-paste behaviour for advanced
+ * cases. Each preset has its own `PolicyDocument` field instance,
+ * disambiguated via the `showIf` mechanism in
+ * `cfn-emitter.applyToCfnTransforms`.
  *
  * Pricing: free (no direct charge — the bucket itself is billed).
  * Registered in the free pricing decomposer.
@@ -39,6 +58,68 @@ import type { ResourcePlugin } from "../types.js";
  *      compound migration off the SDK PutBucketPolicy post-provision
  *      path in result-formatter.ts
  */
+
+/**
+ * Shared validate function — every PolicyDocument field instance
+ * (one per preset) reuses this. Extracted to keep the field
+ * declarations short and DRY.
+ */
+function validatePolicyDocument(value: unknown): string | undefined {
+  if (!value) return "PolicyDocument is required";
+  let parsed: unknown;
+  if (typeof value === "object" && !Array.isArray(value)) {
+    parsed = value;
+  } else {
+    const s = String(value).trim();
+    try {
+      parsed = JSON.parse(s);
+    } catch {
+      return "PolicyDocument must be valid JSON";
+    }
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+    return "PolicyDocument must be a JSON object";
+  const obj = parsed as Record<string, unknown>;
+  if (obj["Version"] !== "2012-10-17")
+    return 'PolicyDocument.Version must be "2012-10-17"';
+  if (!Array.isArray(obj["Statement"]))
+    return "PolicyDocument.Statement must be an array";
+  if ((obj["Statement"] as unknown[]).length === 0)
+    return "PolicyDocument.Statement must contain at least one statement";
+  return undefined;
+}
+
+function policyDocumentToCfn(answer: unknown): unknown {
+  if (!answer) return undefined;
+  if (typeof answer === "object") return answer;
+  if (typeof answer === "string" && answer.trim()) {
+    try {
+      return JSON.parse(answer);
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+/** Pretty-printed JSON used as the editable wizard prefill for each preset. */
+const OAC_READ_TEMPLATE_JSON = JSON.stringify(
+  buildCloudFrontOacReadPolicy(),
+  null,
+  2,
+);
+const TLS_ONLY_TEMPLATE_JSON = JSON.stringify(buildTlsOnlyPolicy(), null, 2);
+const CROSS_ACCOUNT_TEMPLATE_JSON = JSON.stringify(
+  buildCrossAccountDecryptPolicy(),
+  null,
+  2,
+);
+const PUBLIC_READ_TEMPLATE_JSON = JSON.stringify(
+  buildPublicReadPolicy(),
+  null,
+  2,
+);
+
 export const s3BucketPolicyPlugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.S3_BUCKET_POLICY,
   commonFields: [
@@ -69,6 +150,113 @@ export const s3BucketPolicyPlugin: ResourcePlugin = {
       },
     },
     {
+      name: "PolicyTemplate",
+      required: true,
+      question: {
+        type: "enum",
+        label: "Policy template",
+        options: [
+          {
+            value: BUCKET_POLICY_PRESETS.CLOUDFRONT_OAC_READ,
+            label:
+              "cloudfront-oac-read — grant a specific CloudFront distribution read access (most common)",
+          },
+          {
+            value: BUCKET_POLICY_PRESETS.TLS_ONLY,
+            label:
+              "tls-only — deny all non-TLS access (security best-practice baseline)",
+          },
+          {
+            value: BUCKET_POLICY_PRESETS.CROSS_ACCOUNT_DECRYPT,
+            label:
+              "cross-account-decrypt — grant a cross-account principal GetObject + ListBucket",
+          },
+          {
+            value: BUCKET_POLICY_PRESETS.PUBLIC_READ,
+            label:
+              "public-read — anonymous GetObject scoped by IP allowlist (use sparingly)",
+          },
+          {
+            value: BUCKET_POLICY_PRESETS.CUSTOM_JSON,
+            label: "custom-json — paste a raw PolicyDocument (advanced)",
+          },
+        ],
+        initialValue: BUCKET_POLICY_PRESETS.CLOUDFRONT_OAC_READ,
+        hint: "Pick a starting template. Non-custom presets pre-fill PolicyDocument with a working baseline you can tweak (replacing REPLACE_WITH_BUCKET_NAME / REPLACE_WITH_DISTRIBUTION_ID / etc.); custom-json drops you into raw-JSON paste mode.",
+      },
+      // Wizard-only field — strip it from the CFN output (the policy
+      // document below is what CloudFormation actually consumes).
+      toCfn: () => undefined,
+    },
+    {
+      name: "PolicyDocument",
+      required: true,
+      question: {
+        type: "string",
+        label: "Policy document (cloudfront-oac-read preset, editable)",
+        placeholder: OAC_READ_TEMPLATE_JSON,
+        initialValue: OAC_READ_TEMPLATE_JSON,
+        hint: "Pre-filled CloudFront-OAC read policy. Replace REPLACE_WITH_BUCKET_NAME with your bucket name and REPLACE_WITH_DISTRIBUTION_ID / REPLACE_WITH_ACCOUNT_ID inside the AWS:SourceArn condition with your CloudFront distribution's ARN. The condition pin is mandatory — without it any CloudFront distribution in any account could read the bucket.",
+        showIf: {
+          field: "PolicyTemplate",
+          value: BUCKET_POLICY_PRESETS.CLOUDFRONT_OAC_READ,
+        },
+        validate: validatePolicyDocument,
+      },
+      toCfn: policyDocumentToCfn,
+    },
+    {
+      name: "PolicyDocument",
+      required: true,
+      question: {
+        type: "string",
+        label: "Policy document (tls-only preset, editable)",
+        placeholder: TLS_ONLY_TEMPLATE_JSON,
+        initialValue: TLS_ONLY_TEMPLATE_JSON,
+        hint: "Pre-filled TLS-only deny policy (best-practice baseline). Replace REPLACE_WITH_BUCKET_NAME with your bucket name. Combine with another statement (additive Allow) if you also need to grant access — this template only denies non-TLS traffic.",
+        showIf: {
+          field: "PolicyTemplate",
+          value: BUCKET_POLICY_PRESETS.TLS_ONLY,
+        },
+        validate: validatePolicyDocument,
+      },
+      toCfn: policyDocumentToCfn,
+    },
+    {
+      name: "PolicyDocument",
+      required: true,
+      question: {
+        type: "string",
+        label: "Policy document (cross-account-decrypt preset, editable)",
+        placeholder: CROSS_ACCOUNT_TEMPLATE_JSON,
+        initialValue: CROSS_ACCOUNT_TEMPLATE_JSON,
+        hint: "Pre-filled cross-account read policy. Replace REPLACE_WITH_BUCKET_NAME with your bucket name and REPLACE_WITH_OTHER_ACCOUNT_ID / REPLACE_WITH_ROLE_NAME inside the Principal.AWS ARN. If the bucket is encrypted with a customer-managed KMS key, the consumer ALSO needs kms:Decrypt on the key — granted on the KMS key resource policy, not here.",
+        showIf: {
+          field: "PolicyTemplate",
+          value: BUCKET_POLICY_PRESETS.CROSS_ACCOUNT_DECRYPT,
+        },
+        validate: validatePolicyDocument,
+      },
+      toCfn: policyDocumentToCfn,
+    },
+    {
+      name: "PolicyDocument",
+      required: true,
+      question: {
+        type: "string",
+        label: "Policy document (public-read preset, editable)",
+        placeholder: PUBLIC_READ_TEMPLATE_JSON,
+        initialValue: PUBLIC_READ_TEMPLATE_JSON,
+        hint: "Pre-filled public-read policy with an IP allowlist Condition (defaulted to 0.0.0.0/0 — TIGHTEN THIS). Replace REPLACE_WITH_BUCKET_NAME and the aws:SourceIp CIDR. WARNING: most 'public website' cases should use cloudfront-oac-read with a private bucket fronted by CloudFront instead — public buckets are a common breach vector.",
+        showIf: {
+          field: "PolicyTemplate",
+          value: BUCKET_POLICY_PRESETS.PUBLIC_READ,
+        },
+        validate: validatePolicyDocument,
+      },
+      toCfn: policyDocumentToCfn,
+    },
+    {
       name: "PolicyDocument",
       required: true,
       question: {
@@ -76,40 +264,14 @@ export const s3BucketPolicyPlugin: ResourcePlugin = {
         label: "Policy document (JSON)",
         placeholder:
           '{"Version":"2012-10-17","Statement":[{"Sid":"AllowCloudFrontRead","Effect":"Allow",...}]}',
-        hint: "Required. IAM policy document as a JSON object. Must have Version=2012-10-17 and a Statement array. The static-website compound produces a reference CloudFront-OAC policy automatically; standalone users hand-craft it or paste from AWS docs.",
-        validate: (value: unknown) => {
-          if (!value) return "PolicyDocument is required";
-          const s = String(value).trim();
-          let parsed: unknown;
-          try {
-            parsed = JSON.parse(s);
-          } catch {
-            return "PolicyDocument must be valid JSON";
-          }
-          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-            return "PolicyDocument must be a JSON object";
-          const obj = parsed as Record<string, unknown>;
-          if (obj["Version"] !== "2012-10-17")
-            return 'PolicyDocument.Version must be "2012-10-17"';
-          if (!Array.isArray(obj["Statement"]))
-            return "PolicyDocument.Statement must be an array";
-          if ((obj["Statement"] as unknown[]).length === 0)
-            return "PolicyDocument.Statement must contain at least one statement";
-          return undefined;
+        hint: "Required. IAM policy document as a JSON object. Must have Version=2012-10-17 and a Statement array. Hand-craft it or paste from AWS docs.",
+        showIf: {
+          field: "PolicyTemplate",
+          value: BUCKET_POLICY_PRESETS.CUSTOM_JSON,
         },
+        validate: validatePolicyDocument,
       },
-      toCfn: (answer: unknown) => {
-        if (!answer) return undefined;
-        if (typeof answer === "object") return answer;
-        if (typeof answer === "string" && answer.trim()) {
-          try {
-            return JSON.parse(answer);
-          } catch {
-            return undefined;
-          }
-        }
-        return undefined;
-      },
+      toCfn: policyDocumentToCfn,
     },
   ],
   advancedFields: [],
