@@ -235,8 +235,10 @@ describe("preflightGuardNode", () => {
     });
 
     it("does NOT reject real account IDs that happen to look similar", async () => {
-      // 123456789013 is not in the placeholder set — only the canonical
-      // 123456789012 is. This guards against overly-aggressive matching.
+      // 210987654321 (project-canonical non-denylist test ID) is not in
+      // the placeholder set, so the guard must NOT flag it. This guards
+      // against overly-aggressive matching that could trip on real
+      // user-supplied account IDs.
       const result = await preflightGuardNode(
         makeState({
           resourceType: "AWS::Lambda::Function",
@@ -244,7 +246,7 @@ describe("preflightGuardNode", () => {
           desiredState: {
             FunctionName: "my-fn",
             Runtime: "nodejs22.x",
-            Role: "arn:aws:iam::123456789013:role/my-role",
+            Role: "arn:aws:iam::210987654321:role/my-role",
           },
         }),
       );
@@ -1580,9 +1582,23 @@ describe("preflightGuardNode — parallel pricing + IAM fan-out (Story 9.10)", (
 
       const result = await resultPromise;
 
-      // Both should have been called
-      expect(pricingTool.invoke).toHaveBeenCalled();
-      expect(iamTool.invoke).toHaveBeenCalled();
+      // Both should have been called with their proper invoke shapes:
+      //  - pricingTool: AWS pricing query for the S3 service code
+      //  - iamTool: SimulatePrincipalPolicy for s3 actions on a real ARN
+      expect(pricingTool.invoke).toHaveBeenCalledWith(
+        expect.objectContaining({
+          service_code: expect.any(String),
+          region: expect.any(String),
+          filters: expect.any(Array),
+        }),
+      );
+      expect(iamTool.invoke).toHaveBeenCalledWith(
+        expect.objectContaining({
+          policy_source_arn: expect.stringMatching(/^arn:aws[\w-]*:/),
+          action_names: expect.arrayContaining([expect.any(String)]),
+          resource_arns: expect.any(Array),
+        }),
+      );
       expect(result.preflightPassed).toBe(true);
 
       // Verify overlapping execution: IAM should start before pricing ends

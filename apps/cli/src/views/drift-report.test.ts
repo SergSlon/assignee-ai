@@ -94,12 +94,12 @@ describe("drift-report", () => {
     it("includes metadata fields", () => {
       const report = buildDriftReport([], {
         assigneeVersion: "2.0.0",
-        awsAccountId: "111222333444",
+        awsAccountId: "210987654321",
         checkDurationMs: 999,
       });
 
       expect(report.metadata.assigneeVersion).toBe("2.0.0");
-      expect(report.metadata.awsAccountId).toBe("111222333444");
+      expect(report.metadata.awsAccountId).toBe("210987654321");
       expect(report.metadata.checkDurationMs).toBe(999);
     });
 

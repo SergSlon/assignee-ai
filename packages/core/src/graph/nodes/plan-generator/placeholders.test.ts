@@ -99,7 +99,7 @@ describe("placeholders direct import", () => {
       expect(
         isPlaceholderArn("arn:aws:iam::210987654321:role/assignee-operator"),
       ).toBe(false);
-      expect(isPlaceholderArn("arn:aws:sns:us-east-1:987654321098:Real")).toBe(
+      expect(isPlaceholderArn("arn:aws:sns:us-east-1:109876543210:Real")).toBe(
         false,
       );
       expect(isPlaceholderArn("not-an-arn")).toBe(false);
@@ -179,14 +179,14 @@ describe("placeholders direct import", () => {
     it("preserves real scalar ARNs with non-placeholder account IDs", () => {
       const state: Record<string, unknown> = {
         Role: "arn:aws:iam::210987654321:role/assignee-operator",
-        KmsKeyId: "arn:aws:kms:us-west-2:987654321098:key/real-key",
+        KmsKeyId: "arn:aws:kms:us-west-2:109876543210:key/real-key",
       };
       stripPlaceholderArns(state);
       expect(state["Role"]).toBe(
         "arn:aws:iam::210987654321:role/assignee-operator",
       );
       expect(state["KmsKeyId"]).toBe(
-        "arn:aws:kms:us-west-2:987654321098:key/real-key",
+        "arn:aws:kms:us-west-2:109876543210:key/real-key",
       );
     });
 

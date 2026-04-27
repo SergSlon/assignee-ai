@@ -629,7 +629,7 @@ describe("queryCostOptimization (Story 45.3)", () => {
     const recs = [
       {
         RecommendationId: "r-456",
-        ResourceArn: "arn:aws:ec2:us-east-1:987654321098:instance/i-abc",
+        ResourceArn: "arn:aws:ec2:us-east-1:210987654321:instance/i-abc",
         ResourceType: "EC2 Instance",
         Finding: "Right-size to t3.small",
         EstimatedMonthlySavings: "25.00",
@@ -646,7 +646,7 @@ describe("queryCostOptimization (Story 45.3)", () => {
     expect(result).toHaveLength(1);
     expect(result[0]!.id).toBe("r-456");
     expect(result[0]!.resourceArn).toBe(
-      "arn:aws:ec2:us-east-1:987654321098:instance/i-abc",
+      "arn:aws:ec2:us-east-1:210987654321:instance/i-abc",
     );
     expect(result[0]!.finding).toBe("Right-size to t3.small");
     expect(result[0]!.estimatedSavings).toBe("25.00");
@@ -674,7 +674,7 @@ describe("queryComputeOptimizer (Story 45.3)", () => {
   it("returns parsed rightsizing recommendations", async () => {
     const recs = [
       {
-        ResourceArn: "arn:aws:ec2:us-east-1:987654321098:instance/i-xyz",
+        ResourceArn: "arn:aws:ec2:us-east-1:210987654321:instance/i-xyz",
         ResourceType: "EC2 Instance",
         Finding: "OVER_PROVISIONED",
         CurrentInstanceType: "m5.xlarge",
@@ -691,7 +691,7 @@ describe("queryComputeOptimizer (Story 45.3)", () => {
 
     expect(result).toHaveLength(1);
     expect(result[0]!.resourceArn).toBe(
-      "arn:aws:ec2:us-east-1:987654321098:instance/i-xyz",
+      "arn:aws:ec2:us-east-1:210987654321:instance/i-xyz",
     );
     expect(result[0]!.finding).toBe("OVER_PROVISIONED");
     expect(result[0]!.currentConfig).toBe("m5.xlarge");

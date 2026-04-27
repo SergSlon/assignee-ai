@@ -1850,12 +1850,12 @@ describe("stripPlaceholderArns", () => {
     const ds: Record<string, unknown> = {
       AlarmActions: [
         "arn:aws:sns:us-east-1:123456789012:placeholder-topic",
-        "arn:aws:sns:us-east-1:987654321098:real-topic",
+        "arn:aws:sns:us-east-1:210987654321:real-topic",
       ],
     };
     stripPlaceholderArns(ds);
     expect(ds["AlarmActions"]).toEqual([
-      "arn:aws:sns:us-east-1:987654321098:real-topic",
+      "arn:aws:sns:us-east-1:210987654321:real-topic",
     ]);
   });
 
@@ -1918,14 +1918,14 @@ describe("stripPlaceholderArns", () => {
   it("preserves arrays with all real ARNs unchanged", () => {
     const ds: Record<string, unknown> = {
       AlarmActions: [
-        "arn:aws:sns:us-east-1:987654321098:real-topic",
-        "arn:aws:sns:us-east-1:112233445566:other-real-topic",
+        "arn:aws:sns:us-east-1:210987654321:real-topic",
+        "arn:aws:sns:us-east-1:109876543210:other-real-topic",
       ],
     };
     stripPlaceholderArns(ds);
     expect(ds["AlarmActions"]).toEqual([
-      "arn:aws:sns:us-east-1:987654321098:real-topic",
-      "arn:aws:sns:us-east-1:112233445566:other-real-topic",
+      "arn:aws:sns:us-east-1:210987654321:real-topic",
+      "arn:aws:sns:us-east-1:109876543210:other-real-topic",
     ]);
   });
 });

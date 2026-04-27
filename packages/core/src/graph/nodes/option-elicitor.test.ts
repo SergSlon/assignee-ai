@@ -734,8 +734,12 @@ describe("optionElicitorNode — --no-wizard bypass (Story 11.1)", () => {
 
     const result = await optionElicitorNode(makeState({ noWizard: false }));
 
-    // Interactive prompts should have been called
-    expect(text).toHaveBeenCalled();
+    // Interactive prompts should have been called with the Name field's label
+    expect(text).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "Resource name",
+      }),
+    );
     expect(result.elicitedOptions?.["Name"]).toBe("my-resource");
   });
 
@@ -1321,9 +1325,11 @@ describe("optionElicitorNode — parallel pricing + discovery fan-out (Story 9.1
       // Discovery functions should have been called (proving they ran
       // in the parallel block). Additionally, both start + end events
       // landed in executionLog so the concurrency window actually
-      // executed — this is stronger than the pre-fix assertion that
-      // only checked `toHaveBeenCalled()`.
-      expect(discoverAmis).toHaveBeenCalled();
+      // executed — stronger than the prior bare `toHaveBeenCalled()`.
+      // discoverAmis is invoked through resolveDynamicFields with the
+      // fieldContext (the top-level discovery context, an empty object
+      // for AMI since the field has no showIf condition).
+      expect(discoverAmis).toHaveBeenCalledWith({});
       expect(executionLog).toEqual([
         { task: "discovery", event: "start" },
         { task: "discovery", event: "end" },
@@ -1399,7 +1405,7 @@ describe("optionElicitorNode — parallel pricing + discovery fan-out (Story 9.1
     // actually flowed through the wizard despite the pricing tool
     // throwing. The previous `toBeDefined()` would have passed even
     // for `{}` if the wizard silently swallowed both values.
-    expect(discoverAmis).toHaveBeenCalled();
+    expect(discoverAmis).toHaveBeenCalledWith({});
     expect(result.elicitedOptions).toMatchObject({
       InstanceType: "t3.micro",
       ImageId: "ami-123",

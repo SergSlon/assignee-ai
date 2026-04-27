@@ -172,7 +172,7 @@ describe("serializeCheckpoint", () => {
         completedResources: [
           {
             resourceArn:
-              "arn:aws:iam::111111111111:role/assignee-iam-execution-role",
+              "arn:aws:iam::210987654321:role/assignee-iam-execution-role",
             resourceType: "AWS::IAM::Role",
           },
         ],
@@ -240,11 +240,11 @@ describe("serializeCheckpoint", () => {
         completedResources: [
           {
             resourceArn:
-              "arn:aws:iam::111111111111:role/assignee-iam-execution-role",
+              "arn:aws:iam::210987654321:role/assignee-iam-execution-role",
             resourceType: "AWS::IAM::Role",
           },
           {
-            resourceArn: "arn:aws:lambda:us-east-1:111111111111:function:my-fn",
+            resourceArn: "arn:aws:lambda:us-east-1:210987654321:function:my-fn",
             resourceType: "AWS::Lambda::Function",
           },
         ],
@@ -252,11 +252,11 @@ describe("serializeCheckpoint", () => {
       expect(cp.completedResources).toEqual([
         {
           resourceArn:
-            "arn:aws:iam::111111111111:role/assignee-iam-execution-role",
+            "arn:aws:iam::210987654321:role/assignee-iam-execution-role",
           resourceType: "AWS::IAM::Role",
         },
         {
-          resourceArn: "arn:aws:lambda:us-east-1:111111111111:function:my-fn",
+          resourceArn: "arn:aws:lambda:us-east-1:210987654321:function:my-fn",
           resourceType: "AWS::Lambda::Function",
         },
       ]);
@@ -524,12 +524,12 @@ describe("serializeCheckpoint", () => {
         completedResources: [
           {
             resourceArn:
-              "arn:aws:iam::111111111111:role/assignee-iam-execution-role-ae5a006f",
+              "arn:aws:iam::210987654321:role/assignee-iam-execution-role-ae5a006f",
             resourceType: "AWS::IAM::Role",
           },
           {
             resourceArn:
-              "arn:aws:lambda:us-east-1:111111111111:function:assignee-lambda-fn-ae5a006f",
+              "arn:aws:lambda:us-east-1:210987654321:function:assignee-lambda-fn-ae5a006f",
             resourceType: "AWS::Lambda::Function",
           },
         ],

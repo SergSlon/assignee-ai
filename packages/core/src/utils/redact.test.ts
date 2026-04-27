@@ -118,8 +118,8 @@ describe("redactSensitive — multi-line messages", () => {
     const input = [
       "Operation failed:",
       "  Principal: arn:aws:iam::123456789012:role/A",
-      "  Target:    arn:aws-us-gov:iam::987654321098:role/B",
-      "  Account:   555555555555",
+      "  Target:    arn:aws-us-gov:iam::210987654321:role/B",
+      "  Account:   210987654321",
     ].join("\n");
     const result = redactSensitive(input);
     expect(result).toBe(
@@ -199,7 +199,7 @@ describe("redactAccountIdsInPrompt — preserves ARN skeleton, scrubs account sl
   it("handles multiple ARNs in one string", () => {
     expect(
       redactAccountIdsInPrompt(
-        "role arn:aws:iam::111111111111:role/A and queue arn:aws:sqs:us-east-1:222222222222:queue-b",
+        "role arn:aws:iam::210987654321:role/A and queue arn:aws:sqs:us-east-1:109876543210:queue-b",
       ),
     ).toBe(
       "role arn:aws:iam::[ACCOUNT]:role/A and queue arn:aws:sqs:us-east-1:[ACCOUNT]:queue-b",

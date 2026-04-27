@@ -147,7 +147,7 @@ describe("redactStringValue — key-blind value scrubbers", () => {
   it.each([
     ["arn:aws:iam::123456789012:role/foo", "arn:aws:iam::[REDACTED]:role/foo"],
     [
-      "arn:aws-cn:iam::999999999999:user/x",
+      "arn:aws-cn:iam::210987654321:user/x",
       "arn:aws-cn:iam::[REDACTED]:user/x",
     ],
     [
@@ -159,7 +159,7 @@ describe("redactStringValue — key-blind value scrubbers", () => {
       "arn:aws-iso:iam::[REDACTED]:policy/SecurityAudit",
     ],
     [
-      "arn:aws-iso-b:iam::987654321098:role/ops",
+      "arn:aws-iso-b:iam::109876543210:role/ops",
       "arn:aws-iso-b:iam::[REDACTED]:role/ops",
     ],
   ])(

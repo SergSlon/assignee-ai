@@ -604,7 +604,13 @@ describe("resourceProvisionerNode — compound context", () => {
       expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
       expect(result.requestToken).toBe("compound-sns-sub-token");
       expect(mockFallback.subscribe).not.toHaveBeenCalled();
-      expect(mockProvisioner.createResource).toHaveBeenCalled();
+      expect(mockProvisioner.createResource).toHaveBeenCalledWith(
+        "AWS::SNS::Subscription",
+        expect.stringContaining(
+          '"TopicArn":"arn:aws:sns:us-east-1:123456789012:compound-topic"',
+        ),
+        expect.any(String),
+      );
     });
   });
 });
@@ -916,17 +922,32 @@ describe("compound flow error handling", () => {
     // to renderCompoundPartialFailure instead of a single stringified
     // renderError blob. Assert that both completed resources are
     // forwarded and the failed resource is identified.
-    expect(renderCompoundPartialFailure).toHaveBeenCalled();
+    expect(renderCompoundPartialFailure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        completed: expect.arrayContaining([
+          expect.objectContaining({
+            resourceType: "AWS::EC2::SecurityGroup",
+          }),
+          expect.objectContaining({ resourceType: "AWS::IAM::Role" }),
+        ]),
+        failedResource: expect.objectContaining({
+          resourceType: expect.stringMatching(/Lambda|Function/),
+        }),
+      }),
+    );
     const call = (renderCompoundPartialFailure as ReturnType<typeof vi.fn>).mock
       .calls[0]![0] as {
       completed: Array<{ resourceType: string }>;
       failedResource: { resourceType: string };
     };
+    // Verify ORDER (dependency-forward) — toHaveBeenCalledWith above
+    // can match the array regardless of order, so a separate ordered
+    // assertion guards against regressions that reorder the cleanup
+    // list (renderer relies on forward order to do its own reversal).
     expect(call.completed.map((r) => r.resourceType)).toEqual([
       "AWS::EC2::SecurityGroup",
       "AWS::IAM::Role",
     ]);
-    expect(call.failedResource.resourceType).toMatch(/Lambda|Function/);
   });
 
   it("cleanup guidance lists resources in forward order (renderer reverses for destroy)", async () => {
@@ -963,7 +984,19 @@ describe("compound flow error handling", () => {
 
     await resultFormatterNode(state);
 
-    expect(renderCompoundPartialFailure).toHaveBeenCalled();
+    expect(renderCompoundPartialFailure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        completed: expect.arrayContaining([
+          expect.objectContaining({
+            resourceType: "AWS::EC2::SecurityGroup",
+          }),
+          expect.objectContaining({ resourceType: "AWS::IAM::Role" }),
+          expect.objectContaining({
+            resourceType: "AWS::Lambda::Function",
+          }),
+        ]),
+      }),
+    );
     const call = (renderCompoundPartialFailure as ReturnType<typeof vi.fn>).mock
       .calls[0]![0] as {
       completed: Array<{ resourceType: string; resourceArn?: string }>;
@@ -994,7 +1027,15 @@ describe("compound flow error handling", () => {
 
     await resultFormatterNode(state);
 
-    expect(renderError).toHaveBeenCalled();
+    // First-arg is the user-visible error message. Assert it does NOT
+    // begin with the compound "halted at" prefix because no completed
+    // resources exist — this branch must take the standard renderError
+    // path, NOT the compound-partial-failure path.
+    expect(renderError).toHaveBeenCalledWith(
+      expect.not.stringMatching(/halted at/i),
+      expect.anything(),
+      expect.anything(),
+    );
     const errorCall = (renderError as ReturnType<typeof vi.fn>).mock.calls[0]!;
     const errorMessage = errorCall[0] as string;
 

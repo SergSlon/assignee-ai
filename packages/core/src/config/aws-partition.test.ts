@@ -177,7 +177,7 @@ describe("ARN_PATTERN_SOURCE", () => {
       "g",
     );
     const input =
-      "error in arn:aws:iam::123456789012:role/A and arn:aws-us-gov:lambda:us-gov-west-1:123456789012:function:foo or arn:aws-cn:sqs:cn-north-1:999999999999:q";
+      "error in arn:aws:iam::123456789012:role/A and arn:aws-us-gov:lambda:us-gov-west-1:123456789012:function:foo or arn:aws-cn:sqs:cn-north-1:210987654321:q";
     const matches = input.match(re) ?? [];
     expect(matches).toHaveLength(3);
     expect(matches[0]).toContain("arn:aws:");

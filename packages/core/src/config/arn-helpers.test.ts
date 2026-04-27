@@ -276,9 +276,9 @@ describe("extractAccountIdFromArn", () => {
     for (const { prefix } of PARTITIONS) {
       expect(
         extractAccountIdFromArn(
-          `arn:${prefix}:ec2:us-east-1:999888777666:vpc/vpc-x`,
+          `arn:${prefix}:ec2:us-east-1:210987654321:vpc/vpc-x`,
         ),
-      ).toBe("999888777666");
+      ).toBe("210987654321");
     }
   });
 });
