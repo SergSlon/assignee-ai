@@ -16,20 +16,46 @@ if [ "${ASSIGNEE_REVIEWER_BAN_BYPASS:-0}" = "1" ]; then
 fi
 
 while read -r local_ref local_sha remote_ref remote_sha; do
-  # Skip deletions
+  # Skip deletions (push :branch)
   [ "$local_sha" = "0000000000000000000000000000000000000000" ] && continue
 
-  # New branch (no remote) → check most recent 5 commits
+  # New branch (no remote ref) → enumerate commits unique to this branch
+  # (i.e. not yet on origin/<default>). Falls back to last 50 commits if
+  # the default-branch ref isn't fetched locally.
   if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
-    range_args="-n 5 $local_sha"
+    default_remote_branch=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@')
+    default_remote_branch=${default_remote_branch:-main}
+    if git rev-parse --verify --quiet "refs/remotes/origin/$default_remote_branch" >/dev/null 2>&1; then
+      range_args="$local_sha --not refs/remotes/origin/$default_remote_branch"
+    else
+      range_args="-n 50 $local_sha"
+    fi
   else
     range_args="$remote_sha..$local_sha"
   fi
 
+  # Capture rev-list output AND its exit code separately. set -e does not
+  # propagate inside $(...), so a silent failure (force-push made remote_sha
+  # unreachable, shallow clone, etc.) would otherwise let the push pass with
+  # ZERO commits checked. Fail closed on any rev-list error.
+  range_output=$(git rev-list $range_args 2>&1)
+  rev_list_exit=$?
+  if [ $rev_list_exit -ne 0 ]; then
+    echo "" >&2
+    echo "Reviewer-skip BAN: failed to enumerate commits in '$range_args' (exit $rev_list_exit):" >&2
+    echo "$range_output" >&2
+    echo "" >&2
+    echo "Cannot verify reviewer evidence — rejecting push to fail closed." >&2
+    echo "If this is a legitimate force-push or shallow-clone scenario," >&2
+    echo "set ASSIGNEE_REVIEWER_BAN_BYPASS=1 with a justification." >&2
+    exit 1
+  fi
+
   failures=""
-  for sha in $(git rev-list $range_args); do
+  for sha in $range_output; do
     # Skip merge commits (multiple parents)
     parent_count=$(git log -1 --format="%P" "$sha" | wc -w | tr -d ' ')
+    [ -z "$parent_count" ] && parent_count=1
     [ "$parent_count" -gt 1 ] && continue
 
     body=$(git log -1 --format="%B" "$sha")
@@ -39,17 +65,23 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     if echo "$body" | grep -qE "^Reviewer: SKIP — "; then continue; fi
     if echo "$body" | grep -qE "_archive/reviews/[a-f0-9]+-review\.md"; then continue; fi
 
-    failures="${failures}  ${sha:0:8} '${subject}'\n"
+    # Use git's portable abbreviated SHA (avoids bash-only ${var:0:N}).
+    short_sha=$(git log -1 --format=%h --abbrev=8 "$sha" 2>/dev/null)
+    [ -z "$short_sha" ] && short_sha=$(echo "$sha" | cut -c1-8)
+    failures="${failures}  ${short_sha} '${subject}'
+"
   done
 
   if [ -n "$failures" ]; then
     echo "" >&2
     echo "Reviewer-skip BAN (CLAUDE.md): the following commits lack reviewer evidence:" >&2
-    printf "$failures" >&2
+    printf '%s' "$failures" >&2
     echo "" >&2
     echo "Add one of these tokens to each commit body, then re-push:" >&2
     echo "  Reviewer: ACCEPT" >&2
     echo "  Reviewer: SKIP — <reason> — <user-confirmation-quote>" >&2
+    echo "                  ^         ^" >&2
+    echo "                  These are literal em-dashes (U+2014), not hyphens." >&2
     echo "  _archive/reviews/<short-sha>-review.md" >&2
     echo "" >&2
     echo "Or set ASSIGNEE_REVIEWER_BAN_BYPASS=1 (emergency only)." >&2

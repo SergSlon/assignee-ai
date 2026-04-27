@@ -10,16 +10,32 @@ name: Release
 # provenance steps run unconditionally so DRY-RUN exercises the full
 # pipeline. Tap publish is additionally gated behind ASSIGNEE_TAP_PUBLISH=1.
 #
-# To promote to a real publish post-go-decision:
-#   1. Remove `"private": true` from every package.json that should ship.
-#   2. Set repository secret ASSIGNEE_RELEASE_PUBLISH=1 in GitHub settings,
-#      OR pass it as an environment variable in the workflow_dispatch trigger.
-#   3. Set repository secret ASSIGNEE_TAP_PUBLISH=1 to also push the
-#      Homebrew tap formula.
-#   4. Trigger the workflow via workflow_dispatch with confirm=YES_PUBLISH.
+# IMPORTANT: the publish gates read from repository VARIABLES (not secrets).
+# Per MASTER-001, GitHub Actions does NOT expose `secrets.*` to job-level
+# `if:` expressions (`secrets` context is unavailable in job conditionals);
+# only `vars.*` works. Tokens stay in secrets; on/off flags must live in
+# variables.
 #
-# Per feedback_no_public_artifacts: do NOT publish until the acquirer
-# explicitly flips ASSIGNEE_RELEASE_PUBLISH and ASSIGNEE_TAP_PUBLISH.
+# How to enable publishing (post-go-decision):
+#   1. Remove `"private": true` from every package.json that should ship.
+#   2. In GitHub: Settings → Secrets and variables → Actions →
+#      Variables tab → New repository variable
+#        - Name:  ASSIGNEE_RELEASE_PUBLISH
+#        - Value: 1
+#      Any non-`'1'` value (including unset) keeps publishing disabled.
+#   3. Same place, add another variable to enable Homebrew tap push:
+#        - Name:  ASSIGNEE_TAP_PUBLISH
+#        - Value: 1
+#   4. In the Secrets tab (NOT Variables), add the registry/tap tokens:
+#        - HOMEBREW_TAP_TOKEN — fine-grained PAT with write access to the
+#                                homebrew-assignee tap repo.
+#        - (NPM_TOKEN is NOT required — npm provenance via OIDC is used
+#          instead; see `permissions: id-token: write` below.)
+#   5. Manually trigger the workflow:
+#        gh workflow run release.yml -f tag=vX.Y.Z -f confirm=YES_PUBLISH
+#
+# Per feedback_no_public_artifacts: do NOT flip ASSIGNEE_RELEASE_PUBLISH
+# or ASSIGNEE_TAP_PUBLISH until the acquirer explicitly approves.
 # Tag pushes alone do NOT trigger this workflow — a human must trigger it.
 #
 # Tooling notes:
@@ -465,6 +481,23 @@ jobs:
   generate-sbom:
     needs: cross-platform-build
     runs-on: ubuntu-latest
+    permissions:
+      # security-events: write is REQUIRED for github/codeql-action/upload-sarif
+      # to push the Grype SARIF report to the GitHub Security tab. Workflow-level
+      # `permissions:` (contents+id-token) does NOT propagate to jobs that
+      # declare their own permissions block, and the default for jobs without
+      # a block is `contents: read` only — SARIF upload would 403.
+      security-events: write
+      # contents: read is needed for actions/checkout.
+      contents: read
+    # Job-level env so the step-level `if: env.ASSIGNEE_RELEASE_PUBLISH == '1'`
+    # below (Attach SBOM to GitHub Release) actually evaluates against this
+    # value. A step-level `env:` block does NOT influence the same step's
+    # `if:` because `if:` is evaluated BEFORE `env:` is materialised — the
+    # gate would always read `null` and skip. Sourcing from `vars.*` first
+    # mirrors the publish-npm pattern used elsewhere in this workflow.
+    env:
+      ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH || secrets.ASSIGNEE_RELEASE_PUBLISH || '' }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -511,10 +544,11 @@ jobs:
         # MUST address (or document and waive) before publish proceeds.
         # Runs unconditionally (DRY-RUN exercises the scan); not gated by
         # ASSIGNEE_RELEASE_PUBLISH so we catch CVEs even on dry-run cycles.
-        # TODO: SHA-pin anchore/scan-action at v6.x.y latest patch.
-        # Current pin tracks v6.5.1 — dependabot will bump weekly.
+        # SHA pin verified against `gh api repos/anchore/scan-action/git/refs/tags/v6.5.1`
+        # (commit 1638637db639e0ade3258b51db49a9a137574c3e).
+        # Dependabot will bump weekly; re-verify when the comment-tag changes.
         id: scan
-        uses: anchore/scan-action@7c05671ae9be166aeb155bad2d7df9121823df32 # v6.5.1
+        uses: anchore/scan-action@1638637db639e0ade3258b51db49a9a137574c3e # v6.5.1
         with:
           sbom: assignee-${{ inputs.tag }}-sbom.spdx.json
           severity-cutoff: high
@@ -528,15 +562,20 @@ jobs:
         # `if: always()` so the SARIF uploads even when scan-action fails
         # the build — operators need to see WHY it failed.
         if: always() && steps.scan.outputs.sarif != ''
-        # TODO: SHA-pin github/codeql-action/upload-sarif at v3.x.y latest patch.
-        # Current pin tracks v3.27.0 — dependabot will bump weekly.
-        uses: github/codeql-action/upload-sarif@4f3212b61783c3c68e8309a0f18a699764811cda # v3.27.0
+        # SHA pin verified against `gh api repos/github/codeql-action/git/refs/tags/v3.27.1`
+        # (tag dereferences to commit 4f3212b61783c3c68e8309a0f18a699764811cda).
+        # Dependabot will bump weekly; re-verify when the comment-tag changes.
+        uses: github/codeql-action/upload-sarif@4f3212b61783c3c68e8309a0f18a699764811cda # v3.27.1
         with:
           sarif_file: ${{ steps.scan.outputs.sarif }}
           category: grype-sbom-scan
 
       - name: Attach SBOM to GitHub Release
         # DRY-RUN default: SKIPPED unless ASSIGNEE_RELEASE_PUBLISH=1.
+        # `env.ASSIGNEE_RELEASE_PUBLISH` is materialised at the JOB level
+        # (see jobs.generate-sbom.env above) so this step-level `if:` reads
+        # a real value instead of the always-null result that a step-only
+        # `env:` block would produce.
         if: env.ASSIGNEE_RELEASE_PUBLISH == '1'
         uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
         with:
@@ -544,7 +583,6 @@ jobs:
           files: assignee-${{ inputs.tag }}-sbom.spdx.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH || secrets.ASSIGNEE_RELEASE_PUBLISH || '' }}
 
   # --------------------------------------------------------------------------
   # W7-08: SLSA L2 build-provenance attestation via cosign + GH OIDC.
