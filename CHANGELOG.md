@@ -18,6 +18,63 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### Full-project audit closure (2026-04-26 / 2026-04-27)
+
+Closes the highest-ROI cluster of findings from a 9-persona / 11-input
+full-project audit: release-pipeline correctness, supply-chain hygiene,
+process-governance enforcement (reviewer-evidence on every commit body),
+and a follow-on bug-hunt remediation that fixed real issues introduced
+by the prior two waves' rapid integration. Three commits land the
+changes (`80d639b` release/CI gates, `f4bbf7d` governance + audit
+closures, `7223642` bug-hunt remediation).
+
+#### Added
+
+- CodeQL security analysis workflow (`.github/workflows/codeql.yml`)
+  with weekly cadence plus push and pull-request triggers.
+- Dependabot configuration (`.github/dependabot.yml`) with grouped npm
+  and `github-actions` ecosystem updates.
+- CI security gate workflow (`.github/workflows/ci-security.yml`)
+  running 5 previously-orphaned audit scripts (`audit-action-pins`,
+  `audit-secrets-inherit`, `audit-overrides`, `audit-homebrew-pin`,
+  `audit-codeowners`) on every push and PR.
+- Anchore SBOM scanning step in the release pipeline; SARIF results
+  surface in the GitHub Security tab.
+- Cost-ledger artifact upload in the nightly E2E workflow so the
+  FinOps monthly-budget gate has data to enforce against (the
+  monthly-budget consumer was previously reading an artifact that
+  no producer step ever uploaded).
+
+#### Changed
+
+- Release-pipeline gates now read from repository Variables
+  (Settings → Secrets and variables → Actions → Variables) instead
+  of Secrets. Prior `env.*` references inside job-level `if:`
+  clauses were silently ineffective per GitHub Actions
+  context-availability rules; gates appeared green but were
+  actually never evaluated.
+- The pre-push hook now enforces a reviewer-evidence token on every
+  commit body being pushed: one of `Reviewer: ACCEPT`,
+  `Reviewer: SKIP — <reason>`, or a
+  `_archive/reviews/<sha>-review.md` citation. Force-push and
+  shallow-clone scenarios fail closed; tag pushes are exempted.
+- `audit-no-suppress` script extended to scan
+  `.github/workflows/*.yml` in addition to
+  `.github/actions/*/action.yml`, closing the gap where workflow
+  files could silently mask CLI failures with `|| true`.
+
+#### Fixed
+
+- `vacation-quality.yml` no longer suppresses doc-lint failures with
+  `|| true`. The doc-lint command was also corrected to invoke the
+  workspace-root script (the previous `pnpm --filter assignee
+doc-lint` never matched any package and the suppression hid the
+  failure).
+- `nightly-e2e.yml` cost-ledger upload now resolves `$HOME`
+  correctly. The previous configuration used a literal `~`, which
+  `actions/glob` does not shell-expand, so the artifact glob
+  matched nothing.
+
 ### R10b — Round 10 (second half): final 4 P2-tier P-IDs + 6 strategic deferred-records
 
 R10b closes the final 4 cheap P2-tier audit P-IDs in parallel and

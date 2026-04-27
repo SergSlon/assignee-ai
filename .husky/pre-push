@@ -19,16 +19,43 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   # Skip deletions (push :branch)
   [ "$local_sha" = "0000000000000000000000000000000000000000" ] && continue
 
+  # Skip tag pushes — tags only mark historical commits, don't introduce code.
+  # Release workflow (release.yml) is tag-driven dispatch and must not be
+  # blocked by reviewer-token requirements that predate the BAN.
+  case "$local_ref" in
+    refs/tags/*)
+      continue
+      ;;
+  esac
+
   # New branch (no remote ref) → enumerate commits unique to this branch
-  # (i.e. not yet on origin/<default>). Falls back to last 50 commits if
-  # the default-branch ref isn't fetched locally.
+  # (i.e. not yet on origin/<default>). Probe origin/HEAD first, then fall
+  # back to a fixed candidate list (main/master/develop/trunk) before
+  # failing closed. The previous "-n 50" fallback silently exempted
+  # commits 51..N on first push of a long branch — soft re-emergence of
+  # BH-001. Failing closed forces the operator to fetch the default ref
+  # or set ASSIGNEE_REVIEWER_BAN_BYPASS=1 with a justification.
   if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
     default_remote_branch=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@')
+    if [ -z "$default_remote_branch" ]; then
+      for candidate in main master develop trunk; do
+        if git rev-parse --verify --quiet "refs/remotes/origin/$candidate" >/dev/null 2>&1; then
+          default_remote_branch=$candidate
+          break
+        fi
+      done
+    fi
     default_remote_branch=${default_remote_branch:-main}
     if git rev-parse --verify --quiet "refs/remotes/origin/$default_remote_branch" >/dev/null 2>&1; then
       range_args="$local_sha --not refs/remotes/origin/$default_remote_branch"
     else
-      range_args="-n 50 $local_sha"
+      echo "" >&2
+      echo "Reviewer-skip BAN: cannot determine default-branch ref locally" >&2
+      echo "(tried origin/HEAD + origin/{main,master,develop,trunk})." >&2
+      echo "" >&2
+      echo "Run 'git fetch origin' or 'git remote set-head origin --auto'," >&2
+      echo "OR set ASSIGNEE_REVIEWER_BAN_BYPASS=1 with a justification." >&2
+      exit 1
     fi
   else
     range_args="$remote_sha..$local_sha"
