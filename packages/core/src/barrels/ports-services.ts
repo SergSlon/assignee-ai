@@ -56,6 +56,18 @@ export {
   type TelemetryPort,
 } from "../ports/telemetry-port.js";
 
+// StoragePort — key/value blob storage port (RW4d, MASTER-016).
+// Default LocalFsStorageAdapter mirrors today's filesystem-based
+// persistence (atomic writes, mode 0600/0700, path-traversal hardening
+// at the port boundary). Migration of existing fs call-sites
+// (checkpoint store, RBAC policy-store, file advisory lock,
+// user-config-loader, etc.) deferred to RW4d-migration.
+export type { StoragePort } from "../ports/storage-port.js";
+export {
+  LocalFsStorageAdapter,
+  type LocalFsStorageAdapterOptions,
+} from "../adapters/storage/local-fs-adapter.js";
+
 // Services — CloudFormation schema fetching (Story 31.1, 31.2)
 export {
   CloudFormationSchemaService,
