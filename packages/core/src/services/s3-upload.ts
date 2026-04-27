@@ -20,6 +20,10 @@ import { getPartitionFromRegion } from "../config/aws-partition.js";
 import { requireAssigneeCredentials } from "../config/aws-credentials.js";
 import { EnvVar } from "../constants/env-vars.js";
 import { ContentType } from "../constants/errors.js";
+import {
+  ProcessEnvConfigAdapter,
+  type ConfigPort,
+} from "../config/config-port.js";
 
 export interface UploadResult {
   uploaded: number;
@@ -96,12 +100,14 @@ export function collectFiles(dir: string, base?: string): string[] {
  * are not set in the environment. Never falls through to the default AWS
  * credential chain (~/.aws/credentials, SSO, IMDS).
  */
-function createS3Client(region?: string): S3Client {
+function createS3Client(region?: string, config?: ConfigPort): S3Client {
+  const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
   // L-A10: A previous refactor removed AWS_REGION validation, so when neither
   // an explicit override nor process.env.AWS_REGION was set, the SDK silently
   // defaulted to us-east-1 — uploading to the wrong region with no warning.
   // Restore the explicit error so misconfiguration fails fast.
-  const resolvedRegion = region ?? process.env[EnvVar.AWS_REGION]?.trim() ?? "";
+  const resolvedRegion =
+    region ?? effectiveConfig.get(EnvVar.AWS_REGION)?.trim() ?? "";
   if (!resolvedRegion) {
     throw new ConfigurationError(
       "AWS_REGION is missing or empty — set it in .env (or pass an explicit region) before running setup.",
@@ -109,7 +115,7 @@ function createS3Client(region?: string): S3Client {
   }
   return new S3Client({
     region: resolvedRegion,
-    credentials: requireAssigneeCredentials("operator"),
+    credentials: requireAssigneeCredentials("operator", effectiveConfig),
   });
 }
 
@@ -124,9 +130,10 @@ function createS3Client(region?: string): S3Client {
  */
 export async function configureBucketPolicy(
   bucketName: string,
-  options?: { region?: string },
+  options?: { region?: string; config?: ConfigPort },
 ): Promise<void> {
-  const client = createS3Client(options?.region);
+  const effectiveConfig = options?.config ?? new ProcessEnvConfigAdapter();
+  const client = createS3Client(options?.region, effectiveConfig);
 
   // Partition-aware ARN: S3 bucket policies in GovCloud/China reject
   // `arn:aws:` resource ARNs because IAM evaluates the partition literal
@@ -134,7 +141,7 @@ export async function configureBucketPolicy(
   // (options.region > AWS_REGION env var) so GovCloud/China operators
   // emit `arn:aws-us-gov:s3:::...` / `arn:aws-cn:s3:::...` policies.
   const resolvedRegion =
-    options?.region ?? process.env[EnvVar.AWS_REGION]?.trim() ?? "";
+    options?.region ?? effectiveConfig.get(EnvVar.AWS_REGION)?.trim() ?? "";
   const partition = getPartitionFromRegion(resolvedRegion);
 
   const policy = {
@@ -177,9 +184,10 @@ export async function uploadStaticSite(
   options?: {
     region?: string;
     onProgress?: (progress: UploadProgress) => void;
+    config?: ConfigPort;
   },
 ): Promise<UploadResult> {
-  const client = createS3Client(options?.region);
+  const client = createS3Client(options?.region, options?.config);
 
   const allFiles = collectFiles(sourceDir);
   const result: UploadResult = {

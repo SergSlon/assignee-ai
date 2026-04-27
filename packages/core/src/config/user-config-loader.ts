@@ -24,6 +24,7 @@ import {
 import { log, LOG_ACTIONS } from "../utils/logger/index.js";
 import { EnvVar } from "../constants/env-vars.js";
 import { FileName } from "./constants/paths.js";
+import { ProcessEnvConfigAdapter, type ConfigPort } from "./config-port.js";
 
 /** Extended user config with top-level preferences (beyond per-resource overrides). */
 export type UserConfig = UserResourceConfig & {
@@ -110,10 +111,17 @@ export function validateUserConfig(parsed: unknown): UserConfig {
   return result.data as UserConfig;
 }
 
-/** Resolve the config file path from env override or XDG default. */
-export function resolveConfigPath(): string {
+/**
+ * Resolve the config file path from env override or XDG default.
+ *
+ * MASTER-009: accepts an optional `ConfigPort` so SaaS callers can
+ * supply a tenant-scoped lookup. When omitted, falls back to a fresh
+ * `ProcessEnvConfigAdapter` (legacy single-tenant CLI behaviour).
+ */
+export function resolveConfigPath(config?: ConfigPort): string {
+  const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
   const configDir =
-    process.env[EnvVar.ASSIGNEE_CONFIG_DIR] ??
+    effectiveConfig.get(EnvVar.ASSIGNEE_CONFIG_DIR) ??
     path.join(os.homedir(), ".config", "assignee");
   return path.join(configDir, FileName.CONFIG);
 }
@@ -121,10 +129,15 @@ export function resolveConfigPath(): string {
 /**
  * Load user config from YAML file. Returns undefined if the file is missing or malformed.
  *
+ * MASTER-009: accepts an optional `ConfigPort` and forwards it to
+ * `resolveConfigPath`.
+ *
  * @returns Parsed user config or undefined (never throws)
  */
-export async function loadUserConfig(): Promise<UserConfig | undefined> {
-  const configPath = resolveConfigPath();
+export async function loadUserConfig(
+  config?: ConfigPort,
+): Promise<UserConfig | undefined> {
+  const configPath = resolveConfigPath(config);
   try {
     const content = await fs.readFile(configPath, "utf-8");
     const parsed: unknown = parseYaml(content);

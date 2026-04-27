@@ -8,6 +8,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { EnvVar } from "../../constants/env-vars.js";
+import {
+  ProcessEnvConfigAdapter,
+  type ConfigPort,
+} from "../../config/config-port.js";
 import type { RecordedCall, RecordingManifest } from "./types.js";
 import { redactSensitive } from "./redaction.js";
 import { getRecordingDir, sanitizeFilenameSegment } from "./paths.js";
@@ -98,7 +102,14 @@ export class RecordingInterceptor {
   }
 }
 
-/** Returns true when ASSIGNEE_RECORD=1 is set in the environment. */
-export function isRecordingEnabled(): boolean {
-  return process.env[EnvVar.ASSIGNEE_RECORD] === "1";
+/**
+ * Returns true when ASSIGNEE_RECORD=1 is set in the environment.
+ *
+ * MASTER-009: accepts an optional `ConfigPort` so SaaS callers can
+ * supply a tenant-scoped lookup. When omitted, falls back to a fresh
+ * `ProcessEnvConfigAdapter` (legacy single-tenant CLI behaviour).
+ */
+export function isRecordingEnabled(config?: ConfigPort): boolean {
+  const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
+  return effectiveConfig.get(EnvVar.ASSIGNEE_RECORD) === "1";
 }

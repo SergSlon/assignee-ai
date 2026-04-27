@@ -24,6 +24,7 @@ import {
 } from "@/utils/display.js";
 import { AWS_REGION } from "@/config/constants/aws.js";
 import { EnvVar } from "@/constants/env-vars.js";
+import { ProcessEnvConfigAdapter } from "@/config/config-port.js";
 
 /**
  * Epic 94 Wave 3 N6 (C-05 / C-06): emit each advisory as a `[WARN]`
@@ -163,9 +164,13 @@ interface PlanJsonPayload {
 }
 
 function buildPlanJsonPayload(state: AgentState): PlanJsonPayload {
+  // MASTER-009: read via fresh ConfigPort adapter rather than reaching
+  // at process.env directly. TODO(SaaS): thread ConfigPort from graph
+  // state once W4 lands.
+  const cfg = new ProcessEnvConfigAdapter();
   const region =
-    process.env[EnvVar.AWS_REGION] ??
-    process.env[EnvVar.AWS_DEFAULT_REGION] ??
+    cfg.get(EnvVar.AWS_REGION) ??
+    cfg.get(EnvVar.AWS_DEFAULT_REGION) ??
     AWS_REGION;
   // Epic 92 Wave 4 (e92.4.a) / A-19: strip empty-valued rows so JSON
   // consumers don't see `"CPU Credits": ""` noise either.

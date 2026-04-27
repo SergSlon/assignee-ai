@@ -26,6 +26,10 @@ import {
   filterAllowlistedFields,
   filterSensitiveElicitedFields,
 } from "./otel-allowlist.js";
+import {
+  ProcessEnvConfigAdapter,
+  type ConfigPort,
+} from "../config/config-port.js";
 
 // ── TelemetryPort interface ────────────────────────────────────────────
 
@@ -52,9 +56,14 @@ export interface TelemetryPort {
  * Returns true when the caller has explicitly opted in to a telemetry
  * adapter via `ASSIGNEE_TELEMETRY_ADAPTER`. Absent or empty → false
  * (L1-F52 invariant: no vendor phone-home by default).
+ *
+ * MASTER-009: accepts an optional `ConfigPort` so SaaS callers can
+ * supply a tenant-scoped lookup. When omitted, falls back to a fresh
+ * `ProcessEnvConfigAdapter` (legacy single-tenant CLI behaviour).
  */
-export function isTelemetryEnabled(): boolean {
-  const val = process.env["ASSIGNEE_TELEMETRY_ADAPTER"];
+export function isTelemetryEnabled(config?: ConfigPort): boolean {
+  const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
+  const val = effectiveConfig.get("ASSIGNEE_TELEMETRY_ADAPTER");
   return typeof val === "string" && val.trim().length > 0;
 }
 

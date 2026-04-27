@@ -76,6 +76,10 @@ export type AutoFixModeType = (typeof AutoFixMode)[keyof typeof AutoFixMode];
  * W5-01 (P007-tech → L1-F05): using env-derived value stops EU operators
  * from silently hitting a US-East default when they have AWS_REGION
  * configured in their shell / process environment.
+ *
+ * MIGRATION-NOTE(M-009): process-lifetime config; multi-tenant SaaS will
+ * need request-scoped lookup via `ConfigPort.get("AWS_REGION", "us-east-1")`.
+ * Single-tenant CLI captures the value at module load — fine today.
  */
 export const DEFAULT_AWS_REGION: string =
   process.env["AWS_REGION"] ?? "us-east-1";

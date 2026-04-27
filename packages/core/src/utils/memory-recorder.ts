@@ -23,6 +23,10 @@ import {
 } from "./redact.js";
 // W4-03 (Epic 100 Round 3): advisory lock around provisions.json writes.
 import { defaultFileAdvisoryLock } from "../locks/file-advisory-lock.js";
+import {
+  ProcessEnvConfigAdapter,
+  type ConfigPort,
+} from "../config/config-port.js";
 
 /** Lock name = provisions.json path for advisory-lock serialisation. */
 const PROVISIONS_LOCK_NAME = path.join(
@@ -42,7 +46,9 @@ export async function writeProvisionRecord(
   resourceArn: string | undefined,
   desiredState: Record<string, unknown> | undefined,
   estimatedMonthlyCost: string | undefined,
+  config?: ConfigPort,
 ): Promise<void> {
+  const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
   // W4-03: advisory lock wraps the full write.
   await defaultFileAdvisoryLock.withLock(PROVISIONS_LOCK_NAME, async () => {
     try {
@@ -51,8 +57,8 @@ export async function writeProvisionRecord(
         resourceType: resourceType || UNKNOWN_FALLBACK,
         resourceArn: resourceArn ?? "",
         region:
-          process.env[EnvVar.AWS_REGION] ??
-          process.env[EnvVar.AWS_DEFAULT_REGION] ??
+          effectiveConfig.get(EnvVar.AWS_REGION) ??
+          effectiveConfig.get(EnvVar.AWS_DEFAULT_REGION) ??
           UNKNOWN_FALLBACK,
         desiredStateHash: crypto
           .createHash("sha256")

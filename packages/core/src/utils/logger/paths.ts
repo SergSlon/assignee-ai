@@ -7,6 +7,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+import {
+  ProcessEnvConfigAdapter,
+  type ConfigPort,
+} from "../../config/config-port.js";
 
 /** Environment variable to redirect persistent logs (used by tests). */
 const LOG_DIR_ENV = "ASSIGNEE_LOG_DIR";
@@ -40,16 +44,21 @@ export function clearEnsuredDirCacheForTests(): void {
  * Resolve the directory where error/warn events should be persisted.
  * Honors ASSIGNEE_LOG_DIR (used by tests), otherwise falls back to
  * ~/.assignee/logs.
+ *
+ * MASTER-009: accepts an optional `ConfigPort` so SaaS callers can
+ * supply a tenant-scoped lookup. When omitted, falls back to a fresh
+ * `ProcessEnvConfigAdapter` (legacy single-tenant CLI behaviour).
  */
-export function resolveLogDir(): string {
-  const override = process.env[LOG_DIR_ENV];
+export function resolveLogDir(config?: ConfigPort): string {
+  const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
+  const override = effectiveConfig.get(LOG_DIR_ENV);
   if (override && override.length > 0) return override;
   return path.join(os.homedir(), ".assignee", "logs");
 }
 
 /** Exposed for tests and for the `clean` command. */
-export function getLogDir(): string {
-  return resolveLogDir();
+export function getLogDir(config?: ConfigPort): string {
+  return resolveLogDir(config);
 }
 
 /** Format a Date as YYYY-MM-DD in UTC for the daily log file name. */

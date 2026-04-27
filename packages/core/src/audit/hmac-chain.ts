@@ -17,6 +17,10 @@
  */
 
 import { createHmac, randomBytes } from "node:crypto";
+import {
+  ProcessEnvConfigAdapter,
+  type ConfigPort,
+} from "../config/config-port.js";
 
 // ── Key management ─────────────────────────────────────────────────────
 
@@ -32,9 +36,15 @@ let _perProcessKey: string | undefined;
  *   1. `ASSIGNEE_AUDIT_KEY` env var (per-tenant, persists across restarts).
  *   2. Per-process random key (emits a WARNING once; chain not durable
  *      across process restarts — configure the env var in production).
+ *
+ * MASTER-009: accepts an optional `ConfigPort` so SaaS callers can
+ * supply a tenant-scoped key source instead of the process-global
+ * `process.env`. When omitted, falls back to a fresh
+ * `ProcessEnvConfigAdapter` (legacy single-tenant CLI behaviour).
  */
-export function getAuditKey(): string {
-  const envKey = process.env["ASSIGNEE_AUDIT_KEY"];
+export function getAuditKey(config?: ConfigPort): string {
+  const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
+  const envKey = effectiveConfig.get("ASSIGNEE_AUDIT_KEY");
   if (envKey && envKey.length > 0) return envKey;
 
   if (!_perProcessKey) {

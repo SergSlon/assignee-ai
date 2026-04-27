@@ -25,6 +25,7 @@
  */
 
 import { EnvVar } from "../constants/env-vars.js";
+import { ProcessEnvConfigAdapter, type ConfigPort } from "./config-port.js";
 
 export type AssigneeRole = "operator" | "reader" | "auditor";
 
@@ -113,11 +114,14 @@ export function envVarsForRole(role: AssigneeRole): {
  * the current process environment. Single source of truth used by
  * `assignee init` and other detection callers.
  *
+ * MASTER-009: accepts an optional `ConfigPort` and forwards it to
+ * `tryAssigneeCredentials`.
+ *
  * @see SECURITY-AUDIT.md — M-S8
  */
-export function availableRoles(): AssigneeRole[] {
+export function availableRoles(config?: ConfigPort): AssigneeRole[] {
   return ASSIGNEE_ROLES.filter(
-    (role) => tryAssigneeCredentials(role) !== undefined,
+    (role) => tryAssigneeCredentials(role, config) !== undefined,
   );
 }
 
@@ -155,10 +159,12 @@ const MIN_SESSION_TOKEN_LEN = 16;
  */
 export function requireAssigneeCredentials(
   role: AssigneeRole,
+  config?: ConfigPort,
 ): ExplicitAwsCredentials {
+  const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
   const vars = ROLE_TO_VARS[role];
-  const accessKeyId = process.env[vars.accessKey]?.trim();
-  const secretAccessKey = process.env[vars.secretKey]?.trim();
+  const accessKeyId = effectiveConfig.get(vars.accessKey)?.trim();
+  const secretAccessKey = effectiveConfig.get(vars.secretKey)?.trim();
 
   if (!accessKeyId || !secretAccessKey) {
     throw new MissingAssigneeCredentialsError(
@@ -172,7 +178,7 @@ export function requireAssigneeCredentials(
   // legitimately use ASIA-prefixed STS session keys.
   if (
     !ACCESS_KEY_SHAPE.test(accessKeyId) &&
-    process.env["ASSIGNEE_LOG_LEVEL"] === "debug"
+    effectiveConfig.get("ASSIGNEE_LOG_LEVEL") === "debug"
   ) {
     process.stderr.write(
       `[assignee] warning: ${vars.accessKey} does not match the expected ` +
@@ -183,7 +189,7 @@ export function requireAssigneeCredentials(
   // W2-01: read optional session token. Validate if present.
   let sessionToken: string | undefined;
   if (vars.sessionTokenKey) {
-    const rawToken = process.env[vars.sessionTokenKey]?.trim();
+    const rawToken = effectiveConfig.get(vars.sessionTokenKey)?.trim();
     if (rawToken) {
       if (rawToken.length < MIN_SESSION_TOKEN_LEN) {
         throw new InvalidSessionTokenError(vars.sessionTokenKey);
@@ -210,16 +216,18 @@ export function requireAssigneeCredentials(
  */
 export function tryAssigneeCredentials(
   role: AssigneeRole,
+  config?: ConfigPort,
 ): ExplicitAwsCredentials | undefined {
+  const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
   const vars = ROLE_TO_VARS[role];
-  const accessKeyId = process.env[vars.accessKey]?.trim();
-  const secretAccessKey = process.env[vars.secretKey]?.trim();
+  const accessKeyId = effectiveConfig.get(vars.accessKey)?.trim();
+  const secretAccessKey = effectiveConfig.get(vars.secretKey)?.trim();
   if (!accessKeyId || !secretAccessKey) return undefined;
 
   // W2-01: also pick up session token when present.
   let sessionToken: string | undefined;
   if (vars.sessionTokenKey) {
-    const rawToken = process.env[vars.sessionTokenKey]?.trim();
+    const rawToken = effectiveConfig.get(vars.sessionTokenKey)?.trim();
     if (rawToken && rawToken.length >= MIN_SESSION_TOKEN_LEN) {
       sessionToken = rawToken;
     }
@@ -234,7 +242,12 @@ export function tryAssigneeCredentials(
 
 /**
  * Returns true when a role has credentials configured in the environment.
+ *
+ * MASTER-009: accepts an optional `ConfigPort` and forwards it.
  */
-export function hasAssigneeCredentials(role: AssigneeRole): boolean {
-  return tryAssigneeCredentials(role) !== undefined;
+export function hasAssigneeCredentials(
+  role: AssigneeRole,
+  config?: ConfigPort,
+): boolean {
+  return tryAssigneeCredentials(role, config) !== undefined;
 }

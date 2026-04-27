@@ -30,6 +30,10 @@
 
 import { EnvVar } from "../constants/env-vars.js";
 import type { LogEvent, LogLevelType } from "../utils/logger/actions.js";
+import {
+  ProcessEnvConfigAdapter,
+  type ConfigPort,
+} from "../config/config-port.js";
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -70,9 +74,14 @@ const SEVERITY_NUMBERS: Record<LogLevelType, number> = {
  *
  * Read on every call (not cached) so tests and runtime overrides apply
  * immediately.
+ *
+ * MASTER-009: accepts an optional `ConfigPort` so SaaS callers can
+ * supply a tenant-scoped lookup. When omitted, falls back to a fresh
+ * `ProcessEnvConfigAdapter` (legacy single-tenant CLI behaviour).
  */
-export function getOtelEndpoint(): string | undefined {
-  const raw = process.env[EnvVar.ASSIGNEE_OTEL_ENDPOINT];
+export function getOtelEndpoint(config?: ConfigPort): string | undefined {
+  const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
+  const raw = effectiveConfig.get(EnvVar.ASSIGNEE_OTEL_ENDPOINT);
   if (raw === undefined) return undefined;
   const trimmed = raw.trim();
   return trimmed.length > 0 ? trimmed : undefined;
@@ -82,17 +91,27 @@ export function getOtelEndpoint(): string | undefined {
  * Returns the resolved service.name attribute value. Honors
  * `ASSIGNEE_OTEL_SERVICE_NAME`; falls back to `DEFAULT_OTEL_SERVICE_NAME`
  * for absent or empty values.
+ *
+ * MASTER-009: accepts an optional `ConfigPort` so SaaS callers can
+ * supply a tenant-scoped lookup. When omitted, falls back to a fresh
+ * `ProcessEnvConfigAdapter` (legacy single-tenant CLI behaviour).
  */
-export function getOtelServiceName(): string {
-  const raw = process.env[EnvVar.ASSIGNEE_OTEL_SERVICE_NAME];
+export function getOtelServiceName(config?: ConfigPort): string {
+  const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
+  const raw = effectiveConfig.get(EnvVar.ASSIGNEE_OTEL_SERVICE_NAME);
   if (raw === undefined) return DEFAULT_OTEL_SERVICE_NAME;
   const trimmed = raw.trim();
   return trimmed.length > 0 ? trimmed : DEFAULT_OTEL_SERVICE_NAME;
 }
 
-/** Convenience: is the exporter currently active? */
-export function isOtelEnabled(): boolean {
-  return getOtelEndpoint() !== undefined;
+/**
+ * Convenience: is the exporter currently active?
+ *
+ * MASTER-009: accepts an optional `ConfigPort` so SaaS callers can
+ * supply a tenant-scoped lookup.
+ */
+export function isOtelEnabled(config?: ConfigPort): boolean {
+  return getOtelEndpoint(config) !== undefined;
 }
 
 /* ------------------------------------------------------------------ */

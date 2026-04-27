@@ -18,6 +18,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { EnvVar } from "../../constants/env-vars.js";
+import {
+  ProcessEnvConfigAdapter,
+  type ConfigPort,
+} from "../../config/config-port.js";
 
 /**
  * Default retention window for persistent log files, in days.
@@ -65,8 +69,9 @@ const AUTO_PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
  * silently clamped UP to the floor. The env var can only EXTEND, never shrink,
  * the minimum retention period.
  */
-export function resolveLogRetentionDays(): number {
-  const raw = process.env[EnvVar.ASSIGNEE_LOG_RETENTION_DAYS];
+export function resolveLogRetentionDays(config?: ConfigPort): number {
+  const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
+  const raw = effectiveConfig.get(EnvVar.ASSIGNEE_LOG_RETENTION_DAYS);
   if (raw === undefined || raw.length === 0) return DEFAULT_LOG_RETENTION_DAYS;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -87,8 +92,9 @@ export function resolveLogRetentionDays(): number {
  *
  * Returns a value ≥ MINIMUM_AUDIT_RETENTION_DAYS (90).
  */
-export function resolveAuditRetentionDays(): number {
-  const raw = process.env[EnvVar.ASSIGNEE_AUDIT_RETENTION_DAYS];
+export function resolveAuditRetentionDays(config?: ConfigPort): number {
+  const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
+  const raw = effectiveConfig.get(EnvVar.ASSIGNEE_AUDIT_RETENTION_DAYS);
   if (raw === undefined || raw.length === 0)
     return DEFAULT_AUDIT_RETENTION_DAYS;
   const parsed = Number(raw);
