@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { cloudFrontDistributionPlugin } from "./cloudfront-distribution.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { DISTRIBUTION_PRESETS } from "./_policy-templates/index.js";
 
 describe("cloudFrontDistributionPlugin", () => {
   it("has the correct resourceType", () => {
@@ -18,6 +19,213 @@ describe("cloudFrontDistributionPlugin", () => {
 
   it("has no advancedFields (minimum-viable wizard)", () => {
     expect(cloudFrontDistributionPlugin.advancedFields).toEqual([]);
+  });
+
+  // ── MASTER-011 part A — preset-driven wizard UX ────────────────────────────
+  describe("Preset selector (MASTER-011 part A)", () => {
+    const presetField = cloudFrontDistributionPlugin.commonFields.find(
+      (f) => f.name === "Preset",
+    )!;
+
+    it("exposes a Preset enum field as the first prompt", () => {
+      expect(presetField).toBeDefined();
+      expect(presetField.required).toBe(true);
+      expect(presetField.question.type).toBe("enum");
+    });
+
+    it("offers all four documented presets (3 templates + custom-json)", () => {
+      const values = (presetField.question.options ?? []).map((o) => o.value);
+      expect(values).toEqual(
+        expect.arrayContaining([
+          DISTRIBUTION_PRESETS.SPA_WEBSITE,
+          DISTRIBUTION_PRESETS.STATIC_SITE,
+          DISTRIBUTION_PRESETS.API_PASSTHROUGH,
+          DISTRIBUTION_PRESETS.CUSTOM_JSON,
+        ]),
+      );
+      expect(values).toHaveLength(4);
+    });
+
+    it("defaults to spa-website (most common case)", () => {
+      expect(presetField.question.initialValue).toBe(
+        DISTRIBUTION_PRESETS.SPA_WEBSITE,
+      );
+    });
+
+    it("Preset is wizard-only — toCfn drops it from CFN output", () => {
+      expect(
+        presetField.toCfn?.(DISTRIBUTION_PRESETS.SPA_WEBSITE),
+      ).toBeUndefined();
+      expect(
+        presetField.toCfn?.(DISTRIBUTION_PRESETS.CUSTOM_JSON),
+      ).toBeUndefined();
+    });
+
+    it("registers exactly one DistributionConfig variant per preset", () => {
+      const variants = cloudFrontDistributionPlugin.commonFields.filter(
+        (f) => f.name === "DistributionConfig",
+      );
+      expect(variants).toHaveLength(4);
+      const presets = variants
+        .map((v) => v.question.showIf?.value)
+        .filter(Boolean);
+      expect(presets).toEqual(
+        expect.arrayContaining([
+          DISTRIBUTION_PRESETS.SPA_WEBSITE,
+          DISTRIBUTION_PRESETS.STATIC_SITE,
+          DISTRIBUTION_PRESETS.API_PASSTHROUGH,
+          DISTRIBUTION_PRESETS.CUSTOM_JSON,
+        ]),
+      );
+    });
+  });
+
+  describe("Preset prefill — initialValue materializes a working template", () => {
+    function variant(preset: string) {
+      return cloudFrontDistributionPlugin.commonFields.find(
+        (f) =>
+          f.name === "DistributionConfig" &&
+          f.question.showIf?.value === preset,
+      )!;
+    }
+
+    it("spa-website prefill is valid JSON with the canonical SPA fields", () => {
+      const f = variant(DISTRIBUTION_PRESETS.SPA_WEBSITE);
+      const iv = f.question.initialValue as string;
+      expect(typeof iv).toBe("string");
+      const parsed = JSON.parse(iv) as Record<string, unknown>;
+      expect(parsed["Enabled"]).toBe(true);
+      expect(parsed["DefaultRootObject"]).toBe("index.html");
+      // SPA fallback to /index.html on 403/404 is the SPA hallmark.
+      expect(parsed["CustomErrorResponses"]).toBeDefined();
+      const cer = parsed["CustomErrorResponses"] as Record<string, unknown>;
+      const items = cer["Items"] as Array<Record<string, unknown>>;
+      expect(items.some((i) => i["ErrorCode"] === 403)).toBe(true);
+      expect(items.some((i) => i["ErrorCode"] === 404)).toBe(true);
+    });
+
+    it("spa-website prefill uses S3OriginConfig (not CustomOriginConfig)", () => {
+      const iv = variant(DISTRIBUTION_PRESETS.SPA_WEBSITE).question
+        .initialValue as string;
+      const parsed = JSON.parse(iv) as Record<string, unknown>;
+      const origins = parsed["Origins"] as Record<string, unknown>;
+      const items = origins["Items"] as Array<Record<string, unknown>>;
+      expect(items[0]).toHaveProperty("S3OriginConfig");
+      expect(items[0]).not.toHaveProperty("CustomOriginConfig");
+    });
+
+    it("static-site prefill omits the SPA fallback (CustomErrorResponses)", () => {
+      const iv = variant(DISTRIBUTION_PRESETS.STATIC_SITE).question
+        .initialValue as string;
+      const parsed = JSON.parse(iv) as Record<string, unknown>;
+      // Multi-page static sites need real 404s — no rewrite to /index.html.
+      expect(parsed["CustomErrorResponses"]).toBeUndefined();
+    });
+
+    it("api-passthrough prefill uses CustomOriginConfig with HTTPS-only", () => {
+      const iv = variant(DISTRIBUTION_PRESETS.API_PASSTHROUGH).question
+        .initialValue as string;
+      const parsed = JSON.parse(iv) as Record<string, unknown>;
+      const origins = parsed["Origins"] as Record<string, unknown>;
+      const items = origins["Items"] as Array<Record<string, unknown>>;
+      const customOrigin = items[0]!["CustomOriginConfig"] as Record<
+        string,
+        unknown
+      >;
+      expect(customOrigin).toBeDefined();
+      expect(customOrigin["OriginProtocolPolicy"]).toBe("https-only");
+    });
+
+    it("api-passthrough prefill disables caching (DefaultTTL=0)", () => {
+      const iv = variant(DISTRIBUTION_PRESETS.API_PASSTHROUGH).question
+        .initialValue as string;
+      const parsed = JSON.parse(iv) as Record<string, unknown>;
+      const dcb = parsed["DefaultCacheBehavior"] as Record<string, unknown>;
+      expect(dcb["DefaultTTL"]).toBe(0);
+      expect(dcb["MaxTTL"]).toBe(0);
+    });
+
+    it("every non-custom preset uses ViewerProtocolPolicy=redirect-to-https", () => {
+      for (const preset of [
+        DISTRIBUTION_PRESETS.SPA_WEBSITE,
+        DISTRIBUTION_PRESETS.STATIC_SITE,
+        DISTRIBUTION_PRESETS.API_PASSTHROUGH,
+      ]) {
+        const iv = variant(preset).question.initialValue as string;
+        const parsed = JSON.parse(iv) as Record<string, unknown>;
+        const dcb = parsed["DefaultCacheBehavior"] as Record<string, unknown>;
+        expect(dcb["ViewerProtocolPolicy"]).toBe("redirect-to-https");
+      }
+    });
+
+    it("every preset prefill passes the shared validate() check", () => {
+      for (const preset of [
+        DISTRIBUTION_PRESETS.SPA_WEBSITE,
+        DISTRIBUTION_PRESETS.STATIC_SITE,
+        DISTRIBUTION_PRESETS.API_PASSTHROUGH,
+      ]) {
+        const f = variant(preset);
+        const iv = f.question.initialValue as string;
+        expect(f.question.validate?.(iv)).toBeUndefined();
+      }
+    });
+
+    it("custom-json variant has NO initialValue (preserves free-text paste)", () => {
+      const f = variant(DISTRIBUTION_PRESETS.CUSTOM_JSON);
+      expect(f.question.initialValue).toBeUndefined();
+    });
+
+    it("custom-json variant still validates a hand-crafted JSON paste", () => {
+      const f = variant(DISTRIBUTION_PRESETS.CUSTOM_JSON);
+      const validJson = JSON.stringify({
+        CallerReference: "hand-crafted",
+        Enabled: true,
+        Origins: { Quantity: 1, Items: [] },
+        DefaultCacheBehavior: { TargetOriginId: "x" },
+      });
+      expect(f.question.validate?.(validJson)).toBeUndefined();
+      expect(f.question.validate?.("{broken")).toMatch(/valid JSON/);
+    });
+
+    it("custom-json variant's toCfn parses pasted JSON", () => {
+      const f = variant(DISTRIBUTION_PRESETS.CUSTOM_JSON);
+      const validJson = JSON.stringify({
+        CallerReference: "x",
+        Enabled: true,
+        Origins: { Quantity: 1, Items: [] },
+        DefaultCacheBehavior: { TargetOriginId: "x" },
+      });
+      const parsed = f.toCfn?.(validJson) as Record<string, unknown>;
+      expect(parsed["CallerReference"]).toBe("x");
+      expect(parsed["Enabled"]).toBe(true);
+    });
+  });
+
+  // ── MASTER-011 part D — phantom CLI citation ───────────────────────────────
+  describe("phantom CLI citation (MASTER-011 part D)", () => {
+    it("does NOT reference the non-existent `assignee patterns show` command", () => {
+      const allText = JSON.stringify({
+        hints: cloudFrontDistributionPlugin.configHints,
+        fields: cloudFrontDistributionPlugin.commonFields.map((f) => ({
+          label: f.question.label,
+          hint: f.question.hint,
+          placeholder: f.question.placeholder,
+        })),
+      });
+      // Phantom: `assignee patterns show static-website` — NOT a real command.
+      expect(allText).not.toMatch(/assignee patterns show/);
+    });
+
+    it("references real CLI commands instead (assignee plan / assignee cost)", () => {
+      const allText = JSON.stringify({
+        hints: cloudFrontDistributionPlugin.configHints,
+        fields: cloudFrontDistributionPlugin.commonFields.map((f) => ({
+          hint: f.question.hint,
+        })),
+      });
+      // Audit-cited replacement: `assignee plan --help` is a real command.
+      expect(allText).toMatch(/assignee plan --help|assignee cost/);
+    });
   });
 
   describe("DistributionConfig validation", () => {
