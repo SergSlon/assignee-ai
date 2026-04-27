@@ -17,7 +17,7 @@ import {
   buildLogGroupArn,
 } from "./setup-arn-builder.js";
 
-const ACCOUNT = "111111111111";
+const ACCOUNT = "210987654321";
 
 describe("buildIamRoleArn", () => {
   it("builds a commercial-partition role ARN", () => {
@@ -27,7 +27,7 @@ describe("buildIamRoleArn", () => {
         accountId: ACCOUNT,
         roleName: "AssigneeAiBedrockLoggingRole",
       }),
-    ).toBe("arn:aws:iam::111111111111:role/AssigneeAiBedrockLoggingRole");
+    ).toBe("arn:aws:iam::210987654321:role/AssigneeAiBedrockLoggingRole");
   });
 
   it("builds a GovCloud role ARN", () => {
@@ -37,7 +37,7 @@ describe("buildIamRoleArn", () => {
         accountId: ACCOUNT,
         roleName: "MyRole",
       }),
-    ).toBe("arn:aws-us-gov:iam::111111111111:role/MyRole");
+    ).toBe("arn:aws-us-gov:iam::210987654321:role/MyRole");
   });
 
   it("builds a China role ARN", () => {
@@ -47,7 +47,7 @@ describe("buildIamRoleArn", () => {
         accountId: ACCOUNT,
         roleName: "MyRole",
       }),
-    ).toBe("arn:aws-cn:iam::111111111111:role/MyRole");
+    ).toBe("arn:aws-cn:iam::210987654321:role/MyRole");
   });
 
   it("builds an ISO role ARN", () => {
@@ -57,7 +57,7 @@ describe("buildIamRoleArn", () => {
         accountId: ACCOUNT,
         roleName: "MyRole",
       }),
-    ).toBe("arn:aws-iso:iam::111111111111:role/MyRole");
+    ).toBe("arn:aws-iso:iam::210987654321:role/MyRole");
   });
 
   it("preserves nested service-role paths in the role name", () => {
@@ -67,7 +67,7 @@ describe("buildIamRoleArn", () => {
         accountId: ACCOUNT,
         roleName: "service-role/MyService",
       }),
-    ).toBe("arn:aws:iam::111111111111:role/service-role/MyService");
+    ).toBe("arn:aws:iam::210987654321:role/service-role/MyService");
   });
 });
 
@@ -79,7 +79,7 @@ describe("buildIamPolicyArn", () => {
         accountId: ACCOUNT,
         policyName: "AssigneeOperatorPolicy",
       }),
-    ).toBe("arn:aws:iam::111111111111:policy/AssigneeOperatorPolicy");
+    ).toBe("arn:aws:iam::210987654321:policy/AssigneeOperatorPolicy");
   });
 
   it("builds a GovCloud policy ARN", () => {
@@ -89,7 +89,7 @@ describe("buildIamPolicyArn", () => {
         accountId: ACCOUNT,
         policyName: "MyPolicy",
       }),
-    ).toBe("arn:aws-us-gov:iam::111111111111:policy/MyPolicy");
+    ).toBe("arn:aws-us-gov:iam::210987654321:policy/MyPolicy");
   });
 
   it("builds a China policy ARN", () => {
@@ -99,7 +99,7 @@ describe("buildIamPolicyArn", () => {
         accountId: ACCOUNT,
         policyName: "MyPolicy",
       }),
-    ).toBe("arn:aws-cn:iam::111111111111:policy/MyPolicy");
+    ).toBe("arn:aws-cn:iam::210987654321:policy/MyPolicy");
   });
 });
 
@@ -111,7 +111,7 @@ describe("buildIamUserArn", () => {
         accountId: ACCOUNT,
         userName: "assignee-operator",
       }),
-    ).toBe("arn:aws:iam::111111111111:user/assignee-operator");
+    ).toBe("arn:aws:iam::210987654321:user/assignee-operator");
   });
 
   it("builds a GovCloud user ARN", () => {
@@ -121,26 +121,26 @@ describe("buildIamUserArn", () => {
         accountId: ACCOUNT,
         userName: "alice",
       }),
-    ).toBe("arn:aws-us-gov:iam::111111111111:user/alice");
+    ).toBe("arn:aws-us-gov:iam::210987654321:user/alice");
   });
 });
 
 describe("buildIamRootArn", () => {
   it("builds a commercial-partition root ARN", () => {
     expect(buildIamRootArn({ partition: "aws", accountId: ACCOUNT })).toBe(
-      "arn:aws:iam::111111111111:root",
+      "arn:aws:iam::210987654321:root",
     );
   });
 
   it("builds a GovCloud root ARN", () => {
     expect(
       buildIamRootArn({ partition: "aws-us-gov", accountId: ACCOUNT }),
-    ).toBe("arn:aws-us-gov:iam::111111111111:root");
+    ).toBe("arn:aws-us-gov:iam::210987654321:root");
   });
 
   it("builds a China root ARN", () => {
     expect(buildIamRootArn({ partition: "aws-cn", accountId: ACCOUNT })).toBe(
-      "arn:aws-cn:iam::111111111111:root",
+      "arn:aws-cn:iam::210987654321:root",
     );
   });
 });
@@ -155,7 +155,7 @@ describe("buildLogGroupArn", () => {
         logGroupName: "/aws/bedrock/AssigneeAiInvocationLogs",
       }),
     ).toBe(
-      "arn:aws:logs:us-east-1:111111111111:log-group:/aws/bedrock/AssigneeAiInvocationLogs:*",
+      "arn:aws:logs:us-east-1:210987654321:log-group:/aws/bedrock/AssigneeAiInvocationLogs:*",
     );
   });
 
@@ -168,7 +168,7 @@ describe("buildLogGroupArn", () => {
         logGroupName: "/x",
         withStreamWildcard: false,
       }),
-    ).toBe("arn:aws:logs:us-east-1:111111111111:log-group:/x");
+    ).toBe("arn:aws:logs:us-east-1:210987654321:log-group:/x");
   });
 
   it("respects partition for GovCloud regions", () => {
@@ -179,7 +179,7 @@ describe("buildLogGroupArn", () => {
         accountId: ACCOUNT,
         logGroupName: "/x",
       }),
-    ).toBe("arn:aws-us-gov:logs:us-gov-west-1:111111111111:log-group:/x:*");
+    ).toBe("arn:aws-us-gov:logs:us-gov-west-1:210987654321:log-group:/x:*");
   });
 
   it("respects partition for China regions", () => {
@@ -190,7 +190,7 @@ describe("buildLogGroupArn", () => {
         accountId: ACCOUNT,
         logGroupName: "/x",
       }),
-    ).toBe("arn:aws-cn:logs:cn-north-1:111111111111:log-group:/x:*");
+    ).toBe("arn:aws-cn:logs:cn-north-1:210987654321:log-group:/x:*");
   });
 
   it("preserves names that already start with a leading slash", () => {

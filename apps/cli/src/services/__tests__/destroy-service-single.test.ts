@@ -263,10 +263,10 @@ describe("destroySingleResource", () => {
       ]);
 
       const result = await destroySingleResource({
-        // ...but the ARN encodes account 999999999999 — the resource
+        // ...but the ARN encodes account 109876543210 — the resource
         // legitimately exists in a different account that the operator
         // can't see.
-        arn: "arn:aws:ec2:us-east-1:999999999999:natgateway/nat-0b337150b5f9b0b62",
+        arn: "arn:aws:ec2:us-east-1:109876543210:natgateway/nat-0b337150b5f9b0b62",
         resourceType: "AWS::EC2::NatGateway",
         identifier: "nat-0b337150b5f9b0b62",
         region: "us-east-1",
@@ -319,7 +319,7 @@ describe("destroySingleResource", () => {
       ]);
 
       const result = await destroySingleResource({
-        arn: "arn:aws:ec2:us-east-1:999999999999:natgateway/nat-0xxx",
+        arn: "arn:aws:ec2:us-east-1:109876543210:natgateway/nat-0xxx",
         resourceType: "AWS::EC2::NatGateway",
         identifier: "nat-0xxx",
         region: "us-east-1",

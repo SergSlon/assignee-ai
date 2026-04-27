@@ -18,21 +18,21 @@ import {
 import { TenantScopedCache } from "./tenant-scoped-cache.js";
 
 const TENANT_A: TenantId = {
-  accountId: "111111111111",
+  accountId: "210987654321",
   region: "us-east-1",
 };
 const TENANT_B: TenantId = {
-  accountId: "222222222222",
+  accountId: "109876543210",
   region: "us-east-1",
 };
 const TENANT_A_DIFFERENT_REGION: TenantId = {
-  accountId: "111111111111",
+  accountId: "210987654321",
   region: "eu-west-1",
 };
 const TENANT_A_WITH_ROLE: TenantId = {
-  accountId: "111111111111",
+  accountId: "210987654321",
   region: "us-east-1",
-  roleArn: "arn:aws:iam::111111111111:role/cross-account",
+  roleArn: "arn:aws:iam::210987654321:role/cross-account",
 };
 
 describe("tenantIdToKey", () => {
@@ -57,9 +57,9 @@ describe("tenantIdToKey", () => {
   it("emits the empty trailing segment when roleArn is absent", () => {
     // Pinned format so a future change of the canonical-key shape
     // doesn't accidentally collapse two tenants into one cache slot.
-    expect(tenantIdToKey(TENANT_A)).toBe("111111111111|us-east-1|");
+    expect(tenantIdToKey(TENANT_A)).toBe("210987654321|us-east-1|");
     expect(tenantIdToKey(TENANT_A_WITH_ROLE)).toBe(
-      "111111111111|us-east-1|arn:aws:iam::111111111111:role/cross-account",
+      "210987654321|us-east-1|arn:aws:iam::210987654321:role/cross-account",
     );
   });
 });

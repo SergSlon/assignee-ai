@@ -97,16 +97,16 @@ describe("checkCredentials", () => {
     const send = vi
       .fn()
       .mockResolvedValueOnce({
-        Account: "111111111111",
-        Arn: "arn:aws:iam::111111111111:user/assignee-operator",
+        Account: "210987654321",
+        Arn: "arn:aws:iam::210987654321:user/assignee-operator",
       })
       .mockResolvedValueOnce({
-        Account: "111111111111",
-        Arn: "arn:aws:iam::111111111111:user/assignee-reader",
+        Account: "210987654321",
+        Arn: "arn:aws:iam::210987654321:user/assignee-reader",
       })
       .mockResolvedValueOnce({
-        Account: "111111111111",
-        Arn: "arn:aws:iam::111111111111:user/assignee-auditor",
+        Account: "210987654321",
+        Arn: "arn:aws:iam::210987654321:user/assignee-auditor",
       });
 
     const factory = vi.fn().mockReturnValue({ send });
@@ -116,7 +116,7 @@ describe("checkCredentials", () => {
     expect(section.subs).toHaveLength(3);
     for (const sub of section.subs) {
       expect(sub.status).toBe("ok");
-      expect(sub.detail).toContain("arn:aws:iam::111111111111:user/assignee-");
+      expect(sub.detail).toContain("arn:aws:iam::210987654321:user/assignee-");
       // Mask shows prefix only — never the full key.
       expect(sub.detail).toContain("AKIA");
       expect(sub.detail).not.toContain("FODNN7EXAMPLE");
@@ -195,8 +195,8 @@ describe("checkCredentials", () => {
     vi.useFakeTimers();
     try {
       const send = vi.fn().mockResolvedValue({
-        Account: "111111111111",
-        Arn: "arn:aws:iam::111111111111:user/assignee-x",
+        Account: "210987654321",
+        Arn: "arn:aws:iam::210987654321:user/assignee-x",
       });
       const section = await checkCredentials({
         stsClientFactory: () => ({ send }),
@@ -678,8 +678,8 @@ describe("runDoctor", () => {
 
     try {
       const send = vi.fn().mockResolvedValue({
-        Account: "111111111111",
-        Arn: "arn:aws:iam::111111111111:user/x",
+        Account: "210987654321",
+        Arn: "arn:aws:iam::210987654321:user/x",
       });
       const report: DoctorReport = await runDoctor({
         version: "9.9.9",
@@ -751,8 +751,8 @@ describe("runShortDoctor", () => {
     const stdoutCapture: string[] = [];
     const stderrCapture: string[] = [];
     const send = vi.fn().mockResolvedValue({
-      Account: "111111111111",
-      Arn: "arn:aws:iam::111111111111:user/alice",
+      Account: "210987654321",
+      Arn: "arn:aws:iam::210987654321:user/alice",
     });
 
     const code = await runShortDoctor({
@@ -765,8 +765,8 @@ describe("runShortDoctor", () => {
     expect(code).toBe(0);
     const out = stdoutCapture.join("");
     // When ASSIGNEE_DEMO_REDACT_ACCOUNT is unset, raw IDs appear in output.
-    expect(out).toContain("Account:  111111111111");
-    expect(out).toContain("User ARN: arn:aws:iam::111111111111:user/alice");
+    expect(out).toContain("Account:  210987654321");
+    expect(out).toContain("User ARN: arn:aws:iam::210987654321:user/alice");
     expect(out).toMatch(/Region: /);
     expect(out).toContain("Role:     operator");
     expect(out).toContain("Redact:");
@@ -784,8 +784,8 @@ describe("runShortDoctor", () => {
 
     const stdoutCapture: string[] = [];
     const send = vi.fn().mockResolvedValue({
-      Account: "111111111111",
-      Arn: "arn:aws:iam::111111111111:user/alice",
+      Account: "210987654321",
+      Arn: "arn:aws:iam::210987654321:user/alice",
     });
 
     const code = await runShortDoctor({
@@ -798,7 +798,7 @@ describe("runShortDoctor", () => {
     expect(code).toBe(0);
     const out = stdoutCapture.join("");
     // Raw 12-digit account ID must NOT appear in any field.
-    expect(out).not.toContain("111111111111");
+    expect(out).not.toContain("210987654321");
     // The Account line should show the redacted placeholder.
     expect(out).toContain("Account:  ************");
     // The User ARN line should have the account segment redacted.

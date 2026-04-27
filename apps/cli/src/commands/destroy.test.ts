@@ -703,7 +703,7 @@ describe("resourceConfirmationToken — edge cases (P2-R2-5)", () => {
     expect(
       fn({
         identifier: "my-cluster/",
-        arn: "arn:aws:ecs:us-east-1:111111111111:cluster/my-cluster",
+        arn: "arn:aws:ecs:us-east-1:210987654321:cluster/my-cluster",
       }),
     ).toBe("my-cluster");
   });
@@ -727,7 +727,7 @@ describe("resourceConfirmationToken — edge cases (P2-R2-5)", () => {
 
   it("handles ARN-only input (no identifier) by using ARN tail", async () => {
     const fn = await load();
-    expect(fn({ arn: "arn:aws:iam::111111111111:role/MyRole" })).toBe("MyRole");
+    expect(fn({ arn: "arn:aws:iam::210987654321:role/MyRole" })).toBe("MyRole");
   });
 });
 

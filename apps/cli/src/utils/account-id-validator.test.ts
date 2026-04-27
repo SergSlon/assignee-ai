@@ -54,7 +54,7 @@ describe("validateAccountId — format errors", () => {
   });
 
   it("rejects ARN strings", () => {
-    const result = validateAccountId("arn:aws:iam::111122223333:root");
+    const result = validateAccountId("arn:aws:iam::210987654321:root");
     expect(result.valid).toBe(false);
   });
 

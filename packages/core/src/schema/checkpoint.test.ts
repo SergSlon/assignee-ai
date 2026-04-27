@@ -139,11 +139,11 @@ describe("PlanCheckpointSchema", () => {
         completedResources: [
           {
             resourceArn:
-              "arn:aws:iam::111111111111:role/assignee-iam-execution-role",
+              "arn:aws:iam::210987654321:role/assignee-iam-execution-role",
             resourceType: "AWS::IAM::Role",
           },
           {
-            resourceArn: "arn:aws:lambda:us-east-1:111111111111:function:my-fn",
+            resourceArn: "arn:aws:lambda:us-east-1:210987654321:function:my-fn",
             resourceType: "AWS::Lambda::Function",
           },
         ],

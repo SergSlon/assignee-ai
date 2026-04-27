@@ -26,7 +26,7 @@ import {
   type AccountIdLookup,
 } from "../../graph/nodes/plan-generator/marker-resolver.js";
 
-const fakeAccountIdLookup: AccountIdLookup = async () => "111122223333";
+const fakeAccountIdLookup: AccountIdLookup = async () => "210987654321";
 
 // AZ lookup is irrelevant for BucketPolicy resolution (no AZ markers in the
 // defaultOptions for R.BUCKET_POLICY), but the resolver contract takes an
@@ -47,9 +47,9 @@ const TEST_BUCKET_NAME = "assignee-website-bucket-test";
 const TEST_BUCKET_IDENTIFIER = TEST_BUCKET_NAME;
 // For CloudFront distributions CCAPI returns the bare distribution ID as
 // the identifier (e.g. "ETESTFAKE"), so resourceArn is the bare ID, not a
-// full ARN. fakeAccountIdLookup below returns the AWS-documentation
-// placeholder account ID 111122223333 so tests that synthesize a full
-// ARN (e.g. aws:SourceArn) assert against a stable, non-real account.
+// full ARN. fakeAccountIdLookup below returns the project-canonical
+// non-denylist test account ID 210987654321 so tests that synthesize a
+// full ARN (e.g. aws:SourceArn) assert against a stable, non-real account.
 const TEST_DISTRIBUTION_IDENTIFIER = "ETESTFAKE";
 
 /**
@@ -172,9 +172,9 @@ describe("staticWebsitePattern — BucketPolicy Resource ARN regression", () => 
     // full CloudFront distribution ARN because markerRef resolves to
     // the bare distribution ID (CCAPI's `result.identifier`), and the
     // IAM AWS:SourceArn condition requires the full ARN for scoping.
-    // The fake accountIdLookup in this test returns 111122223333.
+    // The fake accountIdLookup in this test returns 210987654321.
     expect(stmt.Condition.StringEquals["aws:SourceArn"]).toBe(
-      `arn:aws:cloudfront::111122223333:distribution/${TEST_DISTRIBUTION_IDENTIFIER}`,
+      `arn:aws:cloudfront::210987654321:distribution/${TEST_DISTRIBUTION_IDENTIFIER}`,
     );
     // Shape guard: must be a full CloudFront distribution ARN, never a
     // bare ID (the earlier failure mode that CCAPI accepted but the

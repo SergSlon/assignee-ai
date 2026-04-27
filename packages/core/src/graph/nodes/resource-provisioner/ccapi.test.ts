@@ -98,22 +98,45 @@ describe("resource-provisioner/ccapi", () => {
   });
 
   describe("waitForCloudFrontS3DnsIfNeeded", () => {
+    // Story RW6-2 (qa H-03): replaced `expect(true).toBe(true)` tautologies.
+    // The intent of these no-op tests is "the function returns immediately,
+    // no DNS-propagation timer was scheduled, no log was emitted". We use
+    // fake timers + `vi.getTimerCount()` to prove no setTimeout(30_000) was
+    // queued, AND assert the function resolves to `undefined` (its `void`
+    // return contract). If the guard regresses and lets the wait fire on a
+    // non-CloudFront resource, the timer count will be > 0 and the test
+    // fails meaningfully.
     it("no-ops when resource is not CloudFront", async () => {
-      await waitForCloudFrontS3DnsIfNeeded(
-        baseState({ resourceType: RESOURCE_TYPES.S3_BUCKET }),
-      );
-      // If this returned without hanging, the test passes.
-      expect(true).toBe(true);
+      vi.useFakeTimers();
+      try {
+        const result = await waitForCloudFrontS3DnsIfNeeded(
+          baseState({ resourceType: RESOURCE_TYPES.S3_BUCKET }),
+        );
+        // Real assertion #1: void return contract.
+        expect(result).toBeUndefined();
+        // Real assertion #2: no DNS-propagation setTimeout was scheduled.
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("no-ops when no S3 bucket is in completedResources", async () => {
-      await waitForCloudFrontS3DnsIfNeeded(
-        baseState({
-          resourceType: RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION,
-          completedResources: [],
-        }),
-      );
-      expect(true).toBe(true);
+      vi.useFakeTimers();
+      try {
+        const result = await waitForCloudFrontS3DnsIfNeeded(
+          baseState({
+            resourceType: RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION,
+            completedResources: [],
+          }),
+        );
+        // Real assertion #1: void return contract.
+        expect(result).toBeUndefined();
+        // Real assertion #2: no DNS-propagation setTimeout was scheduled.
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 

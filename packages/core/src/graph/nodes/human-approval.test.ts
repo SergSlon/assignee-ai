@@ -159,8 +159,19 @@ describe("humanApprovalNode", () => {
     const state = makeState({ autoApprove: false });
     const result = await humanApprovalNode(state);
 
-    expect(renderPlanBox).toHaveBeenCalled();
-    expect(renderHitlConfirm).toHaveBeenCalled();
+    expect(renderPlanBox).toHaveBeenCalledWith(
+      expect.objectContaining({
+        autoApprove: false,
+        resourceType: "AWS::S3::Bucket",
+        runId: "run-test-approval",
+      }),
+    );
+    expect(renderHitlConfirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        autoApprove: false,
+        resourceType: "AWS::S3::Bucket",
+      }),
+    );
     expect(result.executionStatus).toBeUndefined();
   });
 
@@ -258,8 +269,18 @@ describe("humanApprovalNode — interactive fix selection (Story 35.4)", () => {
     const result = await humanApprovalNode(state);
 
     expect(renderPlanBox).toHaveBeenCalledTimes(1); // only initial render
-    expect(promptFixSelection).toHaveBeenCalled();
-    expect(renderHitlConfirm).toHaveBeenCalled();
+    expect(promptFixSelection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bpFindings: [],
+        resourceType: "AWS::S3::Bucket",
+      }),
+    );
+    expect(renderHitlConfirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bpFindings: [],
+        resourceType: "AWS::S3::Bucket",
+      }),
+    );
     expect(result.executionStatus).toBeUndefined(); // approved
   });
 

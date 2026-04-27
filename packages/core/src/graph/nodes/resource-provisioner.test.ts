@@ -237,7 +237,11 @@ describe("resourceProvisionerNode", () => {
       );
 
       expect(mockProvisioner.getResource).not.toHaveBeenCalled();
-      expect(mockProvisioner.createResource).toHaveBeenCalled();
+      expect(mockProvisioner.createResource).toHaveBeenCalledWith(
+        "AWS::S3::Bucket",
+        expect.stringContaining('"BucketName":"poc-smoke-test"'),
+        expect.any(String),
+      );
       expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
     });
 
@@ -290,7 +294,11 @@ describe("resourceProvisionerNode", () => {
       );
 
       // Should proceed to create, not fail at state guard
-      expect(mockProvisioner.createResource).toHaveBeenCalled();
+      expect(mockProvisioner.createResource).toHaveBeenCalledWith(
+        "AWS::IAM::Role",
+        expect.stringContaining('"RoleName":"role-unknown-err"'),
+        expect.any(String),
+      );
     });
 
     it("proceeds with creation when getResource returns ACCESS_DENIED", async () => {
@@ -315,7 +323,11 @@ describe("resourceProvisionerNode", () => {
       );
 
       expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
-      expect(mockProvisioner.createResource).toHaveBeenCalled();
+      expect(mockProvisioner.createResource).toHaveBeenCalledWith(
+        "AWS::IAM::Role",
+        expect.stringContaining('"RoleName":"role-access-denied"'),
+        expect.any(String),
+      );
     });
 
     it("skips state guard when identifier cannot be derived (no BucketName)", async () => {
@@ -330,7 +342,15 @@ describe("resourceProvisionerNode", () => {
       );
 
       expect(mockProvisioner.getResource).not.toHaveBeenCalled();
-      expect(mockProvisioner.createResource).toHaveBeenCalled();
+      // System tags (managed-by, assignee-run-id, environment) are
+      // merged into the user-provided Tags array by the provisioner.
+      // The starting Tags=[] is empty, so the merged result contains
+      // exactly the three system tags.
+      expect(mockProvisioner.createResource).toHaveBeenCalledWith(
+        "AWS::S3::Bucket",
+        expect.stringContaining('"Key":"managed-by","Value":"assignee-ai"'),
+        expect.any(String),
+      );
       expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
     });
   });
@@ -637,7 +657,13 @@ describe("resourceProvisionerNode", () => {
 
       expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
       expect(result.requestToken).toBe("sns-sub-token");
-      expect(mockProvisioner.createResource).toHaveBeenCalled();
+      expect(mockProvisioner.createResource).toHaveBeenCalledWith(
+        "AWS::SNS::Subscription",
+        expect.stringContaining(
+          '"TopicArn":"arn:aws:sns:us-east-1:123456789012:my-topic"',
+        ),
+        expect.any(String),
+      );
     });
 
     it("returns FAILED with redirect message for Lambda::Permission", async () => {
@@ -703,7 +729,10 @@ describe("resourceProvisionerNode", () => {
 
       expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
       expect(result.requestToken).toBe("standard-token");
-      expect(mockProvisioner.getResource).toHaveBeenCalled();
+      expect(mockProvisioner.getResource).toHaveBeenCalledWith(
+        "AWS::IAM::Role",
+        "fallback-test-role",
+      );
     });
 
     it("surfaces CCAPI NOT_FOUND on SNS Subscription TopicArn mistakes (A10 path)", async () => {
@@ -795,7 +824,11 @@ describe("resourceProvisionerNode", () => {
       await resourceProvisionerNode(state, mockProvisioner);
 
       // CloudControl SHOULD have been called
-      expect(mockProvisioner.createResource).toHaveBeenCalled();
+      expect(mockProvisioner.createResource).toHaveBeenCalledWith(
+        "AWS::S3::Bucket",
+        expect.stringContaining('"BucketName":"poc-smoke-test"'),
+        expect.any(String),
+      );
     });
   });
 

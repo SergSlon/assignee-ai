@@ -63,7 +63,7 @@ describe("detectPlaceholderArn (top-level arrays)", () => {
   it("flags placeholder inside an array", () => {
     const err = detectPlaceholderArn({
       AlarmActions: [
-        "arn:aws:sns:us-east-1:987654321098:real",
+        "arn:aws:sns:us-east-1:210987654321:real",
         "arn:aws:sns:us-east-1:111122223333:fake",
       ],
     });

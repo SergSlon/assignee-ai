@@ -363,11 +363,11 @@ describe("buildResourceArn", () => {
       expect(
         buildResourceArn({
           resourceType: RESOURCE_TYPES.SQS_QUEUE,
-          identifier: "https://sqs.eu-west-1.amazonaws.com/999888777666/q2",
+          identifier: "https://sqs.eu-west-1.amazonaws.com/210987654321/q2",
           region: REGION,
           accountId: ACCOUNT,
         }),
-      ).toBe("arn:aws:sqs:eu-west-1:999888777666:q2");
+      ).toBe("arn:aws:sqs:eu-west-1:210987654321:q2");
     });
 
     it("falls back to args when the identifier is a bare queue name", () => {

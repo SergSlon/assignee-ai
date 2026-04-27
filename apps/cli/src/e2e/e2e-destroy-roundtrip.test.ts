@@ -117,11 +117,29 @@ async function applyResource(userIntent: string): Promise<{
 }
 
 describeE2E("E2E: destroy round-trip — apply ARN must destroy cleanly", () => {
-  it("skips everything when credentials are missing", () => {
-    if (skipIfNoCreds()) {
+  // Story RW6-2 (qa H-03): replaced `expect(true).toBe(true)` tautology.
+  // This sentinel test fires only under `RUN_E2E=1`. Its real purpose is
+  // to verify the credential-skip helper actually returns `true` when the
+  // operator keys are absent, which is the contract every `if
+  // (skipIfNoCreds()) return;` guard in this file relies on. If
+  // `skipIfNoCreds()` ever regresses and returns `false` while the keys
+  // are unset, every other test in this suite would proceed to call AWS
+  // with no credentials and fail in an obscure SDK-level way; this test
+  // converts that silent class of failure into a single, clear failure
+  // here. When creds ARE present, the assertion below is satisfied via
+  // the inverse path (helper returns false; no skip needed).
+  it("credential-skip helper matches actual operator-key presence", () => {
+    const credsPresent =
+      !!process.env[EnvVar.OPERATOR_ACCESS_KEY] &&
+      !!process.env[EnvVar.OPERATOR_SECRET_KEY];
+    if (!credsPresent) {
       console.warn("E2E destroy-roundtrip: no operator creds; skipping.");
     }
-    expect(true).toBe(true);
+    // The helper returns `true` iff EITHER key is missing, so its negation
+    // must equal `credsPresent`. Asserting equality (rather than a
+    // tautology) catches drift between the helper and the env-var
+    // contract every other test depends on.
+    expect(!skipIfNoCreds()).toBe(credsPresent);
   });
 
   // Security Group (B-03): the ARN that apply returns MUST be the real

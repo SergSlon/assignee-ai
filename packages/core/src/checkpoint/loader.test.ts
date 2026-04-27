@@ -231,7 +231,7 @@ describe("loadCheckpointFromPath", () => {
         completedResources: [
           {
             resourceArn:
-              "arn:aws:iam::111111111111:role/assignee-iam-execution-role-ae5a006f",
+              "arn:aws:iam::210987654321:role/assignee-iam-execution-role-ae5a006f",
             resourceType: "AWS::IAM::Role",
           },
         ],
