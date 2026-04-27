@@ -61,6 +61,23 @@
  * depth — context-awareness is the primary fix; cosmetic prose cleanup
  * is the secondary). ci-security.yml is outside this story's
  * file-ownership scope.
+ *
+ * Known coverage gaps (R3-002 / EH3-001 / EH3-002):
+ *   - `actions/github-script@v*` `with: script:` blocks contain JS code,
+ *     NOT shell, that runs in the runner. Logical suppressions in JS
+ *     (empty `catch {}` swallow, post-error `process.exit(0)`, etc.)
+ *     cannot be detected by this audit's shell-pattern matcher. To
+ *     keep operators aware, the audit emits a WARNING for every
+ *     workflow line that opens a `with: script:` block — operators
+ *     should hand-review JS payloads for swallowed-error patterns.
+ *     Detecting suppression in JS would require a JS parser, which is
+ *     out of scope for v3.
+ *   - Heredoc bodies inside `run:` blocks are now classified as
+ *     non-shell (data) so literal idiom mentions in heredoc text are
+ *     not flagged (EH3-001).
+ *   - Multi-doc YAML separator (`^---$`) resets block-scope state so
+ *     stale `run:`/heredoc state from a prior document does not bleed
+ *     into the next (EH3-002).
  */
 
 import * as fs from "node:fs";
@@ -119,16 +136,50 @@ type LineContext = "shell" | "non-shell";
  *
  * Comment-only lines (`^\s*#`) are always non-shell — even inside a
  * shell block, a `#` line is a comment, not an executable command.
+ *
+ * Multi-doc YAML separator (`^---\s*$`, EH3-002 fix): YAML supports
+ * multiple documents in a single file separated by `---`. Block-scope
+ * state from the previous document does NOT carry over to the next —
+ * any open `run:` block (and any heredoc inside it) terminates at the
+ * separator. The separator line itself is non-shell.
+ *
+ * Heredoc body inside a `run:` block (EH3-001 fix): a `cat <<EOF ...
+ * EOF` heredoc body is documentation/data, not executable shell. Body
+ * lines are reclassified as non-shell so literal mentions of the
+ * suppression idiom inside heredoc text don't get flagged. The
+ * terminator line itself remains shell context (it's part of the
+ * shell command structure). Supports the standard POSIX forms:
+ *   cat <<EOF        cat <<-EOF        cat <<'EOF'        cat <<"EOF"
+ * Indented variant `<<-` allows leading-tab stripping but the
+ * terminator-match logic is the same.
  */
 function buildLineContexts(lines: string[]): LineContext[] {
   const contexts: LineContext[] = new Array(lines.length).fill("non-shell");
 
   let inRunBlock = false;
   let runIndent = -1; // indent of the `run:` key itself; block is at indent > runIndent
+  let inHeredoc = false;
+  let heredocTerminator = "";
+
+  const resetBlockState = (): void => {
+    inRunBlock = false;
+    runIndent = -1;
+    inHeredoc = false;
+    heredocTerminator = "";
+  };
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] ?? "";
     const trimmed = line.trim();
+
+    // EH3-002: Multi-doc YAML separator. Reset all block-scope state
+    // so a `run:` (or heredoc) opened in the previous document does
+    // not bleed into the next document.
+    if (/^---\s*$/.test(line)) {
+      resetBlockState();
+      contexts[i] = "non-shell";
+      continue;
+    }
 
     // Comment-only lines: always non-shell.
     if (/^\s*#/.test(line)) {
@@ -148,12 +199,45 @@ function buildLineContexts(lines: string[]): LineContext[] {
     // inside it (indent strictly greater than the run: key indent).
     if (inRunBlock) {
       if (lineIndent > runIndent) {
+        // EH3-001: heredoc handling. If we're already inside a
+        // heredoc body, classify as non-shell unless the line is
+        // the terminator (matching trimmed token, possibly with
+        // leading whitespace for `<<-` form).
+        if (inHeredoc) {
+          if (trimmed === heredocTerminator) {
+            // Terminator line — closes heredoc; classify as shell
+            // because it's part of the shell command structure.
+            inHeredoc = false;
+            heredocTerminator = "";
+            contexts[i] = "shell";
+            continue;
+          }
+          // Heredoc body line — data, not code.
+          contexts[i] = "non-shell";
+          continue;
+        }
+
+        // Not in a heredoc; this line is shell. Detect heredoc
+        // OPEN on this line so subsequent lines are classified
+        // as heredoc body. Pattern matches `<<EOF`, `<<-EOF`,
+        // `<<'EOF'`, `<<"EOF"`. Quotes around the terminator are
+        // stripped for matching purposes (POSIX semantics: quoted
+        // terminator disables variable expansion in body, but the
+        // terminator token itself is unquoted).
+        const heredocMatch = line.match(
+          /<<-?\s*['"]?([A-Za-z_][A-Za-z0-9_]*)['"]?/,
+        );
+        if (heredocMatch && typeof heredocMatch[1] === "string") {
+          inHeredoc = true;
+          heredocTerminator = heredocMatch[1];
+        }
         contexts[i] = "shell";
         continue;
       }
-      // Block closed; fall through to re-classify this line.
-      inRunBlock = false;
-      runIndent = -1;
+      // Block closed; fall through to re-classify this line. Reset
+      // any in-flight heredoc state too — a heredoc cannot survive
+      // exiting its enclosing run-block.
+      resetBlockState();
     }
 
     // Detect a `run:` key. Two forms:
@@ -230,6 +314,83 @@ function classifyLine(
   return "WARNING";
 }
 
+/**
+ * Detect `with: script:` opener lines (R3-002). Returns true if `line`
+ * is a `script:` key inside a YAML `with:` block — i.e. the JS payload
+ * passed to `actions/github-script@v*`. The audit cannot inspect the
+ * JS body for suppressions (would need a JS parser), so the caller
+ * surfaces a WARNING to flag the block for hand-review.
+ *
+ * Heuristic: `script:` appears inside the previous step's `with:`
+ * block. Implementation matches a `script:` line whose parent
+ * (immediately preceding non-empty key at shallower indent) is `with:`.
+ * To keep state minimal, we scan for `with:` openers and emit a
+ * warning the first time we see `script:` at strictly greater indent
+ * before the next `with:` block closes. This catches the common
+ * `actions/github-script@v7` shape:
+ *
+ *     - uses: actions/github-script@v7
+ *       with:
+ *         script: |
+ *           // JS here
+ */
+function findGithubScriptWarnings(lines: string[], relPath: string): Finding[] {
+  const findings: Finding[] = [];
+  let inWithBlock = false;
+  let withIndent = -1;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? "";
+    const trimmed = line.trim();
+
+    // Multi-doc separator resets block-scope state.
+    if (/^---\s*$/.test(line)) {
+      inWithBlock = false;
+      withIndent = -1;
+      continue;
+    }
+
+    // Comment-only and blank lines don't affect with-block state.
+    if (/^\s*#/.test(line) || trimmed === "") {
+      continue;
+    }
+
+    const lineIndent = line.length - line.trimStart().length;
+
+    // If we're tracking a with-block, check whether this line is still
+    // inside it (indent strictly greater than the `with:` key indent).
+    if (inWithBlock) {
+      if (lineIndent <= withIndent) {
+        // `with:` block closed; fall through to re-test this line as
+        // a possible new `with:` opener.
+        inWithBlock = false;
+        withIndent = -1;
+      } else {
+        // Inside the with-block. Look for `script:` key.
+        const scriptMatch = /^\s*script\s*:/.exec(line);
+        if (scriptMatch) {
+          findings.push({
+            file: relPath,
+            line: i + 1,
+            content: trimmed,
+            severity: "WARNING",
+          });
+        }
+        continue;
+      }
+    }
+
+    // Detect a new `with:` block opener.
+    const withMatch = /^(\s*)(?:-\s+)?with\s*:\s*$/.exec(line);
+    if (withMatch) {
+      inWithBlock = true;
+      withIndent = withMatch[1]?.length ?? 0;
+    }
+  }
+
+  return findings;
+}
+
 function scanFile(absPath: string, relPath: string): Finding[] {
   const content = fs.readFileSync(absPath, "utf-8");
   const lines = content.split("\n");
@@ -249,6 +410,10 @@ function scanFile(absPath: string, relPath: string): Finding[] {
       });
     }
   }
+
+  // R3-002: surface `with: script:` blocks as WARNING (not BLOCKER) so
+  // operators know JS payloads aren't audited for suppression patterns.
+  findings.push(...findGithubScriptWarnings(lines, relPath));
 
   return findings;
 }
@@ -344,7 +509,7 @@ function main(): number {
   }
 
   console.error(
-    `\nPASS: ${allFindings.length} non-blocker '${SUPPRESSION_IDIOM}' line(s) found (allowed informational use).`,
+    `\nPASS: ${allFindings.length} non-blocker finding(s) (informational '${SUPPRESSION_IDIOM}' lines + 'with: script:' JS payloads not audited — hand-review the latter for empty-catch / post-error process.exit(0) suppressions).`,
   );
   return 0;
 }

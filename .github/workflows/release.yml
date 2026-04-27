@@ -498,8 +498,17 @@ jobs:
       #   relies on the workflow's OIDC identity; mirrors the workflow-level
       #   declaration that the job-level block would otherwise mask.
       id-token: write
-      # actions: read — workflow context lookups (download-artifact / job
-      #   metadata) made by the SBOM action when correlating the run.
+      # actions: read — required by anchore/sbom-action when attaching
+      #   release assets: it calls the GitHub Actions API to locate the
+      #   workflow artifact uploaded via `artifact-name:` (see "Generate
+      #   SPDX SBOM" step below, which sets artifact-name) and to
+      #   correlate the run. Documented in the action's README:
+      #   https://github.com/anchore/sbom-action#github-token-and-permissions
+      #   ("If attaching release assets, the `actions: read` permission
+      #   is also required. This may be implicit for public repositories,
+      #   but is likely to be necessary for private repositories.")
+      #   Keep this line — removing it will silently break artifact
+      #   discovery on private repos.
       actions: read
     # Job-level env so the step-level `if: env.ASSIGNEE_RELEASE_PUBLISH == '1'`
     # below (Attach SBOM to GitHub Release) actually evaluates against this

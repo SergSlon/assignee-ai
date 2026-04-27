@@ -23,10 +23,12 @@ review methodology notes, see
 Closes the highest-ROI cluster of findings from a 9-persona / 11-input
 full-project audit: release-pipeline correctness, supply-chain hygiene,
 process-governance enforcement (reviewer-evidence on every commit body),
-and a follow-on bug-hunt remediation that fixed real issues introduced
-by the prior two waves' rapid integration. Three commits land the
+and two follow-on bug-hunt remediation passes that fixed real issues
+introduced by the prior waves' rapid integration. Five commits land the
 changes (`80d639b` release/CI gates, `f4bbf7d` governance + audit
-closures, `7223642` bug-hunt remediation).
+closures, `7223642` first bug-hunt remediation, `2422324` second
+bug-hunt remediation, `fc22e6a` tenant-cache scoping as a
+SaaS-readiness foundation step).
 
 #### Added
 
@@ -74,6 +76,57 @@ doc-lint` never matched any package and the suppression hid the
   correctly. The previous configuration used a literal `~`, which
   `actions/glob` does not shell-expand, so the artifact glob
   matched nothing.
+
+### Full-project audit closure (continued)
+
+A second bug-hunt remediation pass landed at `2422324` after a
+review of the integration state at `7223642` surfaced a fresh round
+of issues, and a tenant-cache scoping wave landed at `fc22e6a` as
+a SaaS-readiness foundation step.
+
+#### Changed
+
+- The release-pipeline SBOM job now declares all four required
+  permissions explicitly (`contents`, `id-token`, `attestations`,
+  `security-events`). The previous configuration relied on
+  workflow-level defaults that GitHub Actions does not propagate
+  into job permission blocks once any job declares its own
+  `permissions:` map; the SARIF upload to the Security tab and the
+  release-asset upload were both silently denied even though the
+  job appeared green.
+- The pre-push hook is now exempted for tag pushes
+  (`refs/tags/*`). The reviewer-evidence gate fired on
+  release-tag pushes that legitimately carry no new commits,
+  blocking the publish flow; tag pushes now skip the scan.
+- The pre-push hook's `git log -n 50` fallback is removed in
+  favour of a fail-closed posture: if the upstream-range
+  computation fails (force-push, shallow clone, missing
+  remote-tracking ref), the hook errors out with a remediation
+  hint instead of silently scanning a 50-commit window that
+  could let unreviewed commits ride along.
+- The pre-push hook's default-branch detection now falls back
+  through `main` → `master` → `develop` → `trunk` rather than
+  hardcoding `main`, so the gate works on repositories that
+  haven't migrated branch names.
+- The `audit-no-suppress` script's CLI surface was rewritten as
+  an explicit YAML state machine (was a hand-rolled regex chain
+  that mis-handled multi-line scripts and quoted strings); the
+  same script now also indirects its `|| true` and `2>/dev/null`
+  idiom-detection through a small lookup so the patterns are
+  testable in isolation.
+
+#### Changed (continued — `fc22e6a` SaaS-readiness foundation)
+
+- Introduced a tenant-scoped cache abstraction that prepares the
+  codebase for multi-tenant SaaS operation. Five module-level
+  singletons (best-practices rule loader, marker resolver,
+  free-tier catalogue, ARN resolver, EC2 instance-type catalogue)
+  migrated from per-process caches to per-tenant caches isolated
+  by a request-scoped tenant identifier. Twenty-four new isolation
+  tests assert that two concurrent tenants cannot observe each
+  other's cached state. No user-visible behaviour changes for the
+  single-tenant CLI path; this is a foundation step for upcoming
+  SaaS work.
 
 ### R10b — Round 10 (second half): final 4 P2-tier P-IDs + 6 strategic deferred-records
 
