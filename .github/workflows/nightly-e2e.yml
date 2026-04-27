@@ -163,6 +163,17 @@ jobs:
           fi
           echo "Nightly account is clean — zero Assignee-managed resources."
 
+      - name: Resolve $HOME for artifact path
+        # actions/upload-artifact's `path:` input is processed by @actions/glob,
+        # which does NOT shell-expand `~` — a literal `~/...` path component
+        # never matches anything and the upload silently produces a zero-byte
+        # artifact (with `if-no-files-found: warn` swallowing the only signal).
+        # Stage $HOME into $GITHUB_ENV so the next step can interpolate it via
+        # the `${{ env.* }}` template, which IS expanded before the action runs.
+        # See actions/toolkit#1380 and actions/upload-artifact#174.
+        if: always()
+        run: echo "ASSIGNEE_HOME=$HOME" >> "$GITHUB_ENV"
+
       - name: Upload nightly cost ledger
         # P070 / MASTER-002: The FinOps monthly-budget workflow
         # (.github/workflows/finops-monthly-budget.yml) downloads
@@ -186,10 +197,12 @@ jobs:
         with:
           name: nightly-cost-ledger-${{ github.run_number }}
           # Glob matches the per-day JSONL files emitted by the CLI to
-          # ~/.assignee/logs/nightly-cost-YYYY-MM-DD.jsonl (verified
+          # $HOME/.assignee/logs/nightly-cost-YYYY-MM-DD.jsonl (verified
           # against scripts/finops-aggregate.mjs discoverLedgerFiles
           # and apps/cli/src/e2e/nightly-destroy-smoke.test.ts).
-          path: ~/.assignee/logs/nightly-cost-*.jsonl
+          # Uses $ASSIGNEE_HOME (set in the prior step) because the action
+          # does not shell-expand `~` — see comment on the resolver step.
+          path: ${{ env.ASSIGNEE_HOME }}/.assignee/logs/nightly-cost-*.jsonl
           if-no-files-found: warn
           retention-days: 35
 
@@ -208,11 +221,14 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: nightly-e2e-logs-${{ github.run_number }}
-          # The CLI persists structured logs to ~/.assignee/logs — capture
+          # The CLI persists structured logs to $HOME/.assignee/logs — capture
           # them for post-mortem on failures. Also capture the vitest
           # output if vitest wrote a reporter file.
+          # `~` is NOT shell-expanded by @actions/glob — use $ASSIGNEE_HOME
+          # (set in the "Resolve $HOME for artifact path" step above) so the
+          # path resolves to the runner's real home directory.
           path: |
-            ~/.assignee/logs/
+            ${{ env.ASSIGNEE_HOME }}/.assignee/logs/
             apps/cli/test-results/
           if-no-files-found: ignore
           retention-days: 30
