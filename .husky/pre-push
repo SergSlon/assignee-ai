@@ -6,3 +6,53 @@ pnpm doc-lint
 pnpm citation-lint
 pnpm lint:ci-multiplier
 pnpm test
+
+# Reviewer-skip BAN enforcement (CLAUDE.md §"Reviewer-skip BAN (mandatory)")
+# Rejects pushes whose commits lack reviewer evidence in their body.
+# Escape hatch: ASSIGNEE_REVIEWER_BAN_BYPASS=1 git push  (logs a warning)
+if [ "${ASSIGNEE_REVIEWER_BAN_BYPASS:-0}" = "1" ]; then
+  echo "WARNING: ASSIGNEE_REVIEWER_BAN_BYPASS=1 — reviewer-token check skipped." >&2
+  exit 0
+fi
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  # Skip deletions
+  [ "$local_sha" = "0000000000000000000000000000000000000000" ] && continue
+
+  # New branch (no remote) → check most recent 5 commits
+  if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+    range_args="-n 5 $local_sha"
+  else
+    range_args="$remote_sha..$local_sha"
+  fi
+
+  failures=""
+  for sha in $(git rev-list $range_args); do
+    # Skip merge commits (multiple parents)
+    parent_count=$(git log -1 --format="%P" "$sha" | wc -w | tr -d ' ')
+    [ "$parent_count" -gt 1 ] && continue
+
+    body=$(git log -1 --format="%B" "$sha")
+    subject=$(git log -1 --format="%s" "$sha")
+
+    if echo "$body" | grep -qE "^Reviewer: ACCEPT"; then continue; fi
+    if echo "$body" | grep -qE "^Reviewer: SKIP — "; then continue; fi
+    if echo "$body" | grep -qE "_archive/reviews/[a-f0-9]+-review\.md"; then continue; fi
+
+    failures="${failures}  ${sha:0:8} '${subject}'\n"
+  done
+
+  if [ -n "$failures" ]; then
+    echo "" >&2
+    echo "Reviewer-skip BAN (CLAUDE.md): the following commits lack reviewer evidence:" >&2
+    printf "$failures" >&2
+    echo "" >&2
+    echo "Add one of these tokens to each commit body, then re-push:" >&2
+    echo "  Reviewer: ACCEPT" >&2
+    echo "  Reviewer: SKIP — <reason> — <user-confirmation-quote>" >&2
+    echo "  _archive/reviews/<short-sha>-review.md" >&2
+    echo "" >&2
+    echo "Or set ASSIGNEE_REVIEWER_BAN_BYPASS=1 (emergency only)." >&2
+    exit 1
+  fi
+done
