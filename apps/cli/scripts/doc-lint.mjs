@@ -255,6 +255,36 @@ const CROSS_DOC_GUARDS = [
     expect: "supportedTypeCount",
   },
   {
+    label: "decomposers (registry total)",
+    // QA Q-003: "38 decomposers" (or similar) needs a guard; previously
+    // only the parenthetical "decomposer registry (N decomposers)"
+    // shape was guarded.
+    re: /\b(\d+)\s+decomposers\b/gi,
+    expect: "decomposerCount",
+  },
+  {
+    label: "compound patterns are exercised",
+    // QA Q-003: "11 compound patterns are exercised end-to-end" — the
+    // global "exercised" framing.
+    re: /\b(\d+)\s+compound\s+patterns?\s+are\s+exercised\b/gi,
+    expect: "patternCount",
+  },
+  {
+    label: "first-class compound architecture patterns",
+    // QA Q-003: "Pattern template registry (11 compound architecture
+    // patterns)" or "11 first-class compound architecture patterns" —
+    // global registry-size claim.
+    re: /\b(\d+)\s+(?:first-class\s+)?compound\s+architecture\s+patterns\b/gi,
+    expect: "patternCount",
+  },
+  {
+    label: "user-addressable types (no `resource` keyword)",
+    // QA Q-003: mcp-server.md:311 reads "the 38 user-addressable types"
+    // — `resource` keyword absent, prior regex missed it.
+    re: /\b(?:the\s+)?(\d+)\s+user-addressable\s+types\b/gi,
+    expect: "supportedTypeCount",
+  },
+  {
     label: "BP rules + N compound patterns",
     // A claim like "the 185 BP rules + 11 compound patterns" — clearly
     // global, not a per-test-file subset.

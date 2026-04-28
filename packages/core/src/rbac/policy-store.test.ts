@@ -2,7 +2,7 @@
  * W3-02 — RBAC policy store round-trip contract tests.
  */
 
-import { describe, it, expect, afterEach, beforeEach } from "vitest";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as fs from "node:fs/promises";
@@ -154,5 +154,31 @@ describe("FilePolicyStore", () => {
     const store = new FilePolicyStore(filePath);
     const all = await store.list();
     expect(all).toEqual([]);
+  });
+
+  it("warns to stderr when the backing file parses to a non-array (RW-FIX-5 dev-D25)", async () => {
+    // Write a JSON object (not an array) to the policy file. The
+    // legacy behaviour was to silently return [] which masked
+    // corruption; cluster H now emits a one-line stderr warning so
+    // operators see the file shape mismatch.
+    await fs.writeFile(filePath, JSON.stringify({ not: "an-array" }), "utf-8");
+    const writes: string[] = [];
+    const spy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((chunk: string | Uint8Array): boolean => {
+        writes.push(typeof chunk === "string" ? chunk : chunk.toString());
+        return true;
+      });
+    try {
+      const store = new FilePolicyStore(filePath);
+      const all = await store.list();
+      expect(all).toEqual([]);
+      const combined = writes.join("");
+      expect(combined).toMatch(/policy-store/);
+      expect(combined).toMatch(/not a JSON array/);
+      expect(combined).toMatch(/object/);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

@@ -70,8 +70,7 @@ compounds over time and a competitor's proprietary rule set doesn't.
 The eleven canonical compound patterns (`serverless-api`, `static-website`,
 `efs-with-vpc`, `vpc-networking`, `vpc-public-only`, `lambda-with-exec-role`,
 `scheduled-lambda`, `message-processing`, `container-service`,
-`three-tier-web`, plus the VPC Networking pattern that gained
-`AWS::EC2::EIP` as a first-class member) stay OSS for the same reason:
+`three-tier-web`, `websocket-api`) stay OSS for the same reason:
 they're a reusable knowledge artifact, not a monetisation surface.
 
 ### Cost preflight and mandatory tagging

@@ -30,9 +30,17 @@ const PLACEHOLDER_WALK_MAX_DEPTH = 32;
  * in cluster E (commit 155b854) was not rejected by any preflight
  * guard, contradicting the commit body's "fails ARN-shape validation
  * earlier" claim.
+ *
+ * Post-review (UX S-001): the original `^` anchor missed JSON-wrapped
+ * placeholders such as the SNS::Subscription RedrivePolicy
+ * `{"deadLetterTargetArn":"arn:aws:sqs:us-east-1:<...>:my-dlq"}` —
+ * verified live with `node -e`. The regex now allows the placeholder
+ * to appear anywhere inside the string; the angle-bracket + colon
+ * pattern is specific enough that false-positives on real ARNs are
+ * not a concern (real ARNs never contain `<` or `>`).
  */
 const ARN_ANGLE_BRACKET_PLACEHOLDER_REGEX =
-  /^arn:aws[\w-]*:[\w-]+:[^:]*:<[^>]+>:/;
+  /arn:aws[\w-]*:[\w-]+:[^:]*:<[^>]+>:/;
 
 export function detectPlaceholderArn(
   desiredState: Record<string, unknown>,

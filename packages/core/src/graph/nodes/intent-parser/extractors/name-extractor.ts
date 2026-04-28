@@ -47,6 +47,7 @@
 
 import { RESOURCE_TYPES } from "../../../../index.js";
 import type { Advisory } from "../intent-types.js";
+import { containsNonAscii } from "../validators/token-validators.js";
 
 /**
  * Keywords that follow a name in natural-language AWS intents and
@@ -80,21 +81,6 @@ const NAME_BOUNDARY_KEYWORDS: ReadonlySet<string> = new Set([
   "versioning",
   "tagged",
 ]);
-
-/**
- * Return true when any char in `s` is outside the basic ASCII range
- * (0x00-0x7F). Used to detect `dögfood-ünicode` (non-ASCII → S3
- * forbids, Lambda forbids, most AWS name types forbid).
- */
-function containsNonAscii(s: string): boolean {
-  // Walk char-by-char. Avoids regex to keep the rule obvious and
-  // dependency-free.
-  for (let i = 0; i < s.length; i++) {
-    const code = s.charCodeAt(i);
-    if (code > 0x7f) return true;
-  }
-  return false;
-}
 
 /**
  * Parse the raw span after the "named " / "called " keyword into
