@@ -86,6 +86,15 @@ jobs:
         # Exits 1 on any masking finding.
         run: pnpm exec tsx scripts/audit-no-suppress.ts
 
+      - name: audit-placeholder-account-ids (no AWS-docs denylisted IDs in wizard hints)
+        # Scans `packages/core/src/resource-plugins/plugins/**/*.ts` for the
+        # denylisted placeholder account ID `123456789012`. Wizard placeholders
+        # use `<your-12-digit-account-id>` so the placeholder-ARN preflight
+        # guard's runtime rejection of `123456789012` matches what users
+        # see in the prompt hint. Test files are excluded (legitimate
+        # negative-test fixture).
+        run: pnpm exec tsx scripts/audit-placeholder-account-ids.ts
+
       - name: audit-patterns-cleartext (W1-01 — patterns.json has no cleartext credentials)
         # Scans `~/.assignee/memory/patterns.json` for credential-like
         # strings using the SENSITIVE_KEY_NAMES allowlist. On a fresh

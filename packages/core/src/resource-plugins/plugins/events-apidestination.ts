@@ -56,7 +56,7 @@ export const eventsApiDestinationPlugin: ResourcePlugin = {
         type: "string",
         label: "Connection ARN",
         placeholder:
-          "arn:aws:events:us-east-1:123456789012:connection/slack-webhook-connection/abcd-1234",
+          "arn:aws:events:us-east-1:<your-12-digit-account-id>:connection/slack-webhook-connection/abcd-1234",
         hint: "Required. ARN of the Events::Connection that provides the auth credentials for this endpoint. Use a Ref to an Events::Connection logical ID in the same plan, or paste an existing connection ARN. The Connection must already exist (or be created earlier in the same plan).",
         validate: (value: unknown) => {
           if (!value) return "ConnectionArn is required";

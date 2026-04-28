@@ -61,7 +61,7 @@ export const commonFields: ResourcePlugin["commonFields"] = [
     question: {
       type: "string",
       label: "Execution role ARN",
-      placeholder: "arn:aws:iam::123456789012:role/my-role",
+      placeholder: "arn:aws:iam::<your-12-digit-account-id>:role/my-role",
       hint: "IAM role that grants the function permissions to access AWS services (S3, DynamoDB, etc.). If omitted, assignee will create a minimal-privilege role for you.",
       validate: (value: unknown) => {
         if (!value) return undefined;
@@ -255,7 +255,8 @@ export const advancedFields: ResourcePlugin["advancedFields"] = [
     question: {
       type: "string",
       label: "Lambda Layers (comma-separated ARNs)",
-      placeholder: "arn:aws:lambda:us-east-1:123456789012:layer:my-layer:1",
+      placeholder:
+        "arn:aws:lambda:us-east-1:<your-12-digit-account-id>:layer:my-layer:1",
       hint: "Up to 5 Lambda Layers providing shared code or dependencies. Each ARN must include the version number. Total unzipped size of all layers + function must be under 250 MB.",
       validate: (value: unknown) => {
         if (!value) return undefined;

@@ -151,7 +151,7 @@ export const ecrRepositoryPlugin: ResourcePlugin = {
       question: {
         type: "enum",
         label: "KMS Key ARN",
-        placeholder: "arn:aws:kms:us-east-1:123456789012:key/...",
+        placeholder: "arn:aws:kms:us-east-1:<your-12-digit-account-id>:key/...",
         hint: "ARN of the KMS key for encryption. Required when EncryptionType is KMS.",
         showIf: { field: CfnKey.ENCRYPTION_TYPE, value: "KMS" },
         fetcher: "discover-kms-keys",
