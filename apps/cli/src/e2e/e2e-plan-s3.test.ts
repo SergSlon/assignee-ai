@@ -2,13 +2,10 @@
 // during the M-018 cluster-D split (2026-04-28). The monolith remains
 // in place until the lead step replaces it with a 5-line redirect.
 
-import { it, expect, afterAll } from "vitest";
+import { it, expect } from "vitest";
 import {
   describeE2E,
   tools,
-  operatorCreds,
-  skipIfNoCreds,
-  RUN_E2E,
   runFreeTierLifecycle,
   FREE_TIER_LIFECYCLE_CASES,
 } from "./e2e-plan-shared.js";
