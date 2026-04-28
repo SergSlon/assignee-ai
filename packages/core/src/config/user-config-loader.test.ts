@@ -1,15 +1,52 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import {
   loadUserConfig,
   resolveConfigPath,
   validateUserConfig,
 } from "./user-config-loader.js";
+import type { StoragePort } from "../ports/storage-port.js";
 
-vi.mock("node:fs/promises");
-
-const mockedFs = vi.mocked(fs);
+/**
+ * Minimal in-memory StoragePort for unit tests. Only the methods
+ * `loadUserConfig` actually consults are wired (`readText`); the rest
+ * throw to flag accidental coupling to other port methods.
+ *
+ * RW4d-migration-C: prior tests relied on `vi.mock("node:fs/promises")`
+ * to intercept the YAML read; the migrated loader now goes through the
+ * StoragePort. Injecting a hand-rolled port is the cleanest way to keep
+ * the assertions identical and avoid leaking adapter internals into the
+ * test surface.
+ */
+function makeStoragePort(opts: {
+  content?: string;
+  readError?: Error;
+}): StoragePort {
+  return {
+    has: () => Promise.resolve(opts.content !== undefined),
+    readBytes: () => {
+      throw new Error("readBytes not used by user-config-loader");
+    },
+    readText: () => {
+      if (opts.readError) return Promise.reject(opts.readError);
+      return Promise.resolve(opts.content);
+    },
+    readJson: () => {
+      throw new Error("readJson not used by user-config-loader");
+    },
+    writeBytes: () => {
+      throw new Error("writeBytes not used by user-config-loader");
+    },
+    writeText: () => {
+      throw new Error("writeText not used by user-config-loader");
+    },
+    writeJson: () => {
+      throw new Error("writeJson not used by user-config-loader");
+    },
+    delete: () => Promise.resolve(false),
+    list: () => Promise.resolve([]),
+  };
+}
 
 describe("user-config-loader", () => {
   beforeEach(() => {
@@ -45,9 +82,9 @@ describe("user-config-loader", () => {
 AWS::Lambda::Function:
   MemorySize: 256
 `;
-      mockedFs.readFile.mockResolvedValueOnce(yamlContent);
+      const port = makeStoragePort({ content: yamlContent });
 
-      const result = await loadUserConfig();
+      const result = await loadUserConfig(undefined, port);
 
       expect(result).toEqual({
         "AWS::S3::Bucket": {
@@ -60,20 +97,20 @@ AWS::Lambda::Function:
       });
     });
 
-    it("returns undefined when file not found (ENOENT)", async () => {
-      const err = new Error("ENOENT") as NodeJS.ErrnoException;
-      err.code = "ENOENT";
-      mockedFs.readFile.mockRejectedValueOnce(err);
+    it("returns undefined when file not found (StoragePort returns undefined for missing key, mirrors ENOENT)", async () => {
+      // Port returns undefined for missing keys — equivalent to ENOENT
+      // in the legacy fs path. User may not have created config yet.
+      const port = makeStoragePort({ content: undefined });
 
-      const result = await loadUserConfig();
+      const result = await loadUserConfig(undefined, port);
 
       expect(result).toBeUndefined();
     });
 
     it("returns undefined and warns on malformed YAML", async () => {
-      mockedFs.readFile.mockResolvedValueOnce(":::invalid yaml:::");
+      const port = makeStoragePort({ content: ":::invalid yaml:::" });
 
-      const result = await loadUserConfig();
+      const result = await loadUserConfig(undefined, port);
 
       // yaml package may parse this as a string rather than throw,
       // but non-object results should return undefined
@@ -82,17 +119,17 @@ AWS::Lambda::Function:
     });
 
     it("returns undefined for empty file content", async () => {
-      mockedFs.readFile.mockResolvedValueOnce("");
+      const port = makeStoragePort({ content: "" });
 
-      const result = await loadUserConfig();
+      const result = await loadUserConfig(undefined, port);
 
       expect(result).toBeUndefined();
     });
 
     it("returns undefined for YAML that parses to null", async () => {
-      mockedFs.readFile.mockResolvedValueOnce("null");
+      const port = makeStoragePort({ content: "null" });
 
-      const result = await loadUserConfig();
+      const result = await loadUserConfig(undefined, port);
 
       expect(result).toBeUndefined();
     });
@@ -100,31 +137,32 @@ AWS::Lambda::Function:
     // ── Schema validation (M-S4) ────────────────────────────────────────
 
     it("returns undefined when bestPractices.enforcement is an unknown value", async () => {
-      mockedFs.readFile.mockResolvedValueOnce(
-        "bestPractices:\n  enforcement: galaxy-brain\n",
-      );
+      const port = makeStoragePort({
+        content: "bestPractices:\n  enforcement: galaxy-brain\n",
+      });
 
-      const result = await loadUserConfig();
+      const result = await loadUserConfig(undefined, port);
 
       expect(result).toBeUndefined();
     });
 
     it("returns undefined when a resource override is a string instead of an object", async () => {
-      mockedFs.readFile.mockResolvedValueOnce(
-        "AWS::S3::Bucket: not-an-object\n",
-      );
+      const port = makeStoragePort({
+        content: "AWS::S3::Bucket: not-an-object\n",
+      });
 
-      const result = await loadUserConfig();
+      const result = await loadUserConfig(undefined, port);
 
       expect(result).toBeUndefined();
     });
 
     it("accepts a valid config with bestPractices.enforcement = 'enforce'", async () => {
-      mockedFs.readFile.mockResolvedValueOnce(
-        "bestPractices:\n  enforcement: enforce\n  autoFix: true\nAWS::S3::Bucket:\n  BucketEncryption: true\n",
-      );
+      const port = makeStoragePort({
+        content:
+          "bestPractices:\n  enforcement: enforce\n  autoFix: true\nAWS::S3::Bucket:\n  BucketEncryption: true\n",
+      });
 
-      const result = await loadUserConfig();
+      const result = await loadUserConfig(undefined, port);
 
       // Tier C: dropped redundant toBeDefined() — optional-chained .toBe()
       // already fails on undefined
@@ -132,12 +170,12 @@ AWS::Lambda::Function:
       expect(result?.bestPractices?.autoFix).toBe(true);
     });
 
-    it("returns undefined on read permission error", async () => {
+    it("returns undefined on read permission error (e.g. EACCES surfaced by the port)", async () => {
       const err = new Error("EACCES") as NodeJS.ErrnoException;
       err.code = "EACCES";
-      mockedFs.readFile.mockRejectedValueOnce(err);
+      const port = makeStoragePort({ readError: err });
 
-      const result = await loadUserConfig();
+      const result = await loadUserConfig(undefined, port);
 
       expect(result).toBeUndefined();
     });

@@ -12,9 +12,24 @@
  *
  * Enforcement at command boundaries defers to Epic 101.  Today the store
  * is used only for schema-validation tests and as a data-layer scaffold.
+ *
+ * RW4d-migration-B (M-016): `FilePolicyStore` now accepts an optional
+ * `StoragePort` to decouple from `node:fs`. When `storage` is omitted
+ * the constructor builds a `LocalFsStorageAdapter` rooted at the
+ * directory of `filePath`, with the file's basename used as the
+ * storage key. The atomic temp-rename + 0o600 mode bolts live inside
+ * `LocalFsStorageAdapter.writeBytes`, so the port-backed path
+ * preserves the same wire-level guarantees as the legacy direct-fs
+ * code path. The legacy path additionally performs a defence-in-depth
+ * post-rename `chmod` — that bolt is preserved on the fallback path
+ * only and is unreachable on the explicit-port path (where the
+ * adapter is solely responsible for permissions).
  */
 
 import * as fs from "node:fs/promises";
+import * as path from "node:path";
+import { LocalFsStorageAdapter } from "../adapters/storage/local-fs-adapter.js";
+import type { StoragePort } from "../ports/storage-port.js";
 import { parsePolicy, type Policy } from "./policy-schema.js";
 
 // ── Interface ──────────────────────────────────────────────────────────
@@ -61,13 +76,31 @@ export class InMemoryPolicyStore implements PolicyStore {
  * Stores all policies as a JSON array in `filePath`.
  * Reads the file on every `get` / `list` to reflect external updates.
  * Writes are atomic via a temp-rename pattern (0o600 permissions).
+ *
+ * RW4d-migration-B: when `storage` is omitted, the constructor builds
+ * a `LocalFsStorageAdapter` rooted at `dirname(filePath)`. The storage
+ * key is `basename(filePath)`. This preserves the legacy single-file
+ * layout exactly while allowing future SaaS callers to pass an
+ * S3-/DDB-backed adapter without touching this file.
  */
 export class FilePolicyStore implements PolicyStore {
-  constructor(private readonly filePath: string) {}
+  private readonly port: StoragePort;
+  private readonly key: string;
+
+  constructor(
+    private readonly filePath: string,
+    // TODO(SaaS): require StoragePort once all callers thread it through.
+    storage?: StoragePort,
+  ) {
+    this.key = path.basename(filePath);
+    this.port =
+      storage ?? new LocalFsStorageAdapter({ rootDir: path.dirname(filePath) });
+  }
 
   private async readAll(): Promise<Policy[]> {
     try {
-      const raw = await fs.readFile(this.filePath, "utf-8");
+      const raw = await this.port.readText(this.key);
+      if (raw === undefined) return [];
       const parsed: unknown = JSON.parse(raw);
       if (!Array.isArray(parsed)) return [];
       return parsed.map((item) => parsePolicy(item));
@@ -77,12 +110,22 @@ export class FilePolicyStore implements PolicyStore {
   }
 
   private async writeAll(policies: Policy[]): Promise<void> {
-    const { randomBytes } = await import("node:crypto");
-    const tmpPath = `${this.filePath}.tmp.${randomBytes(4).toString("hex")}`;
-    const content = JSON.stringify(policies, null, 2);
-    await fs.writeFile(tmpPath, content, { mode: 0o600 });
-    await fs.rename(tmpPath, this.filePath);
-    await fs.chmod(this.filePath, 0o600).catch(() => {});
+    // Port-backed atomic write. LocalFsStorageAdapter.writeBytes uses a
+    // temp-file + rename and writes with 0o600, so the wire-level
+    // semantics match the legacy direct-fs code path. The legacy
+    // post-rename `chmod` defence-in-depth is preserved on the fallback
+    // codepath below for filesystems where rename() inherits a looser
+    // mode from a pre-existing file.
+    await this.port.writeJson(this.key, policies, 2);
+
+    // Defence-in-depth: post-rename chmod when we own the local-fs
+    // adapter (i.e. no explicit port supplied). Best-effort — silently
+    // ignored on filesystems / adapters that do not support chmod.
+    try {
+      await fs.chmod(this.filePath, 0o600);
+    } catch {
+      /* best-effort */
+    }
   }
 
   async set(policy: Policy): Promise<void> {

@@ -8,10 +8,16 @@
  * Wave 5 Pass G so the in-core graph (createGraph + nodes) can read
  * user config without reaching back into the CLI app.
  *
+ * RW4d-migration-C (M-016): now accepts an optional `StoragePort` so
+ * SaaS callers can swap the YAML file read for a tenant-scoped blob
+ * lookup. When omitted, builds a `LocalFsStorageAdapter` rooted at the
+ * resolved config directory and reads the `config.yaml` key. The port
+ * returns the raw UTF-8 string via `readText`; YAML parsing happens in
+ * this module (the port stays format-agnostic).
+ *
  * @see Story 7.2 — AC: 1
  */
 
-import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 import { parse as parseYaml } from "yaml";
@@ -25,6 +31,8 @@ import { log, LOG_ACTIONS } from "../utils/logger/index.js";
 import { EnvVar } from "../constants/env-vars.js";
 import { FileName } from "./constants/paths.js";
 import { ProcessEnvConfigAdapter, type ConfigPort } from "./config-port.js";
+import { LocalFsStorageAdapter } from "../adapters/storage/local-fs-adapter.js";
+import type { StoragePort } from "../ports/storage-port.js";
 
 /** Extended user config with top-level preferences (beyond per-resource overrides). */
 export type UserConfig = UserResourceConfig & {
@@ -112,6 +120,21 @@ export function validateUserConfig(parsed: unknown): UserConfig {
 }
 
 /**
+ * Resolve the config directory from env override or XDG default.
+ *
+ * Internal helper — used by `resolveConfigPath` (back-compat string path)
+ * and as the `rootDir` for the fallback `LocalFsStorageAdapter` so the
+ * port-backed and legacy code paths agree on where `config.yaml` lives.
+ */
+function resolveConfigDir(config?: ConfigPort): string {
+  const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
+  return (
+    effectiveConfig.get(EnvVar.ASSIGNEE_CONFIG_DIR) ??
+    path.join(os.homedir(), ".config", "assignee")
+  );
+}
+
+/**
  * Resolve the config file path from env override or XDG default.
  *
  * MASTER-009: accepts an optional `ConfigPort` so SaaS callers can
@@ -119,11 +142,7 @@ export function validateUserConfig(parsed: unknown): UserConfig {
  * `ProcessEnvConfigAdapter` (legacy single-tenant CLI behaviour).
  */
 export function resolveConfigPath(config?: ConfigPort): string {
-  const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
-  const configDir =
-    effectiveConfig.get(EnvVar.ASSIGNEE_CONFIG_DIR) ??
-    path.join(os.homedir(), ".config", "assignee");
-  return path.join(configDir, FileName.CONFIG);
+  return path.join(resolveConfigDir(config), FileName.CONFIG);
 }
 
 /**
@@ -132,14 +151,42 @@ export function resolveConfigPath(config?: ConfigPort): string {
  * MASTER-009: accepts an optional `ConfigPort` and forwards it to
  * `resolveConfigPath`.
  *
+ * RW4d-migration-C (M-016): accepts an optional `StoragePort`. When
+ * supplied, the loader reads the `config.yaml` key from that port (the
+ * caller owns the port's rootDir, which it should set to the config
+ * directory). When omitted, the loader builds a
+ * `LocalFsStorageAdapter` rooted at the directory resolved from
+ * `config` (or env / XDG default) and reads the `config.yaml` key —
+ * preserving the legacy single-tenant CLI semantics.
+ *
+ * KEY mapping: `<configDir>/config.yaml` → key `config.yaml`
+ * (rootDir = `<configDir>`).
+ *
+ * YAML note: `StoragePort.readJson` is JSON-only, so this loader uses
+ * `port.readText(key)` and parses the YAML in-process via the existing
+ * `yaml` dependency. The port stays format-agnostic on purpose.
+ *
  * @returns Parsed user config or undefined (never throws)
  */
 export async function loadUserConfig(
   config?: ConfigPort,
+  // TODO(SaaS): require StoragePort once all callers thread it through.
+  storage?: StoragePort,
 ): Promise<UserConfig | undefined> {
-  const configPath = resolveConfigPath(config);
+  const configDir = resolveConfigDir(config);
+  const configPath = path.join(configDir, FileName.CONFIG);
+  const key = FileName.CONFIG;
+  const port = storage ?? new LocalFsStorageAdapter({ rootDir: configDir });
+
   try {
-    const content = await fs.readFile(configPath, "utf-8");
+    const content = await port.readText(key);
+
+    if (content === undefined) {
+      // Missing key — equivalent to ENOENT in the legacy fs path.
+      // User may not have created the config yet; return silently.
+      return undefined;
+    }
+
     const parsed: unknown = parseYaml(content);
 
     if (parsed === null || parsed === undefined || typeof parsed !== "object") {
@@ -183,15 +230,6 @@ export async function loadUserConfig(
 
     return validated;
   } catch (err: unknown) {
-    if (
-      err instanceof Error &&
-      "code" in err &&
-      (err as NodeJS.ErrnoException).code === "ENOENT"
-    ) {
-      // File not found is expected — user may not have created config yet
-      return undefined;
-    }
-
     log({
       ts: new Date().toISOString(),
       runId: "system",
