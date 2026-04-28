@@ -1,17 +1,15 @@
 // Messaging-related token extractors for the intent-parser node.
 //
-// Houses two pure functions extracted from the legacy
-// `intent-parser.ts` monolith (RW7 decomposition):
-//   - `extractSnsProtocol`     — derives SNS::Subscription `Protocol` +
-//                                `Endpoint` from URL scheme, AWS ARN,
-//                                E.164 phone number, or email tokens.
-//   - `extractRetentionDays`   — pulls an explicit "N days retention"
-//                                clause for `AWS::Logs::LogGroup`.
+// Houses one pure function extracted from the legacy `intent-parser.ts`
+// monolith (RW7 decomposition):
+//   - `extractSnsProtocol` — derives SNS::Subscription `Protocol` +
+//                            `Endpoint` from URL scheme, AWS ARN,
+//                            E.164 phone number, or email tokens.
 //
-// Both extractors mutate the caller-supplied `elicited` record in-place
+// The extractor mutates the caller-supplied `elicited` record in-place
 // (no return value) so the orchestrator can chain extractors without
-// rebinding intermediate maps. They are no-ops for any resourceType
-// outside their narrow scope.
+// rebinding intermediate maps. It is a no-op for any resourceType
+// outside its narrow scope.
 
 import { RESOURCE_TYPES } from "../../../../index.js";
 
@@ -77,40 +75,5 @@ export function extractSnsProtocol(
   if (emailMatch && /\b(email|notify|subscribe)\b/.test(intentLower)) {
     elicited["Protocol"] = "email";
     elicited["Endpoint"] = emailMatch[0];
-  }
-}
-
-/**
- * Extract an explicit "N days retention" clause for
- * `AWS::Logs::LogGroup`. The plan-generator's downstream comparator
- * raises this value to the BP minimum (30) when necessary and emits
- * a `BP_ADJUSTED_VALUE` advisory. Stored in `elicitedOptions` as an
- * integer (matching the CFN schema type).
- *
- * Epic 94 Wave 2 fixer e94.N5 — required for finding D-05 so the
- * comparator has a concrete asserted value to compare against.
- */
-export function extractRetentionDays(
-  intent: string,
-  intentLower: string,
-  resourceType: string,
-  elicited: Record<string, unknown>,
-): void {
-  if (resourceType !== RESOURCE_TYPES.LOGS_LOG_GROUP) return;
-  if (!/\bretention\b|\bretain\b/.test(intentLower)) return;
-  // Accept "14 days retention" / "14-day retention" / "retention 14
-  // days" / "retention of 14 days". Bound the number to 1-3652.
-  const patterns: RegExp[] = [
-    /\b(\d{1,4})[-\s]*days?\s+retention\b/i,
-    /\bretention\s+(?:of\s+)?(\d{1,4})\s*days?\b/i,
-    /\bretain\s+(?:for\s+)?(\d{1,4})\s*days?\b/i,
-  ];
-  for (const re of patterns) {
-    const m = re.exec(intent);
-    if (!m) continue;
-    const n = Number(m[1]);
-    if (!Number.isFinite(n) || n <= 0) continue;
-    elicited["RetentionInDays"] = n;
-    return;
   }
 }
