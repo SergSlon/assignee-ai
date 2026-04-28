@@ -15,6 +15,7 @@ import {
 } from "@/index.js";
 import type { AgentState } from "../../graph-state.js";
 import type { ArchitecturePattern } from "@/index.js";
+import { ProcessEnvConfigAdapter } from "@/config/config-port.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import {
   McpMocks,
@@ -160,6 +161,9 @@ function makeState(overrides: Partial<AgentState> = {}): AgentState {
     preflightErrors: [],
     preflightMode: "local",
     messages: [],
+    // RW4b-3: ConfigPort threaded through state — buildPlanJsonPayload
+    // (plan-mode JSON output) reads `state.config` for region resolution.
+    config: new ProcessEnvConfigAdapter(),
     ...overrides,
   } as AgentState;
 }

@@ -24,7 +24,6 @@ import {
 } from "@/utils/display.js";
 import { AWS_REGION } from "@/config/constants/aws.js";
 import { EnvVar } from "@/constants/env-vars.js";
-import { ProcessEnvConfigAdapter } from "@/config/config-port.js";
 
 /**
  * Epic 94 Wave 3 N6 (C-05 / C-06): emit each advisory as a `[WARN]`
@@ -164,10 +163,9 @@ interface PlanJsonPayload {
 }
 
 function buildPlanJsonPayload(state: AgentState): PlanJsonPayload {
-  // MASTER-009: read via fresh ConfigPort adapter rather than reaching
-  // at process.env directly. TODO(SaaS): thread ConfigPort from graph
-  // state once W4 lands.
-  const cfg = new ProcessEnvConfigAdapter();
+  // MASTER-009 (RW4b-3): read via the ConfigPort threaded through graph
+  // state rather than constructing a fresh adapter per call.
+  const cfg = state.config;
   const region =
     cfg.get(EnvVar.AWS_REGION) ??
     cfg.get(EnvVar.AWS_DEFAULT_REGION) ??

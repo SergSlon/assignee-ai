@@ -15,7 +15,7 @@ import {
 } from "@/index.js";
 import { EnvVar } from "@/constants/env-vars.js";
 import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
-import { ProcessEnvConfigAdapter } from "@/config/config-port.js";
+import type { ConfigPort } from "@/config/config-port.js";
 import type { AgentState } from "@/graph/graph-state.js";
 import {
   readMemoryHints,
@@ -56,12 +56,11 @@ function readSchemaMetadata(resourceSchema: Record<string, unknown>): {
 /**
  * Emits a POC guardrail warning when `BEDROCK_GUARDRAIL_ID` is unset.
  *
- * MASTER-009: reads via a fresh ConfigPort adapter rather than reaching
- * at process.env directly. TODO(SaaS): thread ConfigPort from graph
- * state once W4 lands.
+ * MASTER-009 (RW4b-3): reads via the ConfigPort threaded through graph
+ * state rather than constructing a fresh adapter per call.
  */
-function warnIfGuardrailDisabled(runId: string): void {
-  if (new ProcessEnvConfigAdapter().get(EnvVar.BEDROCK_GUARDRAIL_ID)) return;
+function warnIfGuardrailDisabled(runId: string, config: ConfigPort): void {
+  if (config.get(EnvVar.BEDROCK_GUARDRAIL_ID)) return;
   log({
     ts: new Date().toISOString(),
     runId,
@@ -94,7 +93,7 @@ export async function invokeLlmPhase(
 
   const startedAt = Date.now();
   const { schemaKeys, requiredKeys } = readSchemaMetadata(state.resourceSchema);
-  warnIfGuardrailDisabled(state.runId);
+  warnIfGuardrailDisabled(state.runId, state.config);
 
   const { provisionHintLine, memoryHints } = await readMemoryHints(state);
   const resourceHints =

@@ -9,6 +9,7 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 import { ExecutionStatus } from "../../index.js";
 import { MockLlmAdapter } from "../../testing/index.js";
+import { ProcessEnvConfigAdapter } from "../../config/config-port.js";
 
 // ── Module mocks (must be before imports) ────────────────────────────────────
 
@@ -172,6 +173,8 @@ function makePlanState(overrides: Record<string, unknown> = {}) {
     preflightPassed: false,
     preflightErrors: [],
     preflightMode: "local",
+    // RW4b-3: ConfigPort threaded through state for warnIfGuardrailDisabled.
+    config: new ProcessEnvConfigAdapter(),
     ...overrides,
   } as unknown as Parameters<ReturnType<typeof createPlanGeneratorNode>>[0];
 }

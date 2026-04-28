@@ -38,6 +38,10 @@ import type { FreeTierNote } from "../utils/free-tier.js";
 import type { AppliedFix, SecurityFinding } from "../types/fix-finding.js";
 import type { BPFinding } from "@assignee/best-practices";
 import type { Advisory } from "./nodes/intent-parser.js";
+import {
+  ProcessEnvConfigAdapter,
+  type ConfigPort,
+} from "../config/config-port.js";
 
 export type { AppliedFix, SecurityFinding };
 
@@ -241,6 +245,26 @@ export const graphAnnotation = Annotation.Root({
   noApply: Annotation<boolean>({
     reducer: (_, b) => b,
     default: () => false,
+  }),
+  /**
+   * MASTER-009 (RW4b): tenant-scoped configuration adapter threaded
+   * through graph state so depth-3+ call sites (preflight guards,
+   * llm-plan invoke, plan formatter) can read configuration without
+   * constructing a fresh `ProcessEnvConfigAdapter` per call.
+   *
+   * `createGraph` injects its `effectiveConfig` (constructor-supplied
+   * `options.config` OR the lazy fallback `new ProcessEnvConfigAdapter()`)
+   * via the per-node telemetry wrapper so every node-internal callee
+   * sees the same shared adapter for the run. The annotation default
+   * returns a fresh `ProcessEnvConfigAdapter` so direct unit-test
+   * invocations of node functions (without `createGraph`) still get a
+   * working ConfigPort; the reducer keeps the existing value when the
+   * incoming partial update does not carry one (the common case —
+   * nodes do not normally write to `state.config`).
+   */
+  config: Annotation<ConfigPort>({
+    reducer: (a, b) => b ?? a,
+    default: () => new ProcessEnvConfigAdapter(),
   }),
 });
 

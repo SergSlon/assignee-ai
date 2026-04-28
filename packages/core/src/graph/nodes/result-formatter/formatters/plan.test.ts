@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ExecutionMode, ExecutionStatus } from "@/index.js";
 import type { AgentState } from "@/graph/graph-state.js";
+import { ProcessEnvConfigAdapter } from "@/config/config-port.js";
 import { sanitizeDesiredState, normalizeMemoryHints } from "./plan.js";
 
 vi.mock("@/utils/display.js", () => ({
@@ -189,6 +190,9 @@ describe("formatPlanResult JSON output (Epic 92 Wave 4.a)", () => {
       preflightErrors: [],
       preflightMode: "local",
       messages: [],
+      // RW4b-3: ConfigPort threaded through state — buildPlanJsonPayload
+      // reads `state.config` for region resolution.
+      config: new ProcessEnvConfigAdapter(),
       ...overrides,
     } as AgentState;
   }

@@ -138,6 +138,28 @@ async function withTelemetry<S extends { runId: string }, R>(
   }
 }
 
+/**
+ * MASTER-009 (RW4b): override `state.config` with the `effectiveConfig`
+ * captured by `createGraph`. The annotation default returns a fresh
+ * adapter per invocation so direct node-unit-tests still work without
+ * constructing the full graph; here we replace it with the
+ * `createGraph`-scoped adapter so the per-run cache is shared across
+ * every node callee for the lifetime of the run.
+ *
+ * Returns a shallow-cloned state object; the caller's input is not
+ * mutated.
+ */
+function withConfig<S extends { config?: ConfigPort }>(
+  state: S,
+  effectiveConfig: ConfigPort,
+): S {
+  // Shallow clone + override. We always overwrite (rather than `??`)
+  // so SaaS callers that supplied `options.config` to `createGraph`
+  // win over any annotation-default adapter that LangGraph may have
+  // materialised for the initial state.
+  return { ...state, config: effectiveConfig };
+}
+
 export function createGraph(
   tools: StructuredTool[] = [],
   options: CreateGraphOptions = {},
@@ -199,17 +221,27 @@ export function createGraph(
 
   const workflow = new StateGraph(graphAnnotation)
     .addNode(GraphNode.INTENT_PARSER, (state) =>
-      withTelemetry(GraphNode.INTENT_PARSER, tel, intentParserNode, state),
+      withTelemetry(
+        GraphNode.INTENT_PARSER,
+        tel,
+        intentParserNode,
+        withConfig(state, effectiveConfig),
+      ),
     )
     .addNode(GraphNode.SCHEMA_FETCHER, (state) =>
-      withTelemetry(GraphNode.SCHEMA_FETCHER, tel, schemaFetcherNode, state),
+      withTelemetry(
+        GraphNode.SCHEMA_FETCHER,
+        tel,
+        schemaFetcherNode,
+        withConfig(state, effectiveConfig),
+      ),
     )
     .addNode(GraphNode.OPTION_ELICITOR, (state) =>
       withTelemetry(
         GraphNode.OPTION_ELICITOR,
         tel,
         (s) => optionElicitorNode(s, tools, llmAdapter),
-        state,
+        withConfig(state, effectiveConfig),
       ),
     )
     .addNode(GraphNode.COMPOUND_DISPATCHER, (state) =>
@@ -217,18 +249,23 @@ export function createGraph(
         GraphNode.COMPOUND_DISPATCHER,
         tel,
         compoundDispatcherNode,
-        state,
+        withConfig(state, effectiveConfig),
       ),
     )
     .addNode(GraphNode.PLAN_GENERATOR, (state) =>
-      withTelemetry(GraphNode.PLAN_GENERATOR, tel, planGeneratorNode, state),
+      withTelemetry(
+        GraphNode.PLAN_GENERATOR,
+        tel,
+        planGeneratorNode,
+        withConfig(state, effectiveConfig),
+      ),
     )
     .addNode(GraphNode.VALIDATE_DESIRED_STATE, (state) =>
       withTelemetry(
         GraphNode.VALIDATE_DESIRED_STATE,
         tel,
         validateDesiredStateNode,
-        state,
+        withConfig(state, effectiveConfig),
       ),
     )
     .addNode(GraphNode.ADVICE_GENERATOR, (state) =>
@@ -236,7 +273,7 @@ export function createGraph(
         GraphNode.ADVICE_GENERATOR,
         tel,
         (s) => adviceGeneratorNode(s, tools),
-        state,
+        withConfig(state, effectiveConfig),
       ),
     )
     .addNode(GraphNode.PREFLIGHT_GUARD, (state) =>
@@ -244,17 +281,19 @@ export function createGraph(
         GraphNode.PREFLIGHT_GUARD,
         tel,
         (s) => preflightGuardNode(s, tools),
-        state,
+        withConfig(state, effectiveConfig),
       ),
     )
     // HUMAN_APPROVAL excluded from telemetry (blocks on user input -- W4-05 AC).
-    .addNode(GraphNode.HUMAN_APPROVAL, (state) => humanApprovalNode(state))
+    .addNode(GraphNode.HUMAN_APPROVAL, (state) =>
+      humanApprovalNode(withConfig(state, effectiveConfig)),
+    )
     .addNode(GraphNode.RESOURCE_PROVISIONER, (state) =>
       withTelemetry(
         GraphNode.RESOURCE_PROVISIONER,
         tel,
         (s) => resourceProvisionerNode(s, provisioner),
-        state,
+        withConfig(state, effectiveConfig),
       ),
     )
     .addNode(GraphNode.STATUS_POLLER, (state) =>
@@ -262,7 +301,7 @@ export function createGraph(
         GraphNode.STATUS_POLLER,
         tel,
         (s) => statusPollerNode(s, provisioner),
-        state,
+        withConfig(state, effectiveConfig),
       ),
     )
     .addNode(GraphNode.BP_EVALUATOR, (state) =>
@@ -270,18 +309,23 @@ export function createGraph(
         GraphNode.BP_EVALUATOR,
         tel,
         (s) => bpEvaluatorNode(s, tools),
-        state,
+        withConfig(state, effectiveConfig),
       ),
     )
     .addNode(GraphNode.FIX_APPLICATOR, (state) =>
-      withTelemetry(GraphNode.FIX_APPLICATOR, tel, fixApplicatorNode, state),
+      withTelemetry(
+        GraphNode.FIX_APPLICATOR,
+        tel,
+        fixApplicatorNode,
+        withConfig(state, effectiveConfig),
+      ),
     )
     .addNode(GraphNode.RESULT_FORMATTER, (state) =>
       withTelemetry(
         GraphNode.RESULT_FORMATTER,
         tel,
         (s) => resultFormatterNode(s, tools),
-        state,
+        withConfig(state, effectiveConfig),
       ),
     )
     .addConditionalEdges(START, routeCheckpointEntry, {
