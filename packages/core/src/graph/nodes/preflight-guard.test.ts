@@ -3,6 +3,7 @@ import { ExecutionStatus, CostEstimateLabel } from "../../index.js";
 import { preflightGuardNode } from "./preflight-guard.js";
 import { LambdaPricing, PricingUnit } from "../../constants/pricing-api.js";
 import { ToolName } from "../../constants/tools.js";
+import { ProcessEnvConfigAdapter } from "../../config/config-port.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import {
   McpMocks,
@@ -45,6 +46,10 @@ function makeState(overrides: Record<string, unknown> = {}) {
     preflightPassed: false,
     preflightErrors: [],
     preflightMode: "local",
+    // RW4b-3: ConfigPort threaded through state so guards (managed-policy,
+    // vpc-existence) can read configuration without constructing fresh
+    // adapters per call.
+    config: new ProcessEnvConfigAdapter(),
     ...overrides,
   } as unknown as Parameters<typeof preflightGuardNode>[0];
 }

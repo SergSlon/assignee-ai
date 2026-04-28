@@ -47,7 +47,6 @@ import {
 import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
 import { EnvVar } from "@/constants/env-vars.js";
 import { AWS_REGION } from "@/config/constants/aws.js";
-import { ProcessEnvConfigAdapter } from "@/config/config-port.js";
 import type { GuardContext, GuardResult, PreflightGuard } from "../types.js";
 import { failResult, passResult, skipResult } from "../types.js";
 
@@ -254,13 +253,13 @@ export function buildVpcExistenceGuard(
             }
             // Story 48.3 parity: opt-in strict mode blocks on unknown;
             // default is WARN + pass to preserve local-CLI UX.
-            // MASTER-009: read via fresh ConfigPort adapter rather than
-            // reaching at process.env directly. TODO(SaaS): thread
-            // ConfigPort from graph state once W4 lands.
+            // MASTER-009 (RW4b-3): read via the ConfigPort threaded
+            // through graph state rather than constructing a fresh
+            // adapter per call. `state.config` is guaranteed by the
+            // graph-state annotation default.
             if (
-              new ProcessEnvConfigAdapter().get(
-                EnvVar.ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS,
-              ) === "1"
+              ctx.state.config.get(EnvVar.ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS) ===
+              "1"
             ) {
               const errMsg = err instanceof Error ? err.message : String(err);
               return failResult(

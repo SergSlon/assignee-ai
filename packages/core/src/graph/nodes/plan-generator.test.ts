@@ -5,6 +5,7 @@ import {
   ResourceDefault,
 } from "../../index.js";
 import { MockLlmAdapter } from "../../testing/index.js";
+import { ProcessEnvConfigAdapter } from "../../config/config-port.js";
 import {
   createPlanGeneratorNode,
   applyToCfnTransforms,
@@ -78,6 +79,10 @@ function makeState(overrides: Record<string, unknown> = {}) {
     preflightPassed: false,
     preflightErrors: [],
     preflightMode: "local",
+    // RW4b-3: ConfigPort threaded through state so depth-3+ callers
+    // (warnIfGuardrailDisabled, preflight guards, plan formatter) can
+    // read configuration without constructing fresh adapters.
+    config: new ProcessEnvConfigAdapter(),
     ...overrides,
   } as unknown as Parameters<ReturnType<typeof createPlanGeneratorNode>>[0];
 }

@@ -29,7 +29,7 @@ import {
 } from "@/index.js";
 import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
 import { EnvVar } from "@/constants/env-vars.js";
-import { ProcessEnvConfigAdapter } from "@/config/config-port.js";
+import type { ConfigPort } from "@/config/config-port.js";
 import type { GuardContext, GuardResult, PreflightGuard } from "../types.js";
 import { failResult, passResult, skipResult } from "../types.js";
 
@@ -37,6 +37,7 @@ const THROTTLE_BACKOFF_MS = [200, 500, 1200] as const;
 
 export async function verifyManagedPolicyArns(
   arns: readonly string[],
+  config: ConfigPort,
 ): Promise<string | null> {
   if (arns.length === 0) return null;
   try {
@@ -118,14 +119,9 @@ export async function verifyManagedPolicyArns(
         // ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS=1 to escalate to fail-closed.
         // MUST sit inside the else branch (after Auth / NoSuchEntity /
         // AccessDenied / Throttling) so it can never demote those signals.
-        // MASTER-009: read via fresh ConfigPort adapter rather than
-        // reaching at process.env directly. TODO(SaaS): thread
-        // ConfigPort from graph state once W4 lands.
-        if (
-          new ProcessEnvConfigAdapter().get(
-            EnvVar.ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS,
-          ) === "1"
-        ) {
+        // MASTER-009 (RW4b-3): read via the ConfigPort threaded through
+        // graph state rather than constructing a fresh adapter per call.
+        if (config.get(EnvVar.ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS) === "1") {
           return (
             `Preflight unknown error while verifying ManagedPolicyArn ${arn} ` +
             `(${errName || errCode || "unknown"}): ${errMsg}. ` +
@@ -200,6 +196,7 @@ export const managedPolicyGuard: PreflightGuard = {
       return skipResult("no ManagedPolicyArns");
     const err = await verifyManagedPolicyArns(
       arns.filter((a): a is string => typeof a === "string"),
+      ctx.state.config,
     );
     return err ? failResult(err) : passResult;
   },

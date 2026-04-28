@@ -15,6 +15,7 @@ import {
 } from "./vpc-existence.js";
 import type { GuardContext } from "../types.js";
 import { EnvVar } from "../../../../constants/env-vars.js";
+import { ProcessEnvConfigAdapter } from "../../../../config/config-port.js";
 
 function ctx(desiredState: Record<string, unknown>): GuardContext {
   return {
@@ -29,6 +30,10 @@ function ctx(desiredState: Record<string, unknown>): GuardContext {
       preflightPassed: false,
       preflightErrors: [],
       preflightMode: "local",
+      // RW4b-3: ConfigPort threaded through state — vpc-existence guard
+      // reads `state.config` for the ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS
+      // strict-mode toggle.
+      config: new ProcessEnvConfigAdapter(),
     } as unknown as GuardContext["state"],
     desiredState,
   };
