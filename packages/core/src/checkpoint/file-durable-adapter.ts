@@ -21,9 +21,15 @@
  *   - HMAC signing is per-process MCP-server responsibility; this adapter
  *     does not add or verify HMAC — callers that need HMAC wrap saves with
  *     `apps/mcp-server/src/services/checkpoint-hmac.ts` as before.
+ *
+ * RW4d-migration-A (M-016): now constructs (or accepts) a `StoragePort`
+ * and threads it through `saveCheckpoint`, `loadCheckpoint`, and the
+ * `list` / `delete` calls so all I/O flows through the port. The
+ * default constructor preserves the legacy `~/.assignee/checkpoints/`
+ * filesystem layout via `LocalFsStorageAdapter`. Tests can pass an
+ * in-memory port to exercise the behaviour without touching disk.
  */
 
-import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 import {
@@ -35,6 +41,8 @@ import { isCheckpointExpired } from "./ttl.js";
 import { saveCheckpoint, loadCheckpoint } from "./store.js";
 import type { CheckpointerPort } from "../ports/checkpoint-port.js";
 import { CHECKPOINT_FILE_PREFIX } from "./constants.js";
+import { LocalFsStorageAdapter } from "../adapters/storage/local-fs-adapter.js";
+import type { StoragePort } from "../ports/storage-port.js";
 
 /** Default checkpoint directory — mirrors the path used by store.ts callers. */
 const DEFAULT_CHECKPOINT_DIR = path.join(
@@ -43,15 +51,35 @@ const DEFAULT_CHECKPOINT_DIR = path.join(
   "checkpoints",
 );
 
+/** Storage key for a runId — stable across local-fs and remote adapters. */
+function checkpointKey(runId: string): string {
+  return `${CHECKPOINT_FILE_PREFIX}${runId}.json`;
+}
+
 export class FileDurableCheckpointerAdapter implements CheckpointerPort {
-  constructor(private readonly dir: string = DEFAULT_CHECKPOINT_DIR) {}
+  private readonly dir: string;
+  private readonly storage: StoragePort;
+
+  /**
+   * @param dir Directory rooting the checkpoint files. Defaults to
+   *   `~/.assignee/checkpoints/`.
+   * @param storage TODO(SaaS): optional StoragePort. When supplied, all
+   *   I/O flows through it (the `dir` is still kept around so
+   *   `saveCheckpoint`'s legacy `dir`-based return value matches the
+   *   port's rootDir). When omitted, the constructor builds a
+   *   `LocalFsStorageAdapter` rooted at `dir`.
+   */
+  constructor(dir: string = DEFAULT_CHECKPOINT_DIR, storage?: StoragePort) {
+    this.dir = dir;
+    this.storage = storage ?? new LocalFsStorageAdapter({ rootDir: dir });
+  }
 
   /**
    * Save a checkpoint using the atomic-write + 0o600 pattern from store.ts.
    * Returns the absolute file path.
    */
   async save(checkpoint: PlanCheckpoint): Promise<string> {
-    return saveCheckpoint(checkpoint, this.dir);
+    return saveCheckpoint(checkpoint, this.dir, this.storage);
   }
 
   /**
@@ -60,7 +88,7 @@ export class FileDurableCheckpointerAdapter implements CheckpointerPort {
    */
   async load(runId: string): Promise<PlanCheckpoint | undefined> {
     try {
-      return await loadCheckpoint(runId, this.dir);
+      return await loadCheckpoint(runId, this.dir, this.storage);
     } catch (err) {
       // Raw Node fs.readFile throws { code: "ENOENT" } when the file is absent;
       // store.loadCheckpoint does not wrap that. Treat missing-file as a clean
@@ -91,7 +119,7 @@ export class FileDurableCheckpointerAdapter implements CheckpointerPort {
   async list(): Promise<PlanCheckpoint[]> {
     let entries: string[];
     try {
-      entries = await fs.readdir(this.dir);
+      entries = await this.storage.list();
     } catch {
       return [];
     }
@@ -101,9 +129,9 @@ export class FileDurableCheckpointerAdapter implements CheckpointerPort {
       if (!name.startsWith(CHECKPOINT_FILE_PREFIX) || !name.endsWith(".json")) {
         continue;
       }
-      const filePath = path.join(this.dir, name);
       try {
-        const raw = await fs.readFile(filePath, "utf-8");
+        const raw = await this.storage.readText(name);
+        if (raw === undefined) continue;
         const parsed = PlanCheckpointSchema.strict().safeParse(JSON.parse(raw));
         if (parsed.success) {
           checkpoints.push(parsed.data);
@@ -123,14 +151,11 @@ export class FileDurableCheckpointerAdapter implements CheckpointerPort {
    * Delete the checkpoint file for runId. No-op when file does not exist.
    */
   async delete(runId: string): Promise<void> {
-    const filePath = path.join(
-      this.dir,
-      `${CHECKPOINT_FILE_PREFIX}${runId}.json`,
-    );
     try {
-      await fs.unlink(filePath);
+      await this.storage.delete(checkpointKey(runId));
     } catch {
-      // ENOENT — already gone.
+      // Treat delete failures as no-op (matches legacy behaviour where
+      // ENOENT was caught and unknown errors were swallowed).
     }
   }
 
