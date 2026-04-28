@@ -7,24 +7,15 @@
  * Story 50-4 so apps/mcp-server and apps/cli share one pruning
  * implementation.
  *
- * RW4d-migration-A (M-016): now accepts an optional `StoragePort` to
- * decouple from `node:fs` for the read/list/delete operations.
- *
- * FLAG (port extension needed): the `skipRecentMinutes` guard reads
- * `fs.stat(filePath).mtimeMs` to detect concurrent writers. The
- * StoragePort interface does NOT yet expose file-mtime metadata. For
- * now the pruner reads mtime directly via `node:fs` regardless of
- * which port is supplied — this is an fs-only concern, and the only
- * port-backed callers in the current tree pass a `LocalFsStorageAdapter`
- * whose data is on the same filesystem. Future remote adapters
- * (S3 / DDB) will need StoragePort to grow a `stat(key)` /
- * `LastModified` accessor before this guard can be honoured cleanly.
+ * RW4d-migration-A (M-016): accepts an optional `StoragePort` to decouple
+ * from `node:fs` for read/list/delete/stat operations. The `stat(key)`
+ * port method (added in cluster B follow-up) replaces the previous
+ * direct `fs.stat` fall-through, so the pruner is now fully
+ * adapter-agnostic and works against any port backend.
  *
  * @see Story 33.2
  */
 
-import * as fs from "node:fs/promises";
-import * as path from "node:path";
 import {
   CHECKPOINT_FILE_PREFIX,
   CHECKPOINT_CLEANUP_SKIP_RECENT_MINUTES,
@@ -41,8 +32,6 @@ const DEFAULT_FALLBACK_TTL_HOURS = 72;
 interface FileInfo {
   /** Storage key (filename relative to the rootDir). */
   key: string;
-  /** Absolute filesystem path — kept for fs.stat / unlink legacy path. */
-  filePath: string;
   createdAt: number;
   expired: boolean;
   mtime: number;
@@ -55,8 +44,8 @@ interface FileInfo {
  *
  * @param dir - Directory containing checkpoint-*.json files.
  * @param opts.skipRecentMinutes - Skip files modified within this many minutes.
- * @param opts.storage - TODO(SaaS): explicit StoragePort. When omitted the
- *   pruner builds a `LocalFsStorageAdapter` rooted at `dir`.
+ * @param opts.storage - Explicit StoragePort. When omitted the pruner builds
+ *   a `LocalFsStorageAdapter` rooted at `dir`.
  * @returns Count of pruned and kept files.
  */
 export async function pruneExpiredCheckpoints(
@@ -87,7 +76,7 @@ export async function pruneExpiredCheckpoints(
   if (files.length === 0) return { pruned: 0, kept: 0 };
 
   const now = Date.now();
-  const infos = await collectFileInfos(port, dir, files, now);
+  const infos = await collectFileInfos(port, files, now);
 
   // Sort newest first
   infos.sort((a, b) => b.createdAt - a.createdAt);
@@ -125,21 +114,17 @@ export async function pruneExpiredCheckpoints(
 /** Read each candidate file's mtime + parsed created_at / ttl_hours. */
 async function collectFileInfos(
   port: StoragePort,
-  dir: string,
   files: string[],
   now: number,
 ): Promise<FileInfo[]> {
   const infos: FileInfo[] = [];
 
   for (const file of files) {
-    const filePath = path.join(dir, file);
-    // FLAG: port doesn't expose mtime — read directly from `fs` for
-    // the concurrent-writer guard. Local-fs only today; remote adapters
-    // will need StoragePort.stat() before this becomes adapter-agnostic.
     let mtime: number;
     try {
-      const stat = await fs.stat(filePath);
-      mtime = stat.mtimeMs;
+      const statResult = await port.stat(file);
+      if (statResult === undefined) continue;
+      mtime = statResult.lastModifiedMs;
     } catch {
       continue;
     }
@@ -167,7 +152,7 @@ async function collectFileInfos(
       expired = true;
       mtime = 0;
     }
-    infos.push({ key: file, filePath, createdAt, expired, mtime });
+    infos.push({ key: file, createdAt, expired, mtime });
   }
 
   return infos;

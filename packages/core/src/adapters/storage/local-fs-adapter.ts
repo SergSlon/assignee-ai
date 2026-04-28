@@ -12,7 +12,7 @@
  * @see ../../ports/storage-port.ts — port interface contract.
  */
 
-import { promises as fs } from "node:fs";
+import { constants as fsConstants, promises as fs } from "node:fs";
 import { dirname, join, sep } from "node:path";
 
 import type { StoragePort } from "../../ports/storage-port.js";
@@ -112,6 +112,39 @@ export class LocalFsStorageAdapter implements StoragePort {
     return filtered.sort();
   }
 
+  async stat(key: string): Promise<{ lastModifiedMs: number } | undefined> {
+    const path = this.resolveKey(key);
+    try {
+      const s = await fs.stat(path);
+      return { lastModifiedMs: s.mtimeMs };
+    } catch (err) {
+      if (isENOENT(err)) return undefined;
+      throw err;
+    }
+  }
+
+  async tryAcquire(key: string, value: Uint8Array): Promise<boolean> {
+    const path = this.resolveKey(key);
+    await fs.mkdir(dirname(path), { recursive: true, mode: DIR_MODE });
+    let fh: import("node:fs/promises").FileHandle | undefined;
+    try {
+      fh = await fs.open(
+        path,
+        fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY,
+        FILE_MODE,
+      );
+    } catch (err) {
+      if (isEEXIST(err)) return false;
+      throw err;
+    }
+    try {
+      if (value.byteLength > 0) await fh.write(value);
+      return true;
+    } finally {
+      await fh.close();
+    }
+  }
+
   private async collectKeys(
     absDir: string,
     relPrefix: string,
@@ -174,5 +207,14 @@ function isENOENT(err: unknown): boolean {
     err !== null &&
     "code" in err &&
     (err as { code: string }).code === "ENOENT"
+  );
+}
+
+function isEEXIST(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code: string }).code === "EEXIST"
   );
 }
