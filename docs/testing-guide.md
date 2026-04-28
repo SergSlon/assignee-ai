@@ -355,7 +355,7 @@ node process-captured-responses.mjs  # trims schemas/pricing/docs to fixture siz
 | `bp-enforcement-integration.test.ts`  | —     | Best-practice enforcement modes (enforce/warn/skip) integration                                                              |
 | `secure-defaults-audit.test.ts`       | —     | Secure default values audit across all resource types                                                                        |
 | `cost-estimator-e2e.test.ts`          | —     | Cost estimator end-to-end with real pricing data                                                                             |
-| `coverage.test.ts`                    | 47    | Integration: asserts 23/23 pricing strategies + 23/23 decomposers registered                                                 |
+| `coverage.test.ts`                    | 47    | Integration: asserts 38/38 pricing strategies + 38/38 decomposers registered                                                 |
 
 ### Pricing decomposer tests (Epic 39)
 
@@ -381,8 +381,8 @@ All supported resource types have pricing decomposers registered in `packages/co
 | `ecr.test.ts`              | 6     | Single storage line item (usage-based)                                          |
 | `ssm.test.ts`              | ~10   | Standard tier (free, empty array) vs Advanced (2 items); case-insensitive Tier  |
 | `free.test.ts`             | 24    | 8 free resources (VPC, Subnet, SG, IAM, IGW, RT, Route, ECS) → empty arrays     |
-| `red-team.test.ts`         | 368   | All 23 decomposers × 16 adversarial inputs (NaN, null, undefined, wrong types)  |
-| `coverage.test.ts`         | 47    | Integration: asserts 23/23 pricing strategies + 23/23 decomposers registered    |
+| `red-team.test.ts`         | 368   | All 38 decomposers × 16 adversarial inputs (NaN, null, undefined, wrong types)  |
+| `coverage.test.ts`         | 47    | Integration: asserts 38/38 pricing strategies + 38/38 decomposers registered    |
 
 ### Cost estimator and free tier tests (Epic 40)
 

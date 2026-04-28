@@ -102,7 +102,7 @@ interface ResourcePlugin {
 }
 ```
 
-38 registered plugins (36 resource-type plugins + 1 generic fallback; 2 compound-only types — `EC2::VPCGatewayAttachment`, `EC2::SubnetRouteTableAssociation` — share the generic plugin). Plugins provide:
+38 registered plugins (37 resource-type plugins + 1 generic fallback). The 2 compound-only types `EC2::VPCGatewayAttachment` and `EC2::SubnetRouteTableAssociation` are routed to the generic fallback rather than having their own dedicated plugins. Plugins provide:
 
 - Interactive wizard field definitions (type, label, options, validation, showIf conditions)
 - toCfn transforms (boolean answers -> CloudFormation structures)

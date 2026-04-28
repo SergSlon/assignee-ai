@@ -224,9 +224,22 @@ export function isE2eBucketName(name: string): boolean {
   );
 }
 
+// Architect W-001 / TEA TEA-001 / R4 edge-case D-1: the beforeAll/afterAll
+// hooks below are registered at MODULE LOAD time, which means each importing
+// per-resource e2e file re-registers them in its own vitest test-file worker.
+// With vitest 3.x `fileParallelism: true` × 9 importers, a `RUN_E2E=1` run
+// would spawn the MCP child + run the SSM/RGTA/S3 sweep nine times. The
+// global setup state guard below short-circuits subsequent invocations so
+// the heavy work only runs once per `RUN_E2E=1` test process — restoring
+// pre-split (single-monolith) cost characteristics.
+let setupExecuted = false;
+let teardownExecuted = false;
+
 beforeAll(async () => {
   // Hard gate — never execute setup unless RUN_E2E=1
   if (!RUN_E2E) return;
+  if (setupExecuted) return;
+  setupExecuted = true;
   // Snapshot env BEFORE loadEnv mutates it so afterAll can restore.
   savedEnv = { ...process.env };
   loadEnv();
@@ -247,6 +260,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (!RUN_E2E) return;
+  if (teardownExecuted) return;
+  teardownExecuted = true;
   await closeMcpClient().catch(() => {});
 
   // Global sweeper: clean up any stale e2e test resources left by crashed runs.

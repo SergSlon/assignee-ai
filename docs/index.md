@@ -94,21 +94,21 @@ when you want to understand how assignee.ai thinks. See
 
 ## Key metrics (as of 2026-04-25)
 
-| Metric                         | Count                                                                                                                                                     |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Supported AWS resource types   | 38 (36 with dedicated plugins + 2 compound-only that fall through to the generic plugin: `EC2::VPCGatewayAttachment`, `EC2::SubnetRouteTableAssociation`) |
-| Compound architecture patterns | 11 first-class                                                                                                                                            |
-| LangGraph pipeline nodes       | 14                                                                                                                                                        |
-| CLI commands                   | 15                                                                                                                                                        |
-| MCP server tools               | 5                                                                                                                                                         |
-| Resource plugins               | 38 registered (36 type-specific + generic fallback; 2 compound-only types share the generic)                                                              |
-| Best practice YAML rules       | 185 (count matches `packages/best-practices/manifest.json`)                                                                                               |
-| Pricing strategies             | 38 (matches `pnpm doc-lint`)                                                                                                                              |
-| Pricing decomposers            | 38 (matches `pnpm doc-lint`)                                                                                                                              |
-| Config precedence levels       | 6                                                                                                                                                         |
-| LLM providers supported        | 5                                                                                                                                                         |
-| IAM credential users           | 3                                                                                                                                                         |
-| Test files                     | across 4 packages (cli + mcp-server + core + best-practices) — run `pnpm -r test:coverage` for live counts                                                |
-| RUN_E2E compound coverage      | 9/11 first-class compounds (websocket-api and vpc-public-only not yet exercised end-to-end)                                                               |
+| Metric                         | Count                                                                                                                                                                                                        |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Supported AWS resource types   | 38 (36 with dedicated plugins + 2 compound-only that fall through to the generic plugin: `EC2::VPCGatewayAttachment`, `EC2::SubnetRouteTableAssociation`)                                                    |
+| Compound architecture patterns | 11 first-class                                                                                                                                                                                               |
+| LangGraph pipeline nodes       | 14                                                                                                                                                                                                           |
+| CLI commands                   | 15                                                                                                                                                                                                           |
+| MCP server tools               | 5                                                                                                                                                                                                            |
+| Resource plugins               | 38 registered (36 type-specific + generic fallback; 2 compound-only types share the generic)                                                                                                                 |
+| Best practice YAML rules       | 185 (count matches `packages/best-practices/manifest.json`)                                                                                                                                                  |
+| Pricing strategies             | 38 (matches `pnpm doc-lint`)                                                                                                                                                                                 |
+| Pricing decomposers            | 38 (matches `pnpm doc-lint`)                                                                                                                                                                                 |
+| Config precedence levels       | 6                                                                                                                                                                                                            |
+| LLM providers supported        | 5                                                                                                                                                                                                            |
+| IAM credential users           | 3                                                                                                                                                                                                            |
+| Test files                     | across 4 packages (cli + mcp-server + core + best-practices) — run `pnpm -r test:coverage` for live counts                                                                                                   |
+| RUN_E2E compound coverage      | 11/11 first-class compounds — full registry exercised E2E (the 9 lifecycle compounds in `apps/cli/src/e2e/e2e-plan-compounds.test.ts` plus `e94-websocket-render.test.ts` and `e94-vpc-public-only.test.ts`) |
 
 > Full release history is in [`docs/engineering/changelog-history.md`](engineering/changelog-history.md).

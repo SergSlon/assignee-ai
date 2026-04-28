@@ -140,8 +140,17 @@ export class LocalFsStorageAdapter implements StoragePort {
     try {
       if (value.byteLength > 0) await fh.write(value);
       return true;
+    } catch (err) {
+      // QA Q-002 / R4-002: post-O_EXCL write failure (ENOSPC, EROFS, EIO)
+      // would otherwise orphan a 0-byte lock file that subsequent acquirers
+      // see as a held lock. Unlink before rethrowing so the next acquirer
+      // sees no-lock-held instead of false-positive-held.
+      await fh.close().catch(() => undefined);
+      fh = undefined;
+      await fs.unlink(path).catch(() => undefined);
+      throw err;
     } finally {
-      await fh.close();
+      if (fh) await fh.close();
     }
   }
 

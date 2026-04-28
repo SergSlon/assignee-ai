@@ -152,3 +152,83 @@ describe("placeholderArnGuard.run", () => {
     }
   });
 });
+
+describe("placeholder-arn — angle-bracketed wizard placeholders (RW-FIX-4 E-1)", () => {
+  it("rejects bare angle-bracketed ARN as the field value", async () => {
+    const result = await placeholderArnGuard.run(
+      ctx({
+        Role: "arn:aws:iam::<your-12-digit-account-id>:role/foo",
+      }),
+    );
+    expect(result.kind).toBe("fail");
+    if (result.kind === "fail") {
+      expect(result.errorMessage).toContain("wizard-placeholder ARN");
+      expect(result.errorMessage).toContain("Role");
+      expect(result.errorMessage).toContain("12-digit AWS account ID");
+    }
+  });
+
+  it("rejects partition-aware (GovCloud) angle-bracketed ARN", async () => {
+    const result = await placeholderArnGuard.run(
+      ctx({
+        Role: "arn:aws-us-gov:iam::<account-id>:role/admin",
+      }),
+    );
+    expect(result.kind).toBe("fail");
+  });
+
+  it("rejects angle-bracketed ARN inside a JSON-wrapped string (RedrivePolicy shape)", async () => {
+    // RW-FIX-5 UX S-001 regression: SNS::Subscription RedrivePolicy ships
+    // the placeholder inside a JSON wrapper. The original `^arn:aws…`
+    // anchor bypassed the wrapped form. The fixed regex matches anywhere
+    // in the string.
+    const result = await placeholderArnGuard.run(
+      ctx({
+        RedrivePolicy:
+          '{"deadLetterTargetArn":"arn:aws:sqs:us-east-1:<your-12-digit-account-id>:my-dlq"}',
+      }),
+    );
+    expect(result.kind).toBe("fail");
+    if (result.kind === "fail") {
+      expect(result.errorMessage).toContain("wizard-placeholder ARN");
+    }
+  });
+
+  it("rejects angle-bracketed ARN nested under a parsed JSON object", async () => {
+    // After toCfn parses RedrivePolicy, desiredState carries the parsed
+    // shape. The walker recurses into the object's values and hits the
+    // bare ARN string.
+    const result = await placeholderArnGuard.run(
+      ctx({
+        RedrivePolicy: {
+          deadLetterTargetArn:
+            "arn:aws:sqs:us-east-1:<your-12-digit-account-id>:my-dlq",
+        },
+      }),
+    );
+    expect(result.kind).toBe("fail");
+    if (result.kind === "fail") {
+      expect(result.errorMessage).toContain(
+        "RedrivePolicy.deadLetterTargetArn",
+      );
+    }
+  });
+
+  it("does NOT false-positive on a real ARN with a 12-digit account ID", async () => {
+    const result = await placeholderArnGuard.run(
+      ctx({
+        Role: "arn:aws:iam::987654321098:role/admin",
+      }),
+    );
+    expect(result.kind).toBe("pass");
+  });
+
+  it("does NOT false-positive on prose containing the word 'arn'", async () => {
+    const result = await placeholderArnGuard.run(
+      ctx({
+        Description: "Set the role ARN to your IAM role's ARN later.",
+      }),
+    );
+    expect(result.kind).toBe("pass");
+  });
+});
