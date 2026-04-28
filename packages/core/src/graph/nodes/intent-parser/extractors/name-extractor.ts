@@ -46,29 +46,7 @@
 //     user sees that their tail was discarded.
 
 import { RESOURCE_TYPES } from "../../../../index.js";
-
-/**
- * Structured advisory attached to the plan envelope when the parser
- * silently drops or alters a user-supplied token. Mirrors the shape
- * of the `Advisory` interface in the parent `intent-parser.ts` /
- * future `intent-types.ts`. Defined locally here to keep this
- * extractor self-contained during the RW7 parallel extraction window;
- * the merge-lead step will swap this to an import from
- * `../intent-types.js` once worker G lands.
- */
-interface Advisory {
-  /** Stable machine-readable code (e.g. `NAME_REMAINDER_IGNORED`). */
-  code: string;
-  /** Human-readable summary of what was dropped or altered. */
-  message: string;
-  /** Actionable fix hint so the user can rephrase. */
-  hint: string;
-  /**
-   * Optional structured payload — e.g. `{from: "192.168.1.1", to:
-   * "ip-192-168-1-1"}` for NAME_REWRITTEN.
-   */
-  details?: Record<string, unknown>;
-}
+import type { Advisory } from "../intent-types.js";
 
 /**
  * Keywords that follow a name in natural-language AWS intents and

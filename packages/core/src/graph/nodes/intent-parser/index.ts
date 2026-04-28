@@ -50,11 +50,11 @@ import {
   extractEngineVersion,
 } from "./extractors/compute-extractors.js";
 import { extractResourceName } from "./extractors/name-extractor.js";
+import { extractSnsProtocol } from "./extractors/messaging-extractors.js";
 import {
-  extractSnsProtocol,
+  extractCloudWatchAlarmMetric,
   extractRetentionDays,
-} from "./extractors/messaging-extractors.js";
-import { extractCloudWatchAlarmMetric } from "./extractors/cloudwatch-extractor.js";
+} from "./extractors/cloudwatch-extractor.js";
 
 // Public re-exports — preserve the monolith's external API surface.
 export type { Advisory, AssertionExtraction } from "./intent-types.js";
