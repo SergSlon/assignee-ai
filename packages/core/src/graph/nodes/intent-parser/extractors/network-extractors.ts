@@ -213,7 +213,9 @@ export function extractRegion(
   let candidate: string | undefined;
   let path: "tail" | "substring" | "none" = "none";
   let tailMatch: RegExpExecArray | null;
-  // eslint-disable-next-line no-cond-assign
+  // eslint-disable-next-line no-cond-assign -- RegExp.exec walk requires
+  // assignment-in-condition; the alternative duplicates the call inside the
+  // loop body, which is harder to read.
   while ((tailMatch = tailRegex.exec(intent)) !== null) {
     const tok = tailMatch[1]!.toLowerCase();
     if (/^[a-z]{2,3}-/.test(tok)) {
