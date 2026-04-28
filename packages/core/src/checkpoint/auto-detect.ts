@@ -7,17 +7,24 @@
  *
  * Extracted from apps/cli during Wave-6c; promoted to @assignee/core by
  * Story 50-4.
+ *
+ * RW4d-migration-A (M-016): now accepts an optional `StoragePort` to
+ * decouple from `node:fs`. When `storage` is omitted, the function
+ * builds a `LocalFsStorageAdapter` rooted at `dir` for backwards
+ * compatibility. Keys returned by `list()` are the relative paths
+ * under the rootDir — for the checkpoint directory this is just the
+ * filename (no nesting), so the existing prefix/suffix filter remains
+ * valid.
  */
 
-import * as fs from "node:fs/promises";
-import * as path from "node:path";
 import {
   PlanCheckpointSchema,
   type PlanCheckpoint,
 } from "../schema/checkpoint.js";
-import { safeTry } from "../types/result.js";
 import { CHECKPOINT_FILE_PREFIX } from "./constants.js";
 import { isCheckpointExpired } from "./ttl.js";
+import { LocalFsStorageAdapter } from "../adapters/storage/local-fs-adapter.js";
+import type { StoragePort } from "../ports/storage-port.js";
 
 /**
  * Scans a directory for checkpoint files, filters by TTL, returns the newest
@@ -25,9 +32,20 @@ import { isCheckpointExpired } from "./ttl.js";
  */
 export async function findNewestValidCheckpoint(
   dir: string,
+  // TODO(SaaS): require StoragePort once all callers thread it through.
+  storage?: StoragePort,
 ): Promise<PlanCheckpoint | null> {
-  const [readErr, entries] = await safeTry(fs.readdir(dir));
-  if (readErr) return null;
+  const port = storage ?? new LocalFsStorageAdapter({ rootDir: dir });
+
+  // `list()` returns sorted keys; missing-rootDir resolves to `[]` so
+  // the legacy `(readErr) => null` branch becomes a natural empty-list
+  // early-return.
+  let entries: string[];
+  try {
+    entries = await port.list();
+  } catch {
+    return null;
+  }
 
   const checkpointFiles = entries.filter(
     (f) => f.startsWith(CHECKPOINT_FILE_PREFIX) && f.endsWith(".json"),
@@ -39,10 +57,13 @@ export async function findNewestValidCheckpoint(
   let newestTime = 0;
 
   for (const file of checkpointFiles) {
-    const [err, raw] = await safeTry(
-      fs.readFile(path.join(dir, file), "utf-8"),
-    );
-    if (err) continue;
+    let raw: string | undefined;
+    try {
+      raw = await port.readText(file);
+    } catch {
+      continue;
+    }
+    if (raw === undefined) continue;
 
     let json: unknown;
     try {
