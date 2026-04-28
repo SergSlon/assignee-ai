@@ -86,7 +86,38 @@ async function loadRuntimeCounts() {
     // `.list()` method that currently doesn't exist; the parity test is
     // the authoritative guard.
     decomposerCount: supportedTypeCount,
+    // Command count: top-level CLI sub-commands wired via
+    // `program.addCommand(...)` in `apps/cli/src/index.ts`. Excludes
+    // hidden helpers (factories, formatters, filters).
+    commandCount: await countCommands(),
+    // Graph node count: `graph.addNode(...)` calls in
+    // `packages/core/src/graph/create-graph.ts`. The 14 nodes are the
+    // pipeline stages (intent-parser → schema-fetcher → … → result-formatter).
+    graphNodeCount: await countGraphNodes(),
   };
+}
+
+/** Count `program.addCommand(...)` calls in apps/cli/src/index.ts. */
+async function countCommands() {
+  const indexPath = join(REPO_ROOT, "apps", "cli", "src", "index.ts");
+  const text = await readFile(indexPath, "utf8");
+  const matches = text.match(/program\.addCommand\s*\(/g);
+  return matches ? matches.length : 0;
+}
+
+/** Count `.addNode(...)` calls in packages/core/src/graph/create-graph.ts. */
+async function countGraphNodes() {
+  const graphPath = join(
+    REPO_ROOT,
+    "packages",
+    "core",
+    "src",
+    "graph",
+    "create-graph.ts",
+  );
+  const text = await readFile(graphPath, "utf8");
+  const matches = text.match(/\.addNode\s*\(/g);
+  return matches ? matches.length : 0;
 }
 
 /**
@@ -175,6 +206,68 @@ export function extractIntegrationArchitectureCounts(docText) {
 }
 
 /**
+ * Cross-doc count guards: a phrase like "37 supported types" must match
+ * the runtime count regardless of which doc file it appears in. The
+ * regex captures the count; the `expect` key resolves to a runtime
+ * value. Each entry runs against the file glob list below.
+ *
+ * Adding a new doc to the glob is enough to make the guard apply to
+ * it — keeping prose authors honest in every user-facing markdown
+ * file. Engineering-flavoured snapshots (changelog-history.md) are
+ * deliberately excluded because they record historical counts.
+ */
+/**
+ * Patterns that clearly assert a GLOBAL count (not a test-scope subset
+ * or a historical snapshot). The "all N" / "N user-addressable" /
+ * "N first-class" / "N supported types" prefix discriminates a system-
+ * wide claim from a per-test-file claim like
+ * `"smoke-traces 6 compound patterns"`.
+ */
+const CROSS_DOC_GUARDS = [
+  {
+    label: "supported resource types",
+    re: /\b(?:all|over|across)\s+(\d+)\s+(?:supported\s+)?resource\s+types\b/gi,
+    expect: "supportedTypeCount",
+  },
+  {
+    label: "first-class CCAPI types",
+    re: /\b(\d+)\s+first-class\s+CCAPI\s+types\b/gi,
+    expect: "supportedTypeCount",
+  },
+  {
+    label: "user-addressable resource types",
+    re: /\b(?:all\s+)?(\d+)\s+user-addressable\s+resource\s+types?\b/gi,
+    expect: "supportedTypeCount",
+  },
+  {
+    label: "registered plugins",
+    re: /\b(\d+)\s+registered\s+plugins?\b/gi,
+    expect: "supportedTypeCount",
+  },
+  {
+    label: "BP rules + N compound patterns",
+    // A claim like "the 185 BP rules + 11 compound patterns" — clearly
+    // global, not a per-test-file subset.
+    re: /BP\s+rules?\s*\+\s*(\d+)\s+compound\s+patterns?\b/gi,
+    expect: "patternCount",
+  },
+];
+
+/**
+ * Files that the cross-doc guards walk. Engineering snapshots like
+ * `docs/engineering/changelog-history.md` are excluded — they record
+ * point-in-time counts, not current state.
+ */
+const CROSS_DOC_TARGETS = [
+  "docs/architecture.md",
+  "docs/testing-guide.md",
+  "docs/explanation/oss-vs-saas.md",
+  "docs/integration-architecture.md",
+  "docs/index.md",
+  "docs/mcp-server.md",
+];
+
+/**
  * Run every assertion. Exported so the test suite can feed drifted
  * temp fixtures in and assert the linter reports violations.
  */
@@ -182,6 +275,8 @@ export async function runDocLint({
   readmePath,
   integrationArchPath,
   runtimeCounts,
+  repoRoot = REPO_ROOT,
+  crossDocTargets = CROSS_DOC_TARGETS,
 }) {
   const errors = [];
   const readmeText = await readFile(readmePath, "utf8");
@@ -217,6 +312,34 @@ export async function runDocLint({
       );
     }
   }
+
+  // Cross-doc count guards: walk every drift-prone user-facing doc and
+  // check that any narrative count of supported types / compound
+  // patterns matches the runtime registry. Engineering-flavoured
+  // history files are deliberately excluded via CROSS_DOC_TARGETS.
+  for (const relPath of crossDocTargets) {
+    const docPath = join(repoRoot, relPath);
+    let text;
+    try {
+      text = await readFile(docPath, "utf8");
+    } catch {
+      continue; // Optional doc — skip if absent.
+    }
+    for (const guard of CROSS_DOC_GUARDS) {
+      const expected = runtimeCounts[guard.expect];
+      const matches = text.matchAll(guard.re);
+      for (const m of matches) {
+        const actual = Number.parseInt(m[1], 10);
+        if (Number.isFinite(actual) && actual !== expected) {
+          errors.push(
+            `${relPath}: narrative says "${m[0]}" but runtime ${guard.label} count is ${expected}. ` +
+              `Update the doc or the registry.`,
+          );
+        }
+      }
+    }
+  }
+
   return errors;
 }
 
@@ -231,7 +354,9 @@ async function main() {
     `doc-lint: patterns=${runtimeCounts.patternCount} ` +
       `types=${runtimeCounts.supportedTypeCount} ` +
       `strategies=${runtimeCounts.strategyCount} ` +
-      `decomposers=${runtimeCounts.decomposerCount}\n`,
+      `decomposers=${runtimeCounts.decomposerCount} ` +
+      `commands=${runtimeCounts.commandCount} ` +
+      `graphNodes=${runtimeCounts.graphNodeCount}\n`,
   );
   if (errors.length > 0) {
     for (const e of errors) {

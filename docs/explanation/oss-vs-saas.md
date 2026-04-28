@@ -10,7 +10,7 @@
 ## The short version
 
 - **OSS, MIT, forever:** the `assignee` CLI, the LangGraph
-  pipeline, the MCP server, the 185 BP rules + 10 compound patterns,
+  pipeline, the MCP server, the 185 BP rules + 11 compound patterns,
   cost preflight, mandatory tagging, the Bedrock adapter (BYOK), and
   the single-user run-ledger. (License chosen for maximum downstream
   reuse — see [LICENSE](../../LICENSE); earlier drafts floated

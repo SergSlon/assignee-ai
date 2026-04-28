@@ -142,6 +142,7 @@ describe("doc-lint — runDocLint (end-to-end drift detection)", () => {
       readmePath,
       integrationArchPath,
       runtimeCounts: RUNTIME_COUNTS,
+      crossDocTargets: [],
     });
     expect(errors).toEqual([]);
   });
@@ -161,6 +162,7 @@ describe("doc-lint — runDocLint (end-to-end drift detection)", () => {
       readmePath,
       integrationArchPath,
       runtimeCounts: RUNTIME_COUNTS,
+      crossDocTargets: [],
     });
     expect(errors).toHaveLength(1);
     expect(errors[0]).toMatch(/README pattern-table has 9 rows but .* === 10/);
@@ -181,6 +183,7 @@ describe("doc-lint — runDocLint (end-to-end drift detection)", () => {
       readmePath,
       integrationArchPath,
       runtimeCounts: RUNTIME_COUNTS,
+      crossDocTargets: [],
     });
     expect(errors).toHaveLength(1);
     expect(errors[0]).toMatch(/pricing strategies.*says 23.*reports 37/);
@@ -202,9 +205,43 @@ describe("doc-lint — runDocLint (end-to-end drift detection)", () => {
       readmePath,
       integrationArchPath,
       runtimeCounts: RUNTIME_COUNTS,
+      crossDocTargets: [],
     });
     expect(errors).toHaveLength(1);
     expect(errors[0]).toMatch(/"compound architecture patterns" not found/);
+  });
+
+  it("flags drift in a cross-doc target file (e.g. testing-guide narrative)", async () => {
+    // Write a fake testing-guide.md under a tmp repo root and exercise
+    // the cross-doc walker. The fixture asserts "All 23 supported
+    // resource types" while RUNTIME_COUNTS pins 37 — drift expected.
+    const tmpRoot = await mkdtemp(join(tmpdir(), "doc-lint-cross-"));
+    const docsDir = join(tmpRoot, "docs");
+    await writeFile(join(tmpRoot, "README.md"), CLEAN_README, "utf8");
+    await writeFile(
+      join(tmpRoot, "integration-architecture.md"),
+      CLEAN_INTEGRATION_ARCH,
+      "utf8",
+    );
+    await import("node:fs").then((fs) =>
+      fs.promises.mkdir(docsDir, { recursive: true }),
+    );
+    await writeFile(
+      join(docsDir, "testing-guide.md"),
+      "All 23 supported resource types flow through CCAPI.\n",
+      "utf8",
+    );
+    const errors = await runDocLint({
+      readmePath: join(tmpRoot, "README.md"),
+      integrationArchPath: join(tmpRoot, "integration-architecture.md"),
+      runtimeCounts: RUNTIME_COUNTS,
+      repoRoot: tmpRoot,
+      crossDocTargets: ["docs/testing-guide.md"],
+    });
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(
+      /testing-guide\.md.*23.*supported resource types.*runtime.*37/,
+    );
   });
 
   it("accumulates multiple drift errors in one run", async () => {
@@ -225,6 +262,7 @@ describe("doc-lint — runDocLint (end-to-end drift detection)", () => {
       readmePath,
       integrationArchPath,
       runtimeCounts: RUNTIME_COUNTS,
+      crossDocTargets: [],
     });
     expect(errors).toHaveLength(3);
   });
