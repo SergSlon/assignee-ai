@@ -109,7 +109,16 @@ export class FileAdvisoryLockAdapter implements AdvisoryLockPort {
   async acquire(name: string): Promise<boolean> {
     const { port, key } = resolvePortForLock(name, this.storage);
 
-    const existing = await port.stat(key);
+    // Stale-lock probe via port.stat. Wrap in try/catch so EACCES /
+    // EROFS / EIO from the adapter doesn't escape to withLock callers
+    // (matches the pre-cluster-B fs.stat-based code path's defensive
+    // posture — bug-hunt R4 B-1).
+    let existing: { lastModifiedMs: number } | undefined;
+    try {
+      existing = await port.stat(key);
+    } catch {
+      existing = undefined;
+    }
     if (existing !== undefined) {
       const ageMs = Date.now() - existing.lastModifiedMs;
       if (ageMs < this.staleLockTimeoutMs) {
