@@ -102,7 +102,16 @@ export class FilePolicyStore implements PolicyStore {
       const raw = await this.port.readText(this.key);
       if (raw === undefined) return [];
       const parsed: unknown = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return [];
+      if (!Array.isArray(parsed)) {
+        // Audit dev-D25: malformed (non-array) JSON would otherwise vanish
+        // silently into an empty result, masking corruption. Surface a
+        // single-line stderr warning so operators see the file is
+        // recoverable but not load-bearing in this state.
+        process.stderr.write(
+          `policy-store: ${this.key} is not a JSON array; ignoring (got ${typeof parsed}).\n`,
+        );
+        return [];
+      }
       return parsed.map((item) => parsePolicy(item));
     } catch {
       return [];
