@@ -152,7 +152,7 @@ suite — no special gate is needed.
 
 ## MCP Server E2E Tests (real AWS)
 
-Full lifecycle tests for all 37 resource types through the MCP server: plan → estimate → apply → list → destroy → verify.
+Full lifecycle tests for all 38 resource types through the MCP server: plan → estimate → apply → list → destroy → verify.
 
 ### Prerequisites
 
@@ -189,9 +189,9 @@ node apps/mcp-server/e2e-test.mjs --smoke
 | destroy  | CloudControl + pre-delete hooks            | Resource deleted, dependencies handled      |
 | verify   | Confirm resource absent                    | Tagging API de-index or AWS API state check |
 
-### Resource types (37 first-class CCAPI types, 0 SDK-routable)
+### Resource types (38 first-class CCAPI types, 0 SDK-routable)
 
-All 37 supported resource types flow through the CloudControl API (35 with dedicated plugins + 2 compound-only types — `EC2::VPCGatewayAttachment`, `EC2::SubnetRouteTableAssociation` — that share the generic fallback plugin). There are no remaining SDK write paths. See [docs/resource-types.md](resource-types.md) for the full list including the recently added EFS (FileSystem + MountTarget), EventBridge (Rule, EventBus, Connection, ApiDestination), KMS Key, CloudFront (Distribution + OriginAccessControl), S3 BucketPolicy, and SNS Subscription. 10 compound patterns are exercised end-to-end (VPC networking, VPC public-only, lambda-with-exec-role, efs-with-vpc, static-website, scheduled-lambda, serverless-api, message-processing, container-service, three-tier-web).
+All 38 supported resource types flow through the CloudControl API (36 with dedicated plugins + 2 compound-only types — `EC2::VPCGatewayAttachment`, `EC2::SubnetRouteTableAssociation` — that share the generic fallback plugin). There are no remaining SDK write paths. See [docs/resource-types.md](resource-types.md) for the full list including the recently added EFS (FileSystem + MountTarget), EventBridge (Rule, EventBus, Connection, ApiDestination), KMS Key, CloudFront (Distribution + OriginAccessControl), S3 BucketPolicy, and SNS Subscription. 11 compound patterns are exercised end-to-end (VPC networking, VPC public-only, lambda-with-exec-role, efs-with-vpc, static-website, scheduled-lambda, serverless-api, message-processing, container-service, three-tier-web, plus websocket-api).
 
 ### Cost
 
@@ -482,7 +482,7 @@ Run all tests and mark pass/fail:
 | 2   | `apply` + approve → S3 bucket created with 3 tags                                            | ⬜     |
 | 3   | `apply` + decline → exits 0, no resource                                                     | ⬜     |
 | 4   | State Guard — second apply aborts with "Stale Plan"                                          | ⬜     |
-| 5   | Unsupported type → actionable error with all 37 supported types                              | ⬜     |
+| 5   | Unsupported type → actionable error with all 38 supported types                              | ⬜     |
 | 6   | SSM Parameter provisioning                                                                   | ⬜     |
 | 7   | IAM Role provisioning, cost shows Free                                                       | ⬜     |
 | 8   | Non-TTY / pipe → no ANSI codes                                                               | ⬜     |
