@@ -91,4 +91,32 @@ export interface StoragePort {
    * Returns alphabetically-sorted keys for determinism across adapters.
    */
   list(prefix?: string): Promise<string[]>;
+
+  /**
+   * Return the last-modified timestamp for `key`, or `undefined` when
+   * the key does not exist. Local-fs adapter resolves this to
+   * `mtimeMs` from `fs.stat`; remote adapters surface their native
+   * equivalent (S3 LastModified, DDB last-write attribute).
+   *
+   * Used by stale-lock detection and checkpoint pruning to detect
+   * recently-modified files without reading the blob's contents.
+   */
+  stat(key: string): Promise<{ lastModifiedMs: number } | undefined>;
+
+  /**
+   * Atomic create-if-not-exists. Returns `true` when `key` was newly
+   * created with the supplied `value`, `false` when `key` already
+   * existed. Adapters MUST implement the create+check as a single
+   * atomic step so that concurrent callers see exactly one `true`
+   * winner — no TOCTOU window between an existence check and the
+   * write.
+   *
+   * Local-fs adapter uses `O_CREAT|O_EXCL|O_WRONLY`; remote adapters
+   * use the equivalent (S3 conditional PUT with `If-None-Match: *`,
+   * DDB ConditionExpression `attribute_not_exists`).
+   *
+   * Used by file-advisory-lock acquisition and any other "first
+   * writer wins" coordination pattern.
+   */
+  tryAcquire(key: string, value: Uint8Array): Promise<boolean>;
 }

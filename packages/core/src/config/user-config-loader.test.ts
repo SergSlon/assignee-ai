@@ -45,6 +45,12 @@ function makeStoragePort(opts: {
     },
     delete: () => Promise.resolve(false),
     list: () => Promise.resolve([]),
+    stat: () => {
+      throw new Error("stat not used by user-config-loader");
+    },
+    tryAcquire: () => {
+      throw new Error("tryAcquire not used by user-config-loader");
+    },
   };
 }
 

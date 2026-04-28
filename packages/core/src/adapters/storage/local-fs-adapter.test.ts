@@ -192,3 +192,95 @@ describe("LocalFsStorageAdapter — atomic write", () => {
     expect(tmpFiles).toEqual([]);
   });
 });
+
+describe("LocalFsStorageAdapter — stat", () => {
+  it("returns undefined for a missing key", async () => {
+    expect(await adapter.stat("missing")).toBeUndefined();
+  });
+
+  it("returns lastModifiedMs after writeBytes", async () => {
+    const before = Date.now();
+    await adapter.writeText("k", "v");
+    const result = await adapter.stat("k");
+    expect(result).toBeDefined();
+    expect(result!.lastModifiedMs).toBeGreaterThanOrEqual(before - 50);
+    expect(result!.lastModifiedMs).toBeLessThanOrEqual(Date.now() + 50);
+  });
+
+  it("rejects a key containing a NUL byte", async () => {
+    await expect(adapter.stat("nul\0byte")).rejects.toThrow(/NUL/);
+  });
+
+  it("returns undefined after delete", async () => {
+    await adapter.writeText("k", "v");
+    expect(await adapter.stat("k")).toBeDefined();
+    await adapter.delete("k");
+    expect(await adapter.stat("k")).toBeUndefined();
+  });
+});
+
+describe("LocalFsStorageAdapter — tryAcquire", () => {
+  it("returns true and creates the key when absent", async () => {
+    const result = await adapter.tryAcquire(
+      "lock",
+      new TextEncoder().encode("pid-1"),
+    );
+    expect(result).toBe(true);
+    expect(await adapter.readText("lock")).toBe("pid-1");
+  });
+
+  it("returns false when the key already exists", async () => {
+    await adapter.tryAcquire("lock", new TextEncoder().encode("pid-1"));
+    const result = await adapter.tryAcquire(
+      "lock",
+      new TextEncoder().encode("pid-2"),
+    );
+    expect(result).toBe(false);
+    expect(await adapter.readText("lock")).toBe("pid-1");
+  });
+
+  it("is atomic under concurrent calls — exactly one winner", async () => {
+    const attempts = await Promise.all(
+      Array.from({ length: 10 }, (_, i) =>
+        adapter.tryAcquire("race", new TextEncoder().encode(`pid-${i}`)),
+      ),
+    );
+    const winners = attempts.filter((r) => r === true);
+    expect(winners.length).toBe(1);
+  });
+
+  it("creates files with mode 0600", async () => {
+    await adapter.tryAcquire("locked", new TextEncoder().encode("x"));
+    const stat = await fs.stat(join(workspace, "locked"));
+    expect(stat.mode & 0o777).toBe(0o600);
+  });
+
+  it("creates parent directories on demand with mode 0700", async () => {
+    await adapter.tryAcquire(
+      "nested/dir/locked",
+      new TextEncoder().encode("x"),
+    );
+    const stat = await fs.stat(join(workspace, "nested"));
+    expect(stat.mode & 0o777).toBe(0o700);
+  });
+
+  it("accepts an empty value (lock without payload)", async () => {
+    const result = await adapter.tryAcquire("empty", new Uint8Array(0));
+    expect(result).toBe(true);
+    expect(await adapter.readText("empty")).toBe("");
+  });
+
+  it("rejects a key containing path traversal", async () => {
+    await expect(
+      adapter.tryAcquire("../escape", new Uint8Array(0)),
+    ).rejects.toThrow(/\.\./);
+  });
+
+  it("preserves existing value when called twice", async () => {
+    await adapter.tryAcquire("k", new TextEncoder().encode("first"));
+    expect(
+      await adapter.tryAcquire("k", new TextEncoder().encode("second")),
+    ).toBe(false);
+    expect(await adapter.readText("k")).toBe("first");
+  });
+});
