@@ -197,7 +197,7 @@ export const sqsQueuePlugin: ResourcePlugin = {
       question: {
         type: "string",
         label: "Dead-letter queue ARN",
-        placeholder: "arn:aws:sqs:us-east-1:123456789012:my-dlq",
+        placeholder: "arn:aws:sqs:us-east-1:<your-12-digit-account-id>:my-dlq",
         hint: "ARN of a dead-letter queue for messages that fail processing. Messages move to the DLQ after 3 failed receives.",
         validate: (value: unknown) => {
           if (!value) return undefined;

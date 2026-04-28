@@ -42,7 +42,8 @@ export const snsSubscriptionPlugin: ResourcePlugin = {
       question: {
         type: "enum",
         label: "Topic ARN",
-        placeholder: "arn:aws:sns:us-east-1:123456789012:my-topic",
+        placeholder:
+          "arn:aws:sns:us-east-1:<your-12-digit-account-id>:my-topic",
         hint: "Required + createOnly. ARN of the SNS topic to subscribe to. Use a Ref to an SNS::Topic logical ID in the same plan, or paste an existing topic ARN. Changing this replaces the subscription.",
         fetcher: "discover-sns-topics",
         validate: (value: unknown) => {
@@ -91,7 +92,8 @@ export const snsSubscriptionPlugin: ResourcePlugin = {
       question: {
         type: "string",
         label: "Endpoint",
-        placeholder: "arn:aws:sqs:us-east-1:123456789012:my-queue",
+        placeholder:
+          "arn:aws:sqs:us-east-1:<your-12-digit-account-id>:my-queue",
         hint: "Required + createOnly. Format depends on the Protocol: SQS queue ARN, Lambda function ARN, Firehose delivery stream ARN, HTTPS URL, email address, or E.164 phone number. Changing this replaces the subscription.",
         validate: (value: unknown) => {
           if (!value) return "Endpoint is required";
@@ -116,7 +118,7 @@ export const snsSubscriptionPlugin: ResourcePlugin = {
         type: "string",
         label: "RedrivePolicy DLQ (SQS ARN)",
         placeholder:
-          '{"deadLetterTargetArn":"arn:aws:sqs:us-east-1:123456789012:my-dlq"}',
+          '{"deadLetterTargetArn":"arn:aws:sqs:us-east-1:<your-12-digit-account-id>:my-dlq"}',
         hint: 'Optional but strongly recommended: JSON {"deadLetterTargetArn":"<sqs-arn>"}. Messages that SNS cannot deliver after exhausting the retry policy are forwarded to this dead-letter queue instead of being silently dropped. Closes the #1 SNS failure mode.',
         validate: (value: unknown) => {
           if (!value) return undefined;
@@ -229,7 +231,8 @@ export const snsSubscriptionPlugin: ResourcePlugin = {
       question: {
         type: "string",
         label: "Subscription role ARN (Firehose only)",
-        placeholder: "arn:aws:iam::123456789012:role/sns-firehose-delivery",
+        placeholder:
+          "arn:aws:iam::<your-12-digit-account-id>:role/sns-firehose-delivery",
         hint: "ONLY for firehose protocol. ARN of an IAM role SNS assumes to deliver events to the Firehose stream. Ignored for every other protocol.",
         validate: (value: unknown) => {
           if (!value) return undefined;

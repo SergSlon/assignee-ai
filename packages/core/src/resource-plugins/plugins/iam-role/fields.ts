@@ -98,7 +98,7 @@ export const commonFields: ResourcePlugin["commonFields"] = [
     question: {
       type: "string",
       label: "Permissions boundary ARN",
-      placeholder: "arn:aws:iam::123456789012:policy/boundary",
+      placeholder: "arn:aws:iam::<your-12-digit-account-id>:policy/boundary",
       hint: "ARN of a managed policy to use as a permissions boundary. Limits the maximum permissions the role can have. Roles without a permissions boundary violate security policy (see AGENTS.md).",
       validate: (value: unknown) => {
         if (!value) return undefined;

@@ -160,7 +160,8 @@ export const eventsEventBusPlugin: ResourcePlugin = {
       question: {
         type: "string",
         label: "Dead-letter queue SQS ARN",
-        placeholder: "arn:aws:sqs:us-east-1:123456789012:eventbus-dlq",
+        placeholder:
+          "arn:aws:sqs:us-east-1:<your-12-digit-account-id>:eventbus-dlq",
         hint: "Strongly recommended. SQS queue ARN that captures events EventBridge cannot deliver to any rule target. Without a DLQ, undeliverable events are silently dropped — wire a same-account SQS queue here so failures are recoverable. The bus service principal needs sqs:SendMessage on the DLQ via a queue policy.",
         validate: (value: unknown) => {
           if (!value) return undefined;

@@ -130,7 +130,7 @@ export const commonFields: ResourcePlugin["commonFields"] = [
     question: {
       type: "multi",
       label: "Alarm actions (SNS topic ARNs)",
-      placeholder: "arn:aws:sns:us-east-1:123456789012:my-topic",
+      placeholder: "arn:aws:sns:us-east-1:<your-12-digit-account-id>:my-topic",
       hint: "SNS topic ARNs to notify when the alarm triggers. Without actions, alarms only change state — no notifications are sent. Comma-separated for multiple topics.",
       options: [],
       validate: validateSnsArnList,
@@ -209,7 +209,7 @@ export const advancedFields: ResourcePlugin["advancedFields"] = [
     question: {
       type: "multi",
       label: "OK actions (SNS topic ARNs)",
-      placeholder: "arn:aws:sns:us-east-1:123456789012:my-topic",
+      placeholder: "arn:aws:sns:us-east-1:<your-12-digit-account-id>:my-topic",
       hint: "SNS topic ARNs to notify when the alarm returns to OK state. Useful for auto-remediation or 'all clear' notifications.",
       options: [],
       validate: validateSnsArnList,
@@ -220,7 +220,7 @@ export const advancedFields: ResourcePlugin["advancedFields"] = [
     question: {
       type: "multi",
       label: "Insufficient data actions (SNS topic ARNs)",
-      placeholder: "arn:aws:sns:us-east-1:123456789012:my-topic",
+      placeholder: "arn:aws:sns:us-east-1:<your-12-digit-account-id>:my-topic",
       hint: "SNS topic ARNs to notify when the alarm enters INSUFFICIENT_DATA state. This happens when the metric stops publishing (e.g., instance terminated).",
       options: [],
       validate: validateSnsArnList,

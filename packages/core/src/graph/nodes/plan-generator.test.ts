@@ -2015,11 +2015,12 @@ describe("collectPluginPlaceholders (Wave 15)", () => {
     const placeholders = collectPluginPlaceholders(
       RESOURCE_TYPES.LAMBDA_FUNCTION,
     );
-    // The Lambda Role placeholder is "arn:aws:iam::123456789012:role/my-role"
-    // — contains both the docs account placeholder AND "my-" → template.
-    expect(placeholders.has("arn:aws:iam::123456789012:role/my-role")).toBe(
-      true,
-    );
+    // The Lambda Role placeholder is
+    // "arn:aws:iam::<your-12-digit-account-id>:role/my-role" — contains
+    // both the angle-bracketed placeholder marker AND "my-" → template.
+    expect(
+      placeholders.has("arn:aws:iam::<your-12-digit-account-id>:role/my-role"),
+    ).toBe(true);
   });
 
   it("returns an empty set for unknown resource types", () => {

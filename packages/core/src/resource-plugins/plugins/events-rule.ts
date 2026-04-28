@@ -168,7 +168,8 @@ export const eventsRulePlugin: ResourcePlugin = {
       question: {
         type: "string",
         label: "Invocation IAM role ARN",
-        placeholder: "arn:aws:iam::123456789012:role/my-eventbridge-role",
+        placeholder:
+          "arn:aws:iam::<your-12-digit-account-id>:role/my-eventbridge-role",
         hint: "Optional. Required only if targets are cross-account or need to assume a specific role (e.g. Kinesis streams in another account). Most Lambda/SQS/SNS targets don't need this.",
         validate: (value: unknown) => {
           if (!value) return undefined;
