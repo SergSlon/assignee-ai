@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { isE2eBucketName } from "./e2e-plan.test.js";
+import { isE2eBucketName } from "./e2e-plan-shared.js";
 
 describe("isE2eBucketName — D-10 bucket-sweep predicate", () => {
   it("matches the generic `e2e-*` family", () => {

@@ -226,7 +226,17 @@ export function extractIntegrationArchitectureCounts(docText) {
 const CROSS_DOC_GUARDS = [
   {
     label: "supported resource types",
-    re: /\b(?:all|over|across)\s+(\d+)\s+(?:supported\s+)?resource\s+types\b/gi,
+    re: /\b(?:all|over|across)\s+(?:the\s+)?(\d+)\s+(?:supported\s+)?resource\s+types\b/gi,
+    expect: "supportedTypeCount",
+  },
+  {
+    label: "supported types (no `resource` keyword)",
+    // Bug-hunt R4 G-1: testing-guide.md:485 reads "all 38 supported
+    // types" (without `resource`); the prior regex required the
+    // `resource` keyword and silently let drift slip past. The doc was
+    // hand-edited 37→38 in cluster G; the guard must also match this
+    // shape.
+    re: /\b(?:all|over|across)\s+(?:the\s+)?(\d+)\s+supported\s+types\b/gi,
     expect: "supportedTypeCount",
   },
   {
@@ -241,7 +251,7 @@ const CROSS_DOC_GUARDS = [
   },
   {
     label: "registered plugins",
-    re: /\b(\d+)\s+registered\s+plugins?\b/gi,
+    re: /\b(?:all\s+)?(\d+)\s+registered\s+plugins?\b/gi,
     expect: "supportedTypeCount",
   },
   {
