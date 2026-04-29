@@ -13,10 +13,10 @@
  * (default 10 seconds), the lock is considered stale and removed
  * before retrying.
  *
- * `withLock` retries with linear backoff up to `maxRetries` attempts
- * before falling back to calling `fn` without the lock (advisory
- * semantics — the lock is a best-effort coordination mechanism, not a
- * hard POSIX mutex).
+ * `withLock` retries with linear backoff up to `maxRetries` attempts.
+ * If all retries are exhausted without acquiring the lock, a
+ * `LockAcquisitionError` is thrown — `fn()` is never called without
+ * the lock held.
  *
  * 0o600 on lock files: lock files are written with owner-only permissions
  * (enforced by the local-fs adapter's `tryAcquire`).
@@ -32,6 +32,24 @@ import * as path from "node:path";
 import { LocalFsStorageAdapter } from "../adapters/storage/local-fs-adapter.js";
 import type { AdvisoryLockPort } from "../ports/advisory-lock-port.js";
 import type { StoragePort } from "../ports/storage-port.js";
+
+// ── LockAcquisitionError ──────────────────────────────────────────────
+
+/**
+ * Thrown by `withLock` when all retry attempts to acquire the lock are
+ * exhausted. The caller can catch this to implement a fallback strategy
+ * appropriate for their domain (e.g. abort, alert, queue the work).
+ *
+ * `instanceof LockAcquisitionError` is the recommended check pattern.
+ */
+export class LockAcquisitionError extends Error {
+  override readonly name = "LockAcquisitionError";
+  constructor(lockName: string, attempts: number) {
+    super(
+      `Failed to acquire advisory lock "${lockName}" after ${attempts} attempt(s).`,
+    );
+  }
+}
 
 // ── Defaults ──────────────────────────────────────────────────────────
 
@@ -151,26 +169,34 @@ export class FileAdvisoryLockAdapter implements AdvisoryLockPort {
    * Acquire the lock, run `fn`, release in a try/finally block.
    *
    * Retries acquisition with `retryDelayMs` pauses between attempts.
-   * Falls back to calling `fn` without the lock when the retry budget
-   * is exhausted (advisory lock — best-effort coordination only).
+   * Throws `LockAcquisitionError` when the retry budget is exhausted —
+   * `fn()` is NEVER called without the lock held (prevents corrupted
+   * HMAC-chain writes under concurrent load).
    */
   async withLock<T>(name: string, fn: () => Promise<T> | T): Promise<T> {
     let acquired = false;
+    // maxRetries=0 means one attempt (loop body always runs at least once
+    // to give a single acquisition chance before giving up).
+    const totalAttempts = this.maxRetries + 1;
 
-    for (let i = 0; i < this.maxRetries; i++) {
+    for (let i = 0; i < totalAttempts; i++) {
       acquired = await this.acquire(name);
       if (acquired) break;
-      await new Promise<void>((resolve) =>
-        setTimeout(resolve, this.retryDelayMs),
-      );
+      if (i < totalAttempts - 1) {
+        await new Promise<void>((resolve) =>
+          setTimeout(resolve, this.retryDelayMs),
+        );
+      }
+    }
+
+    if (!acquired) {
+      throw new LockAcquisitionError(name, totalAttempts);
     }
 
     try {
       return await fn();
     } finally {
-      if (acquired) {
-        await this.release(name);
-      }
+      await this.release(name);
     }
   }
 }

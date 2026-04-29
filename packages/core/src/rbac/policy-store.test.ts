@@ -156,6 +156,31 @@ describe("FilePolicyStore", () => {
     expect(all).toEqual([]);
   });
 
+  it("concurrent set for different roles — no lost update (W1-C3)", async () => {
+    // Two concurrent set calls on the same store for different roles must
+    // both land; neither write can silently overwrite the other.
+    const store = new FilePolicyStore(filePath);
+    await Promise.all([store.set(adminPolicy), store.set(operatorPolicy)]);
+    const all = await store.list();
+    const roles = all.map((p) => p.role).sort();
+    expect(roles).toContain("admin");
+    expect(roles).toContain("operator");
+    expect(all.length).toBe(2);
+  });
+
+  it("concurrent set for the same role — exactly one copy survives (W1-C3)", async () => {
+    // Two concurrent updates for the same role must produce exactly one
+    // entry; the last-writer-wins outcome is acceptable, but two duplicate
+    // entries in the array are not.
+    const store = new FilePolicyStore(filePath);
+    const v1: Policy = { ...adminPolicy, actions: ["*"] };
+    const v2: Policy = { ...adminPolicy, actions: ["list"] };
+    await Promise.all([store.set(v1), store.set(v2)]);
+    const all = await store.list();
+    const adminEntries = all.filter((p) => p.role === "admin");
+    expect(adminEntries.length).toBe(1);
+  });
+
   it("warns to stderr when the backing file parses to a non-array (RW-FIX-5 dev-D25)", async () => {
     // Write a JSON object (not an array) to the policy file. The
     // legacy behaviour was to silently return [] which masked

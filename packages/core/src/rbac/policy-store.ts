@@ -29,6 +29,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { LocalFsStorageAdapter } from "../adapters/storage/local-fs-adapter.js";
+import { defaultFileAdvisoryLock } from "../locks/file-advisory-lock.js";
 import type { StoragePort } from "../ports/storage-port.js";
 import { parsePolicy, type Policy } from "./policy-schema.js";
 
@@ -138,14 +139,16 @@ export class FilePolicyStore implements PolicyStore {
   }
 
   async set(policy: Policy): Promise<void> {
-    const all = await this.readAll();
-    const idx = all.findIndex((p) => p.role === policy.role);
-    if (idx >= 0) {
-      all[idx] = policy;
-    } else {
-      all.push(policy);
-    }
-    await this.writeAll(all);
+    await defaultFileAdvisoryLock.withLock(this.key, async () => {
+      const all = await this.readAll();
+      const idx = all.findIndex((p) => p.role === policy.role);
+      if (idx >= 0) {
+        all[idx] = policy;
+      } else {
+        all.push(policy);
+      }
+      await this.writeAll(all);
+    });
   }
 
   async get(role: string): Promise<Policy | undefined> {
@@ -158,7 +161,9 @@ export class FilePolicyStore implements PolicyStore {
   }
 
   async delete(role: string): Promise<void> {
-    const all = await this.readAll();
-    await this.writeAll(all.filter((p) => p.role !== role));
+    await defaultFileAdvisoryLock.withLock(this.key, async () => {
+      const all = await this.readAll();
+      await this.writeAll(all.filter((p) => p.role !== role));
+    });
   }
 }

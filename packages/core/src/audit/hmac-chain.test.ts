@@ -138,4 +138,50 @@ describe("verifyChainLink", () => {
     expect(verifyChainLink(r1, h0, h1, key)).toBe(true);
     expect(verifyChainLink(r2, h1, h2, key)).toBe(true);
   });
+
+  // ── timingSafeEqual invariants ─────────────────────────────────────────
+
+  it("returns false for a storedHmac shorter than the expected HMAC (length-mismatch short)", () => {
+    const record = { action: "plan" };
+    const correctHmac = computeChainLink(GENESIS_HMAC, record, KEY);
+    // A shorter stored HMAC must not throw — just return false.
+    expect(
+      verifyChainLink(record, GENESIS_HMAC, correctHmac.slice(0, 32), KEY),
+    ).toBe(false);
+  });
+
+  it("returns false for a storedHmac longer than the expected HMAC (length-mismatch long)", () => {
+    const record = { action: "plan" };
+    const correctHmac = computeChainLink(GENESIS_HMAC, record, KEY);
+    // A longer stored HMAC must not throw — just return false.
+    expect(verifyChainLink(record, GENESIS_HMAC, correctHmac + "00", KEY)).toBe(
+      false,
+    );
+  });
+
+  it("returns false for an empty storedHmac (length-mismatch empty)", () => {
+    const record = { action: "plan" };
+    expect(verifyChainLink(record, GENESIS_HMAC, "", KEY)).toBe(false);
+  });
+
+  it("returns false for an all-zero storedHmac of the correct length (same-length wrong value)", () => {
+    const record = { action: "plan" };
+    const correctHmac = computeChainLink(GENESIS_HMAC, record, KEY);
+    // Replace every char with '0' — same byte-length, completely wrong value.
+    const zeroedHmac = "0".repeat(correctHmac.length);
+    expect(verifyChainLink(record, GENESIS_HMAC, zeroedHmac, KEY)).toBe(false);
+  });
+
+  it("uses timingSafeEqual: does not throw when buffers are the same length but differ by one bit", () => {
+    const record = { action: "apply", resource: "AWS::IAM::Role" };
+    const correctHmac = computeChainLink(GENESIS_HMAC, record, KEY);
+    // Flip the last hex character to produce a same-length but incorrect HMAC.
+    const lastChar = correctHmac[correctHmac.length - 1];
+    const flippedChar = lastChar === "f" ? "e" : "f";
+    const flippedHmac = correctHmac.slice(0, -1) + flippedChar;
+    expect(() =>
+      verifyChainLink(record, GENESIS_HMAC, flippedHmac, KEY),
+    ).not.toThrow();
+    expect(verifyChainLink(record, GENESIS_HMAC, flippedHmac, KEY)).toBe(false);
+  });
 });
