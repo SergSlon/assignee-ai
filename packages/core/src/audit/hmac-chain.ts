@@ -16,7 +16,7 @@
  *     KMS-backed key management defers to Epic 101.
  */
 
-import { createHmac, randomBytes } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import {
   ProcessEnvConfigAdapter,
   type ConfigPort,
@@ -95,5 +95,11 @@ export function verifyChainLink(
   key: string = getAuditKey(),
 ): boolean {
   const expected = computeChainLink(prevHmac, record, key);
-  return expected === storedHmac;
+  // Use timingSafeEqual to prevent timing-oracle attacks.
+  // Both buffers must have the same byte length; a length mismatch is a
+  // guaranteed mismatch (no further comparison needed).
+  const expectedBuf = Buffer.from(expected, "utf8");
+  const storedBuf = Buffer.from(storedHmac, "utf8");
+  if (expectedBuf.length !== storedBuf.length) return false;
+  return timingSafeEqual(expectedBuf, storedBuf);
 }

@@ -104,9 +104,15 @@ function redactValue(value: unknown): unknown {
 
 /**
  * Remove fields with "[REDACTED]" values from a desiredState record.
- * Recurses into nested objects. Prevents sending placeholder strings to AWS
- * on checkpoint resume — AWS will use defaults (e.g., auto-generated
- * passwords) for omitted fields.
+ * Recurses into nested objects and arrays. Prevents sending placeholder
+ * strings to AWS on checkpoint resume — AWS will use defaults (e.g.,
+ * auto-generated passwords) for omitted fields.
+ *
+ * Array handling:
+ *   - Elements equal to REDACTED_VALUE are removed from the output array.
+ *   - Object elements are recursed into (their REDACTED fields stripped).
+ *   - Nested arrays are recursed into as well.
+ *   - Other scalar elements (numbers, booleans, etc.) are kept as-is.
  */
 export function stripRedactedFields(
   state: Record<string, unknown>,
@@ -114,10 +120,34 @@ export function stripRedactedFields(
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(state)) {
     if (value === REDACTED_VALUE) continue;
-    if (value && typeof value === "object" && !Array.isArray(value)) {
+    if (Array.isArray(value)) {
+      result[key] = stripRedactedArray(value);
+    } else if (value && typeof value === "object") {
       result[key] = stripRedactedFields(value as Record<string, unknown>);
     } else {
       result[key] = value;
+    }
+  }
+  return result;
+}
+
+/**
+ * Recursively strip REDACTED_VALUE elements from an array.
+ * Elements equal to REDACTED_VALUE are removed entirely.
+ * Object elements are recursed into via stripRedactedFields.
+ * Nested array elements are recursed into recursively.
+ * Other scalars are kept as-is.
+ */
+function stripRedactedArray(arr: unknown[]): unknown[] {
+  const result: unknown[] = [];
+  for (const element of arr) {
+    if (element === REDACTED_VALUE) continue;
+    if (Array.isArray(element)) {
+      result.push(stripRedactedArray(element));
+    } else if (element && typeof element === "object") {
+      result.push(stripRedactedFields(element as Record<string, unknown>));
+    } else {
+      result.push(element);
     }
   }
   return result;

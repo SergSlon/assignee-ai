@@ -179,14 +179,26 @@ export function createGraph(
   // Restore lenient semantics here; downstream SDK calls fail fast on
   // actual use, which is the correct blast-radius for missing creds —
   // not at graph construction time.
+  //
+  // C4 fix (Wave 1 Option A — factory-routed): ALL CloudControlClient
+  // construction now routes through `createCloudControlClient`, including
+  // the missing-cred path. The factory accepts a `NoCredentialsConfig`
+  // (region-only, accessKeyId === undefined) and handles the stderr warning
+  // + no-cred client construction internally. This ensures the
+  // `vi.mock("../services/cloudcontrol-client.js", ...)` in integration
+  // tests intercepts BOTH paths and no real SDK client is ever constructed
+  // during testing. Empty-string credentials are never forwarded to the SDK.
   const tryCreds = tryAssigneeCredentials("operator", effectiveConfig);
-  const opCreds = {
-    accessKeyId: tryCreds?.accessKeyId ?? "",
-    secretAccessKey: tryCreds?.secretAccessKey ?? "",
-    ...(tryCreds?.sessionToken ? { sessionToken: tryCreds.sessionToken } : {}),
-    region: AWS_REGION,
-  };
-  const cloudClient = createCloudControlClient(opCreds);
+  const cloudClient = tryCreds
+    ? createCloudControlClient({
+        accessKeyId: tryCreds.accessKeyId,
+        secretAccessKey: tryCreds.secretAccessKey,
+        ...(tryCreds.sessionToken
+          ? { sessionToken: tryCreds.sessionToken }
+          : {}),
+        region: AWS_REGION,
+      })
+    : createCloudControlClient({ region: AWS_REGION });
 
   // Story 9.7: Attach recording middleware to CloudControl client when recording enabled
   if (options.recorder && isRecordingEnabled(effectiveConfig)) {

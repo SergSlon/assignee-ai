@@ -273,19 +273,87 @@ describe("stripRedactedFields", () => {
     });
   });
 
-  it("preserves arrays (does not recurse into them — they stay as-is)", () => {
-    // The stripper walks objects but treats arrays as opaque; the
-    // prior redact step already replaced secret array elements with
-    // REDACTED_VALUE which stays in place. Pin this.
-    const redacted = redactSensitiveFields({
-      AccessKeys: [{ SecretAccessKey: "xyz" }],
-    });
-    const stripped = stripRedactedFields(redacted);
+  it("strips [REDACTED] string elements from an array of strings (W1-H1)", () => {
+    // An array with mixed redacted + plain string elements — redacted
+    // elements must be removed; plain elements must be kept.
+    const input = {
+      Regions: [REDACTED_VALUE, "us-east-1", REDACTED_VALUE, "eu-west-1"],
+    };
+    const stripped = stripRedactedFields(input);
+    expect(stripped["Regions"]).toEqual(["us-east-1", "eu-west-1"]);
+  });
+
+  it("recurses into array-of-objects, stripping [REDACTED] fields (W1-H1)", () => {
+    // Object elements inside an array must be recursed into — their
+    // REDACTED fields stripped, their clean fields preserved.
+    const input = {
+      AccessKeys: [
+        { AccessKeyId: "AKID-1", SecretAccessKey: REDACTED_VALUE },
+        { AccessKeyId: "AKID-2", SecretAccessKey: REDACTED_VALUE },
+      ],
+    };
+    const stripped = stripRedactedFields(input);
     const arr = stripped["AccessKeys"] as Array<Record<string, unknown>>;
-    expect(arr).toHaveLength(1);
-    // The inner map kept SecretAccessKey: [REDACTED] because the array
-    // isn't walked by stripRedactedFields.
-    expect(arr[0]).toEqual({ SecretAccessKey: REDACTED_VALUE });
+    expect(arr).toHaveLength(2);
+    expect(arr[0]).toEqual({ AccessKeyId: "AKID-1" });
+    expect(arr[1]).toEqual({ AccessKeyId: "AKID-2" });
+  });
+
+  it("handles nested arrays (array inside object inside array) (W1-H1)", () => {
+    // Arbitrary-depth nesting: array element is an object whose value
+    // is itself another array containing REDACTED_VALUE entries.
+    const input = {
+      Groups: [
+        {
+          GroupName: "admins",
+          Passwords: [REDACTED_VALUE, REDACTED_VALUE],
+          Members: ["alice", "bob"],
+        },
+      ],
+    };
+    const stripped = stripRedactedFields(input);
+    const groups = stripped["Groups"] as Array<Record<string, unknown>>;
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!["GroupName"]).toBe("admins");
+    // All REDACTED elements removed from inner array
+    expect(groups[0]!["Passwords"]).toEqual([]);
+    // Clean array elements preserved
+    expect(groups[0]!["Members"]).toEqual(["alice", "bob"]);
+  });
+
+  it("returns empty array unchanged when array has no [REDACTED] elements (W1-H1)", () => {
+    // Clean arrays must not be mutated or drop elements.
+    const input = {
+      Tags: [
+        { Key: "Env", Value: "production" },
+        { Key: "Owner", Value: "assignee" },
+      ],
+      Cidrs: ["10.0.0.0/8", "192.168.0.0/16"],
+      Empty: [] as unknown[],
+    };
+    const stripped = stripRedactedFields(input);
+    expect(stripped["Tags"]).toEqual(input.Tags);
+    expect(stripped["Cidrs"]).toEqual(["10.0.0.0/8", "192.168.0.0/16"]);
+    expect(stripped["Empty"]).toEqual([]);
+  });
+
+  it("mixed array: plain values + nested objects + [REDACTED] elements (W1-H1)", () => {
+    // The most complex case: all three element types in a single array.
+    const input = {
+      Entries: [
+        "keep-me",
+        REDACTED_VALUE,
+        { Name: "obj1", Secret: REDACTED_VALUE, Keep: "yes" },
+        42,
+        REDACTED_VALUE,
+      ],
+    };
+    const stripped = stripRedactedFields(input);
+    expect(stripped["Entries"]).toEqual([
+      "keep-me",
+      { Name: "obj1", Keep: "yes" },
+      42,
+    ]);
   });
 
   it("empty object in → empty object out", () => {
