@@ -1,5 +1,6 @@
 /**
  * W3-02 — RBAC policy store round-trip contract tests.
+ * W4-S1 (M-α-12) — readAll error-discrimination tests.
  */
 
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
@@ -9,6 +10,7 @@ import * as fs from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { InMemoryPolicyStore, FilePolicyStore } from "./policy-store.js";
 import type { Policy } from "./policy-schema.js";
+import type { StoragePort } from "../ports/storage-port.js";
 
 // ── Test data ────────────────────────────────────────────────────────────
 
@@ -205,5 +207,113 @@ describe("FilePolicyStore", () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+// ── FilePolicyStore — W4-S1 (M-α-12) error-discrimination tests ──────────
+//
+// These tests use a stub StoragePort to inject controlled errors so that
+// we can verify that readAll() distinguishes between:
+//   - file absent (ENOENT) → return []
+//   - malformed JSON       → throw SyntaxError
+//   - other FS error       → re-throw (not silently swallowed)
+//
+// The stub approach avoids writing corrupt bytes to the real filesystem and
+// makes the error path under test unambiguous.
+
+function makeStubPort(opts: {
+  readText: () => Promise<string | undefined>;
+}): StoragePort {
+  const notImpl = (): never => {
+    throw new Error("not implemented in stub");
+  };
+  return {
+    has: notImpl,
+    readBytes: notImpl,
+    readText: opts.readText,
+    readJson: notImpl,
+    writeBytes: notImpl,
+    writeText: notImpl,
+    writeJson: notImpl,
+    delete: notImpl,
+    list: notImpl,
+    stat: notImpl,
+    tryAcquire: notImpl,
+  };
+}
+
+function makeNodeError(code: string): Error {
+  const err = new Error(`Simulated ${code}`) as NodeJS.ErrnoException;
+  err.code = code;
+  return err;
+}
+
+describe("FilePolicyStore — W4-S1 readAll error discrimination", () => {
+  // Acceptance criterion 1: valid JSON returns the parsed array.
+  it("AC1: returns parsed array when readText resolves with valid JSON", async () => {
+    const policies: Policy[] = [adminPolicy];
+    const port = makeStubPort({
+      readText: async () => JSON.stringify(policies),
+    });
+    const store = new FilePolicyStore("policies.json", port);
+    const all = await store.list();
+    expect(all).toEqual(policies);
+  });
+
+  // Acceptance criterion 2: undefined from readText means file absent → [].
+  it("AC2: returns [] when readText resolves with undefined (file absent)", async () => {
+    const port = makeStubPort({ readText: async () => undefined });
+    const store = new FilePolicyStore("policies.json", port);
+    const all = await store.list();
+    expect(all).toEqual([]);
+  });
+
+  // Acceptance criterion 3: malformed JSON must throw, not return [].
+  // This is the core regression fix for M-α-12: a truncated / corrupt
+  // policies.json must NOT be silently treated as an empty policy set.
+  it("AC3: throws when readText resolves with malformed JSON (truncated)", async () => {
+    const port = makeStubPort({
+      readText: async () => '{"role":"admin","actions":["*',
+    });
+    const store = new FilePolicyStore("policies.json", port);
+    await expect(store.list()).rejects.toThrow(SyntaxError);
+  });
+
+  // Acceptance criterion 4: a non-ENOENT filesystem error must be re-thrown.
+  it("AC4: re-throws when readText rejects with EACCES (non-ENOENT fs error)", async () => {
+    const port = makeStubPort({
+      readText: async () => {
+        throw makeNodeError("EACCES");
+      },
+    });
+    const store = new FilePolicyStore("policies.json", port);
+    const err = await store.list().catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect((err as NodeJS.ErrnoException).code).toBe("EACCES");
+  });
+
+  // Acceptance criterion 5: ENOENT from readText → [].
+  // Some StoragePort implementations may throw ENOENT directly rather than
+  // returning undefined (the LocalFsStorageAdapter already converts ENOENT
+  // to undefined, but a custom port or a mock may throw).
+  it("AC5: returns [] when readText rejects with ENOENT", async () => {
+    const port = makeStubPort({
+      readText: async () => {
+        throw makeNodeError("ENOENT");
+      },
+    });
+    const store = new FilePolicyStore("policies.json", port);
+    const all = await store.list();
+    expect(all).toEqual([]);
+  });
+
+  // Invariant 4: errors propagate upward through public API methods.
+  // A corrupt file should reject `get()` and `set()` / `delete()` (which
+  // call readAll internally), not silently return undefined / succeed on
+  // a phantom empty store.
+  it("INV4: get() propagates the SyntaxError from a corrupt file", async () => {
+    const port = makeStubPort({ readText: async () => "NOT_JSON!!!" });
+    const store = new FilePolicyStore("policies.json", port);
+    await expect(store.get("admin")).rejects.toThrow(SyntaxError);
   });
 });

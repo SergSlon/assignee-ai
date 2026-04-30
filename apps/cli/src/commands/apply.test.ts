@@ -11,7 +11,7 @@
  * We test option registration (static) and parsing behavior (with known args).
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { Command } from "commander";
 
 /**
@@ -188,5 +188,48 @@ describe("applyCommand — flag surface (Epic 92 D-13)", () => {
     const longFlags = applyCommand.options.map((o) => o.long);
     expect(longFlags).toContain("--wizard");
     expect(longFlags).toContain("--quick");
+  });
+});
+
+// ── W4-S5 — --target-account user-facing message (M-β-01) ───────────────────
+// Verifies that --target-account exits NOT_IMPLEMENTED without leaking
+// internal tracker strings ("Epic 101", "story", "W3-04") in stderr.
+
+describe("applyCommand — --target-account NOT_IMPLEMENTED message (W4-S5)", () => {
+  it("exits NOT_IMPLEMENTED (12) for a valid 12-digit account ID", async () => {
+    const stderrCalls: string[] = [];
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((chunk: unknown): boolean => {
+        stderrCalls.push(String(chunk));
+        return true;
+      });
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => {}) as never);
+
+    try {
+      const { applyCommand } = await import("./apply.js");
+      await applyCommand.parseAsync([
+        "node",
+        "apply",
+        "--target-account",
+        "123456789012",
+        "Create an S3 bucket",
+      ]);
+    } finally {
+      stderrSpy.mockRestore();
+      exitSpy.mockRestore();
+    }
+
+    const stderrText = stderrCalls.join("");
+    // Must contain user-facing intent keywords.
+    expect(stderrText).toContain("cross-account");
+    expect(stderrText).toContain("not yet available");
+    // Must NOT leak internal tracker names.
+    expect(stderrText).not.toMatch(/Epic\s+\d+/i);
+    expect(stderrText).not.toMatch(/story\s+\d+-W\d+/i);
+    // Exit code must be NOT_IMPLEMENTED (12).
+    expect(exitSpy).toHaveBeenCalledWith(12);
   });
 });

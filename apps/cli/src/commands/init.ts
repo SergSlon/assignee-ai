@@ -204,7 +204,7 @@ to preferences.auto_fix and control how \`assignee plan\` reacts to best
     // IdP adapter is configured.
     if (!process.env["ASSIGNEE_OIDC_ADAPTER"]) {
       process.stderr.write(
-        "OIDC: not configured (Epic 101 follow-on); using AWS_PROFILE SSO via story 100-W2-02\n",
+        "OIDC: not configured. Set ASSIGNEE_OIDC_ADAPTER to enable.\n",
       );
     }
 

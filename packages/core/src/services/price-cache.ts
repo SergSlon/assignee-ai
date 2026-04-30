@@ -78,10 +78,11 @@ function computeHash(serviceCode: string, filters: unknown[]): string {
 }
 
 /**
- * Ensure the cache directory exists.
+ * Ensure the cache directory exists with restrictive permissions (0o700).
+ * Owner-only access prevents other local users from reading cached pricing data.
  */
 function ensureCacheDir(): void {
-  fs.mkdirSync(CACHE_DIR, { recursive: true });
+  fs.mkdirSync(CACHE_DIR, { recursive: true, mode: 0o700 });
 }
 
 /**
@@ -155,7 +156,10 @@ export function setCachedPrice(
       filtersHash: hash,
     };
 
-    fs.writeFileSync(filePath, JSON.stringify(entry), "utf-8");
+    fs.writeFileSync(filePath, JSON.stringify(entry), {
+      encoding: "utf-8",
+      mode: 0o600,
+    });
   } catch {
     // Cache write failures are non-blocking
   }

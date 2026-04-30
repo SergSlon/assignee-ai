@@ -21,17 +21,39 @@ describe("PluginRegistry", () => {
     expect(registry.get("AWS::Test::Resource")).toBe(mockPlugin);
   });
 
-  it("overwrites plugin when re-registered", () => {
+  it("throws when registering a duplicate resourceType", () => {
     const registry = new PluginRegistry();
     registry.register(mockPlugin);
-    const updated = {
-      ...mockPlugin,
-      defaults: { Encryption: "AES256" },
-    };
-    registry.register(updated);
-    expect(registry.get("AWS::Test::Resource")?.defaults).toEqual({
-      Encryption: "AES256",
-    });
+    const duplicate = { ...mockPlugin, defaults: { Encryption: "AES256" } };
+    expect(() => registry.register(duplicate)).toThrow(
+      /duplicate registration for resourceType "AWS::Test::Resource"/,
+    );
+  });
+
+  it("thrown error is an instance of Error", () => {
+    const registry = new PluginRegistry();
+    registry.register(mockPlugin);
+    let caught: unknown;
+    try {
+      registry.register(mockPlugin);
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+  });
+
+  it("thrown error message contains the duplicate resourceType string", () => {
+    const registry = new PluginRegistry();
+    registry.register(mockPlugin);
+    expect(() => registry.register(mockPlugin)).toThrow("AWS::Test::Resource");
+  });
+
+  it("unregister() followed by register() does not throw", () => {
+    const registry = new PluginRegistry();
+    registry.register(mockPlugin);
+    registry.unregister("AWS::Test::Resource");
+    expect(() => registry.register(mockPlugin)).not.toThrow();
+    expect(registry.get("AWS::Test::Resource")).toBe(mockPlugin);
   });
 
   it("has() returns true for registered type", () => {
@@ -50,5 +72,19 @@ describe("PluginRegistry", () => {
     const r2 = new PluginRegistry();
     r1.register(mockPlugin);
     expect(r2.has("AWS::Test::Resource")).toBe(false);
+  });
+
+  it("registering two different resourceTypes in the same registry succeeds", () => {
+    const registry = new PluginRegistry();
+    const anotherPlugin: ResourcePlugin = {
+      resourceType: "AWS::Test::Other",
+      commonFields: [],
+      advancedFields: [],
+      defaults: {},
+    };
+    registry.register(mockPlugin);
+    expect(() => registry.register(anotherPlugin)).not.toThrow();
+    expect(registry.get("AWS::Test::Resource")).toBe(mockPlugin);
+    expect(registry.get("AWS::Test::Other")).toBe(anotherPlugin);
   });
 });

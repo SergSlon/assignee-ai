@@ -33,6 +33,13 @@ import { defaultFileAdvisoryLock } from "../locks/file-advisory-lock.js";
 import type { StoragePort } from "../ports/storage-port.js";
 import { parsePolicy, type Policy } from "./policy-schema.js";
 
+// ── Helpers ────────────────────────────────────────────────────────────
+
+/** Narrows `unknown` to a NodeJS.ErrnoException so `.code` is safe to read. */
+function isNodeError(err: unknown): err is NodeJS.ErrnoException {
+  return typeof err === "object" && err !== null && "code" in err;
+}
+
 // ── Interface ──────────────────────────────────────────────────────────
 
 export interface PolicyStore {
@@ -114,8 +121,25 @@ export class FilePolicyStore implements PolicyStore {
         return [];
       }
       return parsed.map((item) => parsePolicy(item));
-    } catch {
-      return [];
+    } catch (err) {
+      // M-α-12: distinguish "file absent" from real errors.
+      //
+      // ENOENT — the policy file has not been created yet (first run,
+      // or the caller deleted it). Treat as an empty store, same as
+      // when port.readText returns undefined.
+      //
+      // SyntaxError — JSON.parse failed: the file is present but its
+      // content is corrupt or truncated. Silently returning [] here
+      // would mask tampered / corrupted policy files and grant every
+      // role effective operator privileges. Re-throw so callers see a
+      // hard failure and the operator can investigate.
+      //
+      // Any other error (EACCES, EMFILE, parsePolicy validation, …) is
+      // also re-thrown — swallowing unknown errors is the original bug.
+      if (isNodeError(err) && err.code === "ENOENT") {
+        return [];
+      }
+      throw err;
     }
   }
 
