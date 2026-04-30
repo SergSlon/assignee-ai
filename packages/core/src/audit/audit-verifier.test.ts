@@ -1,22 +1,30 @@
 /**
  * W3-01 — Audit chain verifier tests.
+ * W9-S2 — Auto-fallback to legacy HMAC + chainMode field.
  *
  * Tests cover:
- *   - Clean chain → ok: true
+ *   - Clean chain → ok: true, chainMode: "canonical"
  *   - Corrupted record payload → brokenAt N, reason: "hmac-mismatch"
  *   - Corrupted HMAC → brokenAt N, reason: "hmac-mismatch"
  *   - Missing-prev linkage → brokenAt N, reason: "missing-prev"
  *   - Legacy-only log → ok: true with legacyCount
  *   - Mixed legacy + HMAC → verifies HMAC portion only
  *   - 100-record fixture: exit 0 on clean, non-zero on broken
+ *   - Pre-W7 (legacy-HMAC) chain → ok: true, chainMode: "legacy"
+ *   - Mixed canonical + legacy-HMAC chain → ok: true, chainMode: "mixed"
+ *   - Tampered legacy-format entry fails both checks → hmac-mismatch
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as fs from "node:fs/promises";
 import { randomBytes } from "node:crypto";
-import { computeChainLink, GENESIS_HMAC } from "./hmac-chain.js";
+import {
+  computeChainLink,
+  legacyComputeChainLink,
+  GENESIS_HMAC,
+} from "./hmac-chain.js";
 import type { AuditEntry } from "./audit-log.js";
 import { verifyAuditLog } from "./audit-verifier.js";
 
@@ -36,20 +44,96 @@ async function cleanupFile(p: string): Promise<void> {
 const FIXED_KEY = "verifier-test-fixed-key-32-chars-!!";
 
 /**
- * Build an N-entry audit log at `logFile` using `FIXED_KEY`.
+ * Build an N-entry canonical audit log at `logFile` using `FIXED_KEY`.
  * Returns the list of written entries.
  */
 async function buildChain(logFile: string, n: number): Promise<AuditEntry[]> {
   // We cannot pass the key to appendAuditRecord directly (it uses
   // getAuditKey()), so we build the entries manually by writing raw NDJSON.
+  //
+  // Record shape uses keys in REVERSE alphabetical order (zval before action)
+  // so that JSON.stringify (insertion order) and canonicalJson (sorted order)
+  // produce DIFFERENT bytes.  This ensures the canonical path is exercised —
+  // if keys were already sorted, both paths would produce identical bytes and
+  // the fallback branch would never be reached in legacy tests.
   const entries: AuditEntry[] = [];
   let prevHmac = GENESIS_HMAC;
 
   for (let i = 0; i < n; i++) {
-    const record = { action: "test-action", index: i };
+    const record = { zval: "test-action", action: i };
     const hmac = computeChainLink(prevHmac, record, FIXED_KEY);
     const entry: AuditEntry = {
       index: i,
+      timestamp: new Date().toISOString(),
+      role: "operator",
+      record,
+      prevHmac,
+      hmac,
+    };
+    entries.push(entry);
+    await fs.appendFile(logFile, JSON.stringify(entry) + "\n");
+    prevHmac = hmac;
+  }
+  return entries;
+}
+
+/**
+ * Build N canonical entries starting at `startIndex` with `startPrevHmac`,
+ * appending to `logFile`. Used to construct mixed chains in tests.
+ */
+async function buildChain_fromOffset(
+  logFile: string,
+  startIndex: number,
+  startPrevHmac: string,
+): Promise<AuditEntry[]> {
+  const entries: AuditEntry[] = [];
+  let prevHmac = startPrevHmac;
+  const n = 3;
+
+  for (let i = 0; i < n; i++) {
+    const idx = startIndex + i;
+    // Same reverse-alphabetical key order as buildChain to ensure canonical
+    // and legacy serialisations diverge.
+    const record = { zval: "test-action", action: idx };
+    const hmac = computeChainLink(prevHmac, record, FIXED_KEY);
+    const entry: AuditEntry = {
+      index: idx,
+      timestamp: new Date().toISOString(),
+      role: "operator",
+      record,
+      prevHmac,
+      hmac,
+    };
+    entries.push(entry);
+    await fs.appendFile(logFile, JSON.stringify(entry) + "\n");
+    prevHmac = hmac;
+  }
+  return entries;
+}
+
+/**
+ * Build an N-entry legacy (pre-W7, plain JSON.stringify) audit log at
+ * `logFile` using `FIXED_KEY`. Returns the written entries.
+ */
+async function buildLegacyChain(
+  logFile: string,
+  n: number,
+  startIndex = 0,
+  startPrevHmac = GENESIS_HMAC,
+): Promise<AuditEntry[]> {
+  const entries: AuditEntry[] = [];
+  let prevHmac = startPrevHmac;
+
+  for (let i = 0; i < n; i++) {
+    const idx = startIndex + i;
+    // Keys in reverse alphabetical order so JSON.stringify (insertion order:
+    // zval, action) differs from canonicalJson (sorted: action, zval).
+    // This guarantees the canonical verification fails and the legacy fallback
+    // branch fires when the verifier processes these entries.
+    const record = { zval: "legacy-action", action: idx };
+    const hmac = legacyComputeChainLink(prevHmac, record, FIXED_KEY);
+    const entry: AuditEntry = {
+      index: idx,
       timestamp: new Date().toISOString(),
       role: "operator",
       record,
@@ -74,6 +158,7 @@ describe("verifyAuditLog — clean chain", () => {
     if (result.ok) {
       expect(result.total).toBe(5);
       expect(result.legacyCount).toBe(0);
+      expect(result.chainMode).toBe("canonical");
     }
     await cleanupFile(logFile);
   });
@@ -85,6 +170,7 @@ describe("verifyAuditLog — clean chain", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.total).toBe(0);
+      expect(result.chainMode).toBe("canonical");
     }
     await cleanupFile(logFile);
   });
@@ -93,6 +179,9 @@ describe("verifyAuditLog — clean chain", () => {
     const logFile = tempLogFile();
     const result = await verifyAuditLog(logFile, FIXED_KEY);
     expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.chainMode).toBe("canonical");
+    }
   });
 });
 
@@ -104,6 +193,7 @@ describe("verifyAuditLog — 100-record fixture (acceptance criterion)", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.total).toBe(100);
+      expect(result.chainMode).toBe("canonical");
     }
     await cleanupFile(logFile);
   });
@@ -319,6 +409,7 @@ describe("verifyAuditLog — legacy backward compatibility", () => {
     if (result.ok) {
       expect(result.legacyCount).toBe(3);
       expect(result.total).toBe(0);
+      expect(result.chainMode).toBe("canonical"); // 0 HMAC entries → canonical
     }
     await cleanupFile(logFile);
   });
@@ -336,7 +427,144 @@ describe("verifyAuditLog — legacy backward compatibility", () => {
     if (result.ok) {
       expect(result.legacyCount).toBe(1);
       expect(result.total).toBe(3);
+      expect(result.chainMode).toBe("canonical");
     }
     await cleanupFile(logFile);
+  });
+});
+
+// ── W9-S2: Auto-fallback to legacy HMAC + chainMode ─────────────────────
+
+describe("verifyAuditLog — W9-S2 auto-fallback to legacy HMAC", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("emits a per-entry stderr WARN for each legacy-HMAC entry", async () => {
+    const logFile = tempLogFile();
+    // 3-entry legacy chain: each entry will trigger the legacy fallback path
+    // because the record keys (zval, action) are in reverse alphabetical order,
+    // so canonicalJson produces different bytes than JSON.stringify, causing the
+    // canonical check to fail and the legacy check to succeed.
+    await buildLegacyChain(logFile, 3);
+
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+
+    const result = await verifyAuditLog(logFile, FIXED_KEY);
+
+    expect(result.ok).toBe(true);
+
+    // One warning per legacy-HMAC entry (3 entries → 3 warnings).
+    const legacyWarnings = stderrSpy.mock.calls
+      .map((args) => String(args[0]))
+      .filter((msg) =>
+        msg.includes(
+          "used legacy HMAC; consider migrating with re-sign tooling",
+        ),
+      );
+    expect(legacyWarnings).toHaveLength(3);
+
+    // Each warning must cite the correct index.
+    expect(legacyWarnings[0]).toContain("entry at index 0");
+    expect(legacyWarnings[1]).toContain("entry at index 1");
+    expect(legacyWarnings[2]).toContain("entry at index 2");
+
+    await cleanupFile(logFile);
+  });
+
+  it("verifies a pre-W7 chain (all legacy-HMAC entries) → chainMode: legacy", async () => {
+    const logFile = tempLogFile();
+    await buildLegacyChain(logFile, 5);
+    const result = await verifyAuditLog(logFile, FIXED_KEY);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.total).toBe(5);
+      expect(result.legacyCount).toBe(0);
+      expect(result.chainMode).toBe("legacy");
+    }
+    await cleanupFile(logFile);
+  });
+
+  it("verifies a mixed chain (legacy entries then canonical) → chainMode: mixed", async () => {
+    const logFile = tempLogFile();
+    // Build 3 legacy entries, then 3 canonical entries.
+    const legacyEntries = await buildLegacyChain(logFile, 3);
+    const lastLegacyHmac = legacyEntries[legacyEntries.length - 1]!.hmac;
+    // Canonical chain starts at index 3, prevHmac = last legacy HMAC.
+    await buildChain_fromOffset(logFile, 3, lastLegacyHmac);
+
+    const result = await verifyAuditLog(logFile, FIXED_KEY);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.total).toBe(6);
+      expect(result.chainMode).toBe("mixed");
+    }
+    await cleanupFile(logFile);
+  });
+
+  it("does NOT fall back to legacy when the canonical entry is tampered → hmac-mismatch", async () => {
+    const logFile = tempLogFile();
+    await buildChain(logFile, 3);
+
+    // Read and tamper with record at index 1.
+    const lines = await fs.readFile(logFile, "utf-8");
+    const parsed = lines
+      .split("\n")
+      .filter((l) => l.trim())
+      .map((l) => JSON.parse(l) as AuditEntry);
+
+    // Inject a malicious payload — both canonical and legacy checks must fail.
+    parsed[1]!.record = { action: "TAMPERED", index: 1 };
+
+    await fs.writeFile(
+      logFile,
+      parsed.map((e) => JSON.stringify(e)).join("\n") + "\n",
+      { mode: 0o600 },
+    );
+
+    const result = await verifyAuditLog(logFile, FIXED_KEY);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.brokenAt).toBe(1);
+      expect(result.reason).toBe("hmac-mismatch");
+      expect(result.chainMode).toBe("failed");
+    }
+    await cleanupFile(logFile);
+  });
+
+  it("does NOT fall back to legacy when a legacy entry is tampered → hmac-mismatch", async () => {
+    const logFile = tempLogFile();
+    await buildLegacyChain(logFile, 3);
+
+    // Tamper with record at index 1 — should fail both canonical and legacy.
+    const lines = await fs.readFile(logFile, "utf-8");
+    const parsed = lines
+      .split("\n")
+      .filter((l) => l.trim())
+      .map((l) => JSON.parse(l) as AuditEntry);
+
+    parsed[1]!.record = { action: "TAMPERED", index: 1 };
+
+    await fs.writeFile(
+      logFile,
+      parsed.map((e) => JSON.stringify(e)).join("\n") + "\n",
+      { mode: 0o600 },
+    );
+
+    const result = await verifyAuditLog(logFile, FIXED_KEY);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.brokenAt).toBe(1);
+      expect(result.reason).toBe("hmac-mismatch");
+      expect(result.chainMode).toBe("failed");
+    }
+    await cleanupFile(logFile);
+  });
+
+  it("chainMode type is exported from the module", () => {
+    const mode: import("./audit-verifier.js").ChainMode = "mixed";
+    expect(mode).toBe("mixed");
   });
 });

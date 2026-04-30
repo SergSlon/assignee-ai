@@ -24,13 +24,14 @@ import { errorToExitCode } from "../utils/exit-code.js";
 import { ErrorCode, ProcessExitCode } from "../constants/errors.js";
 
 describe("ProcessExitCode constants", () => {
-  it("declares all six documented codes", () => {
+  it("declares all seven documented codes", () => {
     expect(ProcessExitCode.SUCCESS).toBe(0);
     expect(ProcessExitCode.GENERIC_ERROR).toBe(1);
     expect(ProcessExitCode.DOCTOR_WARNINGS).toBe(2);
     expect(ProcessExitCode.POLICY_SAFETY_ABORT).toBe(10);
     expect(ProcessExitCode.MCP_STARTUP_FAILED).toBe(11);
     expect(ProcessExitCode.NOT_IMPLEMENTED).toBe(12);
+    expect(ProcessExitCode.USAGE_ERROR).toBe(73);
   });
 
   it("does NOT re-use exit 10 for MCP startup (regression guard for L8 finding)", () => {
@@ -107,6 +108,20 @@ describe("errorToExitCode", () => {
         new AssigneeError("uvx not found", ErrorCode.MCP_STARTUP_FAILED),
       ),
     ).toBe(11);
+  });
+
+  it("maps AssigneeError USAGE_ERROR to USAGE_ERROR (73) — W9-S4 / M-β-018", () => {
+    // Mutually-exclusive flag combinations (e.g. --wizard + --yes in init)
+    // throw AssigneeError(USAGE_ERROR). Scripts distinguish usage mistakes
+    // (73) from runtime failures (1).
+    expect(
+      errorToExitCode(
+        new AssigneeError(
+          "--wizard and --yes are mutually exclusive",
+          ErrorCode.USAGE_ERROR,
+        ),
+      ),
+    ).toBe(73);
   });
 
   it("maps unrelated AssigneeError codes to GENERIC_ERROR (1)", () => {

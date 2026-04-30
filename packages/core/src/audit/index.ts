@@ -29,4 +29,5 @@ export {
   verifyAuditLog,
   type VerifyResult,
   type VerifyReason,
+  type ChainMode,
 } from "./audit-verifier.js";

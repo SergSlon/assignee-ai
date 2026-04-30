@@ -252,6 +252,7 @@ The `DataSource` type and `formatLabelWithSource()` helper live in `@assignee/co
 | `AWS_PROFILE`                         | AWS CLI named profile. Now honored: when set, `assignee init` uses the profile for SSO credential resolution. For `plan`/`apply`/`destroy`, prefer dedicated `ASSIGNEE_OPERATOR_*` keys; `AWS_PROFILE` alone is not sufficient for those commands.               | unset                                           |
 | `ASSIGNEE_OPERATOR_SESSION_TOKEN`     | Session token for ASIA-prefixed STS / AWS SSO short-term credentials. Required when `ASSIGNEE_OPERATOR_ACCESS_KEY_ID` starts with `ASIA`. Forwarded to every AWS SDK client constructed for the operator role.                                                   | -                                               |
 | `ASSIGNEE_AUDIT_KEY`                  | Per-tenant HMAC key for the audit-log chain. Hex or base64. Without this variable a per-process ephemeral key is generated and a warning is emitted — cross-restart chain verification will fail.                                                                | unset (ephemeral per-process key)               |
+| `ASSIGNEE_AUDIT_FSYNC`                | Controls whether the audit-log writer issues `fsync` + directory `fsync` after each appended entry. Default: **enabled** (any value other than `"0"` → fsync runs). Set to `"0"` to disable. See [`ASSIGNEE_AUDIT_FSYNC`](#assignee_audit_fsync) below.          | enabled (`"0"` disables)                        |
 | `ASSIGNEE_TELEMETRY_ADAPTER`          | Opt-in flag for in-process telemetry adapter. Set to `1` to enable. Default off.                                                                                                                                                                                 | unset (off)                                     |
 | `ASSIGNEE_OTEL_INCLUDE_PII`           | Set to `1` to include PII fields (user identifiers, resource names) in OTEL log events. Default off — PII is stripped before export.                                                                                                                             | unset (off)                                     |
 | `ASSIGNEE_NIGHTLY_BUDGET_USD`         | Cost cap (USD) for the nightly real-AWS smoke run. The runner aborts before launching additional resources once cumulative spend reaches this ceiling.                                                                                                           | `5` (approx.)                                   |
@@ -312,6 +313,32 @@ Persistent warn/error log files (`cli-YYYY-MM-DD.jsonl` and their numbered rotat
 ### `ASSIGNEE_ENABLE_REMOTE_MCP`
 
 Set to exactly `1` to enable the optional remote knowledge MCP server. **Security note:** when enabled, the CLI fetches and executes a remote MCP server over the network at runtime. Only enable this in trusted environments and only after reviewing the upstream server. Any other value (including `true`, `yes`, `on`) leaves the server disabled.
+
+### `ASSIGNEE_AUDIT_FSYNC`
+
+After each entry is appended to the HMAC-chained audit log (`~/.assignee/audit/`), the audit writer calls `fsync` twice:
+
+1. **File fsync** — flushes the appended bytes from the kernel page cache to the storage device.
+2. **Directory fsync** — commits the directory entry (inode update, file size) so a kernel panic between the `appendFile` and the OS directory-flush cannot leave bytes on disk that are invisible to subsequent reads.
+
+**Default: enabled.** The double-fsync runs unless `ASSIGNEE_AUDIT_FSYNC=0` is set.
+
+```bash
+# Disable fsync for high-throughput environments or slow-disk benchmarks
+ASSIGNEE_AUDIT_FSYNC=0 assignee apply "Create S3 bucket"
+```
+
+**When to disable:**
+
+| Scenario                                                   | Rationale                                                                                                                                   |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| High-throughput environments (bulk apply loops, CI fleets) | Audit log durability is provided by the storage layer (NFS, EBS replication, SAN). The OS-level fsync overhead is redundant and measurable. |
+| Slow-disk benchmarks / local development on spinning HDDs  | fsync serializes writes; disabling removes the bottleneck for non-critical local runs.                                                      |
+| Test suites                                                | Avoids `fsync` contention and speeds up audit-log tests (also how `audit-log.test.ts` is configured).                                       |
+
+**Trade-off:** with fsync disabled, a hard kernel panic in the narrow window between the `appendFile` returning and the OS flushing its write-back cache can cause the last N appended entries to be missing from the audit file on recovery. On modern SSDs with power-loss protection this window is very short; on NFS/EBS it is effectively closed by the replication layer.
+
+> Introduced in Wave 8 (W8-S1). Extended to include directory fsync in Wave 9 (W9). Source: `packages/core/src/audit/audit-log.ts`.
 
 ## Org Policy Semantics
 

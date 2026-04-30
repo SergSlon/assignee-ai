@@ -38,6 +38,7 @@ import {
   ProcessEnvConfigAdapter,
   type ConfigPort,
 } from "../config/config-port.js";
+import { AssigneeError } from "../errors.js";
 
 // ── Canonical JSON serialisation ───────────────────────────────────────
 
@@ -73,6 +74,17 @@ function canonicalJson(value: unknown): string {
 /** Sentinel HMAC value written as the `prevHmac` of the first record. */
 export const GENESIS_HMAC = "GENESIS";
 
+/**
+ * Minimum acceptable length (in characters) for `ASSIGNEE_AUDIT_KEY`.
+ *
+ * HMAC-SHA256 uses a 256-bit internal block; any key shorter than 32 bytes
+ * (32 ASCII characters, 64 hex characters, or 44 base64 characters) is
+ * cryptographically negligible.  32 characters is the bare minimum — a
+ * 64-character random hex string (`openssl rand -hex 32`) is recommended
+ * for production use.
+ */
+export const AUDIT_KEY_MIN_LENGTH = 32;
+
 let _perProcessKey: string | undefined;
 
 /**
@@ -91,7 +103,16 @@ let _perProcessKey: string | undefined;
 export function getAuditKey(config?: ConfigPort): string {
   const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
   const envKey = effectiveConfig.get("ASSIGNEE_AUDIT_KEY");
-  if (envKey && envKey.length > 0) return envKey;
+  if (envKey && envKey.length > 0) {
+    if (envKey.length < AUDIT_KEY_MIN_LENGTH) {
+      throw new AssigneeError(
+        `ASSIGNEE_AUDIT_KEY must be ≥ ${AUDIT_KEY_MIN_LENGTH} characters; ` +
+          `generate one with: openssl rand -hex 32`,
+        "AUDIT_KEY_TOO_SHORT",
+      );
+    }
+    return envKey;
+  }
 
   if (!_perProcessKey) {
     _perProcessKey = randomBytes(32).toString("hex");

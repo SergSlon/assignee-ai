@@ -19,6 +19,12 @@ export const ProcessExitCode = {
    * that does not have full backing logic yet.
    */
   NOT_IMPLEMENTED: 12,
+  /**
+   * W9-S4 (full-audit-2026-04-29 M-β-018): User supplied mutually-exclusive
+   * or otherwise invalid flag combination. Scripts should treat this as a
+   * usage mistake (distinct from a runtime failure) and surface a help hint.
+   */
+  USAGE_ERROR: 73,
 } as const;
 
 /**

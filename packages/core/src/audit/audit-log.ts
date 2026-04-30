@@ -118,12 +118,28 @@ export async function appendAuditRecord(
     // writes does not lose the just-appended entry. Enabled by default;
     // operators can set ASSIGNEE_AUDIT_FSYNC=0 to skip (e.g. in tests or
     // high-throughput environments where the OS flush cadence is acceptable).
+    //
+    // Two fsyncs are issued:
+    //   1. File fsync — ensures the appended bytes reach storage.
+    //   2. Directory fsync — ensures the directory entry (inode update, file
+    //      size) is also durable. Without this, a kernel crash between the
+    //      appendFile and the OS directory-flush can leave the bytes on disk
+    //      but invisible to subsequent reads (directory entry not committed).
     if (process.env["ASSIGNEE_AUDIT_FSYNC"] !== "0") {
-      const fd = await fs.open(logFile, "r");
+      // 1. File fsync.
+      const fileFd = await fs.open(logFile, "r");
       try {
-        await fd.sync();
+        await fileFd.sync();
       } finally {
-        await fd.close();
+        await fileFd.close();
+      }
+
+      // 2. Directory fsync.
+      const dirFd = await fs.open(dir, "r");
+      try {
+        await dirFd.sync();
+      } finally {
+        await dirFd.close();
       }
     }
 
