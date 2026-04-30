@@ -60,7 +60,7 @@ const program = new Command();
 
 program
   .name("assignee")
-  .description("Assignee.ai — AI-Native Cloud Operator")
+  .description("Assignee.ai - AI-Native Cloud Operator")
   .version(pkg.version as string)
   .option(
     "--verbose",

@@ -168,12 +168,19 @@ describe("applyCommand — help text (Epic 92 C-24 / D-02)", () => {
 });
 
 // ── Epic 92 Wave 3.b.1 — flag surface (D-13) ────────────────────────────
+// W7-S0 (M-β-02): canonical description shared across plan/apply/init.
+const WIZARD_CANONICAL_DESCRIPTION =
+  "Run the interactive configuration wizard.";
+
 describe("applyCommand — flag surface (Epic 92 D-13)", () => {
-  it("registers --wizard boolean flag (opt-in wizard mode)", async () => {
+  it("registers --wizard boolean flag (W7-S0: unified description matches canonical phrase)", async () => {
     const { applyCommand } = await import("./apply.js");
     const wizard = applyCommand.options.find((o) => o.long === "--wizard");
     expect(wizard?.long).toBe("--wizard");
     expect(wizard?.flags).toBe("--wizard");
+    // W7-S0: description must open with the canonical unified phrase.
+    // Acceptance criterion 2: starts with "Run the interactive configuration wizard".
+    expect(wizard?.description).toBe(WIZARD_CANONICAL_DESCRIPTION);
   });
 
   it("registers -q / --quick flag (skip defaulted prompts)", async () => {

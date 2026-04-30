@@ -219,7 +219,13 @@ export const planCommand = new Command(CommandName.PLAN)
     // --wizard → --quick is preserved (see the normalisation at
     // line ~230) because plan is read-only and has no "full wizard"
     // mode beyond the required-field prompts.
-    "Run interactive configuration wizard (prompts for required fields; plan-only, no provisioning).",
+    // W7-S0 (M-β-02): unified description — all three surfaces (plan/apply/init)
+    // share the same opening clause. Per-command scope (plan is read-only, no
+    // provisioning) is implicit from the command context and documented in the
+    // Examples block below, NOT in the flag description. Internally plan still
+    // aliases --wizard → --quick (see line ~279); only the user-facing string
+    // changed.
+    "Run the interactive configuration wizard.",
   )
   // W3-04 (Epic 100 Round 5): multi-account surface flag. Parse + validate
   // only. Cross-account STS assume-role wiring defers to Epic 101.

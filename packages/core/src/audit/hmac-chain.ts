@@ -6,9 +6,26 @@
  * This makes the chain tamper-evident: altering any record or its HMAC
  * breaks every subsequent link.
  *
- * Algorithm: HMAC-SHA256 over `prevHmac + "|" + JSON.stringify(record)`.
+ * Algorithm: HMAC-SHA256 over `prevHmac + "|" + canonicalJson(record)`.
  * The pipe separator prevents length-extension ambiguity when prevHmac is
  * the sentinel value "GENESIS" for the first record.
+ *
+ * `canonicalJson` (see below) serialises the record with all object keys
+ * sorted alphabetically at every nesting level, producing a byte-stable
+ * representation regardless of JS runtime version or object construction
+ * order.  Standard `JSON.stringify` iterates keys in insertion order,
+ * which differs across V8 versions and when objects are built dynamically,
+ * breaking cross-process / cross-platform chain verification.
+ *
+ * ⚠ CHAIN-FORMAT BREAKING CHANGE (W7-S2 — 2026-04-29):
+ *   Audit logs written before this change used `JSON.stringify` (non-
+ *   canonical) for HMAC computation. Those HMACs will NOT verify against
+ *   this implementation.  To verify a legacy chain, re-compute each HMAC
+ *   with `JSON.stringify(record)` using the original key.  For migration
+ *   tooling, compare `legacyHmac(prevHmac, record, key)` (plain
+ *   JSON.stringify) against the stored HMAC, then re-sign with
+ *   `computeChainLink` once verified.  New chains written after upgrading
+ *   use canonical JSON and are forward-compatible across all environments.
  *
  * Key management:
  *   - Production: `ASSIGNEE_AUDIT_KEY` env var (per-tenant secret).
@@ -21,6 +38,35 @@ import {
   ProcessEnvConfigAdapter,
   type ConfigPort,
 } from "../config/config-port.js";
+
+// ── Canonical JSON serialisation ───────────────────────────────────────
+
+/**
+ * Produce a byte-stable JSON representation of `value` by sorting all
+ * object keys alphabetically at every nesting level.
+ *
+ * This is the serialiser used inside `computeChainLink` so that HMAC
+ * values are reproducible regardless of JS runtime version, V8 key-
+ * enumeration order, or how the record object was originally constructed.
+ *
+ * Arrays preserve their positional order (only object keys are sorted).
+ */
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return "[" + value.map(canonicalJson).join(",") + "]";
+  }
+  const sorted = Object.keys(value as Record<string, unknown>)
+    .sort()
+    .map((k) => {
+      const v = (value as Record<string, unknown>)[k];
+      return JSON.stringify(k) + ":" + canonicalJson(v);
+    })
+    .join(",");
+  return "{" + sorted + "}";
+}
 
 // ── Key management ─────────────────────────────────────────────────────
 
@@ -73,7 +119,7 @@ export function computeChainLink(
   record: unknown,
   key: string = getAuditKey(),
 ): string {
-  const payload = `${prevHmac}|${JSON.stringify(record)}`;
+  const payload = `${prevHmac}|${canonicalJson(record)}`;
   return createHmac("sha256", key).update(payload).digest("hex");
 }
 

@@ -225,13 +225,43 @@ export const restoreProvisionsCommand = new Command("restore-provisions")
     "--from <date>",
     "Restore from a specific backup date (YYYY-MM-DD). Defaults to most recent backup.",
   )
-  .action(async (opts: { from?: string }) => {
+  .option(
+    "--json",
+    "Emit machine-readable JSON to stdout instead of human-readable text",
+  )
+  .action(async (opts: { from?: string; json?: boolean }) => {
     const result = await restoreProvisions({ from: opts.from });
 
     if (!result.restored) {
-      process.stderr.write(`[restore-provisions] ${result.message}\n`);
+      if (opts.json) {
+        process.stdout.write(
+          JSON.stringify({
+            restored: false,
+            backup: result.sourcePath ?? "",
+            message: result.message,
+          }) + "\n",
+        );
+      } else {
+        process.stderr.write(`[restore-provisions] ${result.message}\n`);
+      }
       process.exit(1);
+      return;
     }
 
-    process.stdout.write(`[restore-provisions] ${result.message}\n`);
+    // Extract the backup filename for the JSON envelope.
+    const backupBasename = result.sourcePath
+      ? path.basename(result.sourcePath)
+      : "";
+
+    if (opts.json) {
+      process.stdout.write(
+        JSON.stringify({
+          restored: true,
+          backup: backupBasename,
+          message: result.message,
+        }) + "\n",
+      );
+    } else {
+      process.stdout.write(`[restore-provisions] ${result.message}\n`);
+    }
   });

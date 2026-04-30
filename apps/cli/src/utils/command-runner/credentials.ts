@@ -10,6 +10,7 @@
  * @see W2-02 — AWS_PROFILE via provider chain (Epic 100)
  */
 import { ConfigurationError } from "@assignee/core";
+import chalk from "chalk";
 import { EnvVar } from "../../constants/env-vars.js";
 
 /**
@@ -41,8 +42,14 @@ export function resolveCredentials(silent: boolean): void {
         process.env["AWS_SESSION_TOKEN"];
     }
     if (!silent) {
+      const msg1 =
+        "Using AWS_ACCESS_KEY_ID - consider running `assignee setup` to create least-privilege IAM users.";
       process.stderr.write(
-        "[33m⚠  Using AWS_ACCESS_KEY_ID — consider running `assignee setup` to create least-privilege IAM users.[0m\n",
+        process.stderr.isTTY
+          ? chalk.yellow(`[WARN] ${msg1}
+`)
+          : `[WARN] ${msg1}
+`,
       );
     }
     return;
@@ -54,9 +61,13 @@ export function resolveCredentials(silent: boolean): void {
     // resolveCredentialsWithProfile() must be called before SDK clients are
     // constructed. Command entry-points that support --profile call it directly.
     if (!silent) {
+      const msg2 =
+        `AWS_PROFILE="${hasProfile}" detected - resolving credentials via profile chain. ` +
+        `For least-privilege isolation run \`assignee setup\` to create ASSIGNEE_OPERATOR_* users.`;
       process.stderr.write(
-        `[33m⚠  AWS_PROFILE="${hasProfile}" detected — resolving credentials via profile chain. ` +
-          `For least-privilege isolation run \`assignee setup\` to create ASSIGNEE_OPERATOR_* users.[0m\n`,
+        process.stderr.isTTY
+          ? chalk.yellow(`[WARN] ${msg2}\n`)
+          : `[WARN] ${msg2}\n`,
       );
     }
     // Return without throwing — the profile is usable; the async promoter
@@ -124,8 +135,11 @@ export async function resolveCredentialsWithProfile(
     }
 
     if (!silent) {
+      const successMsg = `Resolved credentials via profile "${resolvedProfile}".`;
       process.stderr.write(
-        `[32m✓  Resolved credentials via profile "${resolvedProfile}".[0m\n`,
+        process.stderr.isTTY
+          ? chalk.green(`[OK] ${successMsg}\n`)
+          : `[OK] ${successMsg}\n`,
       );
     }
   } catch (err) {

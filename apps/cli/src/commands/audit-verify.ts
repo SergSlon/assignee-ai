@@ -28,6 +28,7 @@ export interface AuditVerifyOptions {
   from?: string;
   to?: string;
   logFile?: string;
+  json?: boolean;
 }
 
 export const auditVerifyCommand = new Command("audit-verify")
@@ -47,6 +48,10 @@ export const auditVerifyCommand = new Command("audit-verify")
     "--log-file <path>",
     `Audit log file path (default: ${DEFAULT_AUDIT_LOG_FILE})`,
   )
+  .option(
+    "--json",
+    "Emit machine-readable JSON to stdout instead of human-readable text",
+  )
   .addHelpText(
     "after",
     `
@@ -64,6 +69,8 @@ The current implementation always walks the full chain.
     const logFile = opts.logFile ?? DEFAULT_AUDIT_LOG_FILE;
 
     // Warn if --from or --to were supplied (scaffold: not yet filtering).
+    // In --json mode the warning still goes to stderr (not suppressed) so
+    // scripts know range filtering is a no-op.
     if (opts.from !== undefined || opts.to !== undefined) {
       process.stderr.write(
         "[audit-verify] Note: --from / --to date filtering is not yet implemented " +
@@ -75,28 +82,50 @@ The current implementation always walks the full chain.
     try {
       result = await verifyAuditLog(logFile);
     } catch (err) {
-      process.stderr.write(
-        `[audit-verify] Failed to read audit log at "${logFile}": ` +
-          `${err instanceof Error ? err.message : String(err)}\n`,
-      );
+      const message =
+        `Failed to read audit log at "${logFile}": ` +
+        `${err instanceof Error ? err.message : String(err)}`;
+      if (opts.json) {
+        process.stdout.write(
+          JSON.stringify({ valid: false, entries: 0, error: message }) + "\n",
+        );
+      } else {
+        process.stderr.write(`[audit-verify] ${message}\n`);
+      }
       process.exit(1);
       return;
     }
 
     if (result.ok) {
-      process.stdout.write(
-        `[audit-verify] Chain OK — ${result.total} HMAC-bearing record(s) verified` +
-          (result.legacyCount > 0
-            ? `, ${result.legacyCount} pre-HMAC legacy record(s) skipped`
-            : "") +
-          ".\n",
-      );
+      if (opts.json) {
+        process.stdout.write(
+          JSON.stringify({ valid: true, entries: result.total }) + "\n",
+        );
+      } else {
+        process.stdout.write(
+          `[audit-verify] Chain OK — ${result.total} HMAC-bearing record(s) verified` +
+            (result.legacyCount > 0
+              ? `, ${result.legacyCount} pre-HMAC legacy record(s) skipped`
+              : "") +
+            ".\n",
+        );
+      }
       process.exit(0);
     } else {
-      process.stderr.write(
-        `[audit-verify] Chain BROKEN at record index ${result.brokenAt}: ${result.reason}. ` +
-          `${result.total} record(s) checked, ${result.legacyCount} legacy record(s) skipped.\n`,
-      );
+      const reason =
+        `Chain BROKEN at record index ${result.brokenAt}: ${result.reason}. ` +
+        `${result.total} record(s) checked, ${result.legacyCount} legacy record(s) skipped.`;
+      if (opts.json) {
+        process.stdout.write(
+          JSON.stringify({
+            valid: false,
+            entries: result.total,
+            error: reason,
+          }) + "\n",
+        );
+      } else {
+        process.stderr.write(`[audit-verify] ${reason}\n`);
+      }
       process.exit(1);
     }
   });

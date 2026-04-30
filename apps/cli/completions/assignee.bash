@@ -54,7 +54,7 @@ _assignee_completions() {
       COMPREPLY=( $(compgen -W "--output --json --skip-bedrock --skip-mcp --short" -- "${cur}") )
       ;;
     version)
-      COMPREPLY=( $(compgen -W "" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--json" -- "${cur}") )
       ;;
   esac
   return 0

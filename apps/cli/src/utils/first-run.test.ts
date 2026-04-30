@@ -129,6 +129,30 @@ describe("first-run", () => {
       const result = detectCredentialStatus();
       expect(result.status).toBe("none");
     });
+
+    it("hint strings for all 4 status values are ASCII-only (no Unicode above U+007E)", () => {
+      const asciiOnly = /^[\x20-\x7E]*$/;
+
+      // operator
+      vi.stubEnv("ASSIGNEE_OPERATOR_ACCESS_KEY_ID", "op-key");
+      vi.stubEnv("ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY", "op-secret");
+      expect(detectCredentialStatus().hint).toMatch(asciiOnly);
+      vi.unstubAllEnvs();
+
+      // standard
+      vi.stubEnv("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE");
+      vi.stubEnv("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI");
+      expect(detectCredentialStatus().hint).toMatch(asciiOnly);
+      vi.unstubAllEnvs();
+
+      // profile
+      vi.stubEnv("AWS_PROFILE", "my-dev-profile");
+      expect(detectCredentialStatus().hint).toMatch(asciiOnly);
+      vi.unstubAllEnvs();
+
+      // none (no env vars)
+      expect(detectCredentialStatus().hint).toMatch(asciiOnly);
+    });
   });
 
   describe("showFirstRunWelcome", () => {
