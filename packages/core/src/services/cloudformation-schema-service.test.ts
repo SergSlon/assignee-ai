@@ -14,6 +14,21 @@ import {
 } from "./cloudformation-schema-service.js";
 import { MissingAssigneeCredentialsError } from "../config/aws-credentials.js";
 
+// ---------- Mock logger ----------
+// Capture log() calls so we can assert on WARN events for stale-cache fallback.
+const mockLog = vi.fn();
+vi.mock("../utils/logger/index.js", () => ({
+  log: (...args: unknown[]) => mockLog(...args),
+  LOG_ACTIONS: {
+    SCHEMA_STALE_CACHE_FALLBACK: "schema_stale_cache_fallback",
+  },
+  LogLevel: {
+    INFO: "info",
+    WARN: "warn",
+    ERROR: "error",
+  },
+}));
+
 // ---------- Mock @aws-sdk/client-cloudformation ----------
 //
 // NOTE: Use plain class/function (not vi.fn) for the constructor mocks because
@@ -101,6 +116,7 @@ describe("CloudFormationSchemaService", () => {
   beforeEach(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "cfn-schema-test-"));
     mockSend.mockReset();
+    mockLog.mockReset();
   });
 
   afterEach(async () => {
@@ -486,6 +502,145 @@ describe("CloudFormationSchemaService", () => {
       const service = await createService();
       const schema = await service.getSchema("AWS::S3::Bucket");
       expect(schema).toEqual(S3_BUCKET_SCHEMA);
+    });
+  });
+
+  // ── Stale-cache fallback (TTL expiry + API error) ───────────────────────
+  // When a cache file exists but has exceeded its TTL AND the DescribeType
+  // API throws any error, getSchema() must:
+  //   1. Return the stale cached value (keep CLI usable).
+  //   2. Emit a structured WARN log event with type, error, cache path, hint.
+  //   3. NOT refresh the cache mtime (so subsequent calls retry the API).
+  //
+  // When no cache file exists AND the API throws, the error must propagate
+  // so callers receive an informative SchemaFetchError.
+  describe("getSchema — stale-cache fallback (TTL expiry + API error)", () => {
+    /** Write a cache file whose mtime is set 8 days in the past. */
+    async function writeStaleCacheFile(
+      cacheFile: string,
+      schema: object,
+    ): Promise<void> {
+      const entry = {
+        schema,
+        cachedAt: Date.now() - 8 * 24 * 60 * 60 * 1000,
+        typeName: "AWS::S3::Bucket",
+      };
+      await fs.writeFile(cacheFile, JSON.stringify(entry), "utf-8");
+      const oldTime = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+      await fs.utimes(cacheFile, oldTime, oldTime);
+    }
+
+    it("returns stale cached value when TTL is expired and API throws", async () => {
+      const cacheFile = path.join(tmpDir, "AWS__S3__Bucket.json");
+      await writeStaleCacheFile(cacheFile, S3_BUCKET_SCHEMA);
+
+      const apiError = new Error(
+        "Invalid character '#' in entity name: \"#xD\"",
+      );
+      mockSend.mockRejectedValueOnce(apiError);
+
+      const service = await createService();
+      const schema = await service.getSchema("AWS::S3::Bucket");
+
+      // Must return the stale schema, not throw.
+      expect(schema).toEqual(S3_BUCKET_SCHEMA);
+    });
+
+    it("emits a structured WARN log when falling back to stale cache", async () => {
+      const cacheFile = path.join(tmpDir, "AWS__S3__Bucket.json");
+      await writeStaleCacheFile(cacheFile, S3_BUCKET_SCHEMA);
+
+      const apiError = new Error("XML parse error: #xD");
+      mockSend.mockRejectedValueOnce(apiError);
+
+      const service = await createService();
+      await service.getSchema("AWS::S3::Bucket");
+
+      // Logger must have been called exactly once with the WARN event.
+      expect(mockLog).toHaveBeenCalledOnce();
+      const [logEvent] = mockLog.mock.calls[0] as [Record<string, unknown>];
+      expect(logEvent["level"]).toBe("warn");
+      expect(logEvent["action"]).toBe("schema_stale_cache_fallback");
+      // extras must carry the type name, error message, cache path, and hint.
+      const extras = logEvent["extras"] as Record<string, string>;
+      expect(extras["typeName"]).toBe("AWS::S3::Bucket");
+      expect(extras["error"]).toContain("XML parse error");
+      expect(extras["cacheFile"]).toContain("AWS__S3__Bucket.json");
+      expect(extras["hint"]).toMatch(/touch/);
+    });
+
+    it("does NOT update the cache mtime after stale-cache fallback so subsequent calls retry the API", async () => {
+      const cacheFile = path.join(tmpDir, "AWS__S3__Bucket.json");
+      await writeStaleCacheFile(cacheFile, S3_BUCKET_SCHEMA);
+
+      const statBefore = await fs.stat(cacheFile);
+      const mtimeBefore = statBefore.mtimeMs;
+
+      const apiError = new Error("DescribeType network timeout");
+      mockSend.mockRejectedValueOnce(apiError);
+
+      const service = await createService();
+      await service.getSchema("AWS::S3::Bucket");
+
+      const statAfter = await fs.stat(cacheFile);
+      // mtime must not have changed — we did not write through.
+      expect(statAfter.mtimeMs).toBe(mtimeBefore);
+    });
+
+    it("propagates SchemaFetchError when no cache file exists and API throws", async () => {
+      // Ensure no cache file is present.
+      const cacheFile = path.join(tmpDir, "AWS__S3__Bucket.json");
+      await fs.unlink(cacheFile).catch(() => {
+        // OK if file didn't exist
+      });
+
+      const apiError = new Error("DescribeType: AccessDenied");
+      mockSend.mockRejectedValueOnce(apiError);
+
+      const service = await createService();
+      await expect(service.getSchema("AWS::S3::Bucket")).rejects.toThrow(
+        SchemaFetchError,
+      );
+      // No warn log — nothing to fall back to.
+      expect(mockLog).not.toHaveBeenCalled();
+    });
+
+    it("propagates SchemaFetchError when no cache file exists and API throws (error carries type name)", async () => {
+      const apiError = new Error("DescribeType: AccessDenied");
+      mockSend.mockRejectedValueOnce(apiError);
+
+      const service = await createService();
+      await expect(
+        service.getSchema("AWS::EC2::Instance"),
+      ).rejects.toMatchObject({
+        typeName: "AWS::EC2::Instance",
+        code: "SCHEMA_FETCH_ERROR",
+      });
+    });
+
+    it("still refreshes cache on TTL expiry when API succeeds (happy path preserved)", async () => {
+      const cacheFile = path.join(tmpDir, "AWS__S3__Bucket.json");
+      await writeStaleCacheFile(cacheFile, { old: true });
+
+      // API succeeds with fresh data.
+      mockSend.mockResolvedValueOnce({
+        Schema: JSON.stringify(S3_BUCKET_SCHEMA),
+      });
+
+      const service = await createService();
+      const schema = await service.getSchema("AWS::S3::Bucket");
+
+      // Returns fresh schema, not stale.
+      expect(schema).toEqual(S3_BUCKET_SCHEMA);
+      expect(mockSend).toHaveBeenCalledOnce();
+
+      // Cache file must be rewritten with fresh content.
+      const newContent = await fs.readFile(cacheFile, "utf-8");
+      const parsed = JSON.parse(newContent) as { schema: unknown };
+      expect(parsed.schema).toEqual(S3_BUCKET_SCHEMA);
+
+      // No warn log — the API succeeded.
+      expect(mockLog).not.toHaveBeenCalled();
     });
   });
 });

@@ -18,6 +18,7 @@ import { AssigneeError } from "../errors.js";
 import { DEFAULT_AWS_REGION } from "../config/config-schema.js";
 import { ASSIGNEE_DIR, CACHE_DIR_NAME } from "../config/cfn-keys.js";
 import { requireAssigneeCredentials } from "../config/aws-credentials.js";
+import { log, LOG_ACTIONS, LogLevel } from "../utils/logger/index.js";
 
 /** Default cache directory under ~/.assignee */
 const DEFAULT_CACHE_DIR = path.join(
@@ -129,16 +130,57 @@ export class CloudFormationSchemaService {
    *
    * Returns from disk cache if available and within TTL, otherwise
    * calls the DescribeType API and caches the result.
+   *
+   * Stale-cache fallback (7-day TTL expiry + API error):
+   * If the cache exists but is expired AND the DescribeType API throws for
+   * any reason (XML parse error, network failure, throttling, etc.), the
+   * service returns the stale cached value rather than propagating the error.
+   * A structured WARN event is emitted to the rotating daily log and to
+   * stderr (under --verbose) with the type name, error message, cache file
+   * path, and a recovery hint. The cache mtime is NOT refreshed so
+   * subsequent calls retry the API until it succeeds.
+   *
+   * No-cache + API error:
+   * If there is no cached value at all, the error is propagated as a
+   * SchemaFetchError — no fallback is possible.
    */
   async getSchema(typeName: string): Promise<object> {
-    // Check cache first
+    // Check cache first — returns { schema, stale } or null (no file).
     const cached = await this.readCache(typeName);
-    if (cached !== null) {
-      return cached;
+    if (cached !== null && !cached.stale) {
+      return cached.schema;
     }
 
-    // Cache miss or expired — fetch from API
-    const schema = await this.fetchFromApi(typeName);
+    // Cache miss or expired — fetch from API.
+    let schema: object;
+    try {
+      schema = await this.fetchFromApi(typeName);
+    } catch (fetchError: unknown) {
+      // API threw — check whether we can fall back to a stale cache entry.
+      if (cached !== null && cached.stale) {
+        const cacheFilePath = this.cacheFilePath(typeName);
+        const errMsg =
+          fetchError instanceof Error ? fetchError.message : String(fetchError);
+        log({
+          ts: new Date().toISOString(),
+          runId: "system",
+          level: LogLevel.WARN,
+          action: LOG_ACTIONS.SCHEMA_STALE_CACHE_FALLBACK,
+          extras: {
+            typeName,
+            error: errMsg,
+            cacheFile: cacheFilePath,
+            hint: `Run: touch "${cacheFilePath}" to force a retry on next invocation, or delete the file to force a full refresh.`,
+          },
+        });
+        // Return stale value — mtime is intentionally NOT updated so we keep
+        // retrying the API on subsequent calls.
+        return cached.schema;
+      }
+      // No cache at all — propagate the error (re-throw the SchemaFetchError
+      // that fetchFromApi already wrapped it in).
+      throw fetchError;
+    }
 
     // Write to cache (best effort — don't fail if cache write fails)
     try {
@@ -180,18 +222,27 @@ export class CloudFormationSchemaService {
   }
 
   /**
-   * Read a cached schema if it exists and is within TTL.
-   * Returns null on cache miss or expiry.
+   * Read a cached schema if it exists.
+   *
+   * Returns:
+   *   - `null` when the file does not exist, is unreadable, or contains
+   *     corrupt JSON (the corrupt file is unlinked so the next call sees a
+   *     clean cache miss).
+   *   - `{ schema, stale: false }` when the file is fresh (within TTL).
+   *   - `{ schema, stale: true }` when the file exists and parses cleanly
+   *     but has exceeded the TTL. The caller decides whether to use the
+   *     stale value as a fallback.
    */
-  private async readCache(typeName: string): Promise<object | null> {
+  private async readCache(
+    typeName: string,
+  ): Promise<{ schema: object; stale: boolean } | null> {
     const filePath = this.cacheFilePath(typeName);
     let content: string;
+    let stale: boolean;
     try {
       const stat = await fs.stat(filePath);
       const age = Date.now() - stat.mtimeMs;
-      if (age > this.cacheTtlMs) {
-        return null; // Expired
-      }
+      stale = age > this.cacheTtlMs;
       content = await fs.readFile(filePath, "utf-8");
     } catch {
       return null; // File doesn't exist or is unreadable
@@ -203,7 +254,7 @@ export class CloudFormationSchemaService {
         cachedAt: number;
         typeName: string;
       };
-      return entry.schema;
+      return { schema: entry.schema, stale };
     } catch {
       // Corrupt JSON (e.g. truncated mid-write). Without unlinking, every
       // subsequent getSchema() call would re-read the same broken file,

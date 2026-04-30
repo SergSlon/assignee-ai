@@ -96,6 +96,14 @@ export const LOG_ACTIONS = {
    * name. Reference: feedback_instrument_before_iterating.md.
    */
   REGION_EXTRACTION: "region_extraction",
+  /**
+   * Schema service: TTL-expired cache was kept as a stale fallback because
+   * the CloudFormation DescribeType API threw. Includes the resource type,
+   * error message, cache file path, and a recovery hint. Emitted at WARN
+   * level so the event always lands in the rotating daily log file and is
+   * visible under `--verbose`.
+   */
+  SCHEMA_STALE_CACHE_FALLBACK: "schema_stale_cache_fallback",
 } as const;
 
 export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];
