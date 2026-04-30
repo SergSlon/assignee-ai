@@ -144,4 +144,37 @@ describe("bestPracticeSchema", () => {
     const badBlocking = { ...validBP, blocking: "yes" };
     expect(() => bestPracticeSchema.parse(badBlocking)).toThrow(ZodError);
   });
+
+  // M-γ-07: enum dedup — cost_optimization removed, cost is the only cost category
+  it('accepts category "cost"', () => {
+    const withCost = { ...validBP, category: "cost" };
+    const result = bestPracticeSchema.parse(withCost);
+    expect(result.category).toBe("cost");
+  });
+
+  it('rejects deprecated category "cost_optimization"', () => {
+    const withCostOpt = { ...validBP, category: "cost_optimization" };
+    expect(() => bestPracticeSchema.parse(withCostOpt)).toThrow(ZodError);
+    try {
+      bestPracticeSchema.parse(withCostOpt);
+    } catch (err) {
+      const zodErr = err as ZodError;
+      const catError = zodErr.errors.find((e) => e.path.includes("category"))!;
+      expect(catError.message).toContain("Invalid enum value");
+    }
+  });
+
+  it("accepts all canonical category values", () => {
+    const categories = [
+      "security",
+      "cost",
+      "reliability",
+      "performance",
+      "compliance",
+    ] as const;
+    for (const cat of categories) {
+      const bp = { ...validBP, category: cat };
+      expect(() => bestPracticeSchema.parse(bp)).not.toThrow();
+    }
+  });
 });

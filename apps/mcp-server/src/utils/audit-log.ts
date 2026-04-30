@@ -34,6 +34,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 
+import { redactSensitive } from "@assignee/core";
 import { mcpLogError } from "./structured-log.js";
 
 /**
@@ -115,7 +116,7 @@ export async function auditLog(record: AuditRecord): Promise<void> {
         errorClass:
           err instanceof Error ? err.constructor.name : "UnknownError",
       },
-      err instanceof Error ? err.message : String(err),
+      redactSensitive(err instanceof Error ? err.message : String(err)),
     );
   }
 }

@@ -11,5 +11,5 @@ description: "Trusted Advisor identifies EC2 instances where CPU, memory, or net
 remediation: "Downsize the instance to a smaller type. Use AWS Compute Optimizer recommendations to find the right instance type for the workload."
 consequence: "Over-provisioned instances waste 60%+ of their capacity — across a fleet, this adds up to thousands of dollars per month in unused compute."
 fix_hint: "Downsize to a smaller instance type based on actual usage"
-category: cost_optimization
+category: cost
 lastVerified: "2026-04-23"

@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { Command } from "commander";
 
 // ── Hoisted mocks (accessible inside vi.mock factories) ─────────────────────
 // A6 (2026-04-08): mockLambdaSend was removed after Lambda EventSourceMapping
@@ -966,6 +967,32 @@ describe("Epic 92 Wave 1 — destroy scheduled-deletion paths", () => {
     expect(mockKmsSend).not.toHaveBeenCalled();
     expect(mockSecretsSend).not.toHaveBeenCalled();
     expect(mockEventBridgeSend).not.toHaveBeenCalled();
+  });
+});
+
+// ── W5-S0 — --target-account help description clean of internal trackers ─────
+// Verifies that the --target-account option description rendered by --help
+// (stdout) contains no internal tracker strings such as "Epic 101".
+
+function captureFullDestroyHelp(cmd: Command): string {
+  let captured = "";
+  cmd.outputHelp({
+    write: (chunk: string) => {
+      captured += chunk;
+    },
+  } as unknown as { error: boolean });
+  return captured;
+}
+
+describe("destroyCommand — --target-account help description (W5-S0)", () => {
+  it("--help stdout for --target-account does not contain Epic/story tracker strings", async () => {
+    const { destroyCommand } = await import("./destroy.js");
+    const helpText = captureFullDestroyHelp(destroyCommand);
+    // The option must be present in the help output.
+    expect(helpText).toContain("--target-account");
+    // Must NOT expose internal tracker names in user-facing output.
+    expect(helpText).not.toMatch(/Epic\s+\d+/i);
+    expect(helpText).not.toMatch(/story\s+\d+-W\d+/i);
   });
 });
 

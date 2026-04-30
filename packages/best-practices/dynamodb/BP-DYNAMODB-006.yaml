@@ -10,5 +10,5 @@ source_id: "TA-dynamodb-capacity"
 description: "Trusted Advisor identifies DynamoDB tables with provisioned capacity that consistently use less than 50% of their provisioned throughput. This represents wasted capacity costs. Epic 98 W5.P1: severity normalised MEDIUM → INFO because the check requires multi-day CloudWatch throughput metrics the plan-time evaluator cannot access — the rule is informational until the table has accumulated usage data."
 remediation: "Switch to PAY_PER_REQUEST billing mode for unpredictable workloads, or configure auto-scaling policies to match capacity to actual usage."
 consequence: "Over 50% of provisioned throughput is wasted — you are paying double what the actual usage requires every month."
-category: cost_optimization
+category: cost
 lastVerified: "2026-04-23"

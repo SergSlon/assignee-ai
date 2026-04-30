@@ -138,6 +138,43 @@ lastVerified: "2026-03-22"
     }
   });
 
+  // M-γ-06: fail-fast on invalid category (e.g. deprecated cost_optimization)
+  it("throws BPSchemaError immediately on invalid category value", () => {
+    const testDir = join(FIXTURES_DIR, "loader-bad-category-test");
+    const serviceDir = join(testDir, "ec2");
+    mkdirSync(serviceDir, { recursive: true });
+    writeFileSync(
+      join(serviceDir, "BP-EC2-BAD.yaml"),
+      `id: BP-EC2-001
+title: "EC2 cost rule"
+severity: HIGH
+resource_type: "AWS::EC2::Instance"
+property_path: "SomeField"
+check_type: equals
+expected_value: true
+source: "Test"
+category: cost_optimization
+lastVerified: "2026-03-22"
+`,
+    );
+
+    try {
+      expect(() => loadBestPractices(testDir)).toThrow(BPSchemaError);
+      try {
+        loadBestPractices(testDir);
+      } catch (err) {
+        expect(err).toBeInstanceOf(BPSchemaError);
+        const bpErr = err as BPSchemaError;
+        expect(bpErr.filePath).toContain("BP-EC2-BAD.yaml");
+        expect(bpErr.fieldErrors.some((e) => e.includes("category"))).toBe(
+          true,
+        );
+      }
+    } finally {
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
+
   it("skips non-YAML files in service directories", () => {
     const testDir = join(FIXTURES_DIR, "loader-skip-test");
     const serviceDir = join(testDir, "s3");

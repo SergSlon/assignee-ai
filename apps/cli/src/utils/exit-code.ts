@@ -18,6 +18,11 @@
  *        `AssigneeError` instances whose `.code` is in the
  *        POLICY_SAFETY_CODES set)
  *   11 — MCP server startup failure (`ErrorCode.MCP_STARTUP_FAILED`)
+ *   12 — feature not yet implemented; emitted via direct
+ *        `process.exit(ProcessExitCode.NOT_IMPLEMENTED)` in plan/apply/
+ *        destroy when the user invokes a scaffold-only flag (e.g.
+ *        --target-account). NOT returned by this function — use
+ *        `ProcessExitCode.NOT_IMPLEMENTED` at the call site directly.
  */
 
 import {

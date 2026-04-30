@@ -668,7 +668,7 @@ export const destroyCommand = new Command(CommandName.DESTROY)
   // only. Cross-account STS assume-role wiring defers to Epic 101.
   .option(
     "--target-account <id>",
-    "Target AWS account ID (12 digits). W3-04 scaffold: parses and validates only; cross-account assume-role wiring is Epic 101.",
+    "Target AWS account ID (12 digits). Validates format; cross-account assume-role is not yet supported.",
   )
   .addHelpText(
     "after",
