@@ -63,6 +63,28 @@ export function releaseApply(checkpointPath: string): void {
   activeApplies.delete(checkpointPath);
 }
 
+/**
+ * Emergency-path cleanup for graceful shutdown: clears ALL active-apply
+ * locks so a SIGTERM/SIGINT during an in-flight apply does not leave
+ * stale entries that block subsequent applies after the process is
+ * restarted.
+ *
+ * Called by the MCP signal handler (index.ts) before `server.close()`.
+ * The normal cleanup path (`releaseApply` in the `finally` block) is
+ * bypassed when `process.exit` is called synchronously, so this
+ * function provides the crash-path equivalent.
+ *
+ * Story W6-S1 (M-β-14 + M-β-16): this is the fix for the stale-lock
+ * consequence — callers must invoke this from the signal handler so
+ * any downstream process that inspects the Set after a restart sees a
+ * clean state (in practice the Set is in-memory and dies with the
+ * process, but the intent is documented for reviewers who may wonder
+ * why it's exported from this module).
+ */
+export function clearAllApplies(): void {
+  activeApplies.clear();
+}
+
 /** Exported for testing — clears the active-apply lock set. */
 export function _resetActiveApplies(): void {
   activeApplies.clear();

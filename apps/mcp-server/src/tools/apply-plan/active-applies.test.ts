@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   _resetActiveApplies,
   MAX_ACTIVE_APPLIES,
+  clearAllApplies,
   isApplyActive,
   markApplyActive,
   releaseApply,
@@ -148,5 +149,77 @@ describe("active-applies concurrency guard", () => {
     expect(() =>
       markApplyActive("/tmp/checkpoint-post-reset-overflow.json"),
     ).toThrow();
+  });
+
+  // ---------------------------------------------------------------------------
+  // W6-S1 (M-β-14 + M-β-16): clearAllApplies — crash-path cleanup for the
+  // signal handler.  Tests confirm that:
+  //   (a) clearAllApplies() empties the set even with multiple in-flight applies
+  //   (b) after clearAllApplies() a new apply is accepted (no stale lock blocks it)
+  //   (c) clearAllApplies() is a no-op on an already-empty set
+  // ---------------------------------------------------------------------------
+  describe("clearAllApplies (W6-S1 signal-handler crash-path cleanup)", () => {
+    afterEach(() => {
+      _resetActiveApplies();
+    });
+
+    it("clears all in-flight apply locks when called during simulated signal shutdown", () => {
+      const paths = [
+        "/tmp/apply-flight-1.json",
+        "/tmp/apply-flight-2.json",
+        "/tmp/apply-flight-3.json",
+      ];
+
+      for (const p of paths) {
+        markApplyActive(p);
+      }
+      for (const p of paths) {
+        expect(isApplyActive(p)).toBe(true);
+      }
+
+      // Simulate what the signal handler does before process.exit().
+      clearAllApplies();
+
+      for (const p of paths) {
+        expect(isApplyActive(p)).toBe(false);
+      }
+    });
+
+    it("after clearAllApplies, a fresh apply on the same checkpoint is accepted (no stale-lock)", () => {
+      const path = "/tmp/apply-was-in-flight.json";
+
+      markApplyActive(path);
+      expect(isApplyActive(path)).toBe(true);
+
+      // Signal fires — crash-path cleanup runs.
+      clearAllApplies();
+
+      expect(isApplyActive(path)).toBe(false);
+
+      // A new process invocation (or the same process after restart) marks
+      // the checkpoint active again — must not throw.
+      expect(() => markApplyActive(path)).not.toThrow();
+      expect(isApplyActive(path)).toBe(true);
+    });
+
+    it("clearAllApplies is a no-op on an already-empty set", () => {
+      // Precondition: set is empty.
+      expect(() => clearAllApplies()).not.toThrow();
+    });
+
+    it("activeApplies.size === 0 after clearAllApplies with applies at the cap", () => {
+      // Fill the set to the cap.
+      for (let index = 0; index < MAX_ACTIVE_APPLIES; index += 1) {
+        markApplyActive(`/tmp/cap-path-${index}.json`);
+      }
+      // Verify we're at the cap — the next mark would throw.
+      expect(() => markApplyActive("/tmp/overflow.json")).toThrow();
+
+      clearAllApplies();
+
+      // Set is empty — the overflow path should now succeed.
+      expect(() => markApplyActive("/tmp/overflow.json")).not.toThrow();
+      expect(isApplyActive("/tmp/overflow.json")).toBe(true);
+    });
   });
 });

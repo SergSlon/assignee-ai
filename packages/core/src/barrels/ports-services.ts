@@ -98,7 +98,12 @@ export {
 // `AwsConfig` (Story 49.1). Consumers that need the type should
 // import it from the destroy-strategies barrel or use the structural
 // shape directly.
-export { createCloudControlClient } from "../services/cloudcontrol-client.js";
+export {
+  createCloudControlClient,
+  createKmsClient,
+  createSecretsManagerClient,
+  createEventBridgeClient,
+} from "../services/cloudcontrol-client.js";
 
 // Services — advisory price enricher (Story 50-4 Wave 5 Pass G)
 export {

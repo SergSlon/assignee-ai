@@ -6,7 +6,9 @@ import {
   BP_FIX_TYPE,
   FixType,
   FixAction,
+  POLICY_ANTIPATTERN_NAMES,
 } from "./types.js";
+import { parseNestedArrayPredicate } from "./evaluate/predicates/nested-array-predicate.js";
 
 const triggerSchema = z
   .object({
@@ -87,4 +89,72 @@ export const bestPracticeSchema = z
       return true;
     },
     { message: "fixType 'interactive' requires non-empty interactiveOptions" },
-  );
+  )
+  .superRefine((bp, ctx) => {
+    // M-γ-08: validate expected_value grammar for policy_antipattern
+    if (bp.check_type === "policy_antipattern") {
+      if (typeof bp.expected_value !== "string") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["expected_value"],
+          message: `policy_antipattern expected_value must be a string; got ${typeof bp.expected_value}`,
+        });
+        return;
+      }
+      if (
+        !(POLICY_ANTIPATTERN_NAMES as readonly string[]).includes(
+          bp.expected_value,
+        )
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["expected_value"],
+          message: `Unknown policy_antipattern name "${bp.expected_value}". Known values: ${POLICY_ANTIPATTERN_NAMES.join(", ")}`,
+        });
+      }
+    }
+
+    // M-γ-08: validate expected_value grammar for nested_array_predicate
+    if (bp.check_type === "nested_array_predicate") {
+      if (typeof bp.expected_value !== "string") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["expected_value"],
+          message: `nested_array_predicate expected_value must be a string; got ${typeof bp.expected_value}`,
+        });
+        return;
+      }
+      const parsed = parseNestedArrayPredicate(bp.expected_value);
+      if (parsed === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["expected_value"],
+          message: `nested_array_predicate expected_value does not match required grammar: '<innerArray>[?(@.<prop>=~/<regex>/<flags>)] does not exist'. Got: "${bp.expected_value}"`,
+        });
+      }
+    }
+
+    // M-γ-08: validate condition shape — must have field (string) and value (string | number | boolean)
+    if (bp.condition !== undefined && bp.condition !== null) {
+      const cond = bp.condition as Record<string, unknown>;
+      if (typeof cond["field"] !== "string") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["condition", "field"],
+          message: `condition.field must be a string`,
+        });
+      }
+      const valueType = typeof cond["value"];
+      if (
+        valueType !== "string" &&
+        valueType !== "number" &&
+        valueType !== "boolean"
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["condition", "value"],
+          message: `condition.value must be a string, number, or boolean; got ${valueType}`,
+        });
+      }
+    }
+  });

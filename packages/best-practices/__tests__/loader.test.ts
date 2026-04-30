@@ -175,6 +175,152 @@ lastVerified: "2026-03-22"
     }
   });
 
+  // M-γ-06: collect-all — two files with distinct ZodErrors → both paths in one error
+  it("collects all ZodErrors from multiple invalid files before throwing", () => {
+    const testDir = join(FIXTURES_DIR, "loader-collect-all-test");
+    const s3Dir = join(testDir, "s3");
+    const ec2Dir = join(testDir, "ec2");
+    mkdirSync(s3Dir, { recursive: true });
+    mkdirSync(ec2Dir, { recursive: true });
+
+    // Missing `id` field
+    writeFileSync(
+      join(s3Dir, "BP-S3-BAD.yaml"),
+      `title: "S3 bad rule — no id"
+severity: CRITICAL
+resource_type: "AWS::S3::Bucket"
+property_path: "Test.Path"
+check_type: equals
+expected_value: true
+source: "Test"
+category: security
+lastVerified: "2026-03-22"
+`,
+    );
+
+    // Invalid severity value
+    writeFileSync(
+      join(ec2Dir, "BP-EC2-BAD.yaml"),
+      `id: BP-EC2-001
+title: "EC2 bad rule — bad severity"
+severity: UNKNOWN_SEVERITY
+resource_type: "AWS::EC2::Instance"
+property_path: "Test.Path"
+check_type: equals
+expected_value: true
+source: "Test"
+category: security
+lastVerified: "2026-03-22"
+`,
+    );
+
+    try {
+      expect(() => loadBestPractices(testDir)).toThrow(BPSchemaError);
+      try {
+        loadBestPractices(testDir);
+      } catch (err) {
+        expect(err).toBeInstanceOf(BPSchemaError);
+        const bpErr = err as BPSchemaError;
+        // Both file paths must appear in the aggregated message.
+        expect(bpErr.message).toContain("BP-S3-BAD.yaml");
+        expect(bpErr.message).toContain("BP-EC2-BAD.yaml");
+        // Message must report the count.
+        expect(bpErr.message).toMatch(/2 file\(s\)/);
+        // fieldErrors must be non-empty.
+        expect(bpErr.fieldErrors.length).toBeGreaterThan(0);
+      }
+    } finally {
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
+
+  // M-γ-06: collect-all — three invalid files → all three paths in one error
+  it("collects errors from three invalid files in a single throw", () => {
+    const testDir = join(FIXTURES_DIR, "loader-collect-three-test");
+    const svcDir = join(testDir, "svc");
+    mkdirSync(svcDir, { recursive: true });
+
+    for (let i = 1; i <= 3; i++) {
+      writeFileSync(
+        join(svcDir, `BP-SVC-BAD-${i}.yaml`),
+        `title: "Missing id #${i}"
+severity: HIGH
+resource_type: "AWS::SVC::Resource"
+property_path: "Field"
+check_type: equals
+expected_value: true
+source: "Test"
+category: security
+lastVerified: "2026-03-22"
+`,
+      );
+    }
+
+    try {
+      expect(() => loadBestPractices(testDir)).toThrow(BPSchemaError);
+      try {
+        loadBestPractices(testDir);
+      } catch (err) {
+        expect(err).toBeInstanceOf(BPSchemaError);
+        const bpErr = err as BPSchemaError;
+        expect(bpErr.message).toMatch(/3 file\(s\)/);
+        for (let i = 1; i <= 3; i++) {
+          expect(bpErr.message).toContain(`BP-SVC-BAD-${i}.yaml`);
+        }
+      }
+    } finally {
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
+
+  // M-γ-06: duplicate-id detection — two files sharing the same id → throws with both paths
+  it("throws BPSchemaError when two files share the same BP id", () => {
+    const testDir = join(FIXTURES_DIR, "loader-dup-id-test");
+    const s3Dir = join(testDir, "s3");
+    const ec2Dir = join(testDir, "ec2");
+    mkdirSync(s3Dir, { recursive: true });
+    mkdirSync(ec2Dir, { recursive: true });
+
+    const sharedId = "BP-S3-001";
+    const validYaml = (id: string, title: string) =>
+      `id: ${id}
+title: "${title}"
+severity: HIGH
+resource_type: "AWS::S3::Bucket"
+property_path: "Test.Path"
+check_type: equals
+expected_value: true
+source: "Test"
+category: security
+lastVerified: "2026-03-22"
+`;
+
+    writeFileSync(
+      join(s3Dir, "BP-S3-001.yaml"),
+      validYaml(sharedId, "S3 rule first"),
+    );
+    writeFileSync(
+      join(ec2Dir, "BP-S3-001-dup.yaml"),
+      validYaml(sharedId, "S3 rule duplicate"),
+    );
+
+    try {
+      expect(() => loadBestPractices(testDir)).toThrow(BPSchemaError);
+      try {
+        loadBestPractices(testDir);
+      } catch (err) {
+        expect(err).toBeInstanceOf(BPSchemaError);
+        const bpErr = err as BPSchemaError;
+        // The duplicate-id message must mention the conflicting ID and at least the duplicate file.
+        const combined = bpErr.message + bpErr.fieldErrors.join(" ");
+        expect(combined).toContain(sharedId);
+        expect(combined).toContain("duplicate");
+      }
+    } finally {
+      rmSync(testDir, { recursive: true, force: true });
+    }
+  });
+
   it("skips non-YAML files in service directories", () => {
     const testDir = join(FIXTURES_DIR, "loader-skip-test");
     const serviceDir = join(testDir, "s3");

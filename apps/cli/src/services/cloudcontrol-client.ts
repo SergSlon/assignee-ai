@@ -11,5 +11,10 @@
  * (the destroy-strategies barrel already exports an identically-
  * shaped `AwsConfig` from Story 49.1).
  */
-export { createCloudControlClient } from "@assignee/core";
+export {
+  createCloudControlClient,
+  createKmsClient,
+  createSecretsManagerClient,
+  createEventBridgeClient,
+} from "@assignee/core";
 export type { AwsConfig } from "@assignee/core";
