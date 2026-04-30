@@ -8,6 +8,8 @@
 export {
   computeChainLink,
   verifyChainLink,
+  legacyComputeChainLink,
+  legacyVerifyChainLink,
   getAuditKey,
   GENESIS_HMAC,
 } from "./hmac-chain.js";

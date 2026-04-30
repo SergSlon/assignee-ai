@@ -31,7 +31,6 @@ import * as fs from "node:fs/promises";
 import * as fsSync from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { randomBytes } from "node:crypto";
 import { computeChainLink, GENESIS_HMAC } from "./hmac-chain.js";
 import { getCurrentRole } from "../rbac/role-context.js";
 import { defaultFileAdvisoryLock } from "../locks/file-advisory-lock.js";
@@ -110,19 +109,23 @@ export async function appendAuditRecord(
 
     const line = JSON.stringify(entry) + "\n";
 
-    // Atomic append: write to a temp file then rename-append via a
-    // single O_WRONLY|O_APPEND open to avoid partial-line races.
-    // For NDJSON append the simplest safe form is fs.appendFile with
-    // an exclusive advisory lock already held above.
-    const tmpSuffix = randomBytes(4).toString("hex");
-    const tmpPath = `${logFile}.tmp.${tmpSuffix}`;
-    await fs.writeFile(tmpPath, line, { mode: 0o600 });
+    // Single-call append: the advisory lock held above guarantees exclusive
+    // access, so fs.appendFile with O_APPEND semantics is both correct and
+    // atomic for our NDJSON format. No temp file is needed or created.
+    await fs.appendFile(logFile, line, { mode: 0o600 });
 
-    // Append the temp content then remove.
-    const buf = await fs.readFile(tmpPath);
-    await fs.appendFile(logFile, buf);
-    await fs.chmod(logFile, 0o600).catch(() => {});
-    await fs.unlink(tmpPath).catch(() => {});
+    // Optional fsync: flush kernel page-cache to disk so a crash between
+    // writes does not lose the just-appended entry. Enabled by default;
+    // operators can set ASSIGNEE_AUDIT_FSYNC=0 to skip (e.g. in tests or
+    // high-throughput environments where the OS flush cadence is acceptable).
+    if (process.env["ASSIGNEE_AUDIT_FSYNC"] !== "0") {
+      const fd = await fs.open(logFile, "r");
+      try {
+        await fd.sync();
+      } finally {
+        await fd.close();
+      }
+    }
 
     return entry;
   });

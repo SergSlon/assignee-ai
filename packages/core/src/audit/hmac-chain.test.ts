@@ -6,6 +6,8 @@ import { describe, it, expect, afterEach } from "vitest";
 import {
   computeChainLink,
   verifyChainLink,
+  legacyComputeChainLink,
+  legacyVerifyChainLink,
   getAuditKey,
   GENESIS_HMAC,
 } from "./hmac-chain.js";
@@ -234,5 +236,162 @@ describe("verifyChainLink", () => {
       verifyChainLink(record, GENESIS_HMAC, flippedHmac, KEY),
     ).not.toThrow();
     expect(verifyChainLink(record, GENESIS_HMAC, flippedHmac, KEY)).toBe(false);
+  });
+});
+
+// ── legacyComputeChainLink tests (W8-S0) ───────────────────────────────────
+
+describe("legacyComputeChainLink", () => {
+  const KEY = "test-fixed-key-for-unit-tests";
+
+  it("returns a 64-char hex string", () => {
+    const hmac = legacyComputeChainLink(GENESIS_HMAC, { action: "plan" }, KEY);
+    expect(hmac).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("is deterministic for the same inputs", () => {
+    const record = { action: "apply", resource: "AWS::S3::Bucket" };
+    const h1 = legacyComputeChainLink(GENESIS_HMAC, record, KEY);
+    const h2 = legacyComputeChainLink(GENESIS_HMAC, record, KEY);
+    expect(h1).toBe(h2);
+  });
+
+  it("produces a DIFFERENT HMAC than computeChainLink for multi-key records (key-order sensitivity confirmed)", () => {
+    // { b: 1, a: 2 } — canonical sorts to {"a":2,"b":1}; legacy keeps
+    // insertion order {"b":1,"a":2}.  They produce distinct payloads →
+    // distinct HMACs.
+    const record = { b: 1, a: 2 };
+    const canonical = computeChainLink(GENESIS_HMAC, record, KEY);
+    const legacy = legacyComputeChainLink(GENESIS_HMAC, record, KEY);
+    expect(legacy).not.toBe(canonical);
+  });
+
+  it("agrees with computeChainLink for single-key records (degenerate case)", () => {
+    // A single-key object serialises identically under both strategies.
+    const record = { action: "plan" };
+    const canonical = computeChainLink(GENESIS_HMAC, record, KEY);
+    const legacy = legacyComputeChainLink(GENESIS_HMAC, record, KEY);
+    expect(legacy).toBe(canonical);
+  });
+
+  it("changes when prevHmac changes", () => {
+    const record = { b: 2, a: 1 };
+    const h1 = legacyComputeChainLink(GENESIS_HMAC, record, KEY);
+    const h2 = legacyComputeChainLink("some-other-prev", record, KEY);
+    expect(h1).not.toBe(h2);
+  });
+
+  it("changes when key changes", () => {
+    const record = { b: 2, a: 1 };
+    const h1 = legacyComputeChainLink(GENESIS_HMAC, record, "key-a");
+    const h2 = legacyComputeChainLink(GENESIS_HMAC, record, "key-b");
+    expect(h1).not.toBe(h2);
+  });
+});
+
+// ── legacyVerifyChainLink tests (W8-S0) ────────────────────────────────────
+
+describe("legacyVerifyChainLink", () => {
+  const KEY = "test-fixed-key-for-unit-tests";
+
+  it("returns true for a correctly computed legacy link", () => {
+    const record = { b: 1, a: 2 };
+    const hmac = legacyComputeChainLink(GENESIS_HMAC, record, KEY);
+    expect(legacyVerifyChainLink(record, GENESIS_HMAC, hmac, KEY)).toBe(true);
+  });
+
+  it("returns false for a link computed with the canonical helper (migration boundary confirmed)", () => {
+    // A multi-key record built with computeChainLink (canonical) must fail
+    // legacyVerifyChainLink because the serialised payloads differ.
+    const record = { b: 1, a: 2 };
+    const canonicalHmac = computeChainLink(GENESIS_HMAC, record, KEY);
+    expect(
+      legacyVerifyChainLink(record, GENESIS_HMAC, canonicalHmac, KEY),
+    ).toBe(false);
+  });
+
+  it("returns true when canonical and legacy HMACs agree (single-key degenerate case)", () => {
+    // Single-key records produce identical serialisations under both
+    // strategies, so either verifier must accept the other's output.
+    const record = { action: "plan" };
+    const canonicalHmac = computeChainLink(GENESIS_HMAC, record, KEY);
+    expect(
+      legacyVerifyChainLink(record, GENESIS_HMAC, canonicalHmac, KEY),
+    ).toBe(true);
+  });
+
+  it("returns false for a corrupted HMAC", () => {
+    const record = { b: 1, a: 2 };
+    const hmac = legacyComputeChainLink(GENESIS_HMAC, record, KEY);
+    const corrupted = hmac.slice(0, -1) + (hmac.endsWith("f") ? "e" : "f");
+    expect(legacyVerifyChainLink(record, GENESIS_HMAC, corrupted, KEY)).toBe(
+      false,
+    );
+  });
+
+  it("returns false when prevHmac is wrong", () => {
+    const record = { b: 1, a: 2 };
+    const hmac = legacyComputeChainLink(GENESIS_HMAC, record, KEY);
+    expect(legacyVerifyChainLink(record, "wrong-prev", hmac, KEY)).toBe(false);
+  });
+
+  it("returns false when key differs", () => {
+    const record = { b: 1, a: 2 };
+    const hmac = legacyComputeChainLink(GENESIS_HMAC, record, "key-a");
+    expect(legacyVerifyChainLink(record, GENESIS_HMAC, hmac, "key-b")).toBe(
+      false,
+    );
+  });
+
+  it("returns false for a length-mismatched storedHmac (short)", () => {
+    const record = { b: 1, a: 2 };
+    const hmac = legacyComputeChainLink(GENESIS_HMAC, record, KEY);
+    expect(
+      legacyVerifyChainLink(record, GENESIS_HMAC, hmac.slice(0, 32), KEY),
+    ).toBe(false);
+  });
+
+  it("returns false for an empty storedHmac", () => {
+    const record = { b: 1, a: 2 };
+    expect(legacyVerifyChainLink(record, GENESIS_HMAC, "", KEY)).toBe(false);
+  });
+
+  it("uses timingSafeEqual: does not throw for same-length wrong HMAC", () => {
+    const record = { b: 1, a: 2 };
+    const correctHmac = legacyComputeChainLink(GENESIS_HMAC, record, KEY);
+    const zeroedHmac = "0".repeat(correctHmac.length);
+    expect(() =>
+      legacyVerifyChainLink(record, GENESIS_HMAC, zeroedHmac, KEY),
+    ).not.toThrow();
+    expect(legacyVerifyChainLink(record, GENESIS_HMAC, zeroedHmac, KEY)).toBe(
+      false,
+    );
+  });
+
+  it("verifies a multi-link legacy chain end-to-end (re-sign flow works)", () => {
+    // Simulates: pre-W7 chain built with legacyComputeChainLink, then each
+    // entry is verified with legacyVerifyChainLink and re-signed with
+    // computeChainLink.  After re-signing, verifyChainLink must pass.
+    const r0 = { z: "last", a: "first" };
+    const r1 = { b: 2, a: 1 };
+
+    // Step 1: build a legacy chain (pre-W7 style)
+    const legacyH0 = legacyComputeChainLink(GENESIS_HMAC, r0, KEY);
+    const legacyH1 = legacyComputeChainLink(legacyH0, r1, KEY);
+
+    // Step 2: verify legacy chain passes legacyVerifyChainLink
+    expect(legacyVerifyChainLink(r0, GENESIS_HMAC, legacyH0, KEY)).toBe(true);
+    expect(legacyVerifyChainLink(r1, legacyH0, legacyH1, KEY)).toBe(true);
+
+    // Step 3: re-sign to canonical
+    const canonicalH0 = computeChainLink(GENESIS_HMAC, r0, KEY);
+    const canonicalH1 = computeChainLink(canonicalH0, r1, KEY);
+
+    // Step 4: re-signed chain passes canonical verifier
+    expect(verifyChainLink(r0, GENESIS_HMAC, canonicalH0, KEY)).toBe(true);
+    expect(verifyChainLink(r1, canonicalH0, canonicalH1, KEY)).toBe(true);
+
+    // Step 5: original legacy HMACs fail the canonical verifier (multi-key records)
+    expect(verifyChainLink(r0, GENESIS_HMAC, legacyH0, KEY)).toBe(false);
   });
 });

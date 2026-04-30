@@ -1,6 +1,7 @@
 /**
  * W3-01 + W3-02 — Audit log write/read path tests.
  * P045 — Audit log retention floor enforcement tests.
+ * W8-S1 — Single-call append + fsync gate tests.
  */
 
 import {
@@ -15,6 +16,7 @@ import {
 import * as os from "node:os";
 import * as path from "node:path";
 import * as fs from "node:fs/promises";
+import * as fsSync from "node:fs";
 import { randomBytes } from "node:crypto";
 import {
   appendAuditRecord,
@@ -385,6 +387,97 @@ describe("guardAuditLogTruncation (P045)", () => {
 
     const result = await guardAuditLogTruncation(logFile, now);
     expect(result.ok).toBe(true);
+    await cleanupFile(logFile);
+  });
+});
+
+// ── W8-S1: atomic append + fsync gate (M-α-19) ─────────────────────────
+
+describe("appendAuditRecord — W8-S1 atomic write (no temp file, fsync gate)", () => {
+  const originalEnv = { ...process.env };
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  it("leaves no .tmp.* file in the log directory after a successful write", async () => {
+    const logDir = path.join(
+      os.tmpdir(),
+      `assignee-audit-w8s1-${randomBytes(4).toString("hex")}`,
+    );
+    await fs.mkdir(logDir, { recursive: true });
+    const logFile = path.join(logDir, "audit.log");
+
+    // Disable fsync for speed in this test
+    process.env["ASSIGNEE_AUDIT_FSYNC"] = "0";
+
+    await appendAuditRecord({ action: "plan" }, logFile);
+    await appendAuditRecord({ action: "apply" }, logFile);
+
+    const dirEntries = fsSync.readdirSync(logDir);
+    const tmpFiles = dirEntries.filter((f) => f.includes(".tmp."));
+    expect(tmpFiles).toHaveLength(0);
+
+    // Cleanup
+    await fs.rm(logDir, { recursive: true });
+  });
+
+  it("writes both records as separate NDJSON lines (two lock grants)", async () => {
+    const logFile = tempLogFile();
+    process.env["ASSIGNEE_AUDIT_FSYNC"] = "0";
+
+    const e0 = await appendAuditRecord({ action: "plan", seq: 0 }, logFile);
+    const e1 = await appendAuditRecord({ action: "apply", seq: 1 }, logFile);
+
+    const lines = await readAuditLog(logFile);
+    expect(lines).toHaveLength(2);
+
+    const parsed = lines as AuditEntry[];
+    expect(parsed[0]!.index).toBe(0);
+    expect(parsed[1]!.index).toBe(1);
+    // Chain integrity: e1.prevHmac must equal e0.hmac
+    expect(parsed[1]!.prevHmac).toBe(e0.hmac);
+    expect(parsed[1]!.hmac).toBe(e1.hmac);
+
+    await cleanupFile(logFile);
+  });
+
+  it("calls fsync by default (ASSIGNEE_AUDIT_FSYNC unset) — record lands in file", async () => {
+    delete process.env["ASSIGNEE_AUDIT_FSYNC"];
+    const logFile = tempLogFile();
+
+    const entry = await appendAuditRecord({ action: "fsync-test" }, logFile);
+
+    // File must exist and be non-empty (fsync path completes without throwing).
+    expect(fsSync.existsSync(logFile)).toBe(true);
+    expect(fsSync.statSync(logFile).size).toBeGreaterThan(0);
+
+    // Content must be valid NDJSON with the expected record.
+    const lines = await readAuditLog(logFile);
+    expect(lines).toHaveLength(1);
+    const parsed = lines[0] as AuditEntry;
+    expect(parsed.record).toEqual({ action: "fsync-test" });
+    expect(parsed.hmac).toBe(entry.hmac);
+
+    await cleanupFile(logFile);
+  });
+
+  it("skips fsync when ASSIGNEE_AUDIT_FSYNC=0 — record still lands in file", async () => {
+    process.env["ASSIGNEE_AUDIT_FSYNC"] = "0";
+    const logFile = tempLogFile();
+
+    const entry = await appendAuditRecord({ action: "no-fsync-test" }, logFile);
+
+    // Content must be identical to the fsync path — fsync is durability-only.
+    expect(fsSync.existsSync(logFile)).toBe(true);
+    expect(fsSync.statSync(logFile).size).toBeGreaterThan(0);
+
+    const lines = await readAuditLog(logFile);
+    expect(lines).toHaveLength(1);
+    const parsed = lines[0] as AuditEntry;
+    expect(parsed.record).toEqual({ action: "no-fsync-test" });
+    expect(parsed.hmac).toBe(entry.hmac);
+
     await cleanupFile(logFile);
   });
 });
