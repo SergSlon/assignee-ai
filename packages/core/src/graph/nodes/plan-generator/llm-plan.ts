@@ -48,28 +48,30 @@ export async function runLlmPlan(
   const resourceType = state.resourceType ?? "";
   let desiredState = invoke.desiredState;
 
-  // Phase 2 — plugin placeholder strip + user-elicited merge + plugin-
-  // defaults backfill. Order matters:
+  // Phase 2 — plugin placeholder strip + user-elicited merge.
+  // Order matters:
   //   a) `stripPlaceholders` removes plugin-registered placeholder
   //      sentinels the LLM parroted back ("example-value", "<YOUR-ID>").
   //   b) `mergeElicitedOptions` spreads user wizard answers on top of
   //      the LLM output (user assertions win over LLM guesses).
-  //   c) `mergePluginDefaults` (e96.W2.R5-part-2) fills in plugin-level
-  //      defaults for keys still missing — e.g. the EC2 plugin's
-  //      `CreditSpecification: {CPUCredits: "standard"}` default that
-  //      was missing from the plan on ~60% of LLM runs because the
-  //      LLM omitted the key entirely and no downstream step would
-  //      inject it. Compound-plan already does the analogous spread
-  //      at its top (see `compound-plan.ts:66-68`); this closes the
-  //      parity gap for the LLM path.
   desiredState = stripPlaceholders(desiredState, resourceType);
   desiredState = mergeElicitedOptions(desiredState, state);
-  desiredState = mergePluginDefaults(desiredState, resourceType);
 
   // Phase 3a — schema sanitize (strip extraneous keys + coerce types +
   // resource-aware CCAPI-shape rules from story e92.1.a). Passing
   // `resourceType` is what arms the DDB / ECS / CloudFront shape rules
   // — keep this argument live (story e92.1.a-followup).
+  //
+  // NOTE: `mergePluginDefaults` runs AFTER sanitize (Phase 3a.1 below).
+  // Previously it ran here (pre-sanitize) which caused the sanitizer to
+  // strip injected plugin defaults when the live CFN schema did not
+  // include the key at the top level (e.g. `CreditSpecification` was
+  // trimmed from older/cached schema snapshots). Moving the merge to
+  // post-sanitize ensures injected keys are never subject to schema
+  // stripping — the plugin registry only carries canonical CFN keys so
+  // the risk of shipping a non-schema key is minimal and bounded by the
+  // allowlist in `LLM_PATH_PLUGIN_DEFAULT_BACKFILL_ALLOWLIST`.
+  // Fixes: e96.W2.R5 (t3.micro CreditSpecification) + e98.W2.R2 (C-R1).
   desiredState = sanitizeAgainstSchema(
     desiredState,
     state.resourceSchema ?? {},
@@ -77,6 +79,21 @@ export async function runLlmPlan(
     state.runId,
     resourceType,
   );
+
+  // Phase 3a.1 — plugin-defaults backfill (e96.W2.R5-part-2, e98.W2.R2).
+  // Fills in plugin-level defaults for keys still missing / empty-leaf
+  // after sanitize — e.g. the EC2 plugin's
+  // `CreditSpecification: {CPUCredits: "standard"}` that was missing on
+  // ~60% of LLM runs. Runs AFTER sanitize so the injected keys cannot be
+  // stripped by the schema sanitizer (root cause of the probes). Compound-
+  // plan already does the analogous spread at its top
+  // (see `compound-plan.ts:66-68`); this closes the parity gap.
+  //
+  // Re: BP-enforcement safety — S3 and DynamoDB are NOT on the backfill
+  // allowlist (see `LLM_PATH_PLUGIN_DEFAULT_BACKFILL_ALLOWLIST`), so
+  // moving this step post-sanitize does NOT auto-fix S3/DDB plans
+  // and BP-S3-001/BP-DYN rules still fire as expected.
+  desiredState = mergePluginDefaults(desiredState, resourceType);
 
   // Phase 3a.5 — user-stated VolumeSize fidelity (e98.W2.R4).
   // Runs AFTER sanitize (so schema coercion doesn't clobber the override)

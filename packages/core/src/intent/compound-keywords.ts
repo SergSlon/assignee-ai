@@ -136,15 +136,21 @@ export const SINGLETON_OVERRIDE_CUES: ReadonlyArray<{
   {
     // Epic 96 W3.N2/N3 (C-02 MED NEW): bare "EFS file system" /
     // "EFS filesystem" / "EFS FS" → singleton AWS::EFS::FileSystem.
-    // Pre-fix the efs-with-vpc compound matched on "efs file system"
-    // and "efs" substrings, spinning up a 10-resource stack (VPC,
-    // subnets, RT, associations, NFS SG, mount targets) on top of the
-    // single resource the user asked for. Power users who already
-    // have a VPC, and beginners just kicking the tyres, both
-    // overwhelmingly want the singleton. Users who DO want the full
-    // compound have unambiguous phrasing — "with a VPC", "and a VPC",
-    // "in a new VPC" — which is captured as the negative-phrase list
-    // so the cue does not fire for the compound intent.
+    // Pre-fix the efs-with-vpc compound's keyword list contained both
+    // "efs file system" and "efs", so a bare "Create an EFS file
+    // system" intent fell through to the compound, spinning up a
+    // 10-resource stack (VPC, subnets, RT, associations, NFS SG, mount
+    // targets) on top of the single resource the user asked for.
+    // Power users who already have a VPC, and beginners just kicking
+    // the tyres, both overwhelmingly want the singleton. Users who DO
+    // want the full compound have unambiguous phrasing — "with a VPC",
+    // "and a VPC", "in a new VPC" — which is captured as the
+    // negative-phrase list so the cue does not fire for the compound
+    // intent. As part of probe e96.W3.N3, "efs file system" was also
+    // removed from the efs-with-vpc compound's keyword list: the bare
+    // "efs" keyword is sufficient to detect VPC-qualified compound
+    // intents, and removing the redundant "efs file system" keyword
+    // eliminates the registry-layer ambiguity.
     //
     // Note "efs" alone is NOT in the phrase list: that's too broad
     // and would catch "efs with vpc" before the negative check.
