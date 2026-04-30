@@ -13,10 +13,19 @@ export class PluginRegistry {
   private readonly plugins = new Map<string, ResourcePlugin>();
 
   /**
-   * Register a plugin. If a plugin for the same `resourceType` already exists,
-   * it is overwritten.
+   * Register a plugin. Throws if a plugin for the same `resourceType` is already
+   * registered — duplicate registrations indicate a misconfiguration and must fail
+   * fast at startup rather than silently losing an earlier plugin.
+   *
+   * To replace an existing registration intentionally, call `unregister` first.
    */
   register(plugin: ResourcePlugin): void {
+    if (this.plugins.has(plugin.resourceType)) {
+      throw new Error(
+        `PluginRegistry: duplicate registration for resourceType "${plugin.resourceType}". ` +
+          `Call unregister() first if replacement is intentional.`,
+      );
+    }
     this.plugins.set(plugin.resourceType, plugin);
   }
 

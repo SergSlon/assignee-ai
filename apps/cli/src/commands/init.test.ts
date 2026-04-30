@@ -1744,3 +1744,43 @@ describe("assignee init --wizard alias (Epic 96 W2 R4)", () => {
     expect(captured).toContain("--profile enterprise-sso");
   });
 });
+
+// ── W4-S5 / M-β-03 — OIDC stderr message must not leak internal tracker refs ─
+// Verifies that `assignee init` (no ASSIGNEE_OIDC_ADAPTER) does NOT print
+// "Epic NN" or "story NNN-WN" tracker references in stderr.
+
+describe("initCommand — OIDC stderr message contains no internal tracker refs (W4-S5 / M-β-03)", () => {
+  it("OIDC not-configured message does not contain Epic/story tracker strings", async () => {
+    // Ensure the env var is unset so the OIDC branch fires.
+    const saved = process.env["ASSIGNEE_OIDC_ADAPTER"];
+    delete process.env["ASSIGNEE_OIDC_ADAPTER"];
+
+    const stderrCalls: string[] = [];
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((chunk: unknown): boolean => {
+        stderrCalls.push(String(chunk));
+        return true;
+      });
+
+    try {
+      // Run init in non-interactive mode; use --yes to skip wizard prompts.
+      // The OIDC message is emitted before the intro/wizard starts.
+      await runInitAction(["node", "init", "--yes", "--region", "us-east-1"]);
+    } catch {
+      // Ignore errors from the wizard flow — we only care about stderr.
+    } finally {
+      stderrSpy.mockRestore();
+      if (saved !== undefined) {
+        process.env["ASSIGNEE_OIDC_ADAPTER"] = saved;
+      }
+    }
+
+    const stderrText = stderrCalls.join("");
+    // The OIDC message itself must be present (signal still useful).
+    expect(stderrText).toContain("OIDC: not configured");
+    // Must NOT contain internal tracker references.
+    expect(stderrText).not.toMatch(/Epic\s+\d+/i);
+    expect(stderrText).not.toMatch(/story\s+\d+-W\d+/i);
+  });
+});

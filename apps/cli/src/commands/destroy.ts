@@ -713,7 +713,7 @@ the resource is still billing and recoverable during the window.
           return;
         }
         process.stderr.write(
-          `[destroy] Epic 101: cross-account assume-role not yet implemented for ${rawOptsWithTarget.targetAccount}\n`,
+          `[destroy] cross-account assume-role not yet available for ${rawOptsWithTarget.targetAccount}\n`,
         );
         process.exit(ProcessExitCode.NOT_IMPLEMENTED);
         return;

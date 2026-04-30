@@ -201,6 +201,106 @@ describe("verifyAuditLog — corrupted records", () => {
   });
 });
 
+describe("verifyAuditLog — index monotonicity", () => {
+  it("detects duplicate/replay index (index lower than expected)", async () => {
+    const logFile = tempLogFile();
+    const entries = await buildChain(logFile, 5);
+
+    // Read, set entry[3].index = 2 (duplicate / replay).
+    const lines = await fs.readFile(logFile, "utf-8");
+    const parsed = lines
+      .split("\n")
+      .filter((l) => l.trim())
+      .map((l) => JSON.parse(l) as AuditEntry);
+
+    parsed[3]!.index = 2; // duplicate index
+
+    await fs.writeFile(
+      logFile,
+      parsed.map((e) => JSON.stringify(e)).join("\n") + "\n",
+      { mode: 0o600 },
+    );
+
+    const result = await verifyAuditLog(logFile, FIXED_KEY);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("index-gap");
+      expect(result.brokenAt).toBe(2); // reports entry.index of the bad entry
+    }
+
+    void entries;
+    await cleanupFile(logFile);
+  });
+
+  it("detects skipped index (gap in sequence)", async () => {
+    const logFile = tempLogFile();
+    const entries = await buildChain(logFile, 5);
+
+    // Read, set entry[2].index = 5 (jump ahead, creating a gap).
+    const lines = await fs.readFile(logFile, "utf-8");
+    const parsed = lines
+      .split("\n")
+      .filter((l) => l.trim())
+      .map((l) => JSON.parse(l) as AuditEntry);
+
+    parsed[2]!.index = 5; // gap: skips 2, 3, 4
+
+    await fs.writeFile(
+      logFile,
+      parsed.map((e) => JSON.stringify(e)).join("\n") + "\n",
+      { mode: 0o600 },
+    );
+
+    const result = await verifyAuditLog(logFile, FIXED_KEY);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("index-gap");
+      expect(result.brokenAt).toBe(5); // reports entry.index of the bad entry
+    }
+
+    void entries;
+    await cleanupFile(logFile);
+  });
+
+  it("detects a deleted entry (entries 0,2,3 — entry 1 removed)", async () => {
+    const logFile = tempLogFile();
+    const entries = await buildChain(logFile, 4);
+
+    // Remove entry at position 1 entirely.
+    const lines = await fs.readFile(logFile, "utf-8");
+    const parsed = lines
+      .split("\n")
+      .filter((l) => l.trim())
+      .map((l) => JSON.parse(l) as AuditEntry);
+
+    const withoutIndex1 = [parsed[0]!, parsed[2]!, parsed[3]!];
+
+    await fs.writeFile(
+      logFile,
+      withoutIndex1.map((e) => JSON.stringify(e)).join("\n") + "\n",
+      { mode: 0o600 },
+    );
+
+    const result = await verifyAuditLog(logFile, FIXED_KEY);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("index-gap");
+      // entry[1] is now parsed[2]! which has index 2
+      expect(result.brokenAt).toBe(2);
+    }
+
+    void entries;
+    await cleanupFile(logFile);
+  });
+
+  it("index-gap reason is exported from the module", () => {
+    // Compile-time check: VerifyReason must include "index-gap".
+    // This test exercises the exported type at runtime via a type-narrowed value.
+    const reason: import("./audit-verifier.js").VerifyReason = "index-gap";
+    expect(reason).toBe("index-gap");
+  });
+});
+
 describe("verifyAuditLog — legacy backward compatibility", () => {
   it("skips legacy lines and reports legacyCount", async () => {
     const logFile = tempLogFile();

@@ -23,7 +23,8 @@ import { readAuditLog, type AuditEntry } from "./audit-log.js";
 export type VerifyReason =
   | "payload-mismatch"
   | "hmac-mismatch"
-  | "missing-prev";
+  | "missing-prev"
+  | "index-gap";
 
 export type VerifyResult =
   | { ok: true; total: number; legacyCount: number }
@@ -71,9 +72,21 @@ export async function verifyAuditLog(
 
   // Verify each entry.
   let expectedPrev = GENESIS_HMAC;
+  let expectedIndex = 0;
 
   for (const entry of entries) {
-    // Check prevHmac linkage.
+    // 1. Check index monotonicity FIRST (cheap; avoids unnecessary crypto work).
+    if (entry.index !== expectedIndex) {
+      return {
+        ok: false,
+        brokenAt: entry.index,
+        reason: "index-gap",
+        total,
+        legacyCount,
+      };
+    }
+
+    // 2. Check prevHmac linkage.
     if (entry.prevHmac !== expectedPrev) {
       return {
         ok: false,
@@ -84,7 +97,7 @@ export async function verifyAuditLog(
       };
     }
 
-    // Verify the HMAC over (prevHmac, record).
+    // 3. Verify the HMAC over (prevHmac, record).
     const valid = verifyChainLink(
       entry.record,
       entry.prevHmac,
@@ -102,6 +115,7 @@ export async function verifyAuditLog(
     }
 
     expectedPrev = entry.hmac;
+    expectedIndex++;
   }
 
   return { ok: true, total, legacyCount };

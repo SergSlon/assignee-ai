@@ -1267,3 +1267,39 @@ describe("planCommand — --output json stdout interceptor (A-02 / B-04 / D-29)"
     expect(process.stdout.write).toBe(before);
   });
 });
+
+// ── W4-S5 — --target-account user-facing message (M-β-01) ───────────────────
+// Verifies that --target-account exits NOT_IMPLEMENTED without leaking
+// internal tracker strings ("Epic 101", "story", "W3-04") in stderr.
+
+describe("planCommand — --target-account NOT_IMPLEMENTED message (W4-S5)", () => {
+  it("exits NOT_IMPLEMENTED (12) for a valid 12-digit account ID", async () => {
+    const stderrCalls: string[] = [];
+    vi.spyOn(process.stderr, "write").mockImplementation(
+      (chunk: unknown): boolean => {
+        stderrCalls.push(String(chunk));
+        return true;
+      },
+    );
+    vi.spyOn(process, "exit").mockImplementation((() => {}) as never);
+
+    const { planCommand } = await import("./plan.js");
+    await planCommand.parseAsync([
+      "node",
+      "plan",
+      "--target-account",
+      "123456789012",
+      "Create an S3 bucket",
+    ]);
+
+    const stderrText = stderrCalls.join("");
+    // Must contain user-facing intent keywords.
+    expect(stderrText).toContain("cross-account");
+    expect(stderrText).toContain("not yet available");
+    // Must NOT leak internal tracker names.
+    expect(stderrText).not.toMatch(/Epic\s+\d+/i);
+    expect(stderrText).not.toMatch(/story\s+\d+-W\d+/i);
+    // Exit code must be NOT_IMPLEMENTED (12).
+    expect(process.exit).toHaveBeenCalledWith(12);
+  });
+});

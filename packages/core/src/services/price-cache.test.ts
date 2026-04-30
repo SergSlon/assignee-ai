@@ -224,6 +224,77 @@ describe("price-cache hash function (L-A3)", () => {
   });
 });
 
+// M-α-14: File permission tests — cache dir must be 0o700, cache files must be 0o600.
+describe("price-cache file permissions (M-α-14)", () => {
+  let homeDir: string;
+  let originalHome: string | undefined;
+  let originalUserProfile: string | undefined;
+
+  beforeEach(async () => {
+    homeDir = await fsPromises.mkdtemp(
+      path.join(os.tmpdir(), "assignee-pricecache-perms-"),
+    );
+    originalHome = process.env["HOME"];
+    originalUserProfile = process.env["USERPROFILE"];
+    process.env["HOME"] = homeDir;
+    process.env["USERPROFILE"] = homeDir;
+    vi.resetModules();
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    if (originalHome === undefined) {
+      delete process.env["HOME"];
+    } else {
+      process.env["HOME"] = originalHome;
+    }
+    if (originalUserProfile === undefined) {
+      delete process.env["USERPROFILE"];
+    } else {
+      process.env["USERPROFILE"] = originalUserProfile;
+    }
+    await fsPromises
+      .rm(homeDir, { recursive: true, force: true })
+      .catch(() => {});
+  });
+
+  it("creates the cache directory with mode 0o700 (owner-only)", async () => {
+    // Skip on Windows: chmod semantics are not supported.
+    if (process.platform === "win32") return;
+
+    vi.resetModules();
+    const { setCachedPrice: setCached } = await import("./price-cache.js");
+    setCached("AmazonS3", [], { price: "0.023" });
+
+    const cacheDir = path.join(homeDir, ".assignee", "cache", "pricing");
+    const stat = fs.statSync(cacheDir);
+    // Extract the permission bits (lower 12 bits of mode).
+    const perms = stat.mode & 0o777;
+    expect(perms).toBe(0o700);
+  });
+
+  it("writes cache files with mode 0o600 (owner read/write only)", async () => {
+    // Skip on Windows: chmod semantics are not supported.
+    if (process.platform === "win32") return;
+
+    vi.resetModules();
+    const { setCachedPrice: setCached } = await import("./price-cache.js");
+    const serviceCode = "AmazonEC2";
+    const filters = [
+      { Type: "TERM_MATCH", Field: "instanceType", Value: "t3.micro" },
+    ];
+    setCached(serviceCode, filters, { hourlyUsd: 0.0104 });
+
+    const cacheDir = path.join(homeDir, ".assignee", "cache", "pricing");
+    const files = fs.readdirSync(cacheDir);
+    expect(files).toHaveLength(1);
+
+    const fileStat = fs.statSync(path.join(cacheDir, files[0]!));
+    const perms = fileStat.mode & 0o777;
+    expect(perms).toBe(0o600);
+  });
+});
+
 // Story 50-2: Windows-path coverage. `os.homedir()` prefers `USERPROFILE`
 // on win32 and `HOME` on POSIX. The `HOME`-only tests above cover the
 // POSIX branch; this block exercises the win32 branch by stubbing

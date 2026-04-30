@@ -267,7 +267,7 @@ export const planCommand = new Command(CommandName.PLAN)
         return;
       }
       process.stderr.write(
-        `[plan] Epic 101: cross-account assume-role not yet implemented for ${rawOptsWithTarget.targetAccount}\n`,
+        `[plan] cross-account assume-role not yet available for ${rawOptsWithTarget.targetAccount}\n`,
       );
       process.exit(ProcessExitCode.NOT_IMPLEMENTED);
       return;
