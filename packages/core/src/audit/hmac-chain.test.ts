@@ -83,6 +83,57 @@ describe("computeChainLink", () => {
     const hmac = computeChainLink(GENESIS_HMAC, record, KEY);
     expect(hmac).toMatch(/^[0-9a-f]{64}$/);
   });
+
+  // ── Canonical-JSON (W7-S2) invariants ────────────────────────────────────
+
+  it("produces the same HMAC regardless of object key insertion order (canonical-JSON)", () => {
+    // These two objects are logically identical but built with different
+    // key-insertion orders — vanilla JSON.stringify would produce different
+    // strings on some runtimes; canonicalJson must produce the same one.
+    const recordAB = { action: "apply", resource: "AWS::S3::Bucket" };
+    const recordBA = Object.assign(
+      Object.create(null) as Record<string, string>,
+      { resource: "AWS::S3::Bucket", action: "apply" },
+    );
+    const hmacAB = computeChainLink(GENESIS_HMAC, recordAB, KEY);
+    const hmacBA = computeChainLink(GENESIS_HMAC, recordBA, KEY);
+    expect(hmacAB).toBe(hmacBA);
+  });
+
+  it("sorts nested object keys canonically", () => {
+    const recordZA = {
+      z: "last",
+      tags: { zebra: 1, alpha: 2 },
+      a: "first",
+    };
+    const recordAZ = {
+      a: "first",
+      tags: { alpha: 2, zebra: 1 },
+      z: "last",
+    };
+    expect(computeChainLink(GENESIS_HMAC, recordZA, KEY)).toBe(
+      computeChainLink(GENESIS_HMAC, recordAZ, KEY),
+    );
+  });
+
+  it("preserves array element order (only object keys are sorted)", () => {
+    const r1 = { items: [3, 1, 2] };
+    const r2 = { items: [1, 2, 3] };
+    // Array order must NOT be canonicalised — different arrays → different HMACs.
+    expect(computeChainLink(GENESIS_HMAC, r1, KEY)).not.toBe(
+      computeChainLink(GENESIS_HMAC, r2, KEY),
+    );
+  });
+
+  it("handles null, numbers, booleans, and strings as record roots", () => {
+    // Scalar/null roots should not throw and should be deterministic.
+    expect(computeChainLink(GENESIS_HMAC, null, KEY)).toMatch(/^[0-9a-f]{64}$/);
+    expect(computeChainLink(GENESIS_HMAC, 42, KEY)).toMatch(/^[0-9a-f]{64}$/);
+    expect(computeChainLink(GENESIS_HMAC, true, KEY)).toMatch(/^[0-9a-f]{64}$/);
+    expect(computeChainLink(GENESIS_HMAC, "hello", KEY)).toMatch(
+      /^[0-9a-f]{64}$/,
+    );
+  });
 });
 
 // ── verifyChainLink tests ───────────────────────────────────────────────

@@ -123,7 +123,13 @@ export const initCommand = new Command(CommandName.INIT)
   //     user confusion, not a hidden preference).
   .option(
     "--wizard",
-    "Run the interactive wizard (default behaviour; mutually exclusive with --yes)",
+    // W7-S0 (M-β-02): unified description — matches plan.ts and apply.ts.
+    // Removed "default behaviour" phrasing (implies flag is a no-op) and the
+    // "mutually exclusive with --yes" note (enforced at runtime with a clear
+    // error; see init.ts:171). Per-command acceptance note: when TTY is present
+    // and --yes is absent, --wizard is behaviourally equivalent to default init
+    // (wizard runs either way); the flag exists for explicit user intent signalling.
+    "Run the interactive configuration wizard.",
   )
   .option(
     "--region <region>",

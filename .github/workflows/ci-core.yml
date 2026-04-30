@@ -152,6 +152,11 @@ jobs:
       - name: Build all packages
         run: npx turbo build
 
+      - name: Validate BP rules
+        # W7-S1: Fail fast on malformed/duplicate BP YAML rules before test suite runs.
+        # Script validates schema, ID uniqueness, dedup, and conflict checks.
+        run: npx tsx scripts/validate-bp-rules.ts
+
       - name: Run tests with coverage
         run: npx turbo test:coverage
 

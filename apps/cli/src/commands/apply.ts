@@ -290,7 +290,10 @@ export const applyCommand = new Command(CommandName.APPLY)
   .argument(CommandArgs.INTENT.NAME, CommandArgs.INTENT.DESC)
   .option(
     "--wizard",
-    "Run interactive configuration wizard (without this flag, defaults are auto-selected from your intent)",
+    // W7-S0 (M-β-02): unified description — matches plan.ts and init.ts.
+    // Per-command semantics (enabling full prompts vs. plan-only) remain intact;
+    // only the user-facing description string is harmonised.
+    "Run the interactive configuration wizard.",
   )
   .option(
     "-q, --quick",

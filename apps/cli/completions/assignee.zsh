@@ -42,12 +42,12 @@ _assignee() {
             '--set[Pre-set field values (repeatable), supports human names (e.g., --set size=t3.medium)]:key=value:' \
             '--yes[Accepted for CI wrapper compatibility; plan is read-only and does not mutate.]' \
             '--quick[Skip wizard prompts that have defaults — only ask for required fields without a default. Shows a summary gate before generating the plan.]' \
-            '--wizard[Run interactive configuration wizard (prompts for required fields; plan-only, no provisioning).]' \
+            '--wizard[Run the interactive configuration wizard.]' \
             '--target-account[Target AWS account ID (12 digits). Validates format; cross-account assume-role is not yet supported.]:id:'
           ;;
         apply)
           _arguments \
-            '--wizard[Run interactive configuration wizard (without this flag, defaults are auto-selected from your intent)]' \
+            '--wizard[Run the interactive configuration wizard.]' \
             '--quick[Skip wizard prompts that have defaults — only ask for required fields without a default. Shows a summary gate before provisioning.]' \
             '--no-advice[Skip inline contextual advice generation]' \
             '--yes[Auto-confirm apply without interactive prompt (for CI/CD)]' \
@@ -62,7 +62,7 @@ _assignee() {
           _arguments \
             '--global[Create global user config (~/.config/assignee/config.yaml) instead of project config]' \
             '--yes[Skip interactive prompts and accept defaults (CI scriptability)]' \
-            '--wizard[Run the interactive wizard (default behaviour; mutually exclusive with --yes)]' \
+            '--wizard[Run the interactive configuration wizard.]' \
             '--region[AWS region to write into the config (skips the region prompt)]:region:' \
             '--auto-fix[Set preferences.auto_fix mode\: ask | apply | skip (skips the auto-fix prompt)]:mode:' \
             '--profile[AWS profile to use for credential resolution (reads ~/.aws/config; supports SSO, assumed-role, static)]:profile:'
@@ -144,6 +144,8 @@ _assignee() {
             '--short[Fast identity-only summary\: STS account + ARN + region + active config (replaces the removed `whoami` command)]'
           ;;
         version)
+          _arguments \
+            '--json[Emit machine-readable JSON to stdout instead of human-readable text]'
           ;;
       esac
       ;;

@@ -57,7 +57,7 @@ export function detectCredentialStatus(): {
   if (hasOperator) {
     return {
       status: "operator",
-      hint: "✓ Assignee credentials configured (ASSIGNEE_OPERATOR_*)",
+      hint: "[OK] Assignee credentials configured (ASSIGNEE_OPERATOR_*)",
     };
   }
 
@@ -66,20 +66,20 @@ export function detectCredentialStatus(): {
   if (hasStandard) {
     return {
       status: "standard",
-      hint: "✓ Standard AWS credentials detected (AWS_ACCESS_KEY_ID) — will auto-promote",
+      hint: "[OK] Standard AWS credentials detected (AWS_ACCESS_KEY_ID) - will auto-promote",
     };
   }
 
   if (process.env["AWS_PROFILE"]) {
     return {
       status: "profile",
-      hint: `✓ AWS_PROFILE=${process.env["AWS_PROFILE"]} detected -- named profile will be used via the standard credential chain`,
+      hint: `[OK] AWS_PROFILE=${process.env["AWS_PROFILE"]} detected -- named profile will be used via the standard credential chain`,
     };
   }
 
   return {
     status: "none",
-    hint: "❌ No AWS credentials detected",
+    hint: "[NONE] No AWS credentials detected",
   };
 }
 

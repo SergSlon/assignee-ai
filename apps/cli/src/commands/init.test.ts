@@ -1572,13 +1572,19 @@ describe("assignee init --wizard alias (Epic 96 W2 R4)", () => {
     });
   });
 
-  it("--wizard option is registered on the command", async () => {
+  it("--wizard option is registered on the command (W7-S0: unified description)", async () => {
     const { initCommand } = await import("./init.js");
     const wizardOption = initCommand.options.find(
       (opt) => opt.long === "--wizard",
     );
     expect(wizardOption?.long).toBe("--wizard");
-    expect(wizardOption?.description).toMatch(/interactive wizard/i);
+    // W7-S0 (M-β-02): description must match the canonical phrase used
+    // by plan.ts and apply.ts. Acceptance criterion 3: must NOT say
+    // "default behaviour".
+    expect(wizardOption?.description).toBe(
+      "Run the interactive configuration wizard.",
+    );
+    expect(wizardOption?.description).not.toMatch(/default behaviour/i);
   });
 
   it("--wizard under TTY runs the same interactive flow as default init", async () => {

@@ -101,10 +101,21 @@ export async function loadMcpPinsOrFallback(): Promise<McpPinsRecord> {
 
 export const versionCommand = new Command("version")
   .description("Show version and environment info")
-  .action(async () => {
+  .option(
+    "--json",
+    "Emit machine-readable JSON to stdout instead of human-readable text",
+  )
+  .action(async (opts: { json?: boolean }) => {
     const MCP_PINS = await loadMcpPinsOrFallback();
+    const version = readPackageVersion();
+
+    if (opts.json) {
+      process.stdout.write(JSON.stringify({ version }) + "\n");
+      return;
+    }
+
     const lines = [
-      `assignee ${readPackageVersion()}`,
+      `assignee ${version}`,
       `node     ${process.version}`,
       `platform ${process.platform} ${process.arch}`,
       "",

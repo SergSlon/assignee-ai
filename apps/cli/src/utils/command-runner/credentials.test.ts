@@ -147,6 +147,67 @@ describe("resolveCredentials", () => {
       /No AWS credentials detected/,
     );
   });
+
+  it("non-TTY AWS_* auto-promote warning is ASCII-only (no bytes > 0x7E)", () => {
+    process.env["AWS_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
+    process.env["AWS_SECRET_ACCESS_KEY"] = "wJalrXUtnFEMI/K7MDENG";
+
+    const captured: string[] = [];
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((chunk) => {
+        captured.push(String(chunk));
+        return true;
+      });
+    // Simulate non-TTY
+    const origIsTTY = process.stderr.isTTY;
+    Object.defineProperty(process.stderr, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+
+    resolveCredentials(false);
+
+    Object.defineProperty(process.stderr, "isTTY", {
+      value: origIsTTY,
+      configurable: true,
+    });
+    stderrSpy.mockRestore();
+
+    const output = captured.join("");
+    // Must not contain any character outside printable ASCII + newline
+    expect(output).toMatch(/^[\x20-\x7E\n]*$/);
+    expect(output).toContain("Using AWS_ACCESS_KEY_ID");
+  });
+
+  it("non-TTY AWS_PROFILE warning is ASCII-only (no bytes > 0x7E)", () => {
+    process.env["AWS_PROFILE"] = "my-dev-profile";
+
+    const captured: string[] = [];
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((chunk) => {
+        captured.push(String(chunk));
+        return true;
+      });
+    const origIsTTY = process.stderr.isTTY;
+    Object.defineProperty(process.stderr, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+
+    resolveCredentials(false);
+
+    Object.defineProperty(process.stderr, "isTTY", {
+      value: origIsTTY,
+      configurable: true,
+    });
+    stderrSpy.mockRestore();
+
+    const output = captured.join("");
+    expect(output).toMatch(/^[\x20-\x7E\n]*$/);
+    expect(output).toContain("AWS_PROFILE");
+  });
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -229,6 +290,40 @@ describe("resolveCredentialsWithProfile", () => {
       expect.stringContaining("Resolved credentials"),
     );
     stderrSpy.mockRestore();
+  });
+
+  it("non-TTY resolved-profile success write is ASCII-only (no bytes > 0x7E)", async () => {
+    process.env["AWS_PROFILE"] = "ascii-check-profile";
+    const mockProvider = vi.fn().mockResolvedValue({
+      accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+      secretAccessKey: "wJalrXUtnFEMI/K7MDENG",
+    });
+    mockFromIni.mockReturnValue(mockProvider);
+
+    const captured: string[] = [];
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((chunk) => {
+        captured.push(String(chunk));
+        return true;
+      });
+    const origIsTTY = process.stderr.isTTY;
+    Object.defineProperty(process.stderr, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+
+    await resolveCredentialsWithProfile(undefined, false);
+
+    Object.defineProperty(process.stderr, "isTTY", {
+      value: origIsTTY,
+      configurable: true,
+    });
+    stderrSpy.mockRestore();
+
+    const output = captured.join("");
+    expect(output).toMatch(/^[\x20-\x7E\n]*$/);
+    expect(output).toContain("Resolved credentials");
   });
 
   it("throws ConfigurationError with SSO hint on ExpiredTokenException", async () => {
