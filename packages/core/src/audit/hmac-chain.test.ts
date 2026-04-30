@@ -10,7 +10,9 @@ import {
   legacyVerifyChainLink,
   getAuditKey,
   GENESIS_HMAC,
+  AUDIT_KEY_MIN_LENGTH,
 } from "./hmac-chain.js";
+import { AssigneeError } from "../errors.js";
 
 // ── Key derivation tests ────────────────────────────────────────────────
 
@@ -25,16 +27,66 @@ describe("getAuditKey", () => {
     }
   });
 
-  it("returns the env var when set", () => {
-    process.env["ASSIGNEE_AUDIT_KEY"] = "test-key-from-env";
-    expect(getAuditKey()).toBe("test-key-from-env");
+  it("returns the env var when set to a key of sufficient length (≥32 chars)", () => {
+    // Use exactly 32 characters — the boundary value that must pass.
+    const key32 = "a".repeat(32);
+    process.env["ASSIGNEE_AUDIT_KEY"] = key32;
+    expect(getAuditKey()).toBe(key32);
   });
 
-  it("returns a non-empty string when env var is absent", () => {
+  it("returns a non-empty string when env var is absent (per-process fallback)", () => {
     delete process.env["ASSIGNEE_AUDIT_KEY"];
     const key = getAuditKey();
     expect(typeof key).toBe("string");
-    expect(key.length).toBeGreaterThan(0);
+    // Per-process fallback is randomBytes(32).toString("hex") → 64 chars, always ≥ 32.
+    expect(key.length).toBeGreaterThanOrEqual(AUDIT_KEY_MIN_LENGTH);
+  });
+
+  // ── W9-S3: minimum key-length enforcement ─────────────────────────────
+
+  it("throws AUDIT_KEY_TOO_SHORT when ASSIGNEE_AUDIT_KEY is shorter than 32 chars (31 chars)", () => {
+    process.env["ASSIGNEE_AUDIT_KEY"] = "a".repeat(31);
+    expect(() => getAuditKey()).toThrow(AssigneeError);
+    try {
+      getAuditKey();
+    } catch (err) {
+      expect(err).toBeInstanceOf(AssigneeError);
+      expect((err as AssigneeError).code).toBe("AUDIT_KEY_TOO_SHORT");
+    }
+  });
+
+  it("throws AUDIT_KEY_TOO_SHORT for a single-character key (extreme short case)", () => {
+    process.env["ASSIGNEE_AUDIT_KEY"] = "x";
+    expect(() => getAuditKey()).toThrow(AssigneeError);
+    try {
+      getAuditKey();
+    } catch (err) {
+      expect((err as AssigneeError).code).toBe("AUDIT_KEY_TOO_SHORT");
+    }
+  });
+
+  it("passes with a key of exactly 32 characters (boundary pass)", () => {
+    const key32 = "b".repeat(32);
+    process.env["ASSIGNEE_AUDIT_KEY"] = key32;
+    expect(getAuditKey()).toBe(key32);
+  });
+
+  it("error message contains the openssl rand -hex 32 hint", () => {
+    process.env["ASSIGNEE_AUDIT_KEY"] = "short";
+    let caught: unknown;
+    try {
+      getAuditKey();
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(AssigneeError);
+    expect((caught as AssigneeError).message).toContain("openssl rand -hex 32");
+  });
+
+  it("per-process fallback (no env var) never triggers AUDIT_KEY_TOO_SHORT (random key always ≥ 32)", () => {
+    delete process.env["ASSIGNEE_AUDIT_KEY"];
+    // Should not throw — randomBytes(32).toString("hex") produces 64 chars.
+    expect(() => getAuditKey()).not.toThrow();
   });
 });
 

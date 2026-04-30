@@ -23,6 +23,9 @@
  *        destroy when the user invokes a scaffold-only flag (e.g.
  *        --target-account). NOT returned by this function — use
  *        `ProcessExitCode.NOT_IMPLEMENTED` at the call site directly.
+ *   73 — bad usage / invalid flags: user supplied mutually-exclusive or
+ *        otherwise invalid flag combination (`ErrorCode.USAGE_ERROR`).
+ *        Scripts should treat this as a usage mistake, not a runtime failure.
  */
 
 import {
@@ -62,6 +65,9 @@ export function errorToExitCode(err: unknown): number {
   if (err instanceof AssigneeError) {
     if (err.code === ErrorCode.MCP_STARTUP_FAILED) {
       return ProcessExitCode.MCP_STARTUP_FAILED;
+    }
+    if (err.code === ErrorCode.USAGE_ERROR) {
+      return ProcessExitCode.USAGE_ERROR;
     }
     if (POLICY_SAFETY_CODES.has(err.code)) {
       return ProcessExitCode.POLICY_SAFETY_ABORT;

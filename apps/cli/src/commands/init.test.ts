@@ -1646,6 +1646,25 @@ describe("assignee init --wizard alias (Epic 96 W2 R4)", () => {
     }
   });
 
+  it("--wizard + --yes: thrown error carries USAGE_ERROR code → exit 73 (W9-S4 / M-β-018)", async () => {
+    // The AssigneeError thrown for the mutex violation must carry
+    // ErrorCode.USAGE_ERROR so that errorToExitCode maps it to
+    // ProcessExitCode.USAGE_ERROR (73), not GENERIC_ERROR (1).
+    const { AssigneeError } = await import("@assignee/core");
+    const { ErrorCode } = await import("../constants/errors.js");
+    const { errorToExitCode } = await import("../utils/exit-code.js");
+    try {
+      await runInitAction(["node", "init", "--wizard", "--yes"]);
+      expect.fail("expected throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(AssigneeError);
+      // Must carry USAGE_ERROR code (not UNKNOWN / generic).
+      expect((err as { code: string }).code).toBe(ErrorCode.USAGE_ERROR);
+      // errorToExitCode must resolve to 73, not 1.
+      expect(errorToExitCode(err)).toBe(73);
+    }
+  });
+
   it("--wizard --global runs the global wizard interactively", async () => {
     // Symmetry check: --wizard works with --global too. The global
     // flow mocks the region/tag/prefix/auto-fix prompts like the
