@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { MockInstance } from "vitest";
-import { IAM_USER_NAMES, IAM_POLICY_NAMES } from "@assignee/core";
+import {
+  IAM_USER_NAMES,
+  IAM_POLICY_NAMES,
+  AssigneeError,
+} from "@assignee/core";
+import { ErrorCode } from "../constants/errors.js";
 
 // Mock @aws-sdk/client-iam
 //
@@ -709,14 +714,27 @@ describe("setup command", () => {
   it("--enable-llm-logging combined with --disable-llm-logging fails with a mutually-exclusive error", async () => {
     await resetSetupCommandOptions();
     const { setupCommand } = await import("./setup.js");
-    await expect(
-      setupCommand.parseAsync([
+
+    let caughtError: unknown;
+    try {
+      await setupCommand.parseAsync([
         "node",
         "setup",
         "--enable-llm-logging",
         "--disable-llm-logging",
-      ]),
-    ).rejects.toThrow(/mutually exclusive/i);
+      ]);
+    } catch (err) {
+      caughtError = err;
+    }
+
+    // Must throw an AssigneeError with USAGE_ERROR code so errorToExitCode
+    // maps to exit 73 (USAGE_ERROR) — not exit 1 (GENERIC_ERROR).
+    // Mirror of W9-S4 fix on init.ts (--wizard + --yes mutex).
+    expect(caughtError).toBeInstanceOf(AssigneeError);
+    expect((caughtError as AssigneeError).code).toBe(ErrorCode.USAGE_ERROR);
+    expect((caughtError as AssigneeError).message).toMatch(
+      /mutually exclusive/i,
+    );
 
     // No AWS calls of any kind happened — the guard fires before the
     // intro/spinner/credentials path.
