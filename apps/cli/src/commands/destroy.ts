@@ -71,6 +71,14 @@ import {
 import { resourceConfirmationToken } from "./destroy/typed-confirm.js";
 import { tryAssigneeCredentials } from "../config/aws-credentials.js";
 import { AWS_REGION } from "../config/constants.js";
+import {
+  createKmsClient,
+  createSecretsManagerClient,
+  createEventBridgeClient,
+} from "../services/cloudcontrol-client.js";
+import { ScheduleKeyDeletionCommand } from "@aws-sdk/client-kms";
+import { DeleteSecretCommand } from "@aws-sdk/client-secrets-manager";
+import { DeleteEventBusCommand } from "@aws-sdk/client-eventbridge";
 import { getCostSavingsEstimate } from "../services/billing.js";
 import { getBillingMcpToolsAsync } from "../services/mcp-client.js";
 import {
@@ -389,24 +397,9 @@ async function scheduleKmsKeyDeletion(
   resolved: ResolvedResource,
   pendingWindowInDays: number,
 ): Promise<Date> {
-  const { KMSClient, ScheduleKeyDeletionCommand } =
-    await import("@aws-sdk/client-kms");
   const awsCreds = tryAssigneeCredentials("operator");
-  const kms = new KMSClient({
-    region: resolved.region || AWS_REGION,
-    ...(awsCreds
-      ? {
-          credentials: {
-            accessKeyId: awsCreds.accessKeyId,
-            secretAccessKey: awsCreds.secretAccessKey,
-            // W2-01: pass session token for STS/SSO short-term credentials.
-            ...(awsCreds.sessionToken
-              ? { sessionToken: awsCreds.sessionToken }
-              : {}),
-          },
-        }
-      : {}),
-  });
+  const region = resolved.region || AWS_REGION;
+  const kms = createKmsClient(awsCreds ? { ...awsCreds, region } : { region });
 
   startSpinner("Scheduling KMS key for deletion...");
   try {
@@ -445,24 +438,11 @@ async function deleteSecret(
   resolved: ResolvedResource,
   opts: { force?: boolean; recoveryDays?: number },
 ): Promise<Date | undefined> {
-  const { SecretsManagerClient, DeleteSecretCommand } =
-    await import("@aws-sdk/client-secrets-manager");
   const awsCreds = tryAssigneeCredentials("operator");
-  const client = new SecretsManagerClient({
-    region: resolved.region || AWS_REGION,
-    ...(awsCreds
-      ? {
-          credentials: {
-            accessKeyId: awsCreds.accessKeyId,
-            secretAccessKey: awsCreds.secretAccessKey,
-            // W2-01: pass session token for STS/SSO short-term credentials.
-            ...(awsCreds.sessionToken
-              ? { sessionToken: awsCreds.sessionToken }
-              : {}),
-          },
-        }
-      : {}),
-  });
+  const region = resolved.region || AWS_REGION;
+  const client = createSecretsManagerClient(
+    awsCreds ? { ...awsCreds, region } : { region },
+  );
 
   startSpinner(
     opts.force
@@ -504,24 +484,11 @@ async function deleteSecret(
  * mis-routes EventBus ARNs to DeleteRule (D-19).
  */
 async function deleteEventBus(resolved: ResolvedResource): Promise<void> {
-  const { EventBridgeClient, DeleteEventBusCommand } =
-    await import("@aws-sdk/client-eventbridge");
   const awsCreds = tryAssigneeCredentials("operator");
-  const client = new EventBridgeClient({
-    region: resolved.region || AWS_REGION,
-    ...(awsCreds
-      ? {
-          credentials: {
-            accessKeyId: awsCreds.accessKeyId,
-            secretAccessKey: awsCreds.secretAccessKey,
-            // W2-01: pass session token for STS/SSO short-term credentials.
-            ...(awsCreds.sessionToken
-              ? { sessionToken: awsCreds.sessionToken }
-              : {}),
-          },
-        }
-      : {}),
-  });
+  const region = resolved.region || AWS_REGION;
+  const client = createEventBridgeClient(
+    awsCreds ? { ...awsCreds, region } : { region },
+  );
 
   // EventBus Name is the primary identifier; if the ARN is what we
   // have, parse the `event-bus/<name>` tail.

@@ -809,18 +809,27 @@ jobs:
             console.log('All formula sha256 values match the release manifest.');
           "
 
+      # M-γ-22 fix: use actions/checkout with `token:` input instead of
+      # embedding the secret in the clone URL. The token-in-URL pattern
+      # (`x-access-token:<token>@github.com/...`) exposes the secret in the
+      # process argument list (visible to `ps aux`) and in runner log lines
+      # that GitHub's redaction does not always mask. actions/checkout routes
+      # the credential through git's credential-helper path, never into argv.
+      - name: Checkout Homebrew tap repo
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: assignee-ai/homebrew-assignee
+          # token: uses the credential-helper path — secret never appears in argv
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
       - name: Update Homebrew formula
-        env:
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
           VERSION="${{ inputs.tag }}"
           SHA_DARWIN_ARM64="${{ steps.sha.outputs.sha_darwin_arm64 }}"
           SHA_DARWIN_X64="${{ steps.sha.outputs.sha_darwin_x64 }}"
           SHA_LINUX_X64="${{ steps.sha.outputs.sha_linux_x64 }}"
           SHA_LINUX_ARM64="${{ steps.sha.outputs.sha_linux_arm64 }}"
-
-          # Clone the tap repo
-          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/assignee-ai/homebrew-assignee.git" tap
 
           # Render the multi-platform formula from the repo's template copy
           # (homebrew/assignee.rb) and drop it into the tap. We use envsubst

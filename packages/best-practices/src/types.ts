@@ -1,3 +1,13 @@
+import { POLICY_ANTIPATTERNS } from "./policy-inspector.js";
+
+/**
+ * Canonical list of known `policy_antipattern` expected_value names.
+ * Derived from `POLICY_ANTIPATTERNS` in `policy-inspector.ts` — single
+ * source of truth.  Used by `schema.ts` to validate `expected_value`
+ * for rules with `check_type: "policy_antipattern"`.
+ */
+export const POLICY_ANTIPATTERN_NAMES = POLICY_ANTIPATTERNS;
+
 export const BP_SEVERITY = ["CRITICAL", "HIGH", "MEDIUM", "INFO"] as const;
 export type BPSeverity = (typeof BP_SEVERITY)[number];
 

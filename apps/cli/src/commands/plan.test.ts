@@ -1304,7 +1304,7 @@ describe("planCommand — --target-account NOT_IMPLEMENTED message (W4-S5)", () 
       "node",
       "plan",
       "--target-account",
-      "123456789012",
+      "112233445566",
       "Create an S3 bucket",
     ]);
 

@@ -27,11 +27,16 @@ export {
   clearPriceCache,
 } from "./price-cache.js";
 
-// CloudControl factory — Story 50-4 Wave 5 Pass G
+// CloudControl + parallel service factories — Story 50-4 Wave 5 Pass G / W6-S2
 // (AwsConfig type is exported from cloudcontrol-client.ts directly;
 // not re-exported through this barrel to avoid clash with the
 // destroy-strategies AwsConfig of identical shape.)
-export { createCloudControlClient } from "./cloudcontrol-client.js";
+export {
+  createCloudControlClient,
+  createKmsClient,
+  createSecretsManagerClient,
+  createEventBridgeClient,
+} from "./cloudcontrol-client.js";
 
 // Advisory price enricher — Story 50-4 Wave 5 Pass G
 export {

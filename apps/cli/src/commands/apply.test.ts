@@ -230,22 +230,22 @@ describe("applyCommand — --target-account NOT_IMPLEMENTED message (W4-S5)", ()
         "node",
         "apply",
         "--target-account",
-        "123456789012",
+        "112233445566",
         "Create an S3 bucket",
       ]);
+
+      const stderrText = stderrCalls.join("");
+      // Must contain user-facing intent keywords.
+      expect(stderrText).toContain("cross-account");
+      expect(stderrText).toContain("not yet available");
+      // Must NOT leak internal tracker names.
+      expect(stderrText).not.toMatch(/Epic\s+\d+/i);
+      expect(stderrText).not.toMatch(/story\s+\d+-W\d+/i);
+      // Exit code must be NOT_IMPLEMENTED (12).
+      expect(exitSpy).toHaveBeenCalledWith(12);
     } finally {
       stderrSpy.mockRestore();
       exitSpy.mockRestore();
     }
-
-    const stderrText = stderrCalls.join("");
-    // Must contain user-facing intent keywords.
-    expect(stderrText).toContain("cross-account");
-    expect(stderrText).toContain("not yet available");
-    // Must NOT leak internal tracker names.
-    expect(stderrText).not.toMatch(/Epic\s+\d+/i);
-    expect(stderrText).not.toMatch(/story\s+\d+-W\d+/i);
-    // Exit code must be NOT_IMPLEMENTED (12).
-    expect(exitSpy).toHaveBeenCalledWith(12);
   });
 });

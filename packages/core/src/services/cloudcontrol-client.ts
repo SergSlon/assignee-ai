@@ -14,9 +14,19 @@
  * This keeps ALL client construction routed through this factory so
  * module-level `vi.mock("../services/cloudcontrol-client.js", ...)` in
  * integration tests intercepts both paths.
+ *
+ * W6-S2: parallel factories for KMS, SecretsManager, and EventBridge added
+ * so the destroy command's three inline SDK client constructions are routed
+ * through the same credential-validation + no-cred-warning pattern as the
+ * CloudControl client.  All three factories share the same AwsConfig /
+ * NoCredentialsConfig discriminant so tests intercept them via a single
+ * `vi.mock("../services/cloudcontrol-client.js", ...)` call.
  */
 
 import { CloudControlClient } from "@aws-sdk/client-cloudcontrol";
+import { KMSClient } from "@aws-sdk/client-kms";
+import { SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
+import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import { ConfigurationError } from "../errors.js";
 import { CredentialError } from "../config/constants/aws.js";
 
@@ -96,4 +106,98 @@ export function createCloudControlClient(
       ...(config.sessionToken ? { sessionToken: config.sessionToken } : {}),
     },
   });
+}
+
+// ─── Shared credential-builder helper ────────────────────────────────────────
+// Extracted so the three new factories below don't repeat the same validation
+// pattern.  Returns an object suitable for spreading into any AWS SDK v3
+// client constructor config.
+
+function buildClientConfig(
+  config: AwsConfig | NoCredentialsConfig,
+  serviceName: string,
+): {
+  region: string;
+  credentials?: {
+    accessKeyId: string;
+    secretAccessKey: string;
+    sessionToken?: string;
+  };
+} {
+  if (config.accessKeyId === undefined) {
+    if (!config.region) {
+      throw new ConfigurationError("AWS_REGION is missing or empty");
+    }
+    process.stderr.write(
+      `assignee: operator credentials not found — downstream ${serviceName} calls will fail with auth errors\n`,
+    );
+    return { region: config.region };
+  }
+
+  if (!config.accessKeyId) {
+    throw new ConfigurationError(CredentialError.MISSING_ACCESS_KEY);
+  }
+  if (!config.secretAccessKey) {
+    throw new ConfigurationError(CredentialError.MISSING_SECRET_KEY);
+  }
+  if (!config.region) {
+    throw new ConfigurationError("AWS_REGION is missing or empty");
+  }
+
+  return {
+    region: config.region,
+    credentials: {
+      accessKeyId: config.accessKeyId,
+      secretAccessKey: config.secretAccessKey,
+      ...(config.sessionToken ? { sessionToken: config.sessionToken } : {}),
+    },
+  };
+}
+
+/**
+ * Factory for `@aws-sdk/client-kms` KMSClient.
+ *
+ * Follows the same AwsConfig / NoCredentialsConfig discriminant as
+ * `createCloudControlClient` so tests can intercept via:
+ *   `vi.mock("../services/cloudcontrol-client.js", () => ({ createKmsClient: vi.fn() }))`
+ *
+ * W6-S2: replaces the inline KMSClient construction in `destroy.ts`
+ * `scheduleKmsKeyDeletion`.
+ */
+export function createKmsClient(
+  config: AwsConfig | NoCredentialsConfig,
+): KMSClient {
+  return new KMSClient(buildClientConfig(config, "KMS"));
+}
+
+/**
+ * Factory for `@aws-sdk/client-secrets-manager` SecretsManagerClient.
+ *
+ * Follows the same AwsConfig / NoCredentialsConfig discriminant as
+ * `createCloudControlClient` so tests can intercept via:
+ *   `vi.mock("../services/cloudcontrol-client.js", () => ({ createSecretsManagerClient: vi.fn() }))`
+ *
+ * W6-S2: replaces the inline SecretsManagerClient construction in `destroy.ts`
+ * `deleteSecret`.
+ */
+export function createSecretsManagerClient(
+  config: AwsConfig | NoCredentialsConfig,
+): SecretsManagerClient {
+  return new SecretsManagerClient(buildClientConfig(config, "SecretsManager"));
+}
+
+/**
+ * Factory for `@aws-sdk/client-eventbridge` EventBridgeClient.
+ *
+ * Follows the same AwsConfig / NoCredentialsConfig discriminant as
+ * `createCloudControlClient` so tests can intercept via:
+ *   `vi.mock("../services/cloudcontrol-client.js", () => ({ createEventBridgeClient: vi.fn() }))`
+ *
+ * W6-S2: replaces the inline EventBridgeClient construction in `destroy.ts`
+ * `deleteEventBus`.
+ */
+export function createEventBridgeClient(
+  config: AwsConfig | NoCredentialsConfig,
+): EventBridgeClient {
+  return new EventBridgeClient(buildClientConfig(config, "EventBridge"));
 }

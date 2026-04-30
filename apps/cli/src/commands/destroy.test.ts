@@ -12,6 +12,11 @@ import { Command } from "commander";
 // was migrated from the SDK fallback to CCAPI. The @aws-sdk/client-lambda
 // module is no longer imported by sdk-fallback-dispatcher, so mocking it
 // here is dead code.
+//
+// W6-S2: mockKmsSend / mockSecretsSend / mockEventBridgeSend are hoisted here
+// so the cloudcontrol-client.js factory mock can close over them.  The raw
+// SDK module mocks are kept only for the Command classes (ScheduleKeyDeletion-
+// Command, etc.) that destroy.ts now imports statically.
 const {
   mockText,
   mockOutro,
@@ -22,6 +27,12 @@ const {
   mockResolveResource,
   mockCreateTaggingClient,
   mockDestroySingleResource,
+  mockKmsSend,
+  mockSecretsSend,
+  mockEventBridgeSend,
+  mockCreateKmsClient,
+  mockCreateSecretsManagerClient,
+  mockCreateEventBridgeClient,
 } = vi.hoisted(() => ({
   mockText: vi.fn(),
   mockOutro: vi.fn(),
@@ -32,6 +43,12 @@ const {
   mockResolveResource: vi.fn(),
   mockCreateTaggingClient: vi.fn().mockReturnValue({}),
   mockDestroySingleResource: vi.fn(),
+  mockKmsSend: vi.fn(),
+  mockSecretsSend: vi.fn(),
+  mockEventBridgeSend: vi.fn(),
+  mockCreateKmsClient: vi.fn(),
+  mockCreateSecretsManagerClient: vi.fn(),
+  mockCreateEventBridgeClient: vi.fn(),
 }));
 
 // ── Mock @clack/prompts ─────────────────────────────────────────────────────
@@ -132,54 +149,33 @@ vi.mock("@aws-sdk/client-sns", () => {
   };
 });
 
-// ── Epic 92 Wave 1 (e92.1.b): mock the three direct-SDK clients the
-//    new special-path handlers call (KMS, Secrets, EventBridge).
-//    Each client stores a `send` stub so tests can control response
-//    shape and assert on the command arguments.
-const mockKmsSend = vi.fn();
-vi.mock("@aws-sdk/client-kms", () => {
-  class MockKMSClient {
-    send = mockKmsSend;
-    destroy = vi.fn();
-  }
-  return {
-    KMSClient: MockKMSClient,
-    ScheduleKeyDeletionCommand: vi.fn((input: unknown) => ({
-      _type: "ScheduleKeyDeletion",
-      input,
-    })),
-  };
-});
+// ── Epic 92 Wave 1 (e92.1.b) / W6-S2 refactor ─────────────────────────────
+// The three special-path handlers (KMS, Secrets, EventBridge) now construct
+// clients via factories in `../services/cloudcontrol-client.js` rather than
+// calling `new KMSClient(...)` etc. inline.  We keep the SDK module mocks
+// only for the Command classes (ScheduleKeyDeletionCommand etc.) that
+// destroy.ts imports statically.  The mock clients are wired up via the
+// cloudcontrol-client.js factory mock below.
+vi.mock("@aws-sdk/client-kms", () => ({
+  ScheduleKeyDeletionCommand: vi.fn((input: unknown) => ({
+    _type: "ScheduleKeyDeletion",
+    input,
+  })),
+}));
 
-const mockSecretsSend = vi.fn();
-vi.mock("@aws-sdk/client-secrets-manager", () => {
-  class MockSecretsManagerClient {
-    send = mockSecretsSend;
-    destroy = vi.fn();
-  }
-  return {
-    SecretsManagerClient: MockSecretsManagerClient,
-    DeleteSecretCommand: vi.fn((input: unknown) => ({
-      _type: "DeleteSecret",
-      input,
-    })),
-  };
-});
+vi.mock("@aws-sdk/client-secrets-manager", () => ({
+  DeleteSecretCommand: vi.fn((input: unknown) => ({
+    _type: "DeleteSecret",
+    input,
+  })),
+}));
 
-const mockEventBridgeSend = vi.fn();
-vi.mock("@aws-sdk/client-eventbridge", () => {
-  class MockEventBridgeClient {
-    send = mockEventBridgeSend;
-    destroy = vi.fn();
-  }
-  return {
-    EventBridgeClient: MockEventBridgeClient,
-    DeleteEventBusCommand: vi.fn((input: unknown) => ({
-      _type: "DeleteEventBus",
-      input,
-    })),
-  };
-});
+vi.mock("@aws-sdk/client-eventbridge", () => ({
+  DeleteEventBusCommand: vi.fn((input: unknown) => ({
+    _type: "DeleteEventBus",
+    input,
+  })),
+}));
 
 // ── Mock modules ────────────────────────────────────────────────────────────
 vi.mock("../services/resource-resolver.js", () => ({
@@ -195,6 +191,13 @@ vi.mock("../services/resource-resolver.js", () => ({
 
 vi.mock("../services/cloudcontrol-client.js", () => ({
   createCloudControlClient: vi.fn().mockReturnValue({ send: mockCCSend }),
+  // W6-S2: the three destroy-special-path handlers now use factories from
+  // cloudcontrol-client.js instead of constructing clients inline.  The
+  // hoisted vi.fn() references (mockCreate*Client) are re-armed in beforeEach
+  // so their implementations survive vi.clearAllMocks().
+  createKmsClient: mockCreateKmsClient,
+  createSecretsManagerClient: mockCreateSecretsManagerClient,
+  createEventBridgeClient: mockCreateEventBridgeClient,
 }));
 
 vi.mock("../services/destroy-service.js", () => ({
@@ -240,6 +243,23 @@ const origStdoutWrite = process.stdout.write.bind(process.stdout);
 
 beforeEach(() => {
   vi.clearAllMocks();
+
+  // Re-arm the three factory mocks after clearAllMocks wipes their
+  // implementations.  Hoisted vi.fn() references survive the clear; we just
+  // restore the implementation here so every test starts with a working stub.
+  mockCreateKmsClient.mockImplementation(() => ({
+    send: mockKmsSend,
+    destroy: vi.fn(),
+  }));
+  mockCreateSecretsManagerClient.mockImplementation(() => ({
+    send: mockSecretsSend,
+    destroy: vi.fn(),
+  }));
+  mockCreateEventBridgeClient.mockImplementation(() => ({
+    send: mockEventBridgeSend,
+    destroy: vi.fn(),
+  }));
+
   stderrOutput = "";
   stdoutOutput = "";
 
@@ -970,6 +990,154 @@ describe("Epic 92 Wave 1 — destroy scheduled-deletion paths", () => {
   });
 });
 
+// ── W6-S2 — factory routing for KMS / SecretsManager / EventBridge ───────────
+//
+// Verifies that the three special-path destroy helpers use the service
+// factories from `cloudcontrol-client.js` rather than constructing SDK
+// clients inline.  This ensures:
+//   (a) factory is called (interceptable by module-level vi.mock)
+//   (b) credentials are forwarded correctly (with-creds vs no-creds)
+
+describe("W6-S2 — destroy helpers use cloudcontrol-client.js factories", () => {
+  const w6KmsResource = {
+    arn: "arn:aws:kms:us-east-1:210987654321:key/ba48550a-3f14-446e-8f0c-1473f345c62d",
+    resourceType: "AWS::KMS::Key",
+    region: "us-east-1",
+    tags: { "managed-by": "assignee-ai" },
+    identifier: "ba48550a-3f14-446e-8f0c-1473f345c62d",
+  };
+  const w6SecretResource = {
+    arn: "arn:aws:secretsmanager:us-east-1:210987654321:secret:my-app/prod/db-password-AbCdEf",
+    resourceType: "AWS::SecretsManager::Secret",
+    region: "us-east-1",
+    tags: { "managed-by": "assignee-ai" },
+    identifier: "my-app/prod/db-password",
+  };
+  const w6EventBusResource = {
+    arn: "arn:aws:events:us-east-1:210987654321:event-bus/e92d-bus-1776801116",
+    resourceType: "AWS::Events::Rule",
+    region: "us-east-1",
+    tags: { "managed-by": "assignee-ai" },
+    identifier: "e92d-bus-1776801116",
+  };
+
+  it("scheduleKmsKeyDeletion calls createKmsClient with operator credentials", async () => {
+    const { createKmsClient: mockCreateKmsClient } =
+      await import("../services/cloudcontrol-client.js");
+    mockResolveResource.mockResolvedValue(w6KmsResource);
+    mockKmsSend.mockResolvedValue({
+      DeletionDate: new Date("2026-04-27T00:00:00Z"),
+    });
+
+    await destroyAction(w6KmsResource.arn, {
+      yes: true,
+      pendingWindowInDays: "7",
+    });
+
+    expect(mockCreateKmsClient).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+        secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        region: "us-east-1",
+      }),
+    );
+  });
+
+  it("deleteSecret calls createSecretsManagerClient with operator credentials", async () => {
+    const { createSecretsManagerClient: mockCreateSMClient } =
+      await import("../services/cloudcontrol-client.js");
+    mockResolveResource.mockResolvedValue(w6SecretResource);
+    mockSecretsSend.mockResolvedValue({
+      DeletionDate: new Date("2026-04-27T00:00:00Z"),
+    });
+
+    await destroyAction(w6SecretResource.arn, {
+      yes: true,
+      recoveryWindowInDays: "7",
+    });
+
+    expect(mockCreateSMClient).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+        secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        region: "us-east-1",
+      }),
+    );
+  });
+
+  it("deleteEventBus calls createEventBridgeClient with operator credentials", async () => {
+    const { createEventBridgeClient: mockCreateEBClient } =
+      await import("../services/cloudcontrol-client.js");
+    mockResolveResource.mockResolvedValue(w6EventBusResource);
+    mockEventBridgeSend.mockResolvedValue({});
+
+    await destroyAction(w6EventBusResource.arn, { yes: true });
+
+    expect(mockCreateEBClient).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+        secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        region: "us-east-1",
+      }),
+    );
+  });
+
+  it("scheduleKmsKeyDeletion calls createKmsClient with region-only when credentials absent", async () => {
+    const { createKmsClient: mockCreateKmsClient } =
+      await import("../services/cloudcontrol-client.js");
+    const { tryAssigneeCredentials } =
+      await import("../config/aws-credentials.js");
+    vi.mocked(tryAssigneeCredentials).mockReturnValue(undefined);
+
+    mockResolveResource.mockResolvedValue(w6KmsResource);
+    mockKmsSend.mockResolvedValue({
+      DeletionDate: new Date("2026-04-27T00:00:00Z"),
+    });
+
+    await destroyAction(w6KmsResource.arn, {
+      yes: true,
+      pendingWindowInDays: "7",
+    });
+
+    expect(mockCreateKmsClient).toHaveBeenCalledWith({ region: "us-east-1" });
+  });
+
+  it("deleteSecret calls createSecretsManagerClient with region-only when credentials absent", async () => {
+    const { createSecretsManagerClient: mockCreateSMClient } =
+      await import("../services/cloudcontrol-client.js");
+    const { tryAssigneeCredentials } =
+      await import("../config/aws-credentials.js");
+    vi.mocked(tryAssigneeCredentials).mockReturnValue(undefined);
+
+    mockResolveResource.mockResolvedValue(w6SecretResource);
+    mockSecretsSend.mockResolvedValue({
+      DeletionDate: new Date("2026-04-27T00:00:00Z"),
+    });
+
+    await destroyAction(w6SecretResource.arn, {
+      yes: true,
+      recoveryWindowInDays: "7",
+    });
+
+    expect(mockCreateSMClient).toHaveBeenCalledWith({ region: "us-east-1" });
+  });
+
+  it("deleteEventBus calls createEventBridgeClient with region-only when credentials absent", async () => {
+    const { createEventBridgeClient: mockCreateEBClient } =
+      await import("../services/cloudcontrol-client.js");
+    const { tryAssigneeCredentials } =
+      await import("../config/aws-credentials.js");
+    vi.mocked(tryAssigneeCredentials).mockReturnValue(undefined);
+
+    mockResolveResource.mockResolvedValue(w6EventBusResource);
+    mockEventBridgeSend.mockResolvedValue({});
+
+    await destroyAction(w6EventBusResource.arn, { yes: true });
+
+    expect(mockCreateEBClient).toHaveBeenCalledWith({ region: "us-east-1" });
+  });
+});
+
 // ── W5-S0 — --target-account help description clean of internal trackers ─────
 // Verifies that the --target-account option description rendered by --help
 // (stdout) contains no internal tracker strings such as "Epic 101".
@@ -1019,22 +1187,22 @@ describe("destroyCommand — --target-account NOT_IMPLEMENTED message (W4-S5)", 
         "node",
         "destroy",
         "--target-account",
-        "123456789012",
+        "112233445566",
         "test-bucket",
       ]);
+
+      const stderrText = stderrCalls.join("");
+      // Must contain user-facing intent keywords.
+      expect(stderrText).toContain("cross-account");
+      expect(stderrText).toContain("not yet available");
+      // Must NOT leak internal tracker names.
+      expect(stderrText).not.toMatch(/Epic\s+\d+/i);
+      expect(stderrText).not.toMatch(/story\s+\d+-W\d+/i);
+      // Exit code must be NOT_IMPLEMENTED (12).
+      expect(exitSpy).toHaveBeenCalledWith(12);
     } finally {
       stderrSpy.mockRestore();
       exitSpy.mockRestore();
     }
-
-    const stderrText = stderrCalls.join("");
-    // Must contain user-facing intent keywords.
-    expect(stderrText).toContain("cross-account");
-    expect(stderrText).toContain("not yet available");
-    // Must NOT leak internal tracker names.
-    expect(stderrText).not.toMatch(/Epic\s+\d+/i);
-    expect(stderrText).not.toMatch(/story\s+\d+-W\d+/i);
-    // Exit code must be NOT_IMPLEMENTED (12).
-    expect(exitSpy).toHaveBeenCalledWith(12);
   });
 });
