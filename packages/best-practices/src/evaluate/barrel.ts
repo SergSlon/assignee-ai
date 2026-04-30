@@ -10,6 +10,7 @@
 import type { BestPractice, BPFinding } from "../types.js";
 import { getField, type EvalContext } from "./context-builder.js";
 import { checkPasses } from "./rule-runner.js";
+import { isAwarenessCheck } from "./awareness-filter.js";
 import { matchesTrigger } from "./severity-router.js";
 import { shouldSkipForPattern } from "./compound-suppressor-link.js";
 import { buildFinding } from "./result-formatter.js";
@@ -184,6 +185,24 @@ export function evaluateTriggers(
     // Compound pattern awareness: skip rules that are satisfied at the pattern level
     // rather than the individual resource level
     if (context.patternId && shouldSkipForPattern(bp, context)) {
+      continue;
+    }
+
+    // Awareness-family rules (check_type: "awareness" / "cross_resource_count" /
+    // "cross_resource_reference") are informational advisories that fire on
+    // EVERY plan of the matched resource type, regardless of whether the
+    // property_path field is present. The contract is "always fire" — the
+    // field value is irrelevant. Short-circuit directly so that:
+    //   a) No getField() call is wasted on a field that often won't exist
+    //      at plan-time (e.g. InstanceId, VolumeId — runtime-only fields).
+    //   b) Future developers cannot accidentally introduce a fieldValue guard
+    //      between getField() and checkPasses() that silently suppresses these
+    //      informational rules when the plan doesn't include the target field.
+    //
+    // Epic 98 W5.P1 regression guard: awareness rules emit their normalised
+    // severity even when the advised field is absent at plan-time.
+    if (isAwarenessCheck(bp.check_type)) {
+      findings.push(buildFinding(bp));
       continue;
     }
 

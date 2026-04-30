@@ -273,10 +273,29 @@ describe("efsWithVpcPattern — registry detection", () => {
       ).toBeNull();
     });
 
-    it("still matches compound on plain 'create an EFS file system'", () => {
+    it("still matches compound on plain 'create an EFS file system' — via the bare 'efs' keyword (not the removed 'efs file system' keyword)", () => {
+      // IMPORTANT: the registry matches this intent via the bare "efs"
+      // substring keyword, NOT via "efs file system" (which was removed
+      // in Epic 96 W3.N3 to eliminate routing ambiguity). At the
+      // intent-parser layer the SINGLETON_OVERRIDE_CUES table intercepts
+      // this intent upstream and routes it to AWS::EFS::FileSystem —
+      // the compound is only reached when the intent carries a VPC
+      // qualifier ("with a new VPC", "and VPC", etc.) that disqualifies
+      // the singleton cue. This registry-level match is preserved so
+      // VPC-qualified variants that fall through the singleton cue still
+      // resolve to the efs-with-vpc compound.
       expect(registry.detect("create an EFS file system")).toBe(
         efsWithVpcPattern,
       );
+    });
+
+    it("does NOT have 'efs file system' as a standalone compound keyword (probe e96.W3.N3 regression guard)", () => {
+      // The keyword "efs file system" was removed from efs-with-vpc to
+      // avoid ambiguity with the singleton path. Verify the removal is
+      // permanent — the compound still detects EFS intents via "efs"
+      // alone so this removal has no functional impact on VPC-compound
+      // routing.
+      expect(efsWithVpcPattern.keywords).not.toContain("efs file system");
     });
   });
 });

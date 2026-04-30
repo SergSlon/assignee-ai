@@ -49,6 +49,35 @@ describe("checkPasses — default branch throws on unknown check_type", () => {
   });
 });
 
+describe("checkPasses — awareness-family checks always fail (regression guard)", () => {
+  // Epic 98 W5.P1: awareness rules fire on EVERY plan of the matched resource
+  // type regardless of whether the fieldValue is present. These tests guard
+  // against future refactors that might accidentally introduce a fieldValue
+  // guard before checkPasses(), which would silently suppress informational
+  // findings when the plan doesn't include the target field at plan-time.
+  it("awareness — fails (fires) when fieldValue is undefined (runtime-only field absent at plan-time)", () => {
+    expect(checkPasses("awareness", undefined, true)).toBe(false);
+  });
+
+  it("awareness — fails (fires) when fieldValue is null", () => {
+    expect(checkPasses("awareness", null, true)).toBe(false);
+  });
+
+  it("awareness — fails (fires) when fieldValue is a value", () => {
+    expect(checkPasses("awareness", "i-1234567890abcdef0", true)).toBe(false);
+  });
+
+  it("cross_resource_count — fails (fires) when fieldValue is undefined", () => {
+    expect(checkPasses("cross_resource_count", undefined, true)).toBe(false);
+  });
+
+  it("cross_resource_reference — fails (fires) when fieldValue is undefined", () => {
+    expect(checkPasses("cross_resource_reference", undefined, true)).toBe(
+      false,
+    );
+  });
+});
+
 describe("checkPasses — known check_types dispatch correctly (regression guard)", () => {
   it("equals — passes when values match", () => {
     expect(checkPasses("equals", "foo", "foo")).toBe(true);

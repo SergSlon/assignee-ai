@@ -248,6 +248,66 @@ describe("applyUserStatedVolumeSize — e98.W2.R4 fidelity patcher", () => {
     expect((bdm[0]!["Ebs"] as Record<string, unknown>)["VolumeSize"]).toBe(64);
   });
 
+  it("injects Ebs shell and VolumeSize when bdm[0] has no Ebs key at all (null-safety gap case)", () => {
+    // Null-safety gap: when the sanitizer has stripped Ebs from bdm[0]
+    // entirely (e.g. schema mismatch) or the LLM emitted a BDM entry
+    // without an Ebs key. The patcher must NOT crash on first["Ebs"]
+    // being absent — it must create a new Ebs object and write VolumeSize.
+    const state: Record<string, unknown> = {
+      BlockDeviceMappings: [
+        {
+          DeviceName: "/dev/xvda",
+          // No Ebs key at all
+        },
+      ],
+    };
+    const out = applyUserStatedVolumeSize(
+      state,
+      RESOURCE_TYPES.EC2_INSTANCE,
+      "Create an EC2 instance t3.large with 100GB gp3 volume",
+      RUN_ID,
+    );
+    const bdm = out["BlockDeviceMappings"] as Array<Record<string, unknown>>;
+    expect(bdm).toHaveLength(1);
+    expect(bdm[0]!["DeviceName"]).toBe("/dev/xvda");
+    const ebs = bdm[0]!["Ebs"] as Record<string, unknown>;
+    expect(ebs).toBeDefined();
+    expect(ebs["VolumeSize"]).toBe(100);
+    // No prior numeric VolumeSize → no override log.
+    expect(logSpy).not.toHaveBeenCalled();
+  });
+
+  it("seeds VolumeSize when bdm[0].Ebs exists but has no VolumeSize (post-plugin-default shape)", () => {
+    // This is the exact state mergePluginDefaults produces for a bare intent
+    // where the LLM omits BlockDeviceMappings: plugin seeds
+    // [{ DeviceName: "/dev/xvda", Ebs: { Encrypted: true, VolumeType: "gp3" } }]
+    // with no VolumeSize. The patcher must add VolumeSize without clobbering
+    // the Encrypted/VolumeType fields already present.
+    const state: Record<string, unknown> = {
+      BlockDeviceMappings: [
+        {
+          DeviceName: "/dev/xvda",
+          Ebs: { VolumeType: "gp3", Encrypted: true },
+        },
+      ],
+    };
+    const out = applyUserStatedVolumeSize(
+      state,
+      RESOURCE_TYPES.EC2_INSTANCE,
+      "Create an EC2 instance t3.large with 100GB gp3 volume",
+      RUN_ID,
+    );
+    const bdm = out["BlockDeviceMappings"] as Array<Record<string, unknown>>;
+    const ebs = bdm[0]!["Ebs"] as Record<string, unknown>;
+    // User-stated size must land.
+    expect(ebs["VolumeSize"]).toBe(100);
+    // Existing Ebs fields must be preserved (patcher is additive).
+    expect(ebs["VolumeType"]).toBe("gp3");
+    expect(ebs["Encrypted"]).toBe(true);
+    // No prior numeric VolumeSize → no override-log entry.
+    expect(logSpy).not.toHaveBeenCalled();
+  });
+
   it("does not trigger on zero / negative / non-numeric tokens", () => {
     // Pathological intent: literal "0GB" must not clobber existing.
     const state = stubExistingBdm(20);

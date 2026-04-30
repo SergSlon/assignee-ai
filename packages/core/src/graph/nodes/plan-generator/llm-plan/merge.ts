@@ -236,7 +236,8 @@ function deepMergeDefault(
 /**
  * Injects plugin-level `defaults` for keys NOT already carrying an
  * empty-leaf value in `desiredState`. Runs AFTER `stripPlaceholders` +
- * `mergeElicitedOptions` and BEFORE `sanitizeAgainstSchema`, so:
+ * `mergeElicitedOptions` + `sanitizeAgainstSchema` (Phase 3a.1 in
+ * `llm-plan.ts`), so:
  *
  *   1. LLM-emitted non-empty values win (plugin default does not
  *      clobber them). For object-valued defaults, missing sub-keys are
@@ -248,9 +249,13 @@ function deepMergeDefault(
  *   3. Plugin-default placeholders the LLM emitted verbatim have been
  *      stripped by `stripPlaceholders` first — so the injection fills
  *      the gap created by stripping, with the canonical plugin value.
- *   4. Downstream `sanitizeAgainstSchema` walks the CFN schema; any
- *      injected key that the schema rejects will be stripped cleanly
- *      rather than shipping a bad value.
+ *   4. Running AFTER `sanitizeAgainstSchema` (e96.W2.R5 + e98.W2.R2
+ *      fix): injected keys are never subject to schema stripping.
+ *      Previously running before sanitize caused `CreditSpecification.
+ *      CPUCredits` to be stripped when the schema snapshot didn't
+ *      include that sub-key. Plugin registry keys are canonical CFN
+ *      properties so the risk of shipping non-schema keys is minimal
+ *      and bounded by `LLM_PATH_PLUGIN_DEFAULT_BACKFILL_ALLOWLIST`.
  *
  * e98.W2.R2 (C-R1) — the previous skip-condition
  * `result[key] !== undefined` treated LLM-emitted `{}` as non-empty,

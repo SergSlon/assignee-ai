@@ -66,10 +66,24 @@ export const efsWithVpcPattern: ArchitecturePattern = {
    * the "efs" substrings win against the generic "vpc" keywords.
    * Each keyword must be disjoint from vpc-networking's keyword set
    * (which uses "vpc", never "efs"), so the two cannot collide.
+   *
+   * Note: "efs file system" was intentionally REMOVED from this list
+   * (Epic 96 W3.N3 / probe e96.W3.N3). Bare "Create an EFS file
+   * system" intents are now intercepted upstream by the
+   * `SINGLETON_OVERRIDE_CUES` table in `compound-keywords.ts` and
+   * routed to the singleton AWS::EFS::FileSystem — the 10-resource
+   * compound is too heavy for users who just want one EFS resource.
+   * Keeping "efs file system" as a compound keyword created a routing
+   * ambiguity: the keyword matched the bare intent at the registry
+   * layer, confusing the picture even though the intent-parser node
+   * overrode it upstream via the singleton cue. "efs" alone is a
+   * sufficient substring anchor for VPC-qualified compound intents
+   * ("Create an EFS file system with a new VPC" still resolves here
+   * via the bare "efs" keyword once the VPC qualifiers disqualify the
+   * singleton override's negative-phrase check).
    */
   keywords: [
     "efs",
-    "efs file system",
     "elastic file system",
     "nfs file system",
     "create an efs",

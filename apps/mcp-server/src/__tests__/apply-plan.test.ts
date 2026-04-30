@@ -5,6 +5,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+
+// vi.hoisted runs before vi.mock factories are evaluated (they're hoisted to
+// the top of the module), so this is the only place a shared vi.fn() can be
+// defined that both vi.mock factories (node:fs/promises AND node:fs) can
+// reference. readFileMock is later used directly by setCheckpointFile and
+// setCheckpointFileNotFound in place of dynamic import("node:fs/promises").
+const { readFileMock } = vi.hoisted(() => ({ readFileMock: vi.fn() }));
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -116,10 +123,36 @@ vi.mock("@assignee/best-practices", () => ({
 }));
 
 // ── Mock fs for checkpoint loading ───────────────────────────────────────────
+// The checkpoint loader was refactored (RW4d-migration-A) to go through
+// LocalFsStorageAdapter, which imports `{ promises as fs } from "node:fs"`.
+// Vitest's module mock treats "node:fs" and "node:fs/promises" as SEPARATE
+// module IDs even though they alias the same runtime object — so a
+// `vi.mock("node:fs/promises")` alone no longer intercepts file reads made
+// by LocalFsStorageAdapter.
+//
+// Strategy: mock BOTH module IDs with importOriginal so every real export
+// (mkdir, writeFile, rename, unlink, stat, open, readdir, …) is preserved.
+// Both mocks share the SAME readFile vi.fn() instance (defined once below)
+// so setCheckpointFile / setCheckpointFileNotFound arm it once and all
+// consumers (loader via LocalFsStorageAdapter AND direct importers like
+// audit-log.ts) see the same implementation.
+//
+// Under --coverage the v8 provider instruments modules more aggressively;
+// sharing a single vi.fn() reference ensures the mock stays armed across
+// the coverage instrumentation boundary.
 
-vi.mock("node:fs/promises", () => ({
-  readFile: vi.fn(),
-}));
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return { ...actual, readFile: readFileMock };
+});
+
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return {
+    ...actual,
+    promises: { ...actual.promises, readFile: readFileMock },
+  };
+});
 
 /**
  * Preloads the mocked fs.readFile with the given checkpoint JSON body
@@ -154,8 +187,12 @@ async function setCheckpointFile(
     "/home/user/malicious.json",
   ],
 ) {
-  const { readFile } = await import("node:fs/promises");
-  (readFile as ReturnType<typeof vi.fn>).mockResolvedValue(content);
+  // LocalFsStorageAdapter.readBytes expects readFile to return a Buffer (it
+  // calls buf.buffer / buf.byteOffset / buf.byteLength). Returning a raw string
+  // produces an empty Uint8Array (string has no .buffer) → empty string in
+  // readText → JSON.parse("") throws → "Corrupt checkpoint file" error instead
+  // of the intended validation path. Wrap in Buffer so the byte pipeline works.
+  readFileMock.mockResolvedValue(Buffer.from(content, "utf-8"));
   // Parse the body to compute the desiredState hash — lets us register
   // HMACs for all candidate paths so the integrity check passes once
   // the load+TTL+preflight guards are satisfied.
@@ -176,10 +213,15 @@ async function setCheckpointFile(
 }
 
 async function setCheckpointFileNotFound() {
-  const { readFile } = await import("node:fs/promises");
-  (readFile as ReturnType<typeof vi.fn>).mockRejectedValue(
-    new Error("ENOENT: no such file or directory"),
-  );
+  // LocalFsStorageAdapter.readBytes catches ENOENT via err.code === "ENOENT".
+  // A plain Error without .code would not be caught as ENOENT and would
+  // propagate as a generic error (showing "Checkpoint file not found" via the
+  // fallback in loadAndValidateCheckpoint), but returning undefined from
+  // readBytes is the intended path, so set .code properly.
+  const err = Object.assign(new Error("ENOENT: no such file or directory"), {
+    code: "ENOENT",
+  });
+  readFileMock.mockRejectedValue(err);
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -187,6 +229,10 @@ async function setCheckpointFileNotFound() {
 describe("apply_plan tool", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    // readFileMock is created via vi.hoisted() and may not be tracked by
+    // vitest's automatic mockReset cycle. Reset it explicitly so a previous
+    // test's mockResolvedValue / mockRejectedValue cannot bleed into the next.
+    readFileMock.mockReset();
     _resetActiveApplies();
     _resetBPCache();
     _resetSignaturesForTests();
@@ -1142,8 +1188,7 @@ describe("apply_plan tool", () => {
       const tamperedBody = makeCheckpointJSON({
         desiredState: { BucketName: "attacker-controlled-bucket" },
       });
-      const { readFile } = await import("node:fs/promises");
-      (readFile as ReturnType<typeof vi.fn>).mockResolvedValue(tamperedBody);
+      readFileMock.mockResolvedValue(Buffer.from(tamperedBody, "utf-8"));
 
       const ctx = makeMockGraphContext();
       const { client } = await createTestClient(ctx);
@@ -1166,10 +1211,11 @@ describe("apply_plan tool", () => {
 
   describe("checkpoint error handling", () => {
     it("should return CheckpointError message when checkpoint throws CheckpointError", async () => {
-      const { readFile } = await import("node:fs/promises");
-      // Simulate invalid checkpoint schema by providing JSON missing required fields
-      (readFile as ReturnType<typeof vi.fn>).mockResolvedValue(
-        JSON.stringify({ invalid: true }),
+      // Simulate invalid checkpoint schema by providing JSON missing required fields.
+      // Return a Buffer so LocalFsStorageAdapter.readBytes can decode it (string
+      // returns would produce an empty Uint8Array via the buf.buffer path).
+      readFileMock.mockResolvedValue(
+        Buffer.from(JSON.stringify({ invalid: true }), "utf-8"),
       );
 
       const ctx = makeMockGraphContext();
@@ -1192,8 +1238,7 @@ describe("apply_plan tool", () => {
     });
 
     it("should return generic message when checkpoint throws non-CheckpointError", async () => {
-      const { readFile } = await import("node:fs/promises");
-      (readFile as ReturnType<typeof vi.fn>).mockRejectedValue(
+      readFileMock.mockRejectedValue(
         new Error("ENOENT: no such file or directory"),
       );
 
