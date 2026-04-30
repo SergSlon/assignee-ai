@@ -19,6 +19,7 @@
  */
 
 import { Command } from "commander";
+import * as fs from "node:fs";
 import { verifyAuditLog } from "@assignee/core/audit";
 import { DEFAULT_AUDIT_LOG_FILE } from "@assignee/core/audit";
 
@@ -78,6 +79,22 @@ The current implementation always walks the full chain.
       );
     }
 
+    // Fail fast when the log file does not exist: an absent audit log is an
+    // error condition (not a valid empty chain), so report it before calling
+    // verifyAuditLog (which silently returns ok:true on a missing file).
+    if (!fs.existsSync(logFile)) {
+      const message = `Audit log not found at "${logFile}". Run \`assignee audit-log\` to create it.`;
+      if (opts.json) {
+        process.stdout.write(
+          JSON.stringify({ valid: false, entries: 0, error: message }) + "\n",
+        );
+      } else {
+        process.stderr.write(`[audit-verify] ${message}\n`);
+      }
+      process.exit(1);
+      return;
+    }
+
     let result: Awaited<ReturnType<typeof verifyAuditLog>>;
     try {
       result = await verifyAuditLog(logFile);
@@ -99,7 +116,11 @@ The current implementation always walks the full chain.
     if (result.ok) {
       if (opts.json) {
         process.stdout.write(
-          JSON.stringify({ valid: true, entries: result.total }) + "\n",
+          JSON.stringify({
+            valid: true,
+            entries: result.total,
+            chainMode: result.chainMode,
+          }) + "\n",
         );
       } else {
         process.stdout.write(
@@ -109,7 +130,18 @@ The current implementation always walks the full chain.
               : "") +
             ".\n",
         );
+        process.stdout.write(`Chain mode: ${result.chainMode}\n`);
       }
+
+      // Emit migration hint when chain has legacy or mixed HMAC entries.
+      // Goes to stderr so JSON-mode stdout consumers are unaffected.
+      if (result.chainMode !== "canonical") {
+        process.stderr.write(
+          `[audit-verify] Warning: ${result.legacyCount} of ${result.total} entries verified via ${result.chainMode} HMAC. ` +
+            `Run \`scripts/audit-migrate-legacy-chain.ts --input <logfile>\` to re-sign with canonical HMAC.\n`,
+        );
+      }
+
       process.exit(0);
     } else {
       const reason =

@@ -1,6 +1,7 @@
 /**
  * W3-01 — audit-verify CLI command tests.
  * W7-S3 — adds --json mode tests.
+ * W10-S1 — adds chainMode surface + migration hint tests.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -56,7 +57,30 @@ describe("auditVerifyCommand — --json output", () => {
   let originalStdoutWrite: typeof process.stdout.write;
   let originalExit: typeof process.exit;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    // The vi.mock for W10-S1 is file-scoped, and vitest.config has
+    // mockReset:true which wipes implementations between every test.
+    // Re-install the real verifyAuditLog before each test so this suite's
+    // real-I/O tests work correctly.
+    const real = await vi.importActual<{
+      verifyAuditLog: typeof import("@assignee/core/audit").verifyAuditLog;
+    }>("@assignee/core/audit");
+    mockVerifyAuditLog.mockImplementation(real.verifyAuditLog);
+
+    // Commander is a singleton; reset parsed option values so --json from a
+    // previous test does not bleed into this one.
+    (
+      auditVerifyCommand as unknown as {
+        _optionValues: Record<string, unknown>;
+        _optionValueSources: Record<string, unknown>;
+      }
+    )._optionValues = {};
+    (
+      auditVerifyCommand as unknown as {
+        _optionValueSources: Record<string, unknown>;
+      }
+    )._optionValueSources = {};
+
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "assignee-av-json-test-"));
     writtenChunks = [];
     originalStdoutWrite = process.stdout.write.bind(process.stdout);
@@ -129,5 +153,269 @@ describe("auditVerifyCommand — --json output", () => {
     expect(parsed).not.toBeNull();
     expect(typeof parsed).toBe("object");
     expect(Array.isArray(parsed)).toBe(false);
+  });
+
+  it("includes chainMode field in --json success output (empty log → canonical)", async () => {
+    const logFile = path.join(tmpDir, "audit-canonical.log");
+    fs.writeFileSync(logFile, "", "utf-8");
+
+    await auditVerifyCommand.parseAsync(["--json", "--log-file", logFile], {
+      from: "user",
+    });
+
+    const raw = writtenChunks.join("").trim();
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    expect(parsed["valid"]).toBe(true);
+    expect(parsed["chainMode"]).toBe("canonical");
+  });
+});
+
+// ── W10-S1: chainMode surface + migration hint tests ───────────────────────
+//
+// These tests mock verifyAuditLog to control the chainMode returned,
+// so we can verify the CLI's surface behaviour without needing real HMAC
+// fixtures for every chainMode variant.
+
+const mockVerifyAuditLog = vi.hoisted(() => vi.fn());
+
+vi.mock("@assignee/core/audit", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@assignee/core/audit")>();
+  return {
+    ...actual,
+    verifyAuditLog: mockVerifyAuditLog,
+  };
+});
+
+describe("auditVerifyCommand — chainMode surface (W10-S1)", () => {
+  let tmpDir: string;
+  let stdoutChunks: string[];
+  let stderrChunks: string[];
+  let originalStdoutWrite: typeof process.stdout.write;
+  let originalStderrWrite: typeof process.stderr.write;
+  let originalExit: typeof process.exit;
+
+  beforeEach(() => {
+    // Commander is a singleton; reset parsed option values so --json from a
+    // previous test does not bleed into this one.
+    (
+      auditVerifyCommand as unknown as {
+        _optionValues: Record<string, unknown>;
+        _optionValueSources: Record<string, unknown>;
+      }
+    )._optionValues = {};
+    (
+      auditVerifyCommand as unknown as {
+        _optionValueSources: Record<string, unknown>;
+      }
+    )._optionValueSources = {};
+
+    tmpDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "assignee-av-chainmode-test-"),
+    );
+    stdoutChunks = [];
+    stderrChunks = [];
+
+    originalStdoutWrite = process.stdout.write.bind(process.stdout);
+    originalStderrWrite = process.stderr.write.bind(process.stderr);
+
+    process.stdout.write = ((chunk: string | Uint8Array): boolean => {
+      stdoutChunks.push(
+        typeof chunk === "string"
+          ? chunk
+          : Buffer.from(chunk).toString("utf-8"),
+      );
+      return true;
+    }) as typeof process.stdout.write;
+
+    process.stderr.write = ((chunk: string | Uint8Array): boolean => {
+      stderrChunks.push(
+        typeof chunk === "string"
+          ? chunk
+          : Buffer.from(chunk).toString("utf-8"),
+      );
+      return true;
+    }) as typeof process.stderr.write;
+
+    originalExit = process.exit;
+    process.exit = vi.fn() as unknown as typeof process.exit;
+
+    mockVerifyAuditLog.mockReset();
+  });
+
+  afterEach(() => {
+    process.stdout.write = originalStdoutWrite;
+    process.stderr.write = originalStderrWrite;
+    process.exit = originalExit;
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    vi.restoreAllMocks();
+  });
+
+  it("plain text: emits 'Chain mode: canonical' and no migration warning for canonical chain", async () => {
+    const logFile = path.join(tmpDir, "canonical.log");
+    fs.writeFileSync(logFile, "", "utf-8");
+    mockVerifyAuditLog.mockResolvedValue({
+      ok: true,
+      total: 5,
+      legacyCount: 0,
+      chainMode: "canonical",
+    });
+
+    await auditVerifyCommand.parseAsync(["--log-file", logFile], {
+      from: "user",
+    });
+
+    const stdout = stdoutChunks.join("");
+    const stderr = stderrChunks.join("");
+    expect(stdout).toContain("Chain mode: canonical");
+    expect(stderr).not.toContain("audit-migrate-legacy-chain");
+    expect(process.exit).toHaveBeenCalledWith(0);
+  });
+
+  it("plain text: emits 'Chain mode: legacy' and migration warning for legacy chain", async () => {
+    const logFile = path.join(tmpDir, "legacy.log");
+    fs.writeFileSync(logFile, "", "utf-8");
+    mockVerifyAuditLog.mockResolvedValue({
+      ok: true,
+      total: 3,
+      legacyCount: 0,
+      chainMode: "legacy",
+    });
+
+    await auditVerifyCommand.parseAsync(["--log-file", logFile], {
+      from: "user",
+    });
+
+    const stdout = stdoutChunks.join("");
+    const stderr = stderrChunks.join("");
+    expect(stdout).toContain("Chain mode: legacy");
+    expect(stderr).toContain("legacy");
+    expect(stderr).toContain("audit-migrate-legacy-chain");
+    expect(process.exit).toHaveBeenCalledWith(0);
+  });
+
+  it("plain text: emits 'Chain mode: mixed' and migration warning for mixed chain", async () => {
+    const logFile = path.join(tmpDir, "mixed.log");
+    fs.writeFileSync(logFile, "", "utf-8");
+    mockVerifyAuditLog.mockResolvedValue({
+      ok: true,
+      total: 10,
+      legacyCount: 0,
+      chainMode: "mixed",
+    });
+
+    await auditVerifyCommand.parseAsync(["--log-file", logFile], {
+      from: "user",
+    });
+
+    const stdout = stdoutChunks.join("");
+    const stderr = stderrChunks.join("");
+    expect(stdout).toContain("Chain mode: mixed");
+    expect(stderr).toContain("mixed");
+    expect(stderr).toContain("audit-migrate-legacy-chain");
+    expect(process.exit).toHaveBeenCalledWith(0);
+  });
+
+  it("--json: includes chainMode field in success JSON for legacy chain", async () => {
+    const logFile = path.join(tmpDir, "legacy-json.log");
+    fs.writeFileSync(logFile, "", "utf-8");
+    mockVerifyAuditLog.mockResolvedValue({
+      ok: true,
+      total: 4,
+      legacyCount: 0,
+      chainMode: "legacy",
+    });
+
+    await auditVerifyCommand.parseAsync(["--json", "--log-file", logFile], {
+      from: "user",
+    });
+
+    const raw = stdoutChunks.join("").trim();
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    expect(parsed["valid"]).toBe(true);
+    expect(parsed["entries"]).toBe(4);
+    expect(parsed["chainMode"]).toBe("legacy");
+    // Migration warning goes to stderr, not stdout
+    expect(stderrChunks.join("")).toContain("audit-migrate-legacy-chain");
+    expect(process.exit).toHaveBeenCalledWith(0);
+  });
+
+  it("--json: includes chainMode field in success JSON for mixed chain", async () => {
+    const logFile = path.join(tmpDir, "mixed-json.log");
+    fs.writeFileSync(logFile, "", "utf-8");
+    mockVerifyAuditLog.mockResolvedValue({
+      ok: true,
+      total: 7,
+      legacyCount: 0,
+      chainMode: "mixed",
+    });
+
+    await auditVerifyCommand.parseAsync(["--json", "--log-file", logFile], {
+      from: "user",
+    });
+
+    const raw = stdoutChunks.join("").trim();
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    expect(parsed["valid"]).toBe(true);
+    expect(parsed["chainMode"]).toBe("mixed");
+    expect(process.exit).toHaveBeenCalledWith(0);
+  });
+
+  it("--json: includes chainMode field in success JSON for canonical chain", async () => {
+    const logFile = path.join(tmpDir, "canonical-json.log");
+    fs.writeFileSync(logFile, "", "utf-8");
+    mockVerifyAuditLog.mockResolvedValue({
+      ok: true,
+      total: 2,
+      legacyCount: 0,
+      chainMode: "canonical",
+    });
+
+    await auditVerifyCommand.parseAsync(["--json", "--log-file", logFile], {
+      from: "user",
+    });
+
+    const raw = stdoutChunks.join("").trim();
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    expect(parsed["valid"]).toBe(true);
+    expect(parsed["chainMode"]).toBe("canonical");
+    // No migration warning for canonical chain
+    expect(stderrChunks.join("")).not.toContain("audit-migrate-legacy-chain");
+    expect(process.exit).toHaveBeenCalledWith(0);
+  });
+
+  it("exit codes unchanged: exit 0 for valid chain regardless of chainMode (legacy)", async () => {
+    const logFile = path.join(tmpDir, "exit-legacy.log");
+    fs.writeFileSync(logFile, "", "utf-8");
+    mockVerifyAuditLog.mockResolvedValue({
+      ok: true,
+      total: 3,
+      legacyCount: 0,
+      chainMode: "legacy",
+    });
+
+    await auditVerifyCommand.parseAsync(["--log-file", logFile], {
+      from: "user",
+    });
+
+    expect(process.exit).toHaveBeenCalledWith(0);
+    expect(process.exit).not.toHaveBeenCalledWith(1);
+  });
+
+  it("exit codes unchanged: exit 0 for valid chain regardless of chainMode (mixed)", async () => {
+    const logFile = path.join(tmpDir, "exit-mixed.log");
+    fs.writeFileSync(logFile, "", "utf-8");
+    mockVerifyAuditLog.mockResolvedValue({
+      ok: true,
+      total: 6,
+      legacyCount: 0,
+      chainMode: "mixed",
+    });
+
+    await auditVerifyCommand.parseAsync(["--log-file", logFile], {
+      from: "user",
+    });
+
+    expect(process.exit).toHaveBeenCalledWith(0);
+    expect(process.exit).not.toHaveBeenCalledWith(1);
   });
 });

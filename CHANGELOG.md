@@ -601,6 +601,35 @@ snippets, and Bedrock Guardrail visibility in the doctor command.
   redactor wired into `buildPrompt` and `readMemoryHints` before content
   reaches the LLM boundary.
 
+### Full-audit-2026-04-29 Wave 9 (audit hardening)
+
+#### Breaking Changes
+
+- **`ASSIGNEE_AUDIT_KEY` minimum length raised to 32 characters.**
+  Keys shorter than 32 characters now throw `AUDIT_KEY_TOO_SHORT` at
+  startup. This is a hard breaking change for anyone running with a
+  non-default short key stored in `.env` or a shell rc file.
+  **Migration**: generate a compliant key with `openssl rand -hex 32`
+  and replace the existing value. There is no opt-out; the guard
+  enforces ISO 27001 A.12.4 HMAC key-strength requirements
+  (full-audit-2026-04-29 W9-S3).
+
+#### Added
+
+- `ASSIGNEE_AUDIT_FSYNC` environment variable documented in
+  `docs/configuration.md` — controls whether audit-log writes are
+  followed by an `fsync` call (default: `true`). (W9-S1)
+
+#### Fixed
+
+- Audit-log directory `fsync` is now called after file creation so the
+  directory entry is durable on crash (W9-S0).
+- `audit-verify` auto-detects legacy HMAC entries and bypasses the
+  canonical verifier, preventing false-positive broken-chain reports on
+  pre-W7 logs (W9-S2).
+- `assignee init` now exits with code `73` (`USAGE_ERROR`) rather than
+  `1` (`GENERIC_ERROR`) when passed mutually-exclusive flags (W9-S4).
+
 ---
 
 ## [0.1.0] — 2026-04-24

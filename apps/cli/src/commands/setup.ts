@@ -16,8 +16,9 @@
 import { Command } from "commander";
 import * as clack from "@clack/prompts";
 import { IAMClient } from "@aws-sdk/client-iam";
-import { ConfigurationError } from "@assignee/core";
+import { AssigneeError } from "@assignee/core";
 import { CommandName, CommandDescription } from "../constants/commands.js";
+import { ErrorCode } from "../constants/errors.js";
 import { UserMessage } from "../config/constants.js";
 import { resolveIntroContext, formatIntroContext } from "./init.js";
 import { printSetupIntro } from "./setup/intro.js";
@@ -87,10 +88,14 @@ Examples:
       dryRun?: boolean;
     }) => {
       // UX (Sally): --enable and --disable are mutually exclusive.
+      // Thrown as AssigneeError(USAGE_ERROR) so errorToExitCode maps to
+      // exit 73 (USAGE_ERROR) rather than exit 1 (GENERIC_ERROR).
+      // Mirror of W9-S4 fix on init.ts (--wizard + --yes mutex).
       if (options.enableLlmLogging && options.disableLlmLogging) {
-        throw new ConfigurationError(
+        throw new AssigneeError(
           "Flags --enable-llm-logging and --disable-llm-logging are mutually exclusive. " +
             "Pass one or the other, not both.",
+          ErrorCode.USAGE_ERROR,
         );
       }
 
