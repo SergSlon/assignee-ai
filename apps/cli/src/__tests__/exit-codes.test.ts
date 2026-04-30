@@ -24,16 +24,37 @@ import { errorToExitCode } from "../utils/exit-code.js";
 import { ErrorCode, ProcessExitCode } from "../constants/errors.js";
 
 describe("ProcessExitCode constants", () => {
-  it("declares all five documented codes", () => {
+  it("declares all six documented codes", () => {
     expect(ProcessExitCode.SUCCESS).toBe(0);
     expect(ProcessExitCode.GENERIC_ERROR).toBe(1);
     expect(ProcessExitCode.DOCTOR_WARNINGS).toBe(2);
     expect(ProcessExitCode.POLICY_SAFETY_ABORT).toBe(10);
     expect(ProcessExitCode.MCP_STARTUP_FAILED).toBe(11);
+    expect(ProcessExitCode.NOT_IMPLEMENTED).toBe(12);
   });
 
   it("does NOT re-use exit 10 for MCP startup (regression guard for L8 finding)", () => {
     expect(ProcessExitCode.MCP_STARTUP_FAILED).not.toBe(10);
+  });
+
+  it("NOT_IMPLEMENTED (12) is NOT returned by errorToExitCode — it is emitted via direct process.exit() in commands", () => {
+    // errorToExitCode maps thrown errors; code 12 is only reachable via
+    // direct process.exit(ProcessExitCode.NOT_IMPLEMENTED) in plan/apply/destroy.
+    // Regression guard: no error class should accidentally start mapping to 12.
+    expect(errorToExitCode(new Error("boom"))).not.toBe(12);
+    expect(
+      errorToExitCode(new AssigneeError("x", ErrorCode.USER_CANCELLED)),
+    ).not.toBe(12);
+    expect(
+      errorToExitCode(new AssigneeError("x", ErrorCode.MCP_STARTUP_FAILED)),
+    ).not.toBe(12);
+    expect(
+      errorToExitCode(new AssigneeError("x", ErrorCode.DESTROY_ERROR)),
+    ).not.toBe(12);
+    expect(errorToExitCode(new StateGuardError("stale"))).not.toBe(12);
+    expect(errorToExitCode(new MissingRequiredFieldsError(["Field"]))).not.toBe(
+      12,
+    );
   });
 });
 

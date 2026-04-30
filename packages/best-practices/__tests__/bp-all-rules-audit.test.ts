@@ -2555,7 +2555,7 @@ describe("BP All Rules Audit", () => {
       //   mandatory gate under PCI-DSS / HIPAA / most enterprise
       //   security baselines.
       // + 9 (f) 2026-04-09 Task 9 Epic 30 Phase 2 WA expansion rules:
-      //   BP-S3-007 AbortIncompleteMultipartUpload (cost_optimization),
+      //   BP-S3-007 AbortIncompleteMultipartUpload (cost),
       //   BP-S3BP-001 wildcard-principal policy_antipattern guard
       //   (security + blocking, non-fixable), BP-DYNAMODB-004
       //   ContributorInsights (performance observability), BP-KMS-002

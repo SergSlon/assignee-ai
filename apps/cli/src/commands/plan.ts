@@ -225,7 +225,7 @@ export const planCommand = new Command(CommandName.PLAN)
   // only. Cross-account STS assume-role wiring defers to Epic 101.
   .option(
     "--target-account <id>",
-    "Target AWS account ID (12 digits). W3-04 scaffold: parses and validates only; cross-account assume-role wiring is Epic 101.",
+    "Target AWS account ID (12 digits). Validates format; cross-account assume-role is not yet supported.",
   )
   // Epic 92 Wave 3.b.1 (C-24 / D-01): single consolidated Examples +
   // discovery block — previously composed as two separate addHelpText

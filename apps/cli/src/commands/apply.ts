@@ -327,7 +327,7 @@ export const applyCommand = new Command(CommandName.APPLY)
   // only. Cross-account STS assume-role wiring defers to Epic 101.
   .option(
     "--target-account <id>",
-    "Target AWS account ID (12 digits). W3-04 scaffold: parses and validates only; cross-account assume-role wiring is Epic 101.",
+    "Target AWS account ID (12 digits). Validates format; cross-account assume-role is not yet supported.",
   )
   // Epic 92 Wave 3.b.1 (C-24 / D-02): ONE consolidated addHelpText
   // block with APPLY-specific examples. Before this fix the Examples

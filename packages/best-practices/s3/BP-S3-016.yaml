@@ -11,7 +11,7 @@ description: "S3 buckets with variable access patterns should have Intelligent T
 remediation: "Configure IntelligentTieringConfigurations to enable automatic cost optimization for objects with unpredictable access patterns."
 consequence: "Infrequently accessed objects stay in expensive Standard storage — you overpay for storage that could auto-tier at zero retrieval cost."
 fix_hint: "Enable Intelligent Tiering for automatic cost optimization"
-category: cost_optimization
+category: cost
 lastVerified: "2026-03-24"
 triggers:
   - excludePatterns: ["static-website"]

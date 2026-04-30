@@ -191,6 +191,22 @@ describe("applyCommand — flag surface (Epic 92 D-13)", () => {
   });
 });
 
+// ── W5-S0 — --target-account help description clean of internal trackers ─────
+// Verifies that the --target-account option description rendered by --help
+// (stdout) contains no internal tracker strings such as "Epic 101".
+
+describe("applyCommand — --target-account help description (W5-S0)", () => {
+  it("--help stdout for --target-account does not contain Epic/story tracker strings", async () => {
+    const { applyCommand } = await import("./apply.js");
+    const helpText = captureFullHelp(applyCommand);
+    // The option must be present in the help output.
+    expect(helpText).toContain("--target-account");
+    // Must NOT expose internal tracker names in user-facing output.
+    expect(helpText).not.toMatch(/Epic\s+\d+/i);
+    expect(helpText).not.toMatch(/story\s+\d+-W\d+/i);
+  });
+});
+
 // ── W4-S5 — --target-account user-facing message (M-β-01) ───────────────────
 // Verifies that --target-account exits NOT_IMPLEMENTED without leaking
 // internal tracker strings ("Epic 101", "story", "W3-04") in stderr.

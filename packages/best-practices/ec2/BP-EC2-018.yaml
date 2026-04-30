@@ -11,5 +11,5 @@ description: "Trusted Advisor flags EC2 instances with average CPU utilization b
 remediation: "Right-size or terminate idle instances. Consider using AWS Instance Scheduler for dev/test workloads or switching to spot instances for fault-tolerant workloads."
 consequence: "An idle instance burns its full hourly rate 24/7 for nothing — a forgotten m5.xlarge wastes over $1,400/year."
 fix_hint: "Right-size or terminate idle instances to reduce cost"
-category: cost_optimization
+category: cost
 lastVerified: "2026-04-23"

@@ -308,6 +308,78 @@ describe("auditLog — silent-swallow + mcpLogError routing (P053)", () => {
     expect((extras["errorClass"] as string).length).toBeGreaterThan(0);
   });
 
+  it("redacts AKIA-like patterns from err.message before passing to mcpLogError (M-β-17)", async () => {
+    // Regression guard for W5-S4: a filesystem error whose message contains
+    // an AKIA-format access-key identifier (e.g. a per-tenant cache path
+    // that embeds a credential fragment) must NOT reach the stderr log
+    // scraper verbatim.  The redactSensitive wrapper on the mcpLogError
+    // call should replace the AKIA token with "[AKIA]".
+    //
+    // The AKIA token is embedded in the audit directory path so that the
+    // resulting OS ENOTDIR error message echoes the path — which is the
+    // realistic failure scenario (a per-tenant cache dir derived from a
+    // credential-fragment key).  We use a blocker-file approach (same
+    // pattern as the other P053 tests) so the error originates from a real
+    // OS syscall rather than a synthetic throw, exercising the full path.
+    const fakeAkiaKey = "AKIAIOSFODNN7EXAMPLE";
+
+    const stderrChunks: string[] = [];
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((chunk) => {
+        stderrChunks.push(String(chunk));
+        return true;
+      });
+
+    // Create a regular file at a path whose segment contains the AKIA token,
+    // then point the audit dir at a sub-path of that file (ENOTDIR).
+    const blockerFile = path.join(tmpDir, `tenant-${fakeAkiaKey}`);
+    await fs.writeFile(blockerFile, "blocker");
+    process.env["ASSIGNEE_MCP_AUDIT_DIR"] = path.join(
+      blockerFile,
+      "audit-nested",
+    );
+
+    await auditLog({
+      tool: "apply_plan",
+      runId: "cccccccc-0000-0000-0000-000000000001",
+      resourceType: "AWS::S3::Bucket",
+      identifier: "arn:aws:s3:::akia-redaction-test",
+      success: false,
+      errorClass: "StorageError",
+    });
+
+    stderrSpy.mockRestore();
+
+    // The raw AKIA token must not appear anywhere in the stderr output.
+    const allStderr = stderrChunks.join("");
+    expect(allStderr).not.toContain(fakeAkiaKey);
+
+    // The mcpLogError record must still carry the structured extras (tool,
+    // runId, errorClass) — redaction must only affect the message field.
+    const parsedRecords: Array<Record<string, unknown>> = [];
+    for (const chunk of stderrChunks) {
+      for (const line of chunk.split("\n").filter((l) => l.trim())) {
+        try {
+          parsedRecords.push(JSON.parse(line) as Record<string, unknown>);
+        } catch {
+          // not JSON — skip
+        }
+      }
+    }
+
+    const auditErrRecord = parsedRecords.find(
+      (r) => r["source"] === "audit-log" && r["action"] === "append-failed",
+    );
+    expect(auditErrRecord).toBeDefined();
+
+    const extras = auditErrRecord!["extras"] as Record<string, unknown>;
+    expect(extras["tool"]).toBe("apply_plan");
+    expect(extras["runId"]).toBe("cccccccc-0000-0000-0000-000000000001");
+    expect(typeof extras["errorClass"]).toBe("string");
+    expect((extras["errorClass"] as string).length).toBeGreaterThan(0);
+  });
+
   it("routes write-failure to mcpLogError even for an empty-runId destroy call", async () => {
     // Empty runId is the Story 50-5 H-3 sentinel for destroy_resource
     // (no checkpoint). The audit-log must still surface the error with

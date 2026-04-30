@@ -73,7 +73,7 @@ export function detectCredentialStatus(): {
   if (process.env["AWS_PROFILE"]) {
     return {
       status: "profile",
-      hint: `⚠  AWS_PROFILE=${process.env["AWS_PROFILE"]} detected but not supported directly — export AWS_ACCESS_KEY_ID or run \`assignee setup\``,
+      hint: `✓ AWS_PROFILE=${process.env["AWS_PROFILE"]} detected -- named profile will be used via the standard credential chain`,
     };
   }
 
@@ -91,9 +91,9 @@ export function detectCredentialStatus(): {
  */
 export function showFirstRunWelcome(version: string): void {
   if (!process.stderr.isTTY) {
-    // Non-TTY: minimal output for CI/pipes
+    // Non-TTY: minimal ASCII-only output for CI/pipes (no Unicode glyphs)
     process.stderr.write(
-      `Assignee v${version} — first run, auto-detecting environment...\n`,
+      `Assignee v${version} - first run, auto-detecting environment...\n`,
     );
     return;
   }
@@ -115,8 +115,12 @@ export function showFirstRunWelcome(version: string): void {
       chalk.yellow("  Get started in 2 minutes:"),
       "",
       `  ${chalk.bold("1.")} Set AWS credentials (easiest):`,
+      chalk.gray("       bash/zsh:"),
       `       ${chalk.cyan("export AWS_ACCESS_KEY_ID=<your-key>")}`,
       `       ${chalk.cyan("export AWS_SECRET_ACCESS_KEY=<your-secret>")}`,
+      chalk.gray("       PowerShell:"),
+      `       ${chalk.cyan("$Env:AWS_ACCESS_KEY_ID='<your-key>'")}`,
+      `       ${chalk.cyan("$Env:AWS_SECRET_ACCESS_KEY='<your-secret>'")}`,
       "",
       `  ${chalk.bold("2.")} ${chalk.bold("Or")} create least-privilege IAM users (recommended):`,
       `       ${chalk.cyan("assignee setup")}`,
@@ -132,7 +136,10 @@ export function showFirstRunWelcome(version: string): void {
       chalk.yellow("  Next steps:"),
       "",
       "  • Export your AWS credentials directly:",
+      chalk.gray("       bash/zsh:"),
       `       ${chalk.cyan("export AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=...")}`,
+      chalk.gray("       PowerShell:"),
+      `       ${chalk.cyan("$Env:AWS_ACCESS_KEY_ID='...'; $Env:AWS_SECRET_ACCESS_KEY='...'")}`,
       "",
       "  • Or run `assignee setup` to create least-privilege IAM users",
       "",

@@ -29,11 +29,22 @@ const ARN_PATTERN = new RegExp(
 );
 const ACCOUNT_ID_PATTERN = /\b\d{12}\b/g;
 
+/**
+ * AWS access key identifier pattern (AKIA = long-term IAM key,
+ * ASIA = STS short-term session key). Matches the 20-char key-id
+ * prefix that appears in error messages (e.g. "permission denied
+ * for AKIAIOSFODNN7EXAMPLE"). Defense-in-depth layer complementing
+ * the allowlist-based redactSensitiveFields — this helper operates
+ * on free-form strings rather than structured objects.
+ */
+const AKIA_STRING_PATTERN = /A[KS]IA[0-9A-Z]{16}/g;
+
 export function redactSensitive(message: string): string {
   if (!message) return message;
   return message
     .replace(ARN_PATTERN, "[ARN]")
-    .replace(ACCOUNT_ID_PATTERN, "[ACCOUNT]");
+    .replace(ACCOUNT_ID_PATTERN, "[ACCOUNT]")
+    .replace(AKIA_STRING_PATTERN, "[AKIA]");
 }
 
 /**

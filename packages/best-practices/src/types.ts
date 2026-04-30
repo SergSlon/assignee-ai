@@ -12,7 +12,6 @@ export const Severity = {
 export const BP_CATEGORY = [
   "security",
   "cost",
-  "cost_optimization",
   "reliability",
   "performance",
   "compliance",

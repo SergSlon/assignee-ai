@@ -26,6 +26,7 @@ import {
   ensureAssigneeHome,
   showFirstRunWelcome,
   bootstrapFirstRun,
+  detectCredentialStatus,
   ASSIGNEE_HOME,
 } from "./first-run.js";
 
@@ -79,6 +80,57 @@ describe("first-run", () => {
     });
   });
 
+  describe("detectCredentialStatus", () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it("returns operator status when ASSIGNEE_OPERATOR_* vars are set", () => {
+      vi.stubEnv("ASSIGNEE_OPERATOR_ACCESS_KEY_ID", "op-key");
+      vi.stubEnv("ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY", "op-secret");
+      const result = detectCredentialStatus();
+      expect(result.status).toBe("operator");
+      expect(result.hint).toContain("ASSIGNEE_OPERATOR_*");
+    });
+
+    it("returns standard status when AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are set", () => {
+      vi.stubEnv("ASSIGNEE_OPERATOR_ACCESS_KEY_ID", "");
+      vi.stubEnv("ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY", "");
+      vi.stubEnv("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE");
+      vi.stubEnv("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI");
+      const result = detectCredentialStatus();
+      expect(result.status).toBe("standard");
+    });
+
+    it("returns profile status with correct hint when AWS_PROFILE is set", () => {
+      vi.stubEnv("ASSIGNEE_OPERATOR_ACCESS_KEY_ID", "");
+      vi.stubEnv("ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY", "");
+      vi.stubEnv("AWS_ACCESS_KEY_ID", "");
+      vi.stubEnv("AWS_SECRET_ACCESS_KEY", "");
+      vi.stubEnv("AWS_PROFILE", "my-profile");
+      const result = detectCredentialStatus();
+      expect(result.status).toBe("profile");
+      // Hint must reference the profile name
+      expect(result.hint).toContain("my-profile");
+      // Hint must NOT claim the profile is unsupported
+      expect(result.hint).not.toContain("not supported");
+      // Hint must NOT instruct user to export raw keys
+      expect(result.hint).not.toContain("export AWS_ACCESS_KEY_ID");
+      // Hint must reference the standard credential chain
+      expect(result.hint).toContain("credential chain");
+    });
+
+    it("returns none status when no credentials are set", () => {
+      vi.stubEnv("ASSIGNEE_OPERATOR_ACCESS_KEY_ID", "");
+      vi.stubEnv("ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY", "");
+      vi.stubEnv("AWS_ACCESS_KEY_ID", "");
+      vi.stubEnv("AWS_SECRET_ACCESS_KEY", "");
+      vi.stubEnv("AWS_PROFILE", "");
+      const result = detectCredentialStatus();
+      expect(result.status).toBe("none");
+    });
+  });
+
   describe("showFirstRunWelcome", () => {
     it("writes guided welcome to stderr when TTY (contains version and next steps)", () => {
       const origIsTTY = process.stderr.isTTY;
@@ -126,6 +178,70 @@ describe("first-run", () => {
         value: origIsTTY,
         configurable: true,
       });
+    });
+
+    it("non-TTY output is ASCII-only (no characters outside 0x20-0x7E)", () => {
+      const origIsTTY = process.stderr.isTTY;
+      Object.defineProperty(process.stderr, "isTTY", {
+        value: false,
+        configurable: true,
+      });
+
+      showFirstRunWelcome("0.1.0");
+
+      const allOutput = stderrSpy.mock.calls.map((c) => String(c[0])).join("");
+      // Allow printable ASCII + newlines; reject any character outside that range
+      expect(allOutput).toMatch(/^[\x20-\x7E\n]*$/);
+
+      Object.defineProperty(process.stderr, "isTTY", {
+        value: origIsTTY,
+        configurable: true,
+      });
+    });
+
+    it("status=none setup section includes both export and $Env: snippets", () => {
+      const origIsTTY = process.stderr.isTTY;
+      Object.defineProperty(process.stderr, "isTTY", {
+        value: true,
+        configurable: true,
+      });
+      // Ensure no credentials are set so status === "none"
+      const origAccessKey = process.env["AWS_ACCESS_KEY_ID"];
+      const origSecretKey = process.env["AWS_SECRET_ACCESS_KEY"];
+      const origProfile = process.env["AWS_PROFILE"];
+      const origOpKey = process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
+      const origOpSecret = process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"];
+      delete process.env["AWS_ACCESS_KEY_ID"];
+      delete process.env["AWS_SECRET_ACCESS_KEY"];
+      delete process.env["AWS_PROFILE"];
+      delete process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
+      delete process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"];
+
+      try {
+        showFirstRunWelcome("0.1.0");
+
+        const allOutput = stderrSpy.mock.calls
+          .map((c) => String(c[0]))
+          .join("");
+        // Must contain POSIX export syntax
+        expect(allOutput).toContain("export AWS_ACCESS_KEY_ID");
+        // Must contain PowerShell $Env: syntax
+        expect(allOutput).toContain("$Env:AWS_ACCESS_KEY_ID");
+      } finally {
+        if (origAccessKey !== undefined)
+          process.env["AWS_ACCESS_KEY_ID"] = origAccessKey;
+        if (origSecretKey !== undefined)
+          process.env["AWS_SECRET_ACCESS_KEY"] = origSecretKey;
+        if (origProfile !== undefined) process.env["AWS_PROFILE"] = origProfile;
+        if (origOpKey !== undefined)
+          process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = origOpKey;
+        if (origOpSecret !== undefined)
+          process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] = origOpSecret;
+        Object.defineProperty(process.stderr, "isTTY", {
+          value: origIsTTY,
+          configurable: true,
+        });
+      }
     });
 
     // Story 50-2: chalk@5 honors NO_COLOR natively — the TTY welcome path

@@ -43,7 +43,7 @@ _assignee() {
             '--yes[Accepted for CI wrapper compatibility; plan is read-only and does not mutate.]' \
             '--quick[Skip wizard prompts that have defaults — only ask for required fields without a default. Shows a summary gate before generating the plan.]' \
             '--wizard[Run interactive configuration wizard (prompts for required fields; plan-only, no provisioning).]' \
-            '--target-account[Target AWS account ID (12 digits). W3-04 scaffold\: parses and validates only; cross-account assume-role wiring is Epic 101.]:id:'
+            '--target-account[Target AWS account ID (12 digits). Validates format; cross-account assume-role is not yet supported.]:id:'
           ;;
         apply)
           _arguments \
@@ -56,7 +56,7 @@ _assignee() {
             '--set[Pre-set wizard field values (repeatable)]:key=value...:' \
             '--output[Output format (json|text)]:format:' \
             '--json[Shorthand for --output json (emit machine-readable envelope)]' \
-            '--target-account[Target AWS account ID (12 digits). W3-04 scaffold\: parses and validates only; cross-account assume-role wiring is Epic 101.]:id:'
+            '--target-account[Target AWS account ID (12 digits). Validates format; cross-account assume-role is not yet supported.]:id:'
           ;;
         init)
           _arguments \
@@ -77,7 +77,7 @@ _assignee() {
             '--force-delete-without-recovery[SecretsManager secrets only\: skip the recovery window and destroy the secret immediately. Mutually exclusive with --recovery-window-in-days.]' \
             '--output[Output format (json|text)]:format:' \
             '--json[Shorthand for --output json (emit machine-readable envelope)]' \
-            '--target-account[Target AWS account ID (12 digits). W3-04 scaffold\: parses and validates only; cross-account assume-role wiring is Epic 101.]:id:'
+            '--target-account[Target AWS account ID (12 digits). Validates format; cross-account assume-role is not yet supported.]:id:'
           ;;
         drift)
           _arguments \
