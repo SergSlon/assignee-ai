@@ -22,7 +22,7 @@
  *   canonical) for HMAC computation. Those HMACs will NOT verify against
  *   this implementation.  To verify a legacy chain, re-compute each HMAC
  *   with `JSON.stringify(record)` using the original key.  For migration
- *   tooling, compare `legacyHmac(prevHmac, record, key)` (plain
+ *   tooling, compare `legacyComputeChainLink(prevHmac, record, key)` (plain
  *   JSON.stringify) against the stored HMAC, then re-sign with
  *   `computeChainLink` once verified.  New chains written after upgrading
  *   use canonical JSON and are forward-compatible across all environments.
@@ -144,6 +144,69 @@ export function verifyChainLink(
   // Use timingSafeEqual to prevent timing-oracle attacks.
   // Both buffers must have the same byte length; a length mismatch is a
   // guaranteed mismatch (no further comparison needed).
+  const expectedBuf = Buffer.from(expected, "utf8");
+  const storedBuf = Buffer.from(storedHmac, "utf8");
+  if (expectedBuf.length !== storedBuf.length) return false;
+  return timingSafeEqual(expectedBuf, storedBuf);
+}
+
+// ── Legacy HMAC helpers (W8-S0 — migration tooling for pre-W7 audit logs) ──
+
+/**
+ * Compute the HMAC for a pre-W7 chain link.
+ *
+ * Pre-W7 audit logs used plain `JSON.stringify(record)` (insertion-order,
+ * non-canonical) for HMAC computation.  This helper reproduces that
+ * byte-for-byte behaviour so that operators can verify old entries before
+ * re-signing them with `computeChainLink`.
+ *
+ * **Migration path**:
+ *  1. For each entry in a pre-W7 log, call
+ *     `legacyVerifyChainLink(record, prevHmac, storedHmac, key)`.
+ *     `true` → the entry was correctly written by the old implementation.
+ *  2. Once verified, compute the canonical replacement HMAC with
+ *     `computeChainLink(prevHmac, record, key)` and write the new entry.
+ *  3. After all entries are re-signed, the chain is fully canonical and
+ *     forward-compatible with `verifyChainLink` / `verifyAuditLog`.
+ *
+ * Do NOT use this function to write new log entries — use `computeChainLink`.
+ *
+ * @param prevHmac  - HMAC of the previous record (or `GENESIS_HMAC`).
+ * @param record    - Record object as stored in the original log entry.
+ * @param key       - HMAC key (hex string). Defaults to `getAuditKey()`.
+ * @returns         - Hex-encoded HMAC-SHA256 digest matching pre-W7 output.
+ */
+export function legacyComputeChainLink(
+  prevHmac: string,
+  record: unknown,
+  key: string = getAuditKey(),
+): string {
+  // Intentionally uses JSON.stringify (insertion-order) — NOT canonicalJson.
+  const payload = `${prevHmac}|${JSON.stringify(record)}`;
+  return createHmac("sha256", key).update(payload).digest("hex");
+}
+
+/**
+ * Verify a pre-W7 chain link using the legacy (plain `JSON.stringify`) HMAC.
+ *
+ * Drop-in mirror of `verifyChainLink` that delegates to
+ * `legacyComputeChainLink` instead of `computeChainLink`.  Uses
+ * `timingSafeEqual` to prevent timing-oracle attacks, identical to the
+ * canonical verifier.
+ *
+ * @param record     - The record object stored in the entry.
+ * @param prevHmac   - The `prevHmac` stored in the same entry.
+ * @param storedHmac - The `hmac` field stored in the entry.
+ * @param key        - HMAC key (hex string). Defaults to `getAuditKey()`.
+ * @returns          - `true` when the legacy link is valid.
+ */
+export function legacyVerifyChainLink(
+  record: unknown,
+  prevHmac: string,
+  storedHmac: string,
+  key: string = getAuditKey(),
+): boolean {
+  const expected = legacyComputeChainLink(prevHmac, record, key);
   const expectedBuf = Buffer.from(expected, "utf8");
   const storedBuf = Buffer.from(storedHmac, "utf8");
   if (expectedBuf.length !== storedBuf.length) return false;

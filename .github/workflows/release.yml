@@ -115,6 +115,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Check version parity
+        # W8-S4 (M-γ-20): Verify every publishable package.json version matches
+        # the release tag before any build or publish step runs.  Exits non-zero
+        # and prints a diff if any package is ahead or behind the tag.
+        # Only enforced when the tag looks like semver; branch-triggered runs
+        # are a no-op (the script exits 0 for non-semver ref names).
+        if: startsWith(inputs.tag, 'v')
+        run: npx tsx scripts/audit-version-parity.ts --expected-version ${{ inputs.tag }}
+
       - name: Build all packages
         run: npx turbo build
 
