@@ -51,17 +51,38 @@ const SENSITIVE_KEY_NAMES: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Lowercase-normalized copy of SENSITIVE_KEY_NAMES for case-insensitive
+ * matching (M-α-007). CFN schemas are PascalCase, but operator-submitted
+ * payloads may use lowercase or ALLCAPS variants. We preserve the original
+ * SENSITIVE_KEY_NAMES set for exact-match fast path and fall back to
+ * this lowercase set for non-standard casings.
+ *
+ * Invariant: SENSITIVE_KEY_NAMES is NOT modified; this is an additive set.
+ */
+const SENSITIVE_KEY_NAMES_LOWER: ReadonlySet<string> = new Set(
+  [...SENSITIVE_KEY_NAMES].map((k) => k.toLowerCase()),
+);
+
+/**
  * Pattern for AWS access key identifiers (AKIA = long-term IAM access keys,
- * ASIA = STS short-term session credentials). Any string value matching this
- * pattern is redacted regardless of its key name. This is defense-in-depth
- * over the key allowlist — it walks values, so it has no false-positive risk
- * on innocuously-named properties.
+ * ASIA = STS short-term session credentials). Used with `.replace()` so that
+ * only the matched key-ID substring is replaced, preserving surrounding
+ * context (e.g. a log message "Using key AKIAIOSFODNN7EXAMPLE for S3" becomes
+ * "Using key [REDACTED] for S3" rather than replacing the entire string).
+ *
+ * The `g` flag ensures all occurrences in a single string are replaced (M-α-005).
  *
  * We deliberately do NOT try to match the 40-char base64 secret-access-key
  * shape: it is too generic and would false-positive on bucket names, ARNs,
  * and other long opaque identifiers.
+ *
+ * IMPORTANT: Because this is a module-level regex with the `g` flag, never
+ * use `.test()` on it without resetting `.lastIndex = 0` first — `.test()`
+ * advances `lastIndex` and alternating `.test()` / `.replace()` calls produce
+ * incorrect results. Instead, use `.replace()` directly and detect changes via
+ * `replaced !== value`. This avoids all `lastIndex` statefulness issues.
  */
-const AKIA_PATTERN = /A[KS]IA[0-9A-Z]{16}/;
+const AKIA_PATTERN_G = /A[KS]IA[0-9A-Z]{16}/g;
 
 /** Value used to mask redacted fields. */
 export const REDACTED_VALUE = "[REDACTED]";
@@ -76,7 +97,10 @@ export function redactSensitiveFields(
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(state)) {
-    if (SENSITIVE_KEY_NAMES.has(key)) {
+    if (
+      SENSITIVE_KEY_NAMES.has(key) ||
+      SENSITIVE_KEY_NAMES_LOWER.has(key.toLowerCase())
+    ) {
       result[key] = REDACTED_VALUE;
       continue;
     }
@@ -91,7 +115,11 @@ export function redactSensitiveFields(
  */
 function redactValue(value: unknown): unknown {
   if (typeof value === "string") {
-    return AKIA_PATTERN.test(value) ? REDACTED_VALUE : value;
+    // Use .replace() directly (not .test()) to avoid lastIndex statefulness
+    // with the global regex. Substring replacement preserves surrounding
+    // context — only the AKIA/ASIA key-ID token is masked (M-α-005).
+    const replaced = value.replace(AKIA_PATTERN_G, REDACTED_VALUE);
+    return replaced !== value ? replaced : value;
   }
   if (Array.isArray(value)) {
     return value.map((v) => redactValue(v));

@@ -1299,16 +1299,26 @@ describe("planCommand — --target-account NOT_IMPLEMENTED message (W4-S5)", () 
         return true;
       },
     );
-    vi.spyOn(process, "exit").mockImplementation((() => {}) as never);
+    // W12-S0: process.exit() replaced with process.exitCode = ...; return.
+    // Spy must NOT be called; assert process.exitCode instead.
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {
+      throw new Error("process.exit called — should not happen");
+    }) as never);
 
-    const { planCommand } = await import("./plan.js");
-    await planCommand.parseAsync([
-      "node",
-      "plan",
-      "--target-account",
-      "112233445566",
-      "Create an S3 bucket",
-    ]);
+    const prevExitCode = process.exitCode;
+    process.exitCode = undefined;
+    try {
+      const { planCommand } = await import("./plan.js");
+      await planCommand.parseAsync([
+        "node",
+        "plan",
+        "--target-account",
+        "112233445566",
+        "Create an S3 bucket",
+      ]);
+    } finally {
+      exitSpy.mockRestore();
+    }
 
     const stderrText = stderrCalls.join("");
     // Must contain user-facing intent keywords.
@@ -1317,8 +1327,45 @@ describe("planCommand — --target-account NOT_IMPLEMENTED message (W4-S5)", () 
     // Must NOT leak internal tracker names.
     expect(stderrText).not.toMatch(/Epic\s+\d+/i);
     expect(stderrText).not.toMatch(/story\s+\d+-W\d+/i);
-    // Exit code must be NOT_IMPLEMENTED (12).
-    expect(process.exit).toHaveBeenCalledWith(12);
+    // W12-S0: process.exit must NOT be called; process.exitCode set to 12.
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(12);
+    process.exitCode = prevExitCode;
+  });
+
+  // W12-S0: GENERIC_ERROR path — invalid account ID sets exitCode = 1.
+  it("sets exitCode GENERIC_ERROR (1) for an invalid account ID without calling process.exit", async () => {
+    const stderrCalls: string[] = [];
+    vi.spyOn(process.stderr, "write").mockImplementation(
+      (chunk: unknown): boolean => {
+        stderrCalls.push(String(chunk));
+        return true;
+      },
+    );
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {
+      throw new Error("process.exit called — should not happen");
+    }) as never);
+
+    const prevExitCode = process.exitCode;
+    process.exitCode = undefined;
+    try {
+      const { planCommand } = await import("./plan.js");
+      await planCommand.parseAsync([
+        "node",
+        "plan",
+        "--target-account",
+        "not-a-valid-id",
+        "Create an S3 bucket",
+      ]);
+    } finally {
+      exitSpy.mockRestore();
+    }
+
+    const stderrText = stderrCalls.join("");
+    expect(stderrText).toMatch(/[Ii]nvalid/);
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(1);
+    process.exitCode = prevExitCode;
   });
 });
 

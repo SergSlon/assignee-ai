@@ -29,8 +29,10 @@ const ALL_VARS = [
   "ASSIGNEE_OPERATOR_SESSION_TOKEN",
   "ASSIGNEE_READER_ACCESS_KEY_ID",
   "ASSIGNEE_READER_SECRET_ACCESS_KEY",
+  "ASSIGNEE_READER_SESSION_TOKEN",
   "ASSIGNEE_AUDITOR_ACCESS_KEY_ID",
   "ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY",
+  "ASSIGNEE_AUDITOR_SESSION_TOKEN",
 ];
 
 const saved: Record<string, string | undefined> = {};
@@ -301,6 +303,79 @@ describe("aws-credentials helpers", () => {
       process.env["ASSIGNEE_OPERATOR_SESSION_TOKEN"] = "   ";
       const creds = requireAssigneeCredentials("operator");
       expect(creds.sessionToken).toBeUndefined();
+    });
+  });
+
+  // ── M-α-30: reader/auditor sessionTokenKey parity ───────────────────────
+
+  describe("requireAssigneeCredentials — reader/auditor session token (M-α-30)", () => {
+    const VALID_KEY = "ASIAIOSFODNN7STSEXAMP";
+    const VALID_SECRET = "stsSecretKeyValueExample123456789012345";
+    const VALID_TOKEN =
+      "AQoXnyc4lcK4w4OIaHPGTq6EXAMPLEsessionTOKEN1234567890abcdefghijklmno";
+
+    it("reader: propagates sessionToken when ASSIGNEE_READER_SESSION_TOKEN is set", () => {
+      process.env["ASSIGNEE_READER_ACCESS_KEY_ID"] = VALID_KEY;
+      process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"] = VALID_SECRET;
+      process.env["ASSIGNEE_READER_SESSION_TOKEN"] = VALID_TOKEN;
+      const creds = requireAssigneeCredentials("reader");
+      expect(creds.sessionToken).toBe(VALID_TOKEN);
+    });
+
+    it("reader: no sessionToken when ASSIGNEE_READER_SESSION_TOKEN is absent", () => {
+      process.env["ASSIGNEE_READER_ACCESS_KEY_ID"] = VALID_KEY;
+      process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"] = VALID_SECRET;
+      const creds = requireAssigneeCredentials("reader");
+      expect(creds.sessionToken).toBeUndefined();
+    });
+
+    it("reader: throws InvalidSessionTokenError for too-short reader session token", () => {
+      process.env["ASSIGNEE_READER_ACCESS_KEY_ID"] = VALID_KEY;
+      process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"] = VALID_SECRET;
+      process.env["ASSIGNEE_READER_SESSION_TOKEN"] = "tooshort";
+      expect(() => requireAssigneeCredentials("reader")).toThrow(
+        InvalidSessionTokenError,
+      );
+    });
+
+    it("reader: tryAssigneeCredentials propagates reader sessionToken", () => {
+      process.env["ASSIGNEE_READER_ACCESS_KEY_ID"] = VALID_KEY;
+      process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"] = VALID_SECRET;
+      process.env["ASSIGNEE_READER_SESSION_TOKEN"] = VALID_TOKEN;
+      const creds = tryAssigneeCredentials("reader");
+      expect(creds?.sessionToken).toBe(VALID_TOKEN);
+    });
+
+    it("auditor: propagates sessionToken when ASSIGNEE_AUDITOR_SESSION_TOKEN is set", () => {
+      process.env["ASSIGNEE_AUDITOR_ACCESS_KEY_ID"] = VALID_KEY;
+      process.env["ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY"] = VALID_SECRET;
+      process.env["ASSIGNEE_AUDITOR_SESSION_TOKEN"] = VALID_TOKEN;
+      const creds = requireAssigneeCredentials("auditor");
+      expect(creds.sessionToken).toBe(VALID_TOKEN);
+    });
+
+    it("auditor: no sessionToken when ASSIGNEE_AUDITOR_SESSION_TOKEN is absent", () => {
+      process.env["ASSIGNEE_AUDITOR_ACCESS_KEY_ID"] = VALID_KEY;
+      process.env["ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY"] = VALID_SECRET;
+      const creds = requireAssigneeCredentials("auditor");
+      expect(creds.sessionToken).toBeUndefined();
+    });
+
+    it("auditor: throws InvalidSessionTokenError for too-short auditor session token", () => {
+      process.env["ASSIGNEE_AUDITOR_ACCESS_KEY_ID"] = VALID_KEY;
+      process.env["ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY"] = VALID_SECRET;
+      process.env["ASSIGNEE_AUDITOR_SESSION_TOKEN"] = "tooshort";
+      expect(() => requireAssigneeCredentials("auditor")).toThrow(
+        InvalidSessionTokenError,
+      );
+    });
+
+    it("auditor: tryAssigneeCredentials propagates auditor sessionToken", () => {
+      process.env["ASSIGNEE_AUDITOR_ACCESS_KEY_ID"] = VALID_KEY;
+      process.env["ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY"] = VALID_SECRET;
+      process.env["ASSIGNEE_AUDITOR_SESSION_TOKEN"] = VALID_TOKEN;
+      const creds = tryAssigneeCredentials("auditor");
+      expect(creds?.sessionToken).toBe(VALID_TOKEN);
     });
   });
 

@@ -13,10 +13,14 @@ export const EnvVar = {
   // ── Reader credentials ────────────────────────────────────────
   READER_ACCESS_KEY: "ASSIGNEE_READER_ACCESS_KEY_ID",
   READER_SECRET_KEY: "ASSIGNEE_READER_SECRET_ACCESS_KEY",
+  // M-α-30: session token for STS / ASIA reader keys in MCP subprocess context
+  READER_SESSION_TOKEN: "ASSIGNEE_READER_SESSION_TOKEN",
 
   // ── Auditor credentials ───────────────────────────────────────
   AUDITOR_ACCESS_KEY: "ASSIGNEE_AUDITOR_ACCESS_KEY_ID",
   AUDITOR_SECRET_KEY: "ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY",
+  // M-α-30: session token for STS / ASIA auditor keys in MCP subprocess context
+  AUDITOR_SESSION_TOKEN: "ASSIGNEE_AUDITOR_SESSION_TOKEN",
 
   // ── AWS standard ──────────────────────────────────────────────
   AWS_REGION: "AWS_REGION",
@@ -137,6 +141,14 @@ export const EnvVar = {
    * @see packages/core/src/telemetry/otel-allowlist.ts
    */
   ASSIGNEE_OTEL_INCLUDE_PII: "ASSIGNEE_OTEL_INCLUDE_PII",
+  /**
+   * When set to "1", the OTEL exporter allows plaintext HTTP endpoints.
+   * By default only HTTPS endpoints are accepted to prevent accidental
+   * telemetry exfiltration over an unencrypted channel.
+   * Intended for local development / loopback collectors only.
+   * @see packages/core/src/telemetry/otel-exporter.ts
+   */
+  ASSIGNEE_OTEL_ALLOW_HTTP: "ASSIGNEE_OTEL_ALLOW_HTTP",
 
   // `ASSIGNEE_ENABLE_REMOTE_MCP` was previously defined here to gate the
   // opt-in remote knowledge MCP server. REMOVED per acquisition-DD L4-S01

@@ -72,10 +72,15 @@ const ROLE_TO_VARS: Record<
   reader: {
     accessKey: "ASSIGNEE_READER_ACCESS_KEY_ID",
     secretKey: "ASSIGNEE_READER_SECRET_ACCESS_KEY",
+    // M-α-30: reader may use STS / ASIA keys in MCP subprocess context;
+    // without sessionTokenKey the token is silently dropped → AccessDenied.
+    sessionTokenKey: EnvVar.READER_SESSION_TOKEN,
   },
   auditor: {
     accessKey: "ASSIGNEE_AUDITOR_ACCESS_KEY_ID",
     secretKey: "ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY",
+    // M-α-30: same fix for auditor role.
+    sessionTokenKey: EnvVar.AUDITOR_SESSION_TOKEN,
   },
 };
 

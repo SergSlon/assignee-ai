@@ -26,7 +26,7 @@ import * as clack from "@clack/prompts";
 import { AutoFixMode, AssigneeError } from "@assignee/core";
 import type { AutoFixModeType } from "@assignee/core";
 import { CommandName, CommandDescription } from "../constants/commands.js";
-import { ErrorCode } from "../constants/errors.js";
+import { ErrorCode, ProcessExitCode } from "../constants/errors.js";
 import {
   resolveIntroContext,
   formatIntroContext,
@@ -191,7 +191,7 @@ to preferences.auto_fix and control how \`assignee plan\` reacts to best
         "[ERROR] init requires a TTY OR --yes flag\n" +
           `[FIX] Re-run with: assignee init --yes --region ${region} --auto-fix ${autoFix}\n`,
       );
-      process.exit(1);
+      process.exitCode = ProcessExitCode.GENERIC_ERROR;
       return;
     }
 

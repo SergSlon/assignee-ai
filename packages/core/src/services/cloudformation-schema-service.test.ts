@@ -400,6 +400,100 @@ describe("CloudFormationSchemaService", () => {
     });
   });
 
+  // ── M-α-23: in-flight dedup map (concurrent same-type callers) ─────────
+  // When N concurrent getSchema() calls race on a cold cache for the same
+  // type name, exactly 1 DescribeType API call must fire and N-1 callers
+  // share the result via the _inFlight Map. On failure the map entry is
+  // removed so a subsequent call retries the API (no cached rejections).
+  describe("getSchema — in-flight dedup (M-α-23)", () => {
+    it("3 concurrent calls for same type on cold cache → exactly 1 fetchFromApi call", async () => {
+      // Each mockSend call returns the same schema; if dedup is broken, all 3
+      // concurrent calls would each fire and the second/third would fail to
+      // get a value from mockSend (only 1 value queued).
+      mockSend.mockResolvedValueOnce({
+        Schema: JSON.stringify(S3_BUCKET_SCHEMA),
+      });
+
+      const service = await createService();
+      const [s1, s2, s3] = await Promise.all([
+        service.getSchema("AWS::S3::Bucket"),
+        service.getSchema("AWS::S3::Bucket"),
+        service.getSchema("AWS::S3::Bucket"),
+      ]);
+
+      // All 3 callers must receive the correct schema.
+      expect(s1).toEqual(S3_BUCKET_SCHEMA);
+      expect(s2).toEqual(S3_BUCKET_SCHEMA);
+      expect(s3).toEqual(S3_BUCKET_SCHEMA);
+      // Exactly 1 DescribeType API call was made (not 3).
+      expect(mockSend).toHaveBeenCalledTimes(1);
+    });
+
+    it("concurrent calls for DIFFERENT types each trigger their own API call (no over-dedup)", async () => {
+      const EC2_INSTANCE_SCHEMA = {
+        typeName: "AWS::EC2::Instance",
+        properties: { InstanceId: { type: "string" } },
+        primaryIdentifier: ["/properties/InstanceId"],
+        additionalProperties: false,
+      };
+
+      mockSend
+        .mockResolvedValueOnce({ Schema: JSON.stringify(S3_BUCKET_SCHEMA) })
+        .mockResolvedValueOnce({ Schema: JSON.stringify(EC2_INSTANCE_SCHEMA) });
+
+      const service = await createService();
+      const [s3Schema, ec2Schema] = await Promise.all([
+        service.getSchema("AWS::S3::Bucket"),
+        service.getSchema("AWS::EC2::Instance"),
+      ]);
+
+      expect(s3Schema).toEqual(S3_BUCKET_SCHEMA);
+      expect(ec2Schema).toEqual(EC2_INSTANCE_SCHEMA);
+      // Two separate API calls — one per type.
+      expect(mockSend).toHaveBeenCalledTimes(2);
+    });
+
+    it("_inFlight entry is removed on rejection so a retry call hits the API again", async () => {
+      const apiError = new Error("DescribeType: ServiceUnavailable");
+      // First call fails, second call succeeds.
+      mockSend
+        .mockRejectedValueOnce(apiError)
+        .mockResolvedValueOnce({ Schema: JSON.stringify(S3_BUCKET_SCHEMA) });
+
+      const service = await createService();
+
+      // First call — should throw.
+      await expect(service.getSchema("AWS::S3::Bucket")).rejects.toThrow(
+        SchemaFetchError,
+      );
+
+      // Second call — must retry the API (not hang on a cached rejection).
+      const schema = await service.getSchema("AWS::S3::Bucket");
+      expect(schema).toEqual(S3_BUCKET_SCHEMA);
+
+      // 2 API calls total — dedup did not lock on the error.
+      expect(mockSend).toHaveBeenCalledTimes(2);
+    });
+
+    it("sequential calls (second after first resolves) hit disk cache — API called only once", async () => {
+      mockSend.mockResolvedValueOnce({
+        Schema: JSON.stringify(S3_BUCKET_SCHEMA),
+      });
+
+      const service = await createService();
+
+      // First call: cold cache → API.
+      const first = await service.getSchema("AWS::S3::Bucket");
+      expect(first).toEqual(S3_BUCKET_SCHEMA);
+      expect(mockSend).toHaveBeenCalledTimes(1);
+
+      // Second call: warm disk cache → no API call.
+      const second = await service.getSchema("AWS::S3::Bucket");
+      expect(second).toEqual(S3_BUCKET_SCHEMA);
+      expect(mockSend).toHaveBeenCalledTimes(1); // still 1, not 2
+    });
+  });
+
   // ── M-R6: corrupt cache file must be unlinked, not infinitely re-fetched ─
   // A truncated/partial JSON file in the cache directory previously caused
   // every subsequent getSchema() to (a) read the corrupt file, (b) fail to

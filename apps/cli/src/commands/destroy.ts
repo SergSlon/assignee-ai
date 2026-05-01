@@ -676,13 +676,13 @@ the resource is still billing and recoverable during the window.
           process.stderr.write(
             `[destroy] ${validation.reason ?? "Invalid account ID"}\n`,
           );
-          process.exit(ProcessExitCode.GENERIC_ERROR);
+          process.exitCode = ProcessExitCode.GENERIC_ERROR;
           return;
         }
         process.stderr.write(
           `[destroy] cross-account assume-role not yet available for ${rawOptsWithTarget.targetAccount}\n`,
         );
-        process.exit(ProcessExitCode.NOT_IMPLEMENTED);
+        process.exitCode = ProcessExitCode.NOT_IMPLEMENTED;
         return;
       }
 
