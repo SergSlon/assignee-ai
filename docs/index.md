@@ -121,21 +121,21 @@ when you want to understand how assignee.ai thinks. See
 > `pnpm -r test:coverage` for live values. Numbers in this table are
 > illustrative; trust the registry, not this doc.
 
-| Metric                         | Count / Source                                                                                                                     |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Supported AWS resource types   | see `help-hints.ts` (36 with dedicated plugins + 2 compound-only: `EC2::VPCGatewayAttachment`, `EC2::SubnetRouteTableAssociation`) |
-| Compound architecture patterns | see `help-hints.ts` (first-class compounds)                                                                                        |
-| LangGraph pipeline nodes       | 14                                                                                                                                 |
-| CLI commands                   | 15                                                                                                                                 |
-| MCP server tools               | 5                                                                                                                                  |
-| Resource plugins               | see `help-hints.ts` (type-specific + generic fallback; compound-only types share the generic)                                      |
-| Best practice YAML rules       | see `packages/best-practices/manifest.json` (count enforced by `pnpm doc-lint`)                                                    |
-| Pricing strategies             | see `pnpm doc-lint` for live count                                                                                                 |
-| Pricing decomposers            | see `pnpm doc-lint` for live count                                                                                                 |
-| Config precedence levels       | 6                                                                                                                                  |
-| LLM providers supported        | 5                                                                                                                                  |
-| IAM credential users           | 3                                                                                                                                  |
-| Test files                     | across 4 packages (cli + mcp-server + core + best-practices) — run `pnpm -r test:coverage` for live counts                         |
-| RUN_E2E compound coverage      | full registry exercised E2E — see `apps/cli/src/e2e/e2e-plan-compounds.test.ts` for the canonical list                             |
+| Metric                         | Count / Source                                                                                                                      |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Supported AWS resource types   | see `help-hints.ts` (36 with dedicated plugins + 2 compound-only: `EC2::VPCGatewayAttachment`, `EC2::SubnetRouteTableAssociation`)  |
+| Compound architecture patterns | see `help-hints.ts` (first-class compounds)                                                                                         |
+| LangGraph pipeline nodes       | 14                                                                                                                                  |
+| CLI commands                   | 15                                                                                                                                  |
+| MCP server tools               | 5                                                                                                                                   |
+| Resource plugins               | see `help-hints.ts` (type-specific + generic fallback; compound-only types share the generic)                                       |
+| Best practice YAML rules       | see `packages/best-practices/manifest.json` (count enforced by `pnpm doc-lint`)                                                     |
+| Pricing strategies             | see `pnpm doc-lint` for live count                                                                                                  |
+| Pricing decomposers            | see `pnpm doc-lint` for live count                                                                                                  |
+| Config precedence levels       | 6                                                                                                                                   |
+| LLM providers supported        | 5                                                                                                                                   |
+| IAM credential users           | 3                                                                                                                                   |
+| Test files                     | across 4 packages (cli + mcp-server + core + best-practices) — run `pnpm -r test:coverage` for live counts                          |
+| RUN_E2E compound coverage      | full registry exercised E2E — see `apps/cli/src/e2e/e2e-plan-compounds-{container,lambda,storage,three-tier,web}.test.ts` (5 files) |
 
 > Full release history is in [`docs/engineering/changelog-history.md`](engineering/changelog-history.md).
