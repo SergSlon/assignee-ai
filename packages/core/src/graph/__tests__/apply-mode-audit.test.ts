@@ -179,7 +179,7 @@ vi.mock("../../config/org-policy-cache.js", () => ({
 }));
 
 import { createGraph } from "../create-graph.js";
-import { _resetSchemaService } from "../nodes/schema-fetcher.js";
+// W11-S1: _resetSchemaService removed; schema service is now per-graph.
 import { resetBPCache } from "../nodes/bp-evaluator.js";
 import { createCloudControlClient } from "../../services/cloudcontrol-client.js";
 
@@ -253,8 +253,7 @@ beforeEach(async () => {
   } as never);
   // mockReset is required to clear mockResolvedValueOnce queues
   mockGenerateText.mockReset();
-  // Reset schema service singleton so the mock constructor fires each test
-  _resetSchemaService();
+  // W11-S1: schema service is per-graph; no singleton reset needed.
   // Reset BP cache so rules are reloaded fresh
   resetBPCache();
   // Default schema mock: look up raw schema by resource type name

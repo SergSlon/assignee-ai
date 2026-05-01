@@ -28,7 +28,7 @@ import {
 } from "./graph-routing.js";
 
 import { createIntentParserNode } from "./nodes/intent-parser.js";
-import { schemaFetcherNode } from "./nodes/schema-fetcher.js";
+import { createSchemaFetcherNode } from "./nodes/schema-fetcher.js";
 import { optionElicitorNode } from "./nodes/option-elicitor.js";
 import { compoundDispatcherNode } from "./nodes/compound-dispatcher.js";
 import { createPlanGeneratorNode } from "./nodes/plan-generator.js";
@@ -42,6 +42,7 @@ import { resultFormatterNode } from "./nodes/result-formatter.js";
 import { bpEvaluatorNode } from "./nodes/bp-evaluator.js";
 import { fixApplicatorNode } from "./nodes/fix-applicator/orchestrator.js";
 import { createCloudControlClient } from "../services/cloudcontrol-client.js";
+import { CloudFormationSchemaService } from "../services/cloudformation-schema-service.js";
 import { CloudControlAdapter } from "../aws/cloudcontrol-adapter.js";
 import { LlmAdapter } from "../llm/adapter.js";
 import { tryAssigneeCredentials } from "../config/aws-credentials.js";
@@ -227,6 +228,14 @@ export function createGraph(
   const adviceGeneratorNode = createAdviceGeneratorNode({
     llmClient: llmAdapter,
   });
+
+  // W11-S1: CloudFormationSchemaService is instantiated per createGraph call so
+  // each graph (and therefore each SaaS tenant) owns its own service instance.
+  // No module-level singleton — credentials/schema cache cannot leak across
+  // tenant boundaries.
+  const schemaFetcherNode = createSchemaFetcherNode(
+    new CloudFormationSchemaService(),
+  );
 
   // W4-05: telemetry adapter (undefined = no-op via emitFiltered).
   const tel = options.telemetryAdapter;

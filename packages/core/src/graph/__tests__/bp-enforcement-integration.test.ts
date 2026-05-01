@@ -178,7 +178,7 @@ vi.mock("../../config/org-policy-cache.js", () => ({
 }));
 
 import { createGraph } from "../create-graph.js";
-import { _resetSchemaService } from "../nodes/schema-fetcher.js";
+// W11-S1: _resetSchemaService removed; schema service is now per-graph.
 import { resetBPCache } from "../nodes/bp-evaluator.js";
 import { createCloudControlClient } from "../../services/cloudcontrol-client.js";
 
@@ -268,7 +268,7 @@ beforeEach(async () => {
     send: vi.fn(),
   } as never);
   mockGenerateText.mockReset();
-  _resetSchemaService();
+  // W11-S1: schema service is per-graph; no singleton reset needed.
   resetBPCache();
   mockGetSchema.mockImplementation((typeName: string) => {
     const schema = RawSchemasByType[typeName];

@@ -1,21 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ExecutionStatus, SchemaFetchError } from "../../index.js";
 
-// Mock CloudFormationSchemaService via the in-core barrel path.
-// NOTE: Constructor implementation is re-installed in beforeEach because
-// vitest's mockReset:true wipes vi.fn implementations between tests.
+// createSchemaFetcherNode accepts a CloudFormationSchemaService instance —
+// we pass a plain object stub; no class-level vi.mock() required.
 const mockGetSchema = vi.fn();
-vi.mock("../../index.js", async (importOriginal) => {
-  const actual = (await importOriginal()) as Record<string, unknown>;
-  return {
-    ...actual,
-    CloudFormationSchemaService: vi.fn(),
-  };
-});
 
-import { schemaFetcherNode, _resetSchemaService } from "./schema-fetcher.js";
-import { CloudFormationSchemaService } from "../../index.js";
+import { createSchemaFetcherNode } from "./schema-fetcher.js";
+import type { CloudFormationSchemaService } from "../../index.js";
 import type { AgentState } from "../graph-state.js";
+
+/** Build a stub CloudFormationSchemaService with the mock getSchema impl. */
+function makeService(): CloudFormationSchemaService {
+  return { getSchema: mockGetSchema } as unknown as CloudFormationSchemaService;
+}
 
 function makeState(overrides: Partial<AgentState> = {}): AgentState {
   return {
@@ -27,16 +24,9 @@ function makeState(overrides: Partial<AgentState> = {}): AgentState {
   } as AgentState;
 }
 
-describe("schemaFetcherNode", () => {
+describe("createSchemaFetcherNode", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    _resetSchemaService();
-    vi.mocked(CloudFormationSchemaService).mockImplementation(
-      () =>
-        ({
-          getSchema: mockGetSchema,
-        }) as unknown as CloudFormationSchemaService,
-    );
   });
 
   it("fetches schema via CloudFormationSchemaService and adapts it", async () => {
@@ -56,7 +46,8 @@ describe("schemaFetcherNode", () => {
 
     mockGetSchema.mockResolvedValue(rawSchema);
 
-    const result = await schemaFetcherNode(makeState());
+    const node = createSchemaFetcherNode(makeService());
+    const result = await node(makeState());
 
     expect(mockGetSchema).toHaveBeenCalledWith("AWS::S3::Bucket");
     // Tier C: dropped redundant toBeDefined() — subsequent property
@@ -81,7 +72,8 @@ describe("schemaFetcherNode", () => {
       new SchemaFetchError("AWS::S3::Bucket", rootCause),
     );
 
-    const result = await schemaFetcherNode(makeState());
+    const node = createSchemaFetcherNode(makeService());
+    const result = await node(makeState());
 
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(result.errorMessage).toContain("AWS::S3::Bucket");
@@ -91,7 +83,8 @@ describe("schemaFetcherNode", () => {
   it("returns FAILED status for unexpected errors", async () => {
     mockGetSchema.mockRejectedValue(new Error("Network timeout"));
 
-    const result = await schemaFetcherNode(makeState());
+    const node = createSchemaFetcherNode(makeService());
+    const result = await node(makeState());
 
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(result.errorMessage).toContain("Network timeout");
@@ -99,7 +92,8 @@ describe("schemaFetcherNode", () => {
   });
 
   it("skips schema fetch when resourcePattern is set (compound path)", async () => {
-    const result = await schemaFetcherNode(
+    const node = createSchemaFetcherNode(makeService());
+    const result = await node(
       makeState({
         resourcePattern: { patternId: "serverless-api" },
       } as unknown as Partial<AgentState>),
@@ -110,7 +104,8 @@ describe("schemaFetcherNode", () => {
   });
 
   it("skips schema fetch when executionStatus is not PENDING", async () => {
-    const result = await schemaFetcherNode(
+    const node = createSchemaFetcherNode(makeService());
+    const result = await node(
       makeState({ executionStatus: ExecutionStatus.FAILED }),
     );
 
@@ -118,19 +113,53 @@ describe("schemaFetcherNode", () => {
     expect(mockGetSchema).not.toHaveBeenCalled();
   });
 
-  it("reuses singleton service across invocations", async () => {
+  it("each factory call produces an independent node bound to its own service", async () => {
+    // Two service stubs with different mockGetSchema implementations
+    const mockGetSchemaA = vi.fn().mockResolvedValue({
+      typeName: "AWS::S3::Bucket",
+      properties: {},
+    });
+    const mockGetSchemaB = vi.fn().mockResolvedValue({
+      typeName: "AWS::DynamoDB::Table",
+      properties: {},
+    });
+
+    const serviceA = {
+      getSchema: mockGetSchemaA,
+    } as unknown as CloudFormationSchemaService;
+    const serviceB = {
+      getSchema: mockGetSchemaB,
+    } as unknown as CloudFormationSchemaService;
+
+    const nodeA = createSchemaFetcherNode(serviceA);
+    const nodeB = createSchemaFetcherNode(serviceB);
+
+    await nodeA(makeState({ resourceType: "AWS::S3::Bucket" }));
+    await nodeB(makeState({ resourceType: "AWS::DynamoDB::Table" }));
+
+    // Each node called only its own service — no cross-contamination
+    expect(mockGetSchemaA).toHaveBeenCalledOnce();
+    expect(mockGetSchemaA).toHaveBeenCalledWith("AWS::S3::Bucket");
+    expect(mockGetSchemaB).toHaveBeenCalledOnce();
+    expect(mockGetSchemaB).toHaveBeenCalledWith("AWS::DynamoDB::Table");
+    // Cross-contamination guard: B's schema not requested from A and vice versa
+    expect(mockGetSchemaA).not.toHaveBeenCalledWith("AWS::DynamoDB::Table");
+    expect(mockGetSchemaB).not.toHaveBeenCalledWith("AWS::S3::Bucket");
+  });
+
+  it("reuses the injected service across multiple invocations of the same node", async () => {
     mockGetSchema.mockResolvedValue({
       typeName: "AWS::S3::Bucket",
       properties: {},
     });
 
-    await schemaFetcherNode(makeState());
-    await schemaFetcherNode(
-      makeState({ resourceType: "AWS::DynamoDB::Table" }),
-    );
+    const service = makeService();
+    const node = createSchemaFetcherNode(service);
 
-    // getSchema called twice but CloudFormationSchemaService constructor only once
+    await node(makeState());
+    await node(makeState({ resourceType: "AWS::DynamoDB::Table" }));
+
+    // getSchema called twice on the same injected service instance
     expect(mockGetSchema).toHaveBeenCalledTimes(2);
-    expect(CloudFormationSchemaService).toHaveBeenCalledTimes(1);
   });
 });

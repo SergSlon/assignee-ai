@@ -27,10 +27,10 @@ export {
 export { createGraph, type CreateGraphOptions } from "./create-graph.js";
 
 // All 13 graph-node implementations (Story 50-4 Wave 5 Passes D/E/E.2/H).
-export {
-  schemaFetcherNode,
-  _resetSchemaService,
-} from "./nodes/schema-fetcher.js";
+// W11-S1: schemaFetcherNode is no longer a module-level singleton — use
+// createSchemaFetcherNode(service) factory to bind a per-tenant service
+// instance. _resetSchemaService is gone with the singleton.
+export { createSchemaFetcherNode } from "./nodes/schema-fetcher.js";
 export { humanApprovalNode } from "./nodes/human-approval.js";
 export { statusPollerNode } from "./nodes/status-poller.js";
 export { compoundDispatcherNode } from "./nodes/compound-dispatcher.js";
