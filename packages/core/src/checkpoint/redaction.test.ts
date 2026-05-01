@@ -394,8 +394,10 @@ describe("W12-S2 — AKIA substring replace (M-α-005)", () => {
 
   it("replaces multiple AKIA tokens in a single string", () => {
     // Global flag ensures all occurrences are replaced.
+    // ASIA token must be exactly 20 chars: 4-char prefix + 16-char suffix
+    // (ASIAXYZ1234567890AB was 19 chars and did not match — REG-N4 fix).
     const input = {
-      Audit: "AKIAIOSFODNN7EXAMPLE and ASIAXYZ1234567890AB in same log",
+      Audit: "AKIAIOSFODNN7EXAMPLE and ASIA1234567890ABCDEF in same log",
     };
     const result = redactSensitiveFields(input);
     expect(result["Audit"]).toBe("[REDACTED] and [REDACTED] in same log");

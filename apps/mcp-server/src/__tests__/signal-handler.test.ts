@@ -72,7 +72,13 @@ function buildSignalHandler(
       exitSpy(code);
     };
 
-    doShutdown().catch(() => exitSpy(code));
+    doShutdown().catch(() => {
+      try {
+        exitSpy(code);
+      } catch {
+        /* exitSpy intentionally throws to simulate process.exit — swallow here */
+      }
+    });
   };
 }
 
@@ -202,7 +208,13 @@ describe("MCP signal handler graceful shutdown (W6-S1)", () => {
     await vi.advanceTimersByTimeAsync(500);
 
     // Second signal — must exit immediately without a second server.close().
-    handler();
+    // exitSpy intentionally throws "process.exit called" to simulate process.exit;
+    // wrap the call so the throw doesn't propagate and swallow the assertions.
+    try {
+      handler();
+    } catch {
+      /* expected — exitSpy throws to simulate process.exit */
+    }
 
     expect(exitSpy).toHaveBeenCalledWith(128 + 15);
     // Only one server.close() call despite two signals.

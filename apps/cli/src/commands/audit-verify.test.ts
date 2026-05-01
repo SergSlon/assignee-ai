@@ -96,11 +96,14 @@ describe("auditVerifyCommand — --json output", () => {
     // Stub process.exit so tests don't abort
     originalExit = process.exit;
     process.exit = vi.fn() as unknown as typeof process.exit;
+    // W15-S1: source uses process.exitCode = N; reset before each test
+    process.exitCode = undefined;
   });
 
   afterEach(() => {
     process.stdout.write = originalStdoutWrite;
     process.exit = originalExit;
+    process.exitCode = undefined;
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -128,8 +131,9 @@ describe("auditVerifyCommand — --json output", () => {
     });
 
     // May emit to stdout (json error envelope) or to stderr; the key
-    // invariant is that process.exit was called with non-zero.
-    expect(process.exit).toHaveBeenCalledWith(1);
+    // invariant is that exitCode was set to non-zero.
+    // W15-S1: source uses process.exitCode = N (not process.exit(N)).
+    expect(process.exitCode).toBe(1);
     // If a JSON envelope was written it must be parseable
     const raw = writtenChunks.join("");
     if (raw.trim().length > 0) {
@@ -238,6 +242,8 @@ describe("auditVerifyCommand — chainMode surface (W10-S1)", () => {
 
     originalExit = process.exit;
     process.exit = vi.fn() as unknown as typeof process.exit;
+    // W15-S1: source uses process.exitCode = N; reset before each test
+    process.exitCode = undefined;
 
     mockVerifyAuditLog.mockReset();
   });
@@ -246,6 +252,7 @@ describe("auditVerifyCommand — chainMode surface (W10-S1)", () => {
     process.stdout.write = originalStdoutWrite;
     process.stderr.write = originalStderrWrite;
     process.exit = originalExit;
+    process.exitCode = undefined;
     fs.rmSync(tmpDir, { recursive: true, force: true });
     vi.restoreAllMocks();
   });
@@ -268,7 +275,8 @@ describe("auditVerifyCommand — chainMode surface (W10-S1)", () => {
     const stderr = stderrChunks.join("");
     expect(stdout).toContain("Chain mode: canonical");
     expect(stderr).not.toContain("audit-migrate-legacy-chain");
-    expect(process.exit).toHaveBeenCalledWith(0);
+    // W15-S1: source sets process.exitCode = 0 instead of calling process.exit(0).
+    expect(process.exitCode).toBe(0);
   });
 
   it("plain text: emits 'Chain mode: legacy' and migration warning for legacy chain", async () => {
@@ -290,7 +298,8 @@ describe("auditVerifyCommand — chainMode surface (W10-S1)", () => {
     expect(stdout).toContain("Chain mode: legacy");
     expect(stderr).toContain("legacy");
     expect(stderr).toContain("audit-migrate-legacy-chain");
-    expect(process.exit).toHaveBeenCalledWith(0);
+    // W15-S1: source sets process.exitCode = 0 instead of calling process.exit(0).
+    expect(process.exitCode).toBe(0);
   });
 
   it("plain text: emits 'Chain mode: mixed' and migration warning for mixed chain", async () => {
@@ -312,7 +321,8 @@ describe("auditVerifyCommand — chainMode surface (W10-S1)", () => {
     expect(stdout).toContain("Chain mode: mixed");
     expect(stderr).toContain("mixed");
     expect(stderr).toContain("audit-migrate-legacy-chain");
-    expect(process.exit).toHaveBeenCalledWith(0);
+    // W15-S1: source sets process.exitCode = 0 instead of calling process.exit(0).
+    expect(process.exitCode).toBe(0);
   });
 
   it("--json: includes chainMode field in success JSON for legacy chain", async () => {
@@ -336,7 +346,8 @@ describe("auditVerifyCommand — chainMode surface (W10-S1)", () => {
     expect(parsed["chainMode"]).toBe("legacy");
     // Migration warning goes to stderr, not stdout
     expect(stderrChunks.join("")).toContain("audit-migrate-legacy-chain");
-    expect(process.exit).toHaveBeenCalledWith(0);
+    // W15-S1: source sets process.exitCode = 0 instead of calling process.exit(0).
+    expect(process.exitCode).toBe(0);
   });
 
   it("--json: includes chainMode field in success JSON for mixed chain", async () => {
@@ -357,7 +368,8 @@ describe("auditVerifyCommand — chainMode surface (W10-S1)", () => {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     expect(parsed["valid"]).toBe(true);
     expect(parsed["chainMode"]).toBe("mixed");
-    expect(process.exit).toHaveBeenCalledWith(0);
+    // W15-S1: source sets process.exitCode = 0 instead of calling process.exit(0).
+    expect(process.exitCode).toBe(0);
   });
 
   it("--json: includes chainMode field in success JSON for canonical chain", async () => {
@@ -380,7 +392,8 @@ describe("auditVerifyCommand — chainMode surface (W10-S1)", () => {
     expect(parsed["chainMode"]).toBe("canonical");
     // No migration warning for canonical chain
     expect(stderrChunks.join("")).not.toContain("audit-migrate-legacy-chain");
-    expect(process.exit).toHaveBeenCalledWith(0);
+    // W15-S1: source sets process.exitCode = 0 instead of calling process.exit(0).
+    expect(process.exitCode).toBe(0);
   });
 
   it("exit codes unchanged: exit 0 for valid chain regardless of chainMode (legacy)", async () => {
@@ -397,8 +410,9 @@ describe("auditVerifyCommand — chainMode surface (W10-S1)", () => {
       from: "user",
     });
 
-    expect(process.exit).toHaveBeenCalledWith(0);
-    expect(process.exit).not.toHaveBeenCalledWith(1);
+    // W15-S1: source sets process.exitCode = 0 instead of calling process.exit(0).
+    expect(process.exitCode).toBe(0);
+    expect(process.exitCode).not.toBe(1);
   });
 
   it("exit codes unchanged: exit 0 for valid chain regardless of chainMode (mixed)", async () => {
@@ -415,7 +429,8 @@ describe("auditVerifyCommand — chainMode surface (W10-S1)", () => {
       from: "user",
     });
 
-    expect(process.exit).toHaveBeenCalledWith(0);
-    expect(process.exit).not.toHaveBeenCalledWith(1);
+    // W15-S1: source sets process.exitCode = 0 instead of calling process.exit(0).
+    expect(process.exitCode).toBe(0);
+    expect(process.exitCode).not.toBe(1);
   });
 });

@@ -800,12 +800,20 @@ describe("checkpoint file permissions and redaction (H17)", () => {
     const raw = await fs.readFile(filePath, "utf-8");
     const parsed = JSON.parse(raw);
 
-    expect(parsed.desiredState.Description).toBe("[REDACTED]");
+    // M-α-005 (W12-S2): substring replacement — only the AKIA/ASIA token is
+    // masked; surrounding context is preserved. Full-string values that ARE
+    // exactly the key ID become "[REDACTED]" because there is no surrounding
+    // context left after the token is replaced.
+    expect(parsed.desiredState.Description).toBe(
+      "Migrated from [REDACTED] account",
+    );
     expect(parsed.desiredState.Tags[1].Value).toBe("[REDACTED]");
     expect(parsed.desiredState.Tags[2].Value).toBe("[REDACTED]");
     expect(parsed.desiredState.Tags[0].Value).toBe("platform-team");
     expect(parsed.desiredState.Metadata.LastOperator).toBe("[REDACTED]");
-    expect(parsed.desiredState.Metadata.LastSession).toBe("[REDACTED]");
+    expect(parsed.desiredState.Metadata.LastSession).toBe(
+      "session=[REDACTED] rest of audit log",
+    );
   });
 
   it("still redacts the legacy keys covered by the previous allowlist", async () => {
