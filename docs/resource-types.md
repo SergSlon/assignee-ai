@@ -1,3 +1,10 @@
+---
+diataxis: reference
+canonical: true
+---
+
+> **Diátaxis: Reference** — This is the canonical root page for this topic. Catalog of all supported AWS resource types, plugins, and co-provision relationships.
+
 # Supported Resource Types
 
 assignee.ai supports 38 AWS resource types end-to-end via the CloudFormation CloudControl API. 36 have dedicated plugins; 2 (`AWS::EC2::VPCGatewayAttachment`, `AWS::EC2::SubnetRouteTableAssociation`) are **compound-only** — they are emitted from compound patterns (vpc-networking, three-tier-web) via the marker-token resolver and never directly from a user intent, so they share the generic fallback plugin rather than getting a dedicated one. Additional auxiliary types are used in compound patterns.

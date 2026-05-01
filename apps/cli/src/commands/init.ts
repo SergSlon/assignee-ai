@@ -188,8 +188,8 @@ to preferences.auto_fix and control how \`assignee plan\` reacts to best
       const region = options.region ?? "<region>";
       const autoFix = options.autoFix ?? AutoFixMode.ASK;
       process.stderr.write(
-        "[ERROR] init requires a TTY OR --yes flag\n" +
-          `[FIX] Re-run with: assignee init --yes --region ${region} --auto-fix ${autoFix}\n`,
+        "error: init requires a TTY OR --yes flag\n" +
+          `fix: Re-run with: assignee init --yes --region ${region} --auto-fix ${autoFix}\n`,
       );
       process.exitCode = ProcessExitCode.GENERIC_ERROR;
       return;

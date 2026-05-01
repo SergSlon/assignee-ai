@@ -30,9 +30,9 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    # Weekly Mondays 08:00 UTC — runs even when the repo is quiet so a
+    # Weekly Mondays 07:30 UTC — runs even when the repo is quiet so a
     # dormant CVE in a dependency doesn't sit undiscovered.
-    - cron: '0 8 * * 1'
+    - cron: '30 7 * * 1'
 
 # CodeQL needs to write results to the Security tab; everything else is read-only.
 permissions:

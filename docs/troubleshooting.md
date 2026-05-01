@@ -1,3 +1,10 @@
+---
+diataxis: reference
+canonical: true
+---
+
+> **Diátaxis: Reference** — This is the canonical root page for this topic. Exit codes and error-class playbook for diagnosing and fixing assignee.ai failures.
+
 # Troubleshooting
 
 How to read assignee.ai failures and fix them fast. Organized by exit

@@ -1,3 +1,10 @@
+---
+diataxis: how-to
+canonical: true
+---
+
+> **Diátaxis: How-to** — This is the canonical root page for this topic. Task-oriented guide for running the project's test suite and adding new tests.
+
 # Testing Guide — Assignee.ai CLI-First MVP
 
 > Unit tests (Vitest), MCP server E2E tests against real AWS, and end-to-end smoke tests for the CLI commands.

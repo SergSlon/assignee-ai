@@ -491,7 +491,7 @@ All AWS credentials and elicited resource field values stay on your machine. The
 
 **Installer integrity** — `install.sh` SHA256-verifies the fetched tarball against a signed manifest. Downgrade attempts to known-vulnerable versions require explicit `ASSIGNEE_DOWNGRADE_ACK=1`.
 
-**Supply-chain artefacts** — every release produces an SPDX SBOM and a SLSA L2 cosign-signed provenance attestation. `NOTICE` and `THIRD-PARTY-NOTICES.md` are generated from the pnpm dependency tree in SPDX format; CI enforces freshness. All GitHub Actions steps are SHA-pinned; `pnpm audit` runs in CI. See [docs/explanation/supply-chain-provenance.md](docs/explanation/supply-chain-provenance.md) and [docs/explanation/sbom.md](docs/explanation/sbom.md) for verification instructions.
+**Supply-chain artefacts** — every release produces an SPDX SBOM and a cosign blob signature + OIDC certificate chain (blob signature, not a full SLSA L2 build-provenance attestation). `NOTICE` and `THIRD-PARTY-NOTICES.md` are generated from the pnpm dependency tree in SPDX format; CI enforces freshness. All GitHub Actions steps are SHA-pinned; `pnpm audit` runs in CI. See [docs/explanation/supply-chain-provenance.md](docs/explanation/supply-chain-provenance.md) and [docs/explanation/sbom.md](docs/explanation/sbom.md) for verification instructions.
 
 **Branch protection** — `CODEOWNERS` at repo root; required-status-checks and review rules documented in [docs/explanation/codeowners-and-branch-protection.md](docs/explanation/codeowners-and-branch-protection.md).
 

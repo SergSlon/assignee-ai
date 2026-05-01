@@ -1,3 +1,10 @@
+---
+diataxis: explanation
+canonical: true
+---
+
+> **Diátaxis: Explanation** — This is the canonical root page for this topic. Background, design rationale, and architecture overview.
+
 # Assignee.ai -- Technical Architecture
 
 > Reverse-engineered from source code, April 2026.

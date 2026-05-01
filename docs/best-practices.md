@@ -1,3 +1,10 @@
+---
+diataxis: explanation
+canonical: true
+---
+
+> **Diátaxis: Explanation** — This is the canonical root page for this topic. Background and design of the best-practice rule engine.
+
 # Best Practices Engine
 
 assignee.ai evaluates every plan against a library of AWS best practice rules before any resource is created. Violations are displayed, auto-fixed where possible, and blocking issues prevent provisioning.
