@@ -1222,6 +1222,13 @@ describe("optionElicitorNode — parallel pricing + discovery fan-out (Story 9.1
   beforeEach(() => {
     vi.clearAllMocks();
     setTTY(true);
+    // W14-S0: The outer beforeEach already registered testEc2Plugin for
+    // AWS::EC2::Instance. Tests in this block need to register a different
+    // ec2PluginWithFetchers for the same type. Unregister first to avoid
+    // PluginRegistry.register() throwing the "duplicate registration" error
+    // (the throw is correct per W4-S3/M-α-13 — do NOT weaken the registry).
+    _realRegistry.unregister("AWS::EC2::Instance");
+    _distRegistry.unregister("AWS::EC2::Instance");
   });
 
   afterEach(() => {
@@ -1229,6 +1236,10 @@ describe("optionElicitorNode — parallel pricing + discovery fan-out (Story 9.1
       value: undefined,
       configurable: true,
     });
+    // W14-S0: Clean up any block-specific EC2 plugin registration so the
+    // outer afterEach unregister calls are idempotent (no stale entry).
+    _realRegistry.unregister("AWS::EC2::Instance");
+    _distRegistry.unregister("AWS::EC2::Instance");
   });
 
   it("pricing and discovery run concurrently (overlapping execution)", async () => {

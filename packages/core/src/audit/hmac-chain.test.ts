@@ -1,18 +1,135 @@
 /**
  * W3-01 — HMAC chain primitive tests.
+ * W14-S3 — resolveAuditKey persistent key-file tests.
  */
 
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, beforeEach } from "vitest";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import {
   computeChainLink,
   verifyChainLink,
   legacyComputeChainLink,
   legacyVerifyChainLink,
   getAuditKey,
+  resolveAuditKey,
+  DEFAULT_AUDIT_KEY_FILE,
   GENESIS_HMAC,
   AUDIT_KEY_MIN_LENGTH,
+  _resetAuditKeyCache,
 } from "./hmac-chain.js";
 import { AssigneeError } from "../errors.js";
+
+// ── resolveAuditKey (W14-S3) — persistent key-file tests ───────────────
+
+describe("resolveAuditKey", () => {
+  const ORIGINAL_ENV = process.env["ASSIGNEE_AUDIT_KEY"];
+  let tmpDir: string;
+  let keyFile: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "assignee-audit-test-"));
+    keyFile = path.join(tmpDir, "audit-key");
+    _resetAuditKeyCache();
+    delete process.env["ASSIGNEE_AUDIT_KEY"];
+  });
+
+  afterEach(() => {
+    // Restore env var
+    if (ORIGINAL_ENV !== undefined) {
+      process.env["ASSIGNEE_AUDIT_KEY"] = ORIGINAL_ENV;
+    } else {
+      delete process.env["ASSIGNEE_AUDIT_KEY"];
+    }
+    // Clean up temp dir
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      // best-effort cleanup
+    }
+    _resetAuditKeyCache();
+  });
+
+  it("ASSIGNEE_AUDIT_KEY env var overrides the key file (env-first priority)", () => {
+    const envKey = "e".repeat(64);
+    process.env["ASSIGNEE_AUDIT_KEY"] = envKey;
+    // Even if a key file exists, the env var must win
+    fs.writeFileSync(keyFile, "f".repeat(64), { mode: 0o600 });
+    expect(resolveAuditKey(keyFile)).toBe(envKey);
+  });
+
+  it("returns the env var value verbatim when set (no trimming)", () => {
+    const envKey = "a".repeat(32);
+    process.env["ASSIGNEE_AUDIT_KEY"] = envKey;
+    expect(resolveAuditKey(keyFile)).toBe(envKey);
+  });
+
+  it("throws AUDIT_KEY_TOO_SHORT when ASSIGNEE_AUDIT_KEY is too short via resolveAuditKey", () => {
+    process.env["ASSIGNEE_AUDIT_KEY"] = "short";
+    expect(() => resolveAuditKey(keyFile)).toThrow(AssigneeError);
+  });
+
+  it("reads an existing key file when no env var is set", () => {
+    const existingKey = "c".repeat(64);
+    fs.writeFileSync(keyFile, existingKey, { mode: 0o600 });
+    const result = resolveAuditKey(keyFile);
+    expect(result).toBe(existingKey);
+  });
+
+  it("is idempotent: calling twice with the same key file returns the same key", () => {
+    const k1 = resolveAuditKey(keyFile);
+    const k2 = resolveAuditKey(keyFile);
+    expect(k1).toBe(k2);
+    expect(k1.length).toBeGreaterThanOrEqual(AUDIT_KEY_MIN_LENGTH);
+  });
+
+  it("writes the key file on first call when no file exists", () => {
+    expect(fs.existsSync(keyFile)).toBe(false);
+    resolveAuditKey(keyFile);
+    expect(fs.existsSync(keyFile)).toBe(true);
+  });
+
+  it("key file is written with mode 0o600 (owner read+write only)", () => {
+    resolveAuditKey(keyFile);
+    const stat = fs.statSync(keyFile);
+    expect(stat.mode & 0o777).toBe(0o600);
+  });
+
+  it("key file content meets AUDIT_KEY_MIN_LENGTH requirement", () => {
+    resolveAuditKey(keyFile);
+    const content = fs.readFileSync(keyFile, "utf8").trim();
+    expect(content.length).toBeGreaterThanOrEqual(AUDIT_KEY_MIN_LENGTH);
+  });
+
+  it("two separate calls (simulating separate processes) agree when key file exists", () => {
+    // First 'process': generates and writes the key
+    const key1 = resolveAuditKey(keyFile);
+    _resetAuditKeyCache();
+    // Second 'process': reads the same key from file
+    const key2 = resolveAuditKey(keyFile);
+    expect(key1).toBe(key2);
+  });
+
+  it("key generated via resolveAuditKey is accepted by verifyChainLink (cross-call consistency)", () => {
+    const key = resolveAuditKey(keyFile);
+    const record = { action: "plan", resource: "AWS::S3::Bucket" };
+    const hmac = computeChainLink(GENESIS_HMAC, record, key);
+    expect(verifyChainLink(record, GENESIS_HMAC, hmac, key)).toBe(true);
+  });
+
+  it("does NOT read or write the key file when ASSIGNEE_AUDIT_KEY env var is set", () => {
+    process.env["ASSIGNEE_AUDIT_KEY"] = "d".repeat(64);
+    resolveAuditKey(keyFile);
+    // File must not have been created
+    expect(fs.existsSync(keyFile)).toBe(false);
+  });
+
+  it("DEFAULT_AUDIT_KEY_FILE points to ~/.assignee/audit-key", () => {
+    const expected = path.join(os.homedir(), ".assignee", "audit-key");
+    expect(DEFAULT_AUDIT_KEY_FILE).toBe(expected);
+  });
+});
 
 // ── Key derivation tests ────────────────────────────────────────────────
 
@@ -25,6 +142,7 @@ describe("getAuditKey", () => {
     } else {
       delete process.env["ASSIGNEE_AUDIT_KEY"];
     }
+    _resetAuditKeyCache();
   });
 
   it("returns the env var when set to a key of sufficient length (≥32 chars)", () => {
@@ -34,11 +152,11 @@ describe("getAuditKey", () => {
     expect(getAuditKey()).toBe(key32);
   });
 
-  it("returns a non-empty string when env var is absent (per-process fallback)", () => {
+  it("returns a non-empty string when env var is absent (persistent key fallback)", () => {
     delete process.env["ASSIGNEE_AUDIT_KEY"];
     const key = getAuditKey();
     expect(typeof key).toBe("string");
-    // Per-process fallback is randomBytes(32).toString("hex") → 64 chars, always ≥ 32.
+    // Persistent fallback writes/reads randomBytes(32).toString("hex") → 64 chars, always ≥ 32.
     expect(key.length).toBeGreaterThanOrEqual(AUDIT_KEY_MIN_LENGTH);
   });
 
@@ -83,7 +201,7 @@ describe("getAuditKey", () => {
     expect((caught as AssigneeError).message).toContain("openssl rand -hex 32");
   });
 
-  it("per-process fallback (no env var) never triggers AUDIT_KEY_TOO_SHORT (random key always ≥ 32)", () => {
+  it("persistent fallback (no env var) never triggers AUDIT_KEY_TOO_SHORT (generated key always ≥ 32)", () => {
     delete process.env["ASSIGNEE_AUDIT_KEY"];
     // Should not throw — randomBytes(32).toString("hex") produces 64 chars.
     expect(() => getAuditKey()).not.toThrow();
