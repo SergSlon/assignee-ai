@@ -5,6 +5,14 @@
  * Story 50-4 Wave 5 Pass B. Preserves:
  *   - feedback_token_cost_visibility (callsite required in recordTokenUsage)
  *   - feedback_bedrock_region_error_hints (detectBedrockRegionError wrap)
+ *
+ * W11-S4: Adds exponential-backoff retry for transient Bedrock throttling
+ * errors (ThrottlingException / ServiceUnavailableException /
+ * TooManyRequestsException). Auth errors, validation errors, and
+ * region-availability errors are NOT retried — those are handled by their
+ * own code paths. Retry behaviour is controlled by env vars:
+ *   ASSIGNEE_LLM_MAX_RETRIES  — integer, default 3
+ *   ASSIGNEE_LLM_RETRY_BASE_MS — base delay in ms, default 1000
  */
 import { generateText, Output } from "ai";
 import type { LanguageModel } from "ai";
@@ -31,6 +39,95 @@ import {
 import { createLanguageModel } from "./client-factory.js";
 import { detectBedrockRegionError } from "./bedrock-region.js";
 import { stripPromptBoundaryTags } from "./prompt-sanitize.js";
+
+// ── Retry constants ──────────────────────────────────────────────────────────
+
+/**
+ * Exception name patterns that warrant an automatic retry.
+ * Only transient throttling/availability errors — NOT auth or validation.
+ */
+const RETRYABLE_ERROR_PATTERNS = [
+  "ThrottlingException",
+  "ServiceUnavailableException",
+  "TooManyRequestsException",
+] as const;
+
+/** Default maximum number of retry attempts (excludes the initial attempt). */
+const DEFAULT_MAX_RETRIES = 3;
+
+/** Base delay for exponential backoff in milliseconds. */
+const DEFAULT_RETRY_BASE_MS = 1_000;
+
+/** Hard ceiling on any single sleep to avoid runaway waits (~30s total). */
+const MAX_JITTER_WINDOW_MS = 1_000;
+
+/**
+ * Returns true when the error message contains one of the retryable exception
+ * names. AWS SDK errors embed the code in the message and/or a `name` property.
+ */
+export function isRetryableError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const text = `${err.name ?? ""} ${err.message}`;
+  return RETRYABLE_ERROR_PATTERNS.some((pattern) => text.includes(pattern));
+}
+
+/**
+ * Compute exponential-backoff delay with full jitter.
+ * Formula: random(0, min(cap, base * 2^attempt))
+ * @param attempt   zero-based attempt index (0 = first retry)
+ * @param baseMs    base delay in milliseconds
+ */
+export function backoffDelayMs(attempt: number, baseMs: number): number {
+  const exponential = baseMs * Math.pow(2, attempt);
+  const cap = Math.min(exponential, baseMs * 16); // ceiling: 16× base
+  return Math.floor(Math.random() * Math.min(cap, cap + MAX_JITTER_WINDOW_MS));
+}
+
+/**
+ * Reads the retry configuration from environment variables.
+ * Falls back to sensible defaults if the vars are absent or invalid.
+ */
+function readRetryConfig(): { maxRetries: number; baseMs: number } {
+  const rawMax = process.env["ASSIGNEE_LLM_MAX_RETRIES"];
+  const rawBase = process.env["ASSIGNEE_LLM_RETRY_BASE_MS"];
+
+  const maxRetries =
+    rawMax !== undefined && /^\d+$/.test(rawMax)
+      ? Math.min(parseInt(rawMax, 10), 10) // hard cap at 10 to avoid abuse
+      : DEFAULT_MAX_RETRIES;
+
+  const baseMs =
+    rawBase !== undefined && /^\d+$/.test(rawBase)
+      ? Math.max(parseInt(rawBase, 10), 100) // floor at 100ms
+      : DEFAULT_RETRY_BASE_MS;
+
+  return { maxRetries, baseMs };
+}
+
+/**
+ * Invoke `fn` with exponential-backoff retry on retryable errors.
+ * Non-retryable errors surface immediately without delay.
+ */
+async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
+  const { maxRetries, baseMs } = readRetryConfig();
+  let lastErr: unknown;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (!isRetryableError(err) || attempt === maxRetries) {
+        throw err;
+      }
+      const delay = backoffDelayMs(attempt, baseMs);
+      await new Promise<void>((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
+  // Should never reach here — the loop always throws or returns.
+  throw lastErr;
+}
 
 export interface LlmAdapterConfig {
   /** Model string, e.g. "anthropic/claude-sonnet-4-5". Defaults to DEFAULT_MODEL. */
@@ -141,14 +238,20 @@ export class LlmAdapter implements LlmPort {
     const sanitizedPrompt = stripPromptBoundaryTags(prompt);
     const redactedPrompt = redactAccountIdsInPrompt(sanitizedPrompt);
 
+    // W11-S4: withRetry wraps the generateText call so transient Bedrock
+    // throttling errors (ThrottlingException / ServiceUnavailableException /
+    // TooManyRequestsException) are retried up to DEFAULT_MAX_RETRIES times
+    // with exponential backoff + jitter before surfacing an error.
     const [callErr, result] = await safeTry(
-      generateText({
-        model,
-        output: Output.object({ schema }),
-        maxOutputTokens: options?.maxTokens ?? DEFAULT_MAX_TOKENS,
-        ...this.guardrailOpts,
-        messages: [{ role: "user", content: redactedPrompt }],
-      }),
+      withRetry(() =>
+        generateText({
+          model,
+          output: Output.object({ schema }),
+          maxOutputTokens: options?.maxTokens ?? DEFAULT_MAX_TOKENS,
+          ...this.guardrailOpts,
+          messages: [{ role: "user", content: redactedPrompt }],
+        }),
+      ),
     );
 
     if (callErr) {
@@ -209,13 +312,18 @@ export class LlmAdapter implements LlmPort {
     const sanitizedPrompt = stripPromptBoundaryTags(prompt);
     const redactedPrompt = redactAccountIdsInPrompt(sanitizedPrompt);
 
+    // W11-S4: withRetry wraps the generateText call — same retry policy as
+    // generateStructured above (ThrottlingException / ServiceUnavailable /
+    // TooManyRequests retried with exponential backoff + jitter).
     const [callErr, result] = await safeTry(
-      generateText({
-        model,
-        maxOutputTokens: options?.maxTokens ?? DEFAULT_MAX_TOKENS,
-        ...this.guardrailOpts,
-        messages: [{ role: "user", content: redactedPrompt }],
-      }),
+      withRetry(() =>
+        generateText({
+          model,
+          maxOutputTokens: options?.maxTokens ?? DEFAULT_MAX_TOKENS,
+          ...this.guardrailOpts,
+          messages: [{ role: "user", content: redactedPrompt }],
+        }),
+      ),
     );
 
     if (callErr) {

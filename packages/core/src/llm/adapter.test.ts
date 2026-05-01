@@ -9,6 +9,7 @@ import {
 } from "vitest";
 import { z } from "zod";
 import { LlmError } from "../errors.js";
+import { isRetryableError, backoffDelayMs } from "./adapter.js";
 
 // Mock all provider packages before importing the adapter.
 // NOTE: Plain functions (not vi.fn) for the provider factories so impls
@@ -545,6 +546,223 @@ describe("LlmAdapter", () => {
       expect(KNOWN_BEDROCK_REGIONS).toContain("us-east-1");
       expect(KNOWN_BEDROCK_REGIONS).toContain("us-west-2");
       expect(KNOWN_BEDROCK_REGIONS).toContain("eu-central-1");
+    });
+  });
+
+  // ── W11-S4: isRetryableError unit tests ────────────────────────────────────
+  describe("isRetryableError", () => {
+    it("returns true for ThrottlingException in message", () => {
+      expect(
+        isRetryableError(new Error("ThrottlingException: Rate exceeded")),
+      ).toBe(true);
+    });
+
+    it("returns true for ThrottlingException in error name", () => {
+      const err = new Error("Rate exceeded");
+      err.name = "ThrottlingException";
+      expect(isRetryableError(err)).toBe(true);
+    });
+
+    it("returns true for ServiceUnavailableException", () => {
+      expect(
+        isRetryableError(
+          new Error("ServiceUnavailableException: service is down"),
+        ),
+      ).toBe(true);
+    });
+
+    it("returns true for TooManyRequestsException", () => {
+      expect(
+        isRetryableError(new Error("TooManyRequestsException: quota exceeded")),
+      ).toBe(true);
+    });
+
+    it("returns false for AccessDeniedException (auth error)", () => {
+      expect(
+        isRetryableError(new Error("AccessDeniedException: not authorized")),
+      ).toBe(false);
+    });
+
+    it("returns false for ValidationException (config error)", () => {
+      expect(
+        isRetryableError(new Error("ValidationException: invalid model id")),
+      ).toBe(false);
+    });
+
+    it("returns false for network ECONNRESET", () => {
+      expect(isRetryableError(new Error("ECONNRESET: socket hang up"))).toBe(
+        false,
+      );
+    });
+
+    it("returns false for non-Error values", () => {
+      expect(isRetryableError("ThrottlingException")).toBe(false);
+      expect(isRetryableError(null)).toBe(false);
+      expect(isRetryableError(42)).toBe(false);
+    });
+  });
+
+  // ── W11-S4: backoffDelayMs unit tests ─────────────────────────────────────
+  describe("backoffDelayMs", () => {
+    it("returns a non-negative number", () => {
+      for (let attempt = 0; attempt < 4; attempt++) {
+        expect(backoffDelayMs(attempt, 1000)).toBeGreaterThanOrEqual(0);
+      }
+    });
+
+    it("is bounded by 16× baseMs + jitter window", () => {
+      // For base=1000 the exponential cap is 1000*16 = 16000; jitter adds up to
+      // MAX_JITTER_WINDOW_MS (1000). The helper uses min(cap, cap+jitter) which
+      // means ceil is cap itself (Math.min(cap, cap+1000) = cap = 16000).
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const delay = backoffDelayMs(attempt, 1000);
+        expect(delay).toBeLessThanOrEqual(17_000); // cap + jitter
+      }
+    });
+
+    it("is always < base for attempt 0 at base 100", () => {
+      // attempt 0: exponential = 100*1 = 100; cap = 100; result in [0, 100)
+      for (let i = 0; i < 20; i++) {
+        expect(backoffDelayMs(0, 100)).toBeLessThanOrEqual(100);
+      }
+    });
+  });
+
+  // ── W11-S4: end-to-end retry behaviour through LlmAdapter ─────────────────
+  describe("retry on ThrottlingException (W11-S4)", () => {
+    beforeEach(() => {
+      // Zero out retry delay so tests don't actually sleep.
+      process.env["ASSIGNEE_LLM_MAX_RETRIES"] = "3";
+      process.env["ASSIGNEE_LLM_RETRY_BASE_MS"] = "0";
+    });
+
+    afterEach(() => {
+      delete process.env["ASSIGNEE_LLM_MAX_RETRIES"];
+      delete process.env["ASSIGNEE_LLM_RETRY_BASE_MS"];
+    });
+
+    it("retries generateText on ThrottlingException and succeeds on 2nd attempt", async () => {
+      vi.mocked(generateText)
+        .mockRejectedValueOnce(new Error("ThrottlingException: Rate exceeded"))
+        .mockResolvedValueOnce({
+          text: "success after throttle",
+          output: {},
+        } as never);
+
+      const adapter = new LlmAdapter({
+        modelString: "bedrock/amazon.nova-lite-v1:0",
+      });
+      const [err, result] = await adapter.generateText("Hello");
+
+      expect(err).toBeNull();
+      expect(result).toBe("success after throttle");
+      expect(generateText).toHaveBeenCalledTimes(2);
+    });
+
+    it("retries generateStructured on ServiceUnavailableException and succeeds on 3rd attempt", async () => {
+      const schema = z.object({ resourceType: z.string() });
+      vi.mocked(generateText)
+        .mockRejectedValueOnce(
+          new Error("ServiceUnavailableException: service down"),
+        )
+        .mockRejectedValueOnce(
+          new Error("ServiceUnavailableException: still down"),
+        )
+        .mockResolvedValueOnce({
+          text: "",
+          output: { resourceType: "AWS::S3::Bucket" },
+        } as never);
+
+      const adapter = new LlmAdapter({
+        modelString: "bedrock/amazon.nova-lite-v1:0",
+      });
+      const [err, result] = await adapter.generateStructured(
+        "Parse this",
+        schema,
+      );
+
+      expect(err).toBeNull();
+      expect(result).toEqual({ resourceType: "AWS::S3::Bucket" });
+      expect(generateText).toHaveBeenCalledTimes(3);
+    });
+
+    it("exhausts retries and returns LlmError after 4 total attempts (3 retries)", async () => {
+      vi.mocked(generateText).mockRejectedValue(
+        new Error("ThrottlingException: persistent throttle"),
+      );
+
+      const adapter = new LlmAdapter({
+        modelString: "bedrock/amazon.nova-lite-v1:0",
+      });
+      const [err, result] = await adapter.generateText("Hello");
+
+      expect(result).toBeNull();
+      expect(err).toBeInstanceOf(LlmError);
+      expect(err!.message).toContain("Text LLM call failed");
+      // 1 initial + 3 retries = 4 calls
+      expect(generateText).toHaveBeenCalledTimes(4);
+    });
+
+    it("does NOT retry AccessDeniedException (non-retryable) — fails immediately", async () => {
+      vi.mocked(generateText).mockRejectedValueOnce(
+        new Error("AccessDeniedException: not authorized"),
+      );
+
+      const adapter = new LlmAdapter({
+        modelString: "bedrock/amazon.nova-lite-v1:0",
+      });
+      const [err] = await adapter.generateText("Hello");
+
+      expect(err).toBeInstanceOf(LlmError);
+      // Must NOT retry — only 1 call
+      expect(generateText).toHaveBeenCalledTimes(1);
+    });
+
+    it("does NOT retry ValidationException (non-retryable) — fails immediately", async () => {
+      vi.mocked(generateText).mockRejectedValueOnce(
+        new Error("ValidationException: invalid model"),
+      );
+
+      const adapter = new LlmAdapter({
+        modelString: "bedrock/amazon.nova-lite-v1:0",
+      });
+      const [err] = await adapter.generateText("Hello");
+
+      expect(err).toBeInstanceOf(LlmError);
+      expect(generateText).toHaveBeenCalledTimes(1);
+    });
+
+    it("respects ASSIGNEE_LLM_MAX_RETRIES=1 env override", async () => {
+      process.env["ASSIGNEE_LLM_MAX_RETRIES"] = "1";
+      vi.mocked(generateText).mockRejectedValue(
+        new Error("ThrottlingException: throttled"),
+      );
+
+      const adapter = new LlmAdapter({
+        modelString: "bedrock/amazon.nova-lite-v1:0",
+      });
+      await adapter.generateText("Hello");
+
+      // 1 initial + 1 retry = 2 calls
+      expect(generateText).toHaveBeenCalledTimes(2);
+    });
+
+    it("retries generateText on TooManyRequestsException", async () => {
+      vi.mocked(generateText)
+        .mockRejectedValueOnce(new Error("TooManyRequestsException: quota"))
+        .mockResolvedValueOnce({
+          text: "ok",
+          output: {},
+        } as never);
+
+      const adapter = new LlmAdapter({
+        modelString: "bedrock/amazon.nova-lite-v1:0",
+      });
+      const [err, result] = await adapter.generateText("Hello");
+
+      expect(err).toBeNull();
+      expect(result).toBe("ok");
+      expect(generateText).toHaveBeenCalledTimes(2);
     });
   });
 
