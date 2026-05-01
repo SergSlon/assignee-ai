@@ -326,6 +326,15 @@ export class CloudFormationSchemaService {
   /**
    * Fetch a schema from the CloudFormation DescribeType API.
    * Includes one retry on throttling errors with a 1s delay.
+   *
+   * DEF-09 audit (W18-S3, HEAD 8a856878): This method is a single-type
+   * helper — it is not the bulk loop that was flagged as a potential eager-IO
+   * site. The bulk loop lives in `schema-cache-warmer.ts::SchemaCacheWarmer.warmAll`
+   * which already uses bounded concurrency (Promise.race / executing-Set pattern,
+   * cap = 5). Additionally, `getSchema()` has per-type in-flight dedup via the
+   * `_inFlight` Map (W12-S4, M-α-23), so concurrent callers for the same type
+   * share one DescribeType call. No serial eager-IO loop exists in this file.
+   * DEF-09 is CLOSED for this service — no code change required.
    */
   private async fetchFromApi(
     typeName: string,

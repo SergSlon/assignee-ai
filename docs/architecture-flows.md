@@ -2,6 +2,8 @@
 
 > **Developer-facing diagrams.** For the authoritative CLI implementation spec, see `cli-architecture.md` in the workspace-level `_bmad-output/planning-artifacts/` directory (outside this repo).
 
+> See also: [architecture.md](architecture.md) — technical architecture overview (monorepo structure, graph nodes, credential model, error handling).
+
 Complete reference of all execution flows, resource types, MCP integrations, and data sources.
 
 ---

@@ -727,7 +727,7 @@ describe("status observability — Epic 92 e92.u.a", () => {
     const stderrOutput = stderrSpy.mock.calls
       .map((c: unknown[]) => c[0])
       .join("");
-    expect(stderrOutput).toContain("[WARN]");
+    expect(stderrOutput).toContain("warning:");
     expect(stderrOutput).toContain("stale-run-id-abc-123");
     expect(stderrOutput).toContain("assignee list --json");
 
@@ -763,8 +763,8 @@ describe("status observability — Epic 92 e92.u.a", () => {
     const stderrOutput = stderrSpy.mock.calls
       .map((c: unknown[]) => c[0])
       .join("");
-    // JSON mode: no human-readable `[WARN]` line on stderr.
-    expect(stderrOutput).not.toContain("[WARN]");
+    // JSON mode: no human-readable `warning:` line on stderr.
+    expect(stderrOutput).not.toContain("warning:");
 
     // Structured WARN event still emitted so the machinery is honest
     // about dropping the runId.

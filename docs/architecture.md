@@ -322,3 +322,7 @@ Each server receives its own credential set (reader or auditor).
 ## Logging
 
 Structured JSON to stderr (`utils/logger.ts`). 40+ log action types covering the full lifecycle. Controlled by `ASSIGNEE_LOG_LEVEL` env var.
+
+## See also
+
+- [architecture-flows.md](architecture-flows.md) — execution flow diagrams for all commands, wizard flows, MCP integrations, and credential routing.
