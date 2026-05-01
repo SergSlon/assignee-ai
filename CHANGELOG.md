@@ -892,6 +892,55 @@ backlog.md` was filed under `_archive/done-stories/` even though it contains
 - `assignee init` now exits with code `73` (`USAGE_ERROR`) rather than
   `1` (`GENERIC_ERROR`) when passed mutually-exclusive flags (W9-S4).
 
+### Full-audit-2026-04-29 Waves 10–17 — cycle close
+
+The full-audit-2026-04-29 cycle formally closed after 17 waves (commits
+`a66aff5` → `62b8b818`, 2026-04-29 → 2026-05-01), closing approximately 86
+findings from a two-team AB-DIFF audit (Team A: 375 findings; Team B: 534
+findings). All 4 Tier-1a Convergent Criticals and all 6 Tier-2 single-team
+Criticals were closed in the first 12 waves. The remaining waves (W10–W17)
+drained Tier 1b convergent Highs, Tier 3 theme clusters, and Tier 4
+single-team Highs. Ten items remain deliberately deferred with explicit
+rationale and 2026-06-01 review-by dates in
+`_bmad-output/planning-artifacts/audit-deferred-backlog-2026-04-28.md`;
+the only infra-blocked item is M-γ-02 (nightly E2E OIDC key rotation).
+Retrospective and final deferred-backlog are archived at
+`.agents/reviews/full-audit-2026-04-29-RETROSPECTIVE.md`.
+
+Waves 1–9 are documented in the subsections above. Highlights for Waves 10–17:
+
+- **W10** — `setup.ts` USAGE_ERROR exit code; `audit-verify` chainMode user
+  surface + mixed-chain migration hint; `ASSIGNEE_AUDIT_RETENTION_DAYS`
+  documented in `configuration.md`; W9 CHANGELOG entry; audit-migrate script.
+- **W11** — `throttleRetryCount` propagation to `CloudControlClient`
+  (M-α-07); `version.test.ts` Commander double-parse leak; W1–W8 CHANGELOG
+  backfill; `LlmAdapter` exponential-backoff retry on throttle (M-α-26).
+- **W12-prelude + W12** — `schemaService` module-singleton (M-α-08) with 6
+  consumer migrations; `process.exit` race in 4 async Commander actions
+  (M-β-001); OTEL `exportLogEvent` ConfigPort injection (M-α-06+18);
+  redaction allowlist for policy/token false-positive over-matches
+  (M-α-005+007); reader/auditor credential wiring (M-α-30); schema in-flight
+  dedup (M-α-23).
+- **W13** — remaining 4 `process.exit` sites (M-β-001-cont); ARN regex
+  GovCloud/China partition coverage (M-α-22); IAM unscoped `DeleteRole` +
+  `GetSecretValue` (M-α-16+17); pricing fan-out cap (M-α-21); audit-iam-policies
+  registry-derived (M-γ-04).
+- **W14** — 3 pre-existing test failures; CLI cold-start `pkg.json` lazy
+  read; signal-handler extraction; audit-key per-process persistence (M-α-15);
+  sprint-status deferred-backlog canonical path (M-γ-01).
+- **W15** — 17 accumulated pre-existing test failures cleared in one sweep
+  (process.exit semantics, AKIA/ASIA redaction edge cases, OTEL scheme guard,
+  S3 graph routing, best-practices manifest regen).
+- **W16** — tracker-leak CI lint gate preventing `"Epic N"` recurrence;
+  SLSA L2 claim correction in `release.yml` + `supply-chain-provenance.md`;
+  OIDC token blast-radius tightening (workflow-level `id-token: none`);
+  `install.sh` Node version probe + CI smoke; `show-if.ts` RegExp compilation
+  cache (hot-path wizard prompt loop).
+- **W17** — SLSA claim correction in `README.md` + `CHANGELOG.md`; stderr
+  prefix unification (`[plan]`/`[ERROR]` → `error:`); N+1 `ListRoleTags`
+  batching in MCP IAM enumeration; Monday cron stagger across 3 workflows;
+  Diátaxis redirect stubs for 12 root-level orphan docs.
+
 ---
 
 ## [0.1.0] — 2026-04-24
