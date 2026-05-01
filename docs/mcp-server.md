@@ -1,3 +1,10 @@
+---
+diataxis: how-to
+canonical: true
+---
+
+> **Diátaxis: How-to** — This is the canonical root page for this topic. Task-oriented guide for exposing assignee.ai as an MCP server to AI-powered IDEs.
+
 # MCP Server
 
 Expose assignee.ai as [Model Context Protocol](https://modelcontextprotocol.io/) tools so AI-powered IDEs can plan, estimate, provision, and destroy AWS infrastructure through natural conversation.

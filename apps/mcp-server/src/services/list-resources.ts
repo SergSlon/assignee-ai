@@ -62,9 +62,23 @@ export function resolveDefaultRegion(): string {
 }
 
 /**
+ * Maximum number of concurrent `iam:ListRoleTags` calls.
+ *
+ * Tag fetches are lightweight (single-role lookup, no pagination in the
+ * common case) so 10 concurrent calls is safe without hitting IAM rate
+ * limits. Comparable to the schema-warmer (5) and pricing decomposer
+ * (PRICING_CONCURRENCY=5) concurrency caps used elsewhere in the project,
+ * but higher because tag reads are cheaper per-call than schema/pricing.
+ */
+const IAM_TAG_FETCH_CONCURRENCY = 10;
+
+/**
  * Enumerate tagged IAM roles — the RGTA API does NOT return IAM::Role
  * (per memory `feedback_iam_role_rgta_gap`). We paginate `iam:ListRoles`
- * + `iam:ListRoleTags` directly and filter client-side.
+ * to collect all role stubs, then fan-out `iam:ListRoleTags` in bounded
+ * batches of {@link IAM_TAG_FETCH_CONCURRENCY} using `Promise.allSettled`
+ * so a single role's tag fetch failing doesn't abort the entire
+ * enumeration.
  *
  * Failures are NON-FATAL — swallowed at the core level, which falls
  * back to whatever RGTA returned.
@@ -80,7 +94,12 @@ async function enumerateMcpIamRoles(region: string): Promise<ManagedIamRole[]> {
     },
   });
   try {
-    const roles: ManagedIamRole[] = [];
+    // Phase 1: collect all role stubs via paginated ListRoles
+    const roleStubs: Array<{
+      roleName: string;
+      arn: string;
+      createdDate: string;
+    }> = [];
     let marker: string | undefined;
     do {
       const resp = await client.send(
@@ -88,10 +107,34 @@ async function enumerateMcpIamRoles(region: string): Promise<ManagedIamRole[]> {
       );
       for (const role of resp.Roles ?? []) {
         if (!role.RoleName || !role.Arn) continue;
-        const tagResp = await client.send(
-          new ListRoleTagsCommand({ RoleName: role.RoleName }),
-        );
-        const tags = tagResp.Tags ?? [];
+        roleStubs.push({
+          roleName: role.RoleName,
+          arn: role.Arn,
+          createdDate: role.CreateDate?.toISOString() ?? "",
+        });
+      }
+      marker = resp.IsTruncated ? resp.Marker : undefined;
+    } while (marker);
+
+    // Phase 2: fan-out ListRoleTags in bounded batches of
+    // IAM_TAG_FETCH_CONCURRENCY using Promise.allSettled so a single
+    // role's tag failure doesn't abort the entire enumeration.
+    const roles: ManagedIamRole[] = [];
+    for (let i = 0; i < roleStubs.length; i += IAM_TAG_FETCH_CONCURRENCY) {
+      const batch = roleStubs.slice(i, i + IAM_TAG_FETCH_CONCURRENCY);
+      const results = await Promise.allSettled(
+        batch.map((stub) =>
+          client.send(new ListRoleTagsCommand({ RoleName: stub.roleName })),
+        ),
+      );
+      for (let j = 0; j < batch.length; j++) {
+        const stub = batch[j]!;
+        const result = results[j]!;
+        if (result.status === "rejected") {
+          // Per-role tag fetch failed; skip this role rather than aborting.
+          continue;
+        }
+        const tags = result.value.Tags ?? [];
         const matches = tags.some(
           (t: { Key?: string; Value?: string }) =>
             t.Key === AssigneeTag.KEY && t.Value === AssigneeTag.VALUE,
@@ -102,14 +145,13 @@ async function enumerateMcpIamRoles(region: string): Promise<ManagedIamRole[]> {
           if (t.Key && t.Value !== undefined) tagsRecord[t.Key] = t.Value;
         }
         roles.push({
-          arn: role.Arn,
-          roleName: role.RoleName,
-          createdDate: role.CreateDate?.toISOString() ?? "",
+          arn: stub.arn,
+          roleName: stub.roleName,
+          createdDate: stub.createdDate,
           tags: tagsRecord,
         });
       }
-      marker = resp.IsTruncated ? resp.Marker : undefined;
-    } while (marker);
+    }
     return roles;
   } finally {
     client.destroy();

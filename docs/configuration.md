@@ -1,3 +1,10 @@
+---
+diataxis: reference
+canonical: true
+---
+
+> **Diátaxis: Reference** — This is the canonical root page for this topic. Full configuration precedence chain, environment variables, and file formats.
+
 # Configuration
 
 assignee.ai uses a layered configuration system. Everything works out of the box with zero configuration -- all settings have sensible defaults.

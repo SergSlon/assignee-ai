@@ -1,3 +1,10 @@
+---
+diataxis: reference
+canonical: true
+---
+
+> **Diátaxis: Reference** — This is the canonical root page for this topic. Lookup-style reference for every CLI command, flag, and exit code.
+
 # Commands Reference
 
 All commands follow the pattern: `assignee <command> [args] [options]`

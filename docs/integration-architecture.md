@@ -1,3 +1,10 @@
+---
+diataxis: explanation
+canonical: true
+---
+
+> **Diátaxis: Explanation** — This is the canonical root page for this topic. Background on how the CLI, MCP server, and `@assignee/core` fit together.
+
 # Assignee.ai -- Integration Architecture
 
 > Reverse-engineered from source code, April 2026.

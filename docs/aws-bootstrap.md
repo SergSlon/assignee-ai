@@ -1,3 +1,10 @@
+---
+diataxis: how-to
+canonical: true
+---
+
+> **Diátaxis: How-to** — This is the canonical root page for this topic. Task-oriented guide for setting up AWS credentials and IAM users.
+
 # AWS Bootstrap Guide
 
 > Stories covered: **0.5** (account bootstrap) · **2.5** (IAM tightening) · **18.8** (IAM security overhaul)

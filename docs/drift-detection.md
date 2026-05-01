@@ -1,3 +1,10 @@
+---
+diataxis: how-to
+canonical: true
+---
+
+> **Diátaxis: How-to** — This is the canonical root page for this topic. Task-oriented guide for detecting and reconciling config drift between desired and live state.
+
 # Drift Detection
 
 Detect and reconcile configuration drift between your desired state and live AWS resources.

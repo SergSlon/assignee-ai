@@ -16,6 +16,15 @@ vi.mock("@aws-sdk/client-resource-groups-tagging-api", () => ({
   GetResourcesCommand: vi.fn(),
 }));
 
+// Mock IAM SDK for enumerateMcpIamRoles (ListRoles + ListRoleTags) tests.
+const mockIamSend = vi.fn();
+const mockIamDestroy = vi.fn();
+vi.mock("@aws-sdk/client-iam", () => ({
+  IAMClient: vi.fn(),
+  ListRolesCommand: vi.fn(),
+  ListRoleTagsCommand: vi.fn(),
+}));
+
 // Mock fs for provision log reading. Default impl is re-installed in
 // beforeEach because mockReset wipes it.
 vi.mock("node:fs", () => ({
@@ -46,6 +55,7 @@ vi.mock("node:fs/promises", async () => {
 
 import * as fs from "node:fs";
 import { ResourceGroupsTaggingAPIClient } from "@aws-sdk/client-resource-groups-tagging-api";
+import { IAMClient } from "@aws-sdk/client-iam";
 import { fetchManagedResources } from "../services/list-resources.js";
 
 // Access the mock send function
@@ -61,6 +71,16 @@ beforeEach(() => {
         destroy: vi.fn(),
       }) as unknown as ResourceGroupsTaggingAPIClient,
   );
+  vi.mocked(IAMClient).mockImplementation(
+    () =>
+      ({
+        send: mockIamSend,
+        destroy: mockIamDestroy,
+      }) as unknown as IAMClient,
+  );
+  // Default: IAM ListRoles returns empty list so existing RGTA-only tests
+  // are unaffected by the new IAM enumeration path.
+  mockIamSend.mockResolvedValue({ Roles: [], IsTruncated: false });
   vi.mocked(fs.readFileSync).mockImplementation(() => {
     throw new Error("File not found");
   });
@@ -670,5 +690,260 @@ describe("list_managed_resources — tag edge cases", () => {
       "AWS::RDS::DBInstance",
     );
     expect(resources).toEqual([]);
+  });
+});
+
+// ── IAM role enumeration — N+1 fix (W17-S3) ─────────────────────────────────
+//
+// enumerateMcpIamRoles must fan-out ListRoleTags in bounded concurrent
+// batches (IAM_TAG_FETCH_CONCURRENCY=10) using Promise.allSettled, so
+// a single role's tag failure doesn't abort the whole enumeration.
+
+describe("enumerateMcpIamRoles — concurrent ListRoleTags fan-out", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // RGTA returns no resources so all returned entries come from IAM.
+    mockSend.mockResolvedValue({
+      ResourceTagMappingList: [],
+      PaginationToken: undefined,
+    });
+  });
+
+  it("fetches tags for all roles in a single page", async () => {
+    // ListRoles returns 3 roles; ListRoleTags for each returns the
+    // assignee managed-by tag so all 3 should surface in the result.
+    mockIamSend
+      .mockResolvedValueOnce({
+        // ListRoles page 1 (only page)
+        Roles: [
+          {
+            RoleName: "role-a",
+            Arn: "arn:aws:iam::123456789012:role/role-a",
+            CreateDate: new Date("2026-01-01"),
+          },
+          {
+            RoleName: "role-b",
+            Arn: "arn:aws:iam::123456789012:role/role-b",
+            CreateDate: new Date("2026-01-02"),
+          },
+          {
+            RoleName: "role-c",
+            Arn: "arn:aws:iam::123456789012:role/role-c",
+            CreateDate: new Date("2026-01-03"),
+          },
+        ],
+        IsTruncated: false,
+      })
+      // ListRoleTags for role-a, role-b, role-c (order matches batch)
+      .mockResolvedValueOnce({
+        Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+      })
+      .mockResolvedValueOnce({
+        Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+      })
+      .mockResolvedValueOnce({
+        Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+      });
+
+    const resources = await fetchManagedResources("us-east-1");
+    const iamRoles = resources.filter(
+      (r) => r.resourceType === "AWS::IAM::Role",
+    );
+    expect(iamRoles).toHaveLength(3);
+    expect(iamRoles.map((r) => r.arn).sort()).toEqual([
+      "arn:aws:iam::123456789012:role/role-a",
+      "arn:aws:iam::123456789012:role/role-b",
+      "arn:aws:iam::123456789012:role/role-c",
+    ]);
+  });
+
+  it("excludes roles whose tags do not include the assignee managed-by tag", async () => {
+    mockIamSend
+      .mockResolvedValueOnce({
+        Roles: [
+          {
+            RoleName: "managed-role",
+            Arn: "arn:aws:iam::123456789012:role/managed-role",
+            CreateDate: new Date(),
+          },
+          {
+            RoleName: "unmanaged-role",
+            Arn: "arn:aws:iam::123456789012:role/unmanaged-role",
+            CreateDate: new Date(),
+          },
+        ],
+        IsTruncated: false,
+      })
+      .mockResolvedValueOnce({
+        Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+      })
+      .mockResolvedValueOnce({ Tags: [{ Key: "env", Value: "prod" }] }); // no managed-by tag
+
+    const resources = await fetchManagedResources("us-east-1");
+    const iamRoles = resources.filter(
+      (r) => r.resourceType === "AWS::IAM::Role",
+    );
+    expect(iamRoles).toHaveLength(1);
+    expect(iamRoles[0]!.arn).toBe(
+      "arn:aws:iam::123456789012:role/managed-role",
+    );
+  });
+
+  it("skips a role whose ListRoleTags call fails without aborting enumeration", async () => {
+    // role-a tag fetch fails; role-b and role-c should still be returned.
+    mockIamSend
+      .mockResolvedValueOnce({
+        Roles: [
+          {
+            RoleName: "role-a",
+            Arn: "arn:aws:iam::123456789012:role/role-a",
+            CreateDate: new Date(),
+          },
+          {
+            RoleName: "role-b",
+            Arn: "arn:aws:iam::123456789012:role/role-b",
+            CreateDate: new Date(),
+          },
+          {
+            RoleName: "role-c",
+            Arn: "arn:aws:iam::123456789012:role/role-c",
+            CreateDate: new Date(),
+          },
+        ],
+        IsTruncated: false,
+      })
+      .mockRejectedValueOnce(new Error("AccessDenied: role-a")) // role-a fails
+      .mockResolvedValueOnce({
+        Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+      })
+      .mockResolvedValueOnce({
+        Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+      });
+
+    const resources = await fetchManagedResources("us-east-1");
+    const iamRoles = resources.filter(
+      (r) => r.resourceType === "AWS::IAM::Role",
+    );
+    // role-a skipped; role-b and role-c returned
+    expect(iamRoles).toHaveLength(2);
+    expect(iamRoles.map((r) => r.arn).sort()).toEqual([
+      "arn:aws:iam::123456789012:role/role-b",
+      "arn:aws:iam::123456789012:role/role-c",
+    ]);
+  });
+
+  it("fans out tags across batches when more than 10 roles are present", async () => {
+    // 12 roles → 2 batches (10 + 2). All tagged with managed-by.
+    const roles = Array.from({ length: 12 }, (_, i) => ({
+      RoleName: `role-${i}`,
+      Arn: `arn:aws:iam::123456789012:role/role-${i}`,
+      CreateDate: new Date(),
+    }));
+
+    // First call: ListRoles (all 12, single page)
+    mockIamSend.mockResolvedValueOnce({ Roles: roles, IsTruncated: false });
+    // Next 12 calls: ListRoleTags for each role
+    for (let i = 0; i < 12; i++) {
+      mockIamSend.mockResolvedValueOnce({
+        Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+      });
+    }
+
+    const resources = await fetchManagedResources("us-east-1");
+    const iamRoles = resources.filter(
+      (r) => r.resourceType === "AWS::IAM::Role",
+    );
+    expect(iamRoles).toHaveLength(12);
+    // ListRoles (1) + ListRoleTags (12) = 13 IAM sends
+    expect(mockIamSend).toHaveBeenCalledTimes(13);
+  });
+
+  it("handles paginated ListRoles across multiple pages", async () => {
+    mockIamSend
+      .mockResolvedValueOnce({
+        // Page 1 of ListRoles
+        Roles: [
+          {
+            RoleName: "role-p1",
+            Arn: "arn:aws:iam::123456789012:role/role-p1",
+            CreateDate: new Date(),
+          },
+        ],
+        IsTruncated: true,
+        Marker: "next-marker",
+      })
+      .mockResolvedValueOnce({
+        // Page 2 of ListRoles
+        Roles: [
+          {
+            RoleName: "role-p2",
+            Arn: "arn:aws:iam::123456789012:role/role-p2",
+            CreateDate: new Date(),
+          },
+        ],
+        IsTruncated: false,
+      })
+      // ListRoleTags for both roles (batched together since ≤ 10)
+      .mockResolvedValueOnce({
+        Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+      })
+      .mockResolvedValueOnce({
+        Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+      });
+
+    const resources = await fetchManagedResources("us-east-1");
+    const iamRoles = resources.filter(
+      (r) => r.resourceType === "AWS::IAM::Role",
+    );
+    expect(iamRoles).toHaveLength(2);
+    expect(iamRoles.map((r) => r.arn).sort()).toEqual([
+      "arn:aws:iam::123456789012:role/role-p1",
+      "arn:aws:iam::123456789012:role/role-p2",
+    ]);
+  });
+
+  it("returns empty array when ListRoles returns no roles", async () => {
+    mockIamSend.mockResolvedValueOnce({ Roles: [], IsTruncated: false });
+
+    const resources = await fetchManagedResources("us-east-1");
+    const iamRoles = resources.filter(
+      (r) => r.resourceType === "AWS::IAM::Role",
+    );
+    expect(iamRoles).toHaveLength(0);
+    // Only ListRoles was called, no ListRoleTags needed
+    expect(mockIamSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns a ManagedResource entry with correct shape for a tagged role", async () => {
+    mockIamSend
+      .mockResolvedValueOnce({
+        Roles: [
+          {
+            RoleName: "tagged-role",
+            Arn: "arn:aws:iam::123456789012:role/tagged-role",
+            CreateDate: new Date("2026-03-15"),
+          },
+        ],
+        IsTruncated: false,
+      })
+      .mockResolvedValueOnce({
+        Tags: [
+          { Key: "managed-by", Value: "assignee-ai" },
+          { Key: "env", Value: "staging" },
+        ],
+      });
+
+    const resources = await fetchManagedResources("us-east-1");
+    const iamRoles = resources.filter(
+      (r) => r.resourceType === "AWS::IAM::Role",
+    );
+    expect(iamRoles).toHaveLength(1);
+    const role = iamRoles[0]!;
+    expect(role.arn).toBe("arn:aws:iam::123456789012:role/tagged-role");
+    expect(role.resourceType).toBe("AWS::IAM::Role");
+    expect(role.region).toBe("global");
+    // createdDate comes from the IAM CreateDate (no provision log entry)
+    expect(role.createdDate).toBe("2026-03-15T00:00:00.000Z");
+    expect(role.keyKind).toBe("arn");
   });
 });

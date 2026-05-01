@@ -535,9 +535,9 @@ snippets, and Bedrock Guardrail visibility in the doctor command.
 - LLM-output sanitizer (`scripts/sanitize-llm-output-for-ci.ts`);
   composite actions `apply` and `plan` now route LLM output through file
   artefacts instead of template-literal interpolation.
-- SPDX SBOM-generation and SLSA L2 cosign-signed build-provenance steps
-  in the release workflow. `docs/explanation/sbom.md` and
-  `docs/explanation/supply-chain-provenance.md`.
+- SPDX SBOM-generation and cosign blob-signature + OIDC certificate provenance steps
+  in the release workflow (blob signature, not full SLSA L2 attestation).
+  `docs/explanation/sbom.md` and `docs/explanation/supply-chain-provenance.md`.
 - `homebrew/assignee.rb` references the signed release manifest;
   `scripts/audit-homebrew-pin.ts` asserts SHA256 parity.
 - Lint scripts: `audit-action-pins.ts`, `audit-secrets-inherit.ts`,

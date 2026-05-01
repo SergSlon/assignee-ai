@@ -45,10 +45,10 @@ name: FinOps Monthly Budget Ceiling
 
 on:
   schedule:
-    # 08:00 UTC every Monday — after the previous week's nightly runs have
+    # 08:15 UTC every Monday — after the previous week's nightly runs have
     # completed and ledger artifacts are available. Weekly cadence gives
     # operators a 7-day look-back window with a clear trend signal.
-    - cron: '0 8 * * 1'
+    - cron: '15 8 * * 1'
   workflow_dispatch:
     # Allow manual triggering for ad-hoc budget checks without waiting for
     # the weekly schedule (e.g. after a large nightly run or budget update).

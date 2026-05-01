@@ -1066,8 +1066,8 @@ describe("assignee init non-interactive flags (e92-u.d)", () => {
     // W12-S0: process.exit must NOT be called; exitCode set to GENERIC_ERROR (1).
     expect(exitSpy).not.toHaveBeenCalled();
     expect(process.exitCode).toBe(1);
-    expect(errBuf).toContain("[ERROR] init requires a TTY OR --yes flag");
-    expect(errBuf).toContain("[FIX] Re-run with: assignee init --yes");
+    expect(errBuf).toContain("error: init requires a TTY OR --yes flag");
+    expect(errBuf).toContain("fix: Re-run with: assignee init --yes");
 
     // No prompts should have fired — we bailed before the wizard.
     expect(clack.text).not.toHaveBeenCalled();
@@ -1119,8 +1119,8 @@ describe("assignee init non-interactive flags (e92-u.d)", () => {
     // W12-S0: process.exit must NOT be called; exitCode set to GENERIC_ERROR (1).
     expect(exitSpy).not.toHaveBeenCalled();
     expect(process.exitCode).toBe(1);
-    expect(errBuf).toContain("[ERROR] init requires a TTY OR --yes flag");
-    expect(errBuf).toContain("[FIX] Re-run with: assignee init --yes");
+    expect(errBuf).toContain("error: init requires a TTY OR --yes flag");
+    expect(errBuf).toContain("fix: Re-run with: assignee init --yes");
     // No prompts should have fired — we bailed before the wizard.
     expect(clack.text).not.toHaveBeenCalled();
     expect(clack.select).not.toHaveBeenCalled();
@@ -1165,8 +1165,8 @@ describe("assignee init non-interactive flags (e92-u.d)", () => {
     // W12-S0: process.exit must NOT be called; exitCode set to GENERIC_ERROR (1).
     expect(exitSpy).not.toHaveBeenCalled();
     expect(process.exitCode).toBe(1);
-    expect(errBuf).toContain("[ERROR] init requires a TTY OR --yes flag");
-    expect(errBuf).toContain("[FIX] Re-run with: assignee init --yes");
+    expect(errBuf).toContain("error: init requires a TTY OR --yes flag");
+    expect(errBuf).toContain("fix: Re-run with: assignee init --yes");
     process.exitCode = prevExitCode;
   });
 
@@ -1716,7 +1716,7 @@ describe("assignee init --wizard alias (Epic 96 W2 R4)", () => {
     // W15-S1: process.exit must NOT be called; exitCode set to GENERIC_ERROR (1).
     expect(exitSpy).not.toHaveBeenCalled();
     expect(process.exitCode).toBe(1);
-    expect(errBuf).toContain("[ERROR] init requires a TTY OR --yes flag");
+    expect(errBuf).toContain("error: init requires a TTY OR --yes flag");
     process.exitCode = prevExitCode;
   });
 

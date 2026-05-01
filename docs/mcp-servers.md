@@ -1,3 +1,10 @@
+---
+diataxis: reference
+canonical: true
+---
+
+> **Diátaxis: Reference** — This is the canonical root page for this topic. Reference for the 5 AWS MCP servers that assignee.ai consumes internally (Pricing, Documentation, IAM, Security, Billing).
+
 # MCP Servers Reference
 
 Assignee.ai uses 5 AWS MCP servers (+ 1 optional remote knowledge server) to enrich the pipeline with live AWS data. All servers are from the [AWS Labs MCP project](https://awslabs.github.io/mcp/).

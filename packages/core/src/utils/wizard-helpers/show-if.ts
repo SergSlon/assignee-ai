@@ -5,7 +5,17 @@
 
 import type { ResourceField } from "../../index.js";
 
-/** Module-level cache: pattern string → compiled RegExp (avoids recompilation per field per keystroke). */
+/**
+ * Module-level cache: pattern string → compiled RegExp.
+ *
+ * Bounded by design: the number of distinct `showIf.pattern` strings is
+ * equal to the number of unique patterns across all registered resource
+ * fields, which is a small, static set (O(100) at most). The cache is
+ * never evicted at runtime; `_clearRegexCache` exists for test isolation
+ * only. There is no risk of unbounded growth from user input because
+ * patterns come from the static field-definition registry, not from
+ * user-supplied text.
+ */
 const _regexCache = new Map<string, RegExp>();
 
 /** Test-only helper — clears the pattern cache between test runs. */
