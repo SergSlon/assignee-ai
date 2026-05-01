@@ -263,6 +263,6 @@ export const restoreProvisionsCommand = new Command("restore-provisions")
         }) + "\n",
       );
     } else {
-      process.stdout.write(`[restore-provisions] ${result.message}\n`);
+      process.stdout.write(`${result.message}\n`);
     }
   });

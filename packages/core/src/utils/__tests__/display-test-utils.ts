@@ -7,7 +7,7 @@
  *   - display-plan-box-variants.test.ts
  *   - display-option-prompt.test.ts
  *   - display-interactive.test.ts
- *   - display-help-output.test.ts
+ *   - display-output.test.ts
  *   - display-epic35.test.ts
  */
 
