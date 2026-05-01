@@ -601,6 +601,268 @@ snippets, and Bedrock Guardrail visibility in the doctor command.
   redactor wired into `buildPrompt` and `readMemoryHints` before content
   reaches the LLM boundary.
 
+### Full-audit-2026-04-29 Wave 1 — 4 convergent Criticals + 1 top High
+
+Two independent review teams (Team A: 375 findings; Team B: 534 findings) audited
+the codebase and their convergence diff identified 4 Criticals both teams flagged
+independently, plus 1 top-score convergent High that 5 worker lanes flagged. This
+wave closes all 5.
+
+#### Fixed
+
+- **Lock-free audit corruption (CRITICAL)** — `withLock` fell back to lock-free
+  execution after `FILE_LOCK_MAX_RETRIES` (20) attempts; concurrent
+  `appendAuditRecord` callers could corrupt the HMAC chain under the lock-free
+  path. Now throws `LockAcquisitionError` on retry exhaustion; `fn()` never runs
+  without the lock held. (`locks/file-advisory-lock.ts`)
+- **Timing oracle in HMAC comparison (CRITICAL)** — `verifyChainLink` used `===`
+  to compare HMAC strings, leaking a timing side-channel. Replaced with
+  `crypto.timingSafeEqual` + length-mismatch short-circuit.
+  (`audit/hmac-chain.ts`)
+- **Concurrent policy-store write corruption (CRITICAL)** — `FilePolicyStore.set`
+  and `delete` did unguarded read-modify-write; concurrent writers silently
+  overwrote each other. Both methods now wrap the RMW in
+  `defaultFileAdvisoryLock.withLock`. (`rbac/policy-store.ts`)
+- **Empty-string credentials masked by test mock (CRITICAL)** — `createGraph`
+  propagated empty-string credentials to `CloudControlClient` when operator
+  creds were absent. Reshaped via factory accepting `AwsConfig |
+NoCredentialsConfig` discriminated union; the no-cred branch emits a stderr
+  warning and returns a region-only client. (`graph/create-graph.ts`,
+  `services/cloudcontrol-client.ts`)
+- **REDACTED array passthrough in resume payloads (HIGH)** — `stripRedactedFields`
+  routed arrays into a verbatim copy branch, sending literal `[REDACTED]`
+  strings to AWS on checkpoint resume. New `stripRedactedArray` helper recurses
+  into object elements and removes redacted values. (`checkpoint/redaction.ts`)
+
+### Full-audit-2026-04-29 Wave 2 — pre-existing breakage closures
+
+Wave 1 surfaced two pre-existing breakage clusters: 27 mcp-server tests failing
+under coverage-only runs, and 5 pre-close probe failures caused by a stale
+schema-cache. This wave closes the source-side breakage for all 5 probes and
+fixes the coverage cascade; it also surfaces a latent schema-service failure
+mode addressed in Wave 3.
+
+#### Fixed
+
+- **mcp-server coverage-only cascade (27 failures)** — `RW4d-migration-A`
+  refactored checkpoint loader to use `LocalFsStorageAdapter`, which imports
+  a different `node:fs` module ID than the test's `vi.mock("node:fs/promises")`.
+  Fixed via dual `importOriginal` mock factories, `vi.hoisted()` for the shared
+  `fn()` reference, and `Buffer.from()` mock values. (`apply-plan.test.ts`)
+- **LLM plugin-default phase ordering (R5 / R2 probes)** — `mergePluginDefaults`
+  ran before `sanitizeAgainstSchema`, causing the sanitiser to immediately strip
+  plugin-injected keys absent from the trimmed schema fixture. Moved
+  `mergePluginDefaults` to Phase 3a.1 (post-sanitize).
+- **EFS bare-intent ambiguity (N3 probe)** — redundant `"efs file system"` keyword
+  in the `efs-with-vpc` compound shadowed the bare-EFS singleton route. Removed
+  the shadow keyword.
+- **EC2 volume-size fidelity (R4 probe)** — added 2 regression tests pinning the
+  post-plugin-default shape for both `bdm[0]` no-Ebs and `bdm[0].Ebs`
+  no-VolumeSize edge cases.
+- **BP-awareness severity normalisation (P1 probe)** — added explicit awareness
+  short-circuit in `evaluate/barrel.ts` that emits the finding before any
+  `getField()`/`checkPasses()` call. 5 regression-guard tests added.
+
+### Full-audit-2026-04-29 Wave 3 — graceful schema-cache fallback
+
+Wave 2 identified a latent failure: when `~/.assignee/cache/schemas/*.json`
+exceeded their 7-day TTL and the AWS CloudFormation DescribeType API returned
+an XML error page, the schema service propagated the error and broke every CLI
+command silently.
+
+#### Fixed
+
+- **Schema-cache stale fallback** — `readCache()` now returns
+  `{ schema, stale: boolean } | null`. When `fetchFromApi()` throws and a stale
+  entry exists, `getSchema()` catches the error, emits a structured `WARN` log
+  with a manual-recovery hint, and returns the stale schema. The cache mtime is
+  deliberately not refreshed on fallback so subsequent invocations keep retrying.
+  "No cache + API error" path is unchanged — `SchemaFetchError` propagates.
+  (`packages/core/src/services/cloud-formation-schema-service.ts`)
+
+### Full-audit-2026-04-29 Wave 4 — 5 convergent Highs
+
+Five convergent High findings from AB-DIFF Tier 1 (each flagged independently by
+both review teams, score 128 each). All are surgical fixes with disjoint file
+ownership.
+
+#### Fixed
+
+- **Silent policy-corruption on corrupt file (W4-S1)** — `FilePolicyStore.readAll`
+  swallowed all errors in a blanket `catch { return [] }`, making JSON corruption
+  indistinguishable from "file not yet created" and silently granting every role
+  effective operator access. Typed handler now splits `ENOENT` (return `[]`) from
+  all other errors (re-throw). (`rbac/policy-store.ts`)
+- **Audit-log index-monotonicity not verified (W4-S2)** — the audit verifier
+  checked HMAC chain linkage but not `entry.index` monotonicity. An attacker
+  could delete, duplicate, or reorder entries while replaying a consistent HMAC
+  chain. Added `"index-gap"` to `VerifyReason`; index-gap detection runs before
+  HMAC crypto. (`audit/audit-verifier.ts`)
+- **Silent plugin-registration overwrite (W4-S3)** — `PluginRegistry.register`
+  called unconditional `Map.set`, silently overwriting duplicate registrations.
+  A `.has()` guard now throws on duplicate. (`resource-plugins/registry.ts`)
+- **World-readable price-cache files (W4-S4)** — `mkdirSync` and `writeFileSync`
+  in the price-cache defaulted to umask permissions (world-readable). Fixed:
+  `mode: 0o700` on directory, `mode: 0o600` on file.
+  (`services/price-cache.ts`)
+- **Internal tracker strings leaked to users (W4-S5)** — Four
+  `process.stderr.write` calls in `plan`, `apply`, `destroy`, and `init`
+  commands leaked internal strings like `"Epic 101"` and `"story 100-W2-02"`
+  to users. Replaced with user-facing wording.
+  (`apps/cli/src/commands/{plan,apply,destroy,init}.ts`)
+
+### Full-audit-2026-04-29 Wave 5 — 5 convergent Highs + tracker-leak follow-up
+
+Four convergent High findings from AB-DIFF Tier 1, plus one Wave 4 reviewer
+follow-up (`--help` stdout still leaked `"Epic 101"` after W4-S5 fixed stderr
+only).
+
+#### Fixed
+
+- **`--help` stdout tracker-string leak (W5-S0)** — Commander `.option()`
+  description strings on `plan`, `apply`, and `destroy` still contained
+  `"Epic 101"`. Replaced with user-facing wording; completion shims
+  regenerated. (`apps/cli/src/commands/{plan,apply,destroy}.ts`)
+- **Duplicate `BP_CATEGORY` enum values (W5-S1)** — `"cost"` and
+  `"cost_optimization"` coexisted in the enum; 11 YAML rule files used them
+  inconsistently. Removed `"cost_optimization"` alias; all 11 YAML files
+  migrated to `category: cost`. (`packages/best-practices/src/types.ts` +
+  11 rule files)
+- **Incorrect AWS_PROFILE UX guidance (W5-S2)** — first-run helper falsely told
+  users the named profile was "not supported" and instructed them to export raw
+  keys instead. Also fixed em-dash rendering on Windows cmd.exe and added
+  PowerShell `$Env:` snippets alongside bash `export` snippets.
+  (`apps/cli/src/utils/first-run.ts`)
+- **Missing `NOT_IMPLEMENTED=12` exit-code test (W5-S3)** — table-test lacked
+  an assertion for code 12; JSDoc omitted it. Added the assertion and extended
+  JSDoc. (`apps/cli/src/utils/exit-code.ts`)
+- **AKIA/ASIA tokens in audit-log error messages (W5-S4)** — `mcpLogError`
+  forwarded raw `err.message`, which can contain access-key-id tokens from AWS
+  SDK errors. Extended `redactSensitive` with `/A[KS]IA[0-9A-Z]{16}/g` and
+  wrapped the audit-log error path. (`packages/core/src/utils/redact.ts`)
+
+### Full-audit-2026-04-29 Wave 6 — 5 convergent Highs + W4-S5 placeholder fix
+
+Five convergent High findings plus two carry-overs: the collect-all loader half
+of W5-S1 deferred from Wave 5, and 3 tests that used a denylisted placeholder
+account ID.
+
+#### Fixed
+
+- **BP loader fail-fast hides subsequent errors (W6-S0)** — `loadBestPractices`
+  threw on the first `ZodError`, hiding all subsequent invalid files and
+  performing no duplicate-rule-ID detection. Fixed to collect-all: walks every
+  file, accumulates `schemaErrors` and tracks `seenIds`; reports all offending
+  files in one aggregated `BPSchemaError`. (`best-practices/src/loader.ts`)
+- **MCP server signal handler tears down before cleanup (W6-S1)** — synchronous
+  `process.exit` in signal handlers tore down the event loop before
+  `finally { releaseApply }` blocks could run, leaving stale `activeApplies`
+  entries and causing "Active-applies cap reached" on every subsequent apply
+  until restart. Signal handler now calls `clearAllApplies()` synchronously,
+  races `mcpServerInstance.close()` against a 5-second timeout, then exits.
+  (`apps/mcp-server/src/signal-handler.ts`)
+- **KMS / SecretsManager / EventBridge bypass factory pattern (W6-S2)** — three
+  inline AWS SDK clients in `destroy.ts` bypassed the `cloudcontrol-client.ts`
+  factory (W1-C4). Added `createKmsClient`, `createSecretsManagerClient`, and
+  `createEventBridgeClient` factories sharing a `buildClientConfig` helper.
+  (`packages/core/src/services/`)
+- **BP schema missing cross-field validation (W6-S3)** — `bestPracticeSchema`
+  had `expected_value: z.unknown()` with no cross-field validation. A
+  `.superRefine` block now validates 3 cross-field constraints:
+  `policy_antipattern` → string + known antipattern name;
+  `nested_array_predicate` → grammar parse; `condition` → field/value shape.
+  (`best-practices/src/schema.ts`)
+- **Release workflow embeds token in git-clone argv (W6-S4)** — `update-homebrew`
+  job cloned the tap repo via `https://x-access-token:${TOKEN}@github.com/...`,
+  embedding the secret in argv visible to `ps aux` and runner logs. Replaced
+  with `actions/checkout@SHA-pinned-v4.2.2` using `with: token`.
+  (`.github/workflows/release.yml`)
+
+#### Changed
+
+- Denylisted placeholder account ID (`123456789012`) in 3 W4-S5 tests replaced
+  with `112233445566` (verified non-denylisted). Updated memory guidance:
+  `210987654321` is also denylisted; `112233445566` is the correct test value.
+
+### Full-audit-2026-04-29 Wave 7 — 5 convergent Highs
+
+Five convergent High findings across CLI commands, CI workflows, audit-chain
+semantics, and CLI output encoding.
+
+#### Breaking Changes
+
+- **Audit-log HMAC chain format changed.** Wave 7 (W7-S2) switches HMAC
+  computation from `JSON.stringify` (non-deterministic key order) to an inline
+  `canonicalJson` helper that sorts object keys alphabetically. Audit logs
+  created before this wave will fail verification under the new verifier.
+  **Migration**: use the `legacyVerifyChainLink` helper added in Wave 8 (W8-S0)
+  to re-verify old entries, then re-sign them with `computeChainLink`.
+  (`packages/core/src/audit/hmac-chain.ts`)
+
+#### Added
+
+- `--json` output mode for `audit-verify`, `restore-provisions`, and `version`
+  commands with structured envelope shapes, enabling scripted consumption of all
+  three commands. (`apps/cli/src/commands/`)
+- `validate-bp-rules.ts` script wired into CI as a hard-gate step between Build
+  and `test:coverage`, ensuring best-practice YAML rule validation runs on every
+  push. (`.github/workflows/ci-core.yml`)
+
+#### Fixed
+
+- **`--wizard` flag description divergence (W7-S0)** — the `--wizard` flag
+  description differed across `plan`, `apply`, and `init`, creating UX
+  surprises. All three now carry the identical string
+  "Run the interactive configuration wizard."; per-command behaviour differences
+  documented in JSDoc. (`apps/cli/src/commands/{plan,apply,init}.ts`)
+- **Non-deterministic HMAC key ordering (W7-S2)** — `JSON.stringify` is
+  non-deterministic for object-key order across V8 versions. Replaced with
+  `canonicalJson` (recursive alphabetical sort, no new dependency).
+  (`packages/core/src/audit/hmac-chain.ts`)
+- **Non-ASCII glyphs on Windows cmd.exe (W7-S4)** — `✓`, `❌`, and `⚠` rendered
+  as `?` on Windows with default code pages. Replaced with ASCII
+  `[OK]`/`[NONE]`/`[WARN]` tokens; `isTTY` guard added for ANSI sequences.
+  (`apps/cli/src/utils/first-run.ts`, `utils/command-runner/credentials.ts`,
+  `apps/cli/src/index.ts`)
+
+### Full-audit-2026-04-29 Wave 8 — 5 convergent Highs + W7-S2 follow-up
+
+Four convergent High findings plus the `legacyHmac` migration helper that was a
+Wave 7 reviewer caveat.
+
+#### Added
+
+- `legacyComputeChainLink` and `legacyVerifyChainLink` exports — verify audit
+  logs computed with pre-W7 `JSON.stringify` HMAC, enabling a migration path to
+  the canonical W7 format. (`packages/core/src/audit/hmac-chain.ts`)
+- `scripts/audit-version-parity.ts` — reads the 4 publishable `package.json`
+  files, normalises the tag, and exits 1 with a diff on mismatch. New
+  `Check version parity` CI step runs before `turbo build` on tag-triggered
+  releases. (`.github/workflows/release.yml`)
+
+#### Fixed
+
+- **Audit-log temp-file write race and missing fsync (W8-S1)** — 4-syscall
+  temp-file dance (write tmp → read tmp → append log → unlink tmp) had two
+  failure windows: partial-write race on kill and no durability guarantee.
+  Replaced with a single `fs.appendFile(line, { mode: 0o600 })` plus
+  conditional `fd.sync()` gated by `ASSIGNEE_AUDIT_FSYNC !== "0"` (default on).
+  (`packages/core/src/audit/audit-log.ts`)
+- **Sprint-status YAML stale prelude (W8-S2)** — `sprint-status.yaml` had a
+  158-line stale prelude with 35 lines of prior-epic comments. Rolled the
+  comments into `_archive/sprint-history-rollup.md`; reduced prelude to 8
+  lines; promoted `last_updated`/`current_sprint`/`sprint_dates` to top-level
+  keys. All 218 epic entries preserved.
+  (`_bmad-output/implementation-artifacts/sprint-status.yaml`)
+- **Deferred-backlog misfiled in `done-stories/` (W8-S3)** — `audit-deferred-
+backlog.md` was filed under `_archive/done-stories/` even though it contains
+  active work items (Clusters F, H, I). Moved to `planning-artifacts/` and
+  renamed with date suffix.
+- **Release pipeline lacks version-parity gate (W8-S4)** — a stale package
+  version could silently publish at the wrong version. New
+  `audit-version-parity.ts` script and CI gate address this.
+  (`.github/workflows/release.yml`)
+
 ### Full-audit-2026-04-29 Wave 9 (audit hardening)
 
 #### Breaking Changes

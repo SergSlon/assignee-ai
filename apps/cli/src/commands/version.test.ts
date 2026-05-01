@@ -53,6 +53,20 @@ describe("versionCommand — --json output", () => {
   let originalStdoutWrite: typeof process.stdout.write;
 
   beforeEach(() => {
+    // Commander is a singleton; reset parsed option values so --json from a
+    // previous test does not bleed into this one.
+    (
+      versionCommand as unknown as {
+        _optionValues: Record<string, unknown>;
+        _optionValueSources: Record<string, unknown>;
+      }
+    )._optionValues = {};
+    (
+      versionCommand as unknown as {
+        _optionValueSources: Record<string, unknown>;
+      }
+    )._optionValueSources = {};
+
     writtenChunks = [];
     originalStdoutWrite = process.stdout.write.bind(process.stdout);
     process.stdout.write = ((chunk: string | Uint8Array): boolean => {
@@ -114,6 +128,20 @@ describe("versionCommand — human-readable output (no --json)", () => {
   let originalStdoutWrite: typeof process.stdout.write;
 
   beforeEach(() => {
+    // Commander is a singleton; reset parsed option values so --json from a
+    // previous test does not bleed into this one.
+    (
+      versionCommand as unknown as {
+        _optionValues: Record<string, unknown>;
+        _optionValueSources: Record<string, unknown>;
+      }
+    )._optionValues = {};
+    (
+      versionCommand as unknown as {
+        _optionValueSources: Record<string, unknown>;
+      }
+    )._optionValueSources = {};
+
     writtenChunks = [];
     originalStdoutWrite = process.stdout.write.bind(process.stdout);
     process.stdout.write = ((chunk: string | Uint8Array): boolean => {

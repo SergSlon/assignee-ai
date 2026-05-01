@@ -103,6 +103,13 @@ export async function formatApplyCompoundSuccess(
       requestToken: undefined,
       resourceArn: undefined,
       executionStatus: ExecutionStatus.PENDING,
+      // W11-S0 (M-α-07): reset per-resource throttle budget so resource N+1
+      // starts with a full retry window instead of inheriting resource N's
+      // exhausted count.  Without this reset, a resource that hit the ceiling
+      // (e.g. throttleRetryCount === MAX_THROTTLE_RETRIES) would cause every
+      // subsequent resource in the queue to fail immediately on the first
+      // ThrottlingException.
+      throttleRetryCount: 0,
     };
   }
 
