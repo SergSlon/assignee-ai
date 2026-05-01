@@ -76,6 +76,21 @@ export class CloudFormationSchemaService {
   private readonly cacheDir: string;
   private readonly cacheTtlMs: number;
 
+  /**
+   * In-flight dedup map: tracks active fetchFromApi Promises by type name.
+   *
+   * When N concurrent callers request the same resource type on a cache miss,
+   * the first caller inserts a Promise here; subsequent callers receive that
+   * same Promise instead of spawning their own DescribeType API call. The
+   * entry is deleted (in a `finally` block) when the fetch settles — on both
+   * resolve AND reject — so the cache-TTL flow takes over from that point.
+   *
+   * Instance-scoped (not static/module-level) so each service instance owns
+   * its own dedup state. This is correct because W12-prelude made the service
+   * per-graph (no shared singleton).
+   */
+  private readonly _inFlight = new Map<string, Promise<object>>();
+
   constructor(config?: CloudFormationSchemaServiceConfig) {
     this.cacheDir = config?.cacheDir ?? DEFAULT_CACHE_DIR;
     this.cacheTtlMs = config?.cacheTtlMs ?? DEFAULT_TTL_MS;
@@ -151,45 +166,69 @@ export class CloudFormationSchemaService {
       return cached.schema;
     }
 
-    // Cache miss or expired — fetch from API.
-    let schema: object;
-    try {
-      schema = await this.fetchFromApi(typeName);
-    } catch (fetchError: unknown) {
-      // API threw — check whether we can fall back to a stale cache entry.
-      if (cached !== null && cached.stale) {
-        const cacheFilePath = this.cacheFilePath(typeName);
-        const errMsg =
-          fetchError instanceof Error ? fetchError.message : String(fetchError);
-        log({
-          ts: new Date().toISOString(),
-          runId: "system",
-          level: LogLevel.WARN,
-          action: LOG_ACTIONS.SCHEMA_STALE_CACHE_FALLBACK,
-          extras: {
-            typeName,
-            error: errMsg,
-            cacheFile: cacheFilePath,
-            hint: `Run: touch "${cacheFilePath}" to force a retry on next invocation, or delete the file to force a full refresh.`,
-          },
-        });
-        // Return stale value — mtime is intentionally NOT updated so we keep
-        // retrying the API on subsequent calls.
-        return cached.schema;
+    // Cache miss or expired — check whether a fetch is already in flight for
+    // this type name. If so, reuse the existing Promise (dedup: N callers → 1
+    // DescribeType API call). The first caller creates the Promise, stores it
+    // in _inFlight, and all subsequent concurrent callers await that same
+    // Promise. On settle (resolve OR reject) the entry is removed so the
+    // cache-TTL flow takes over for the next caller.
+    const existingFetch = this._inFlight.get(typeName);
+    if (existingFetch !== undefined) {
+      return existingFetch;
+    }
+
+    const fetchPromise = (async () => {
+      try {
+        let schema: object;
+        try {
+          schema = await this.fetchFromApi(typeName);
+        } catch (fetchError: unknown) {
+          // API threw — check whether we can fall back to a stale cache entry.
+          if (cached !== null && cached.stale) {
+            const cacheFilePath = this.cacheFilePath(typeName);
+            const errMsg =
+              fetchError instanceof Error
+                ? fetchError.message
+                : String(fetchError);
+            log({
+              ts: new Date().toISOString(),
+              runId: "system",
+              level: LogLevel.WARN,
+              action: LOG_ACTIONS.SCHEMA_STALE_CACHE_FALLBACK,
+              extras: {
+                typeName,
+                error: errMsg,
+                cacheFile: cacheFilePath,
+                hint: `Run: touch "${cacheFilePath}" to force a retry on next invocation, or delete the file to force a full refresh.`,
+              },
+            });
+            // Return stale value — mtime is intentionally NOT updated so we
+            // keep retrying the API on subsequent calls.
+            return cached.schema;
+          }
+          // No cache at all — propagate the error (re-throw the SchemaFetchError
+          // that fetchFromApi already wrapped it in).
+          throw fetchError;
+        }
+
+        // Write to cache (best effort — don't fail if cache write fails)
+        try {
+          await this.writeCache(typeName, schema);
+        } catch {
+          // Cache write failures are non-blocking
+        }
+
+        return schema;
+      } finally {
+        // Remove the in-flight entry whether the fetch resolved or rejected.
+        // This ensures a subsequent caller after a failure retries the API
+        // rather than receiving a cached rejection.
+        this._inFlight.delete(typeName);
       }
-      // No cache at all — propagate the error (re-throw the SchemaFetchError
-      // that fetchFromApi already wrapped it in).
-      throw fetchError;
-    }
+    })();
 
-    // Write to cache (best effort — don't fail if cache write fails)
-    try {
-      await this.writeCache(typeName, schema);
-    } catch {
-      // Cache write failures are non-blocking
-    }
-
-    return schema;
+    this._inFlight.set(typeName, fetchPromise);
+    return fetchPromise;
   }
 
   /**

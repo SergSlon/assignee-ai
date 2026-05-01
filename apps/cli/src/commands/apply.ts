@@ -350,13 +350,13 @@ export const applyCommand = new Command(CommandName.APPLY)
         process.stderr.write(
           `[apply] ${validation.reason ?? "Invalid account ID"}\n`,
         );
-        process.exit(ProcessExitCode.GENERIC_ERROR);
+        process.exitCode = ProcessExitCode.GENERIC_ERROR;
         return;
       }
       process.stderr.write(
         `[apply] cross-account assume-role not yet available for ${rawOptsWithTarget.targetAccount}\n`,
       );
-      process.exit(ProcessExitCode.NOT_IMPLEMENTED);
+      process.exitCode = ProcessExitCode.NOT_IMPLEMENTED;
       return;
     }
 

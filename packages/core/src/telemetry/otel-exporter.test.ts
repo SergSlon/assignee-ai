@@ -11,16 +11,19 @@ import {
   getOtelServiceName,
   buildOtlpPayload,
   exportLogEvent,
+  isEndpointSchemeAllowed,
   DEFAULT_OTEL_SERVICE_NAME,
   OTLP_LOGS_PATH,
 } from "./otel-exporter.js";
-import type { LogEvent } from "../utils/logger/index.js";
+import type { LogEvent, LogAction } from "../utils/logger/index.js";
+import type { ConfigPort } from "../config/config-port.js";
 
 const ORIGINAL_ENV = { ...process.env };
 
 beforeEach(() => {
   delete process.env["ASSIGNEE_OTEL_ENDPOINT"];
   delete process.env["ASSIGNEE_OTEL_SERVICE_NAME"];
+  delete process.env["ASSIGNEE_OTEL_ALLOW_HTTP"];
 });
 
 afterEach(() => {
@@ -272,8 +275,8 @@ describe("exportLogEvent", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("POSTs OTLP JSON to <endpoint>/v1/logs when enabled", async () => {
-    process.env["ASSIGNEE_OTEL_ENDPOINT"] = "http://collector.local:4318";
+  it("POSTs OTLP JSON to <endpoint>/v1/logs when enabled (HTTPS)", async () => {
+    process.env["ASSIGNEE_OTEL_ENDPOINT"] = "https://collector.local:4318";
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(new Response(null, { status: 200 }));
@@ -282,7 +285,7 @@ describe("exportLogEvent", () => {
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const [url, init] = fetchSpy.mock.calls[0]!;
-    expect(url).toBe("http://collector.local:4318" + OTLP_LOGS_PATH);
+    expect(url).toBe("https://collector.local:4318" + OTLP_LOGS_PATH);
     expect(init?.method).toBe("POST");
     expect((init?.headers as Record<string, string>)["Content-Type"]).toBe(
       "application/json",
@@ -297,8 +300,19 @@ describe("exportLogEvent", () => {
     });
   });
 
-  it("strips a single trailing slash from the endpoint", async () => {
+  it("strips a single trailing slash from the endpoint (HTTPS)", async () => {
+    process.env["ASSIGNEE_OTEL_ENDPOINT"] = "https://localhost:4318/";
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    await exportLogEvent(event);
+    const [url] = fetchSpy.mock.calls[0]!;
+    expect(url).toBe("https://localhost:4318/v1/logs");
+  });
+
+  it("strips a single trailing slash from HTTP endpoint when ASSIGNEE_OTEL_ALLOW_HTTP=1", async () => {
     process.env["ASSIGNEE_OTEL_ENDPOINT"] = "http://localhost:4318/";
+    process.env["ASSIGNEE_OTEL_ALLOW_HTTP"] = "1";
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(new Response(null, { status: 200 }));
@@ -308,13 +322,13 @@ describe("exportLogEvent", () => {
   });
 
   it("swallows fetch rejection silently — never throws to the caller", async () => {
-    process.env["ASSIGNEE_OTEL_ENDPOINT"] = "http://collector.local:4318";
+    process.env["ASSIGNEE_OTEL_ENDPOINT"] = "https://collector.local:4318";
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("ECONNREFUSED"));
     await expect(exportLogEvent(event)).resolves.toBeUndefined();
   });
 
   it("swallows non-2xx responses silently (collector may reject schema)", async () => {
-    process.env["ASSIGNEE_OTEL_ENDPOINT"] = "http://collector.local:4318";
+    process.env["ASSIGNEE_OTEL_ENDPOINT"] = "https://collector.local:4318";
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response("schema error", { status: 400 }),
     );
@@ -322,7 +336,7 @@ describe("exportLogEvent", () => {
   });
 
   it("aborts the request after the timeout window so a slow collector cannot stall the CLI", async () => {
-    process.env["ASSIGNEE_OTEL_ENDPOINT"] = "http://collector.local:4318";
+    process.env["ASSIGNEE_OTEL_ENDPOINT"] = "https://collector.local:4318";
 
     // Stall fetch indefinitely until the AbortController fires.
     const fetchSpy = vi
@@ -338,5 +352,232 @@ describe("exportLogEvent", () => {
     // The exporter swallows the rejection — `await` should still resolve.
     await expect(exportLogEvent(event)).resolves.toBeUndefined();
     expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── Scheme validation (M-α-18) ───────────────────────────────────────────────
+
+describe("isEndpointSchemeAllowed", () => {
+  // W12-S1 follow-up: ConfigPort has 4 methods (get/getRequired/getInt/getBool).
+  // Tests only exercise `.get()`; the other 3 throw if ever called by the SUT.
+  const makeConfig = (env: Record<string, string | undefined>): ConfigPort => ({
+    get(key: string) {
+      return env[key];
+    },
+    getRequired(key: string): string {
+      const value = env[key];
+      if (value === undefined)
+        throw new Error(`Required config missing: ${key}`);
+      return value;
+    },
+    getInt(key: string, defaultValue?: number): number | undefined {
+      const raw = env[key];
+      if (raw === undefined) return defaultValue;
+      const parsed = parseInt(raw, 10);
+      return Number.isNaN(parsed) ? defaultValue : parsed;
+    },
+    getBool(key: string, defaultValue?: boolean): boolean | undefined {
+      const raw = env[key];
+      if (raw === undefined) return defaultValue;
+      return ["1", "true", "yes", "on"].includes(raw.toLowerCase());
+    },
+  });
+
+  it("allows https:// endpoints unconditionally", () => {
+    const config = makeConfig({});
+    expect(isEndpointSchemeAllowed("https://otel.example.com", config)).toBe(
+      true,
+    );
+  });
+
+  it("rejects http:// endpoints when ASSIGNEE_OTEL_ALLOW_HTTP is unset", () => {
+    const config = makeConfig({});
+    expect(isEndpointSchemeAllowed("http://localhost:4318", config)).toBe(
+      false,
+    );
+  });
+
+  it("rejects http:// endpoints when ASSIGNEE_OTEL_ALLOW_HTTP is empty", () => {
+    const config = makeConfig({ ASSIGNEE_OTEL_ALLOW_HTTP: "" });
+    expect(isEndpointSchemeAllowed("http://localhost:4318", config)).toBe(
+      false,
+    );
+  });
+
+  it("rejects http:// endpoints when ASSIGNEE_OTEL_ALLOW_HTTP is 0", () => {
+    const config = makeConfig({ ASSIGNEE_OTEL_ALLOW_HTTP: "0" });
+    expect(isEndpointSchemeAllowed("http://localhost:4318", config)).toBe(
+      false,
+    );
+  });
+
+  it("allows http:// endpoints when ASSIGNEE_OTEL_ALLOW_HTTP=1", () => {
+    const config = makeConfig({ ASSIGNEE_OTEL_ALLOW_HTTP: "1" });
+    expect(isEndpointSchemeAllowed("http://localhost:4318", config)).toBe(true);
+  });
+
+  it("allows http:// endpoints when ASSIGNEE_OTEL_ALLOW_HTTP=1 with surrounding whitespace", () => {
+    const config = makeConfig({ ASSIGNEE_OTEL_ALLOW_HTTP: "  1  " });
+    expect(isEndpointSchemeAllowed("http://localhost:4318", config)).toBe(true);
+  });
+
+  it("rejects non-http/https schemes even with ASSIGNEE_OTEL_ALLOW_HTTP=1", () => {
+    const config = makeConfig({ ASSIGNEE_OTEL_ALLOW_HTTP: "1" });
+    expect(isEndpointSchemeAllowed("grpc://collector:4317", config)).toBe(
+      false,
+    );
+    expect(isEndpointSchemeAllowed("ws://collector:4317", config)).toBe(false);
+  });
+});
+
+// ── Scheme guard in exportLogEvent (M-α-18 hot path) ───────────────────────
+
+describe("exportLogEvent scheme guard", () => {
+  const event: LogEvent = {
+    ts: "2026-04-08T12:34:56.789Z",
+    runId: "aaaabbbb-cccc-dddd-eeee-ffffffffffff",
+    level: "info",
+    action: "test_event" as unknown as LogAction,
+  };
+
+  it("does NOT call fetch for an http:// endpoint when ASSIGNEE_OTEL_ALLOW_HTTP is unset", async () => {
+    process.env["ASSIGNEE_OTEL_ENDPOINT"] = "http://collector.local:4318";
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    await exportLogEvent(event);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("writes a diagnostic message to stderr when rejecting an http:// endpoint", async () => {
+    process.env["ASSIGNEE_OTEL_ENDPOINT"] = "http://collector.local:4318";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(null, { status: 200 }),
+    );
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    await exportLogEvent(event);
+    expect(stderrSpy).toHaveBeenCalledOnce();
+    const msg = stderrSpy.mock.calls[0]![0] as string;
+    expect(msg).toContain("ASSIGNEE_OTEL_ALLOW_HTTP=1");
+    expect(msg).toContain("http://collector.local:4318");
+  });
+
+  it("calls fetch for an http:// endpoint when ASSIGNEE_OTEL_ALLOW_HTTP=1", async () => {
+    process.env["ASSIGNEE_OTEL_ENDPOINT"] = "http://collector.local:4318";
+    process.env["ASSIGNEE_OTEL_ALLOW_HTTP"] = "1";
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    await exportLogEvent(event);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url] = fetchSpy.mock.calls[0]!;
+    expect(url).toBe("http://collector.local:4318" + OTLP_LOGS_PATH);
+  });
+
+  it("scheme rejection still resolves (never throws)", async () => {
+    process.env["ASSIGNEE_OTEL_ENDPOINT"] = "http://collector.local:4318";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(null, { status: 200 }),
+    );
+    vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    await expect(exportLogEvent(event)).resolves.toBeUndefined();
+  });
+});
+
+// ── ConfigPort threading in exportLogEvent (M-α-06) ────────────────────────
+
+describe("exportLogEvent ConfigPort threading", () => {
+  const event: LogEvent = {
+    ts: "2026-04-08T12:34:56.789Z",
+    runId: "12345678-1234-1234-1234-123456789abc",
+    level: "warn",
+    action: "tenant_event" as unknown as LogAction,
+  };
+
+  it("uses the injected ConfigPort to resolve the endpoint — does not fall through to process.env", async () => {
+    // process.env has NO endpoint set
+    delete process.env["ASSIGNEE_OTEL_ENDPOINT"];
+
+    // Tenant config supplies its own endpoint. SUT only calls .get(); other
+    // ConfigPort methods stubbed via cast.
+    const tenantConfig = {
+      get(key: string) {
+        if (key === "ASSIGNEE_OTEL_ENDPOINT") return "https://tenant.otel:4318";
+        if (key === "ASSIGNEE_OTEL_SERVICE_NAME") return "tenant-service";
+        return undefined;
+      },
+    } as unknown as ConfigPort;
+
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 200 }));
+
+    await exportLogEvent(event, tenantConfig);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url] = fetchSpy.mock.calls[0]!;
+    expect(url).toBe("https://tenant.otel:4318" + OTLP_LOGS_PATH);
+
+    // Verify service name was also sourced from the injected config
+    const body = JSON.parse(fetchSpy.mock.calls[0]![1]!.body as string);
+    expect(body.resourceLogs[0].resource.attributes).toContainEqual({
+      key: "service.name",
+      value: { stringValue: "tenant-service" },
+    });
+  });
+
+  it("is a no-op when the injected ConfigPort returns no endpoint", async () => {
+    // Both process.env and the injected config have no endpoint
+    delete process.env["ASSIGNEE_OTEL_ENDPOINT"];
+    const emptyConfig = { get: () => undefined } as unknown as ConfigPort;
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 200 }));
+
+    await exportLogEvent(event, emptyConfig);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("injected ConfigPort can allow HTTP via ASSIGNEE_OTEL_ALLOW_HTTP=1", async () => {
+    // process.env has NO allow-http flag
+    delete process.env["ASSIGNEE_OTEL_ALLOW_HTTP"];
+
+    const tenantConfig = {
+      get(key: string) {
+        if (key === "ASSIGNEE_OTEL_ENDPOINT")
+          return "http://internal.otel:4318";
+        if (key === "ASSIGNEE_OTEL_ALLOW_HTTP") return "1";
+        return undefined;
+      },
+    } as unknown as ConfigPort;
+
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 200 }));
+
+    await exportLogEvent(event, tenantConfig);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url] = fetchSpy.mock.calls[0]!;
+    expect(url).toBe("http://internal.otel:4318" + OTLP_LOGS_PATH);
+  });
+
+  it("injected ConfigPort HTTP endpoint is still rejected when ASSIGNEE_OTEL_ALLOW_HTTP is absent", async () => {
+    const tenantConfig = {
+      get(key: string) {
+        if (key === "ASSIGNEE_OTEL_ENDPOINT")
+          return "http://internal.otel:4318";
+        return undefined; // no ASSIGNEE_OTEL_ALLOW_HTTP
+      },
+    } as unknown as ConfigPort;
+
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+    await exportLogEvent(event, tenantConfig);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

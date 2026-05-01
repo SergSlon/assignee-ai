@@ -161,34 +161,43 @@ describe("redactSensitiveFields — NOT over-redacted (allowlist precision)", ()
     );
   });
 
-  it("key case-sensitivity: 'password' (lowercase) is NOT redacted", () => {
-    // CloudFormation property names are PascalCase. A lowercase-'password'
-    // key would come from a non-CFN shape (e.g. an operator-submitted
-    // options payload). The allowlist is case-sensitive and deliberately
-    // doesn't catch it — if callers want it covered they should normalise
-    // keys before passing in.
-    const input = { password: "not-a-cfn-key" };
+  it("key case-insensitive: 'password' (lowercase) IS redacted (M-α-007)", () => {
+    // Operator-submitted payloads may use lowercase or mixed-case key names.
+    // The allowlist check is case-insensitive (M-α-007 fix): both the PascalCase
+    // exact-match set and a lowercase-normalised fallback are consulted.
+    // The original key name is preserved in the output; only the VALUE is masked.
+    const input = { password: "hunter2" };
     const result = redactSensitiveFields(input);
-    expect(result["password"]).toBe("not-a-cfn-key");
+    expect(result["password"]).toBe(REDACTED_VALUE);
   });
 });
 
 describe("redactSensitiveFields — AKIA / ASIA pattern defense-in-depth", () => {
-  it("scrubs AKIA strings inside innocuous top-level keys", () => {
+  it("scrubs AKIA substring — preserves surrounding context (M-α-005)", () => {
+    // M-α-005 fix: only the AKIA token is replaced, not the whole string.
+    // The surrounding message context is preserved so logs remain readable
+    // while the credential is masked.
     const input = {
       Description: "access key is AKIAABCDEFGHIJKLMNOP for legacy user",
     };
     const result = redactSensitiveFields(input);
-    // Current implementation replaces the WHOLE value when AKIA_PATTERN
-    // matches (not just the matched substring). This is deliberate —
-    // a message containing a leaked key is itself a leak vector.
-    expect(result["Description"]).toBe(REDACTED_VALUE);
+    expect(result["Description"]).toBe(
+      "access key is [REDACTED] for legacy user",
+    );
   });
 
-  it("scrubs ASIA (short-term STS) strings the same way", () => {
-    const input = { note: "temp creds ASIAABCDEFGHIJKLMNOP" };
+  it("scrubs AKIA exact full-string value (no context) — result is [REDACTED]", () => {
+    // When the entire string is just the key ID (no surrounding context),
+    // substring replacement produces [REDACTED] — same end result as before.
+    const input = { KeyId: "AKIAABCDEFGHIJKLMNOP" };
     const result = redactSensitiveFields(input);
-    expect(result["note"]).toBe(REDACTED_VALUE);
+    expect(result["KeyId"]).toBe(REDACTED_VALUE);
+  });
+
+  it("scrubs ASIA (short-term STS) substring — preserves context", () => {
+    const input = { note: "temp creds ASIAABCDEFGHIJKLMNOP in region" };
+    const result = redactSensitiveFields(input);
+    expect(result["note"]).toBe("temp creds [REDACTED] in region");
   });
 
   it("does NOT false-match on ARNs containing 'aws:iam' substrings", () => {
@@ -205,28 +214,28 @@ describe("redactSensitiveFields — AKIA / ASIA pattern defense-in-depth", () =>
     expect(result["BucketName"]).toBe(input.BucketName);
   });
 
-  it("scrubs AKIA inside arrays", () => {
+  it("scrubs AKIA inside arrays — preserves context (M-α-005)", () => {
     const input = {
       Entries: ["normal", "AKIAZZZZZZZZZZZZZZZZ is a real access key"],
     };
     const result = redactSensitiveFields(input);
     const arr = result["Entries"] as unknown[];
     expect(arr[0]).toBe("normal");
-    expect(arr[1]).toBe(REDACTED_VALUE);
+    expect(arr[1]).toBe("[REDACTED] is a real access key");
   });
 
-  it("scrubs AKIA deeply nested", () => {
+  it("scrubs AKIA deeply nested — preserves context (M-α-005)", () => {
     const input = {
       Config: {
         Legacy: {
-          Notes: "old key AKIAABCDEFGHIJKLMNOP",
+          Notes: "old key AKIAABCDEFGHIJKLMNOP in us-east-1",
         },
       },
     };
     const result = redactSensitiveFields(input);
     const config = result["Config"] as Record<string, unknown>;
     const legacy = config["Legacy"] as Record<string, unknown>;
-    expect(legacy["Notes"]).toBe(REDACTED_VALUE);
+    expect(legacy["Notes"]).toBe("old key [REDACTED] in us-east-1");
   });
 });
 
@@ -358,6 +367,92 @@ describe("stripRedactedFields", () => {
 
   it("empty object in → empty object out", () => {
     expect(stripRedactedFields({})).toEqual({});
+  });
+});
+
+// ── W12-S2: AKIA whole-string replace fix (M-α-005) + case-insensitive key lookup (M-α-007) ──
+
+describe("W12-S2 — AKIA substring replace (M-α-005)", () => {
+  it("replaces only the AKIA token, preserving surrounding context", () => {
+    // Primary acceptance criterion for M-α-005.
+    const input = {
+      LogMessage:
+        "Using key AKIAIOSFODNN7EXAMPLE for connection to s3://bucket",
+    };
+    const result = redactSensitiveFields(input);
+    expect(result["LogMessage"]).toBe(
+      "Using key [REDACTED] for connection to s3://bucket",
+    );
+  });
+
+  it("exact-match AKIA string (no surrounding context) still returns [REDACTED]", () => {
+    // When the whole string IS the key ID, replace() → "[REDACTED]".
+    const input = { KeyId: "AKIAIOSFODNN7EXAMPLE" };
+    const result = redactSensitiveFields(input);
+    expect(result["KeyId"]).toBe(REDACTED_VALUE);
+  });
+
+  it("replaces multiple AKIA tokens in a single string", () => {
+    // Global flag ensures all occurrences are replaced.
+    const input = {
+      Audit: "AKIAIOSFODNN7EXAMPLE and ASIAXYZ1234567890AB in same log",
+    };
+    const result = redactSensitiveFields(input);
+    expect(result["Audit"]).toBe("[REDACTED] and [REDACTED] in same log");
+  });
+
+  it("ASIA token replaced as substring, context preserved", () => {
+    const input = { Note: "session ASIAIOSFODNN7EXAMPLE expired" };
+    const result = redactSensitiveFields(input);
+    expect(result["Note"]).toBe("session [REDACTED] expired");
+  });
+});
+
+describe("W12-S2 — case-insensitive key lookup (M-α-007)", () => {
+  it("lowercase 'password' key is redacted", () => {
+    const input = { password: "hunter2" };
+    const result = redactSensitiveFields(input);
+    expect(result["password"]).toBe(REDACTED_VALUE);
+  });
+
+  it("ALLCAPS 'PASSWORD' key is redacted", () => {
+    const input = { PASSWORD: "hunter2" };
+    const result = redactSensitiveFields(input);
+    expect(result["PASSWORD"]).toBe(REDACTED_VALUE);
+  });
+
+  it("PascalCase 'MasterUserPassword' still redacted (existing fast path unaffected)", () => {
+    const input = { MasterUserPassword: "prod-pass" };
+    const result = redactSensitiveFields(input);
+    expect(result["MasterUserPassword"]).toBe(REDACTED_VALUE);
+  });
+
+  it("original key name is preserved in output (only value is masked)", () => {
+    // The key name in the result must match the input key, not a normalized form.
+    const result = redactSensitiveFields({ secretaccesskey: "raw-secret" });
+    expect(Object.keys(result)).toContain("secretaccesskey");
+    expect(result["secretaccesskey"]).toBe(REDACTED_VALUE);
+  });
+
+  it("mixed-case 'SecretAccessKey' (exact) and 'secretaccesskey' (lower) both redacted", () => {
+    const input = {
+      SecretAccessKey: "real-secret-1",
+      secretaccesskey: "real-secret-2",
+    };
+    const result = redactSensitiveFields(input);
+    expect(result["SecretAccessKey"]).toBe(REDACTED_VALUE);
+    expect(result["secretaccesskey"]).toBe(REDACTED_VALUE);
+  });
+
+  it("'PasswordPolicy' (Cognito — NOT a secret) is still NOT redacted despite case-insensitive matching", () => {
+    // Case-insensitive lookup is against the allowlist entries only.
+    // 'PasswordPolicy'.toLowerCase() = 'passwordpolicy' — not in the
+    // lowercased allowlist (which has 'password' but not 'passwordpolicy').
+    const input = {
+      PasswordPolicy: { MinimumLength: 12, RequireUppercase: true },
+    };
+    const result = redactSensitiveFields(input);
+    expect(result["PasswordPolicy"]).toEqual(input.PasswordPolicy);
   });
 });
 

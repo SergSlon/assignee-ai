@@ -1048,31 +1048,24 @@ describe("assignee init non-interactive flags (e92-u.d)", () => {
         errBuf += String(chunk);
         return true;
       });
-    // Override the global no-op exit mock with one that throws, so we
-    // can assert the exit(1) happened without letting Commander's
-    // action body continue past it.
-    const exitSpy = vi
-      .spyOn(process, "exit")
-      .mockImplementation((code?: number | string | null | undefined) => {
-        throw new Error(`__TEST_EXIT__:${String(code ?? "")}`);
-      });
+    // W12-S0: process.exit(1) replaced with process.exitCode = GENERIC_ERROR; return.
+    // Spy must NOT be called; the action returns normally after setting exitCode.
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {
+      throw new Error("process.exit called — should not happen");
+    }) as never);
 
-    let caughtMsg = "";
-    let exitCallArgs: unknown[] = [];
+    const prevExitCode = process.exitCode;
+    process.exitCode = undefined;
     try {
       await runInitAction(["node", "init"]);
-    } catch (err) {
-      caughtMsg = err instanceof Error ? err.message : String(err);
     } finally {
-      exitCallArgs = exitSpy.mock.calls[0] ?? [];
       stderrSpy.mockRestore();
       exitSpy.mockRestore();
     }
 
-    // The thrown marker proves process.exit was called and Commander
-    // did NOT continue into the wizard.
-    expect(caughtMsg).toBe("__TEST_EXIT__:1");
-    expect(exitCallArgs[0]).toBe(1);
+    // W12-S0: process.exit must NOT be called; exitCode set to GENERIC_ERROR (1).
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(1);
     expect(errBuf).toContain("[ERROR] init requires a TTY OR --yes flag");
     expect(errBuf).toContain("[FIX] Re-run with: assignee init --yes");
 
@@ -1082,6 +1075,7 @@ describe("assignee init non-interactive flags (e92-u.d)", () => {
     // No config file should have been written.
     const configPath = path.join(tmpDir, ".assignee", "config.yaml");
     await expect(fs.access(configPath)).rejects.toThrow();
+    process.exitCode = prevExitCode;
   });
 
   // Epic 94 R6 (D-01 regression) — the predicate must catch the
@@ -1108,26 +1102,23 @@ describe("assignee init non-interactive flags (e92-u.d)", () => {
         errBuf += String(chunk);
         return true;
       });
-    const exitSpy = vi
-      .spyOn(process, "exit")
-      .mockImplementation((code?: number | string | null | undefined) => {
-        throw new Error(`__TEST_EXIT__:${String(code ?? "")}`);
-      });
+    // W12-S0: process.exit(1) replaced with process.exitCode = GENERIC_ERROR; return.
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {
+      throw new Error("process.exit called — should not happen");
+    }) as never);
 
-    let caughtMsg = "";
-    let exitCallArgs: unknown[] = [];
+    const prevExitCode = process.exitCode;
+    process.exitCode = undefined;
     try {
       await runInitAction(["node", "init"]);
-    } catch (err) {
-      caughtMsg = err instanceof Error ? err.message : String(err);
     } finally {
-      exitCallArgs = exitSpy.mock.calls[0] ?? [];
       stderrSpy.mockRestore();
       exitSpy.mockRestore();
     }
 
-    expect(caughtMsg).toBe("__TEST_EXIT__:1");
-    expect(exitCallArgs[0]).toBe(1);
+    // W12-S0: process.exit must NOT be called; exitCode set to GENERIC_ERROR (1).
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(1);
     expect(errBuf).toContain("[ERROR] init requires a TTY OR --yes flag");
     expect(errBuf).toContain("[FIX] Re-run with: assignee init --yes");
     // No prompts should have fired — we bailed before the wizard.
@@ -1136,6 +1127,7 @@ describe("assignee init non-interactive flags (e92-u.d)", () => {
     // No config file should have been written.
     const configPath = path.join(tmpDir, ".assignee", "config.yaml");
     await expect(fs.access(configPath)).rejects.toThrow();
+    process.exitCode = prevExitCode;
   });
 
   // Epic 94 R6 — symmetric coverage for the piped-stdout case
@@ -1156,25 +1148,26 @@ describe("assignee init non-interactive flags (e92-u.d)", () => {
         errBuf += String(chunk);
         return true;
       });
-    const exitSpy = vi
-      .spyOn(process, "exit")
-      .mockImplementation((code?: number | string | null | undefined) => {
-        throw new Error(`__TEST_EXIT__:${String(code ?? "")}`);
-      });
+    // W12-S0: process.exit(1) replaced with process.exitCode = GENERIC_ERROR; return.
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {
+      throw new Error("process.exit called — should not happen");
+    }) as never);
 
-    let caughtMsg = "";
+    const prevExitCode = process.exitCode;
+    process.exitCode = undefined;
     try {
       await runInitAction(["node", "init"]);
-    } catch (err) {
-      caughtMsg = err instanceof Error ? err.message : String(err);
     } finally {
       stderrSpy.mockRestore();
       exitSpy.mockRestore();
     }
 
-    expect(caughtMsg).toBe("__TEST_EXIT__:1");
+    // W12-S0: process.exit must NOT be called; exitCode set to GENERIC_ERROR (1).
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(1);
     expect(errBuf).toContain("[ERROR] init requires a TTY OR --yes flag");
     expect(errBuf).toContain("[FIX] Re-run with: assignee init --yes");
+    process.exitCode = prevExitCode;
   });
 
   it("non-TTY + --yes: proceeds silently with defaults (CI mode)", async () => {

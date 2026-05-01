@@ -246,6 +246,25 @@ export function buildOtlpPayload(
 }
 
 /* ------------------------------------------------------------------ */
+/*  Scheme validation                                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Returns true when the endpoint URL uses HTTPS, or when the HTTP
+ * override flag (`ASSIGNEE_OTEL_ALLOW_HTTP=1`) is explicitly set.
+ *
+ * Exported for unit testing; production callers use `exportLogEvent`.
+ */
+export function isEndpointSchemeAllowed(
+  endpoint: string,
+  config: ConfigPort,
+): boolean {
+  if (endpoint.startsWith("https://")) return true;
+  const override = config.get(EnvVar.ASSIGNEE_OTEL_ALLOW_HTTP);
+  return override?.trim() === "1";
+}
+
+/* ------------------------------------------------------------------ */
 /*  Export hot path                                                    */
 /* ------------------------------------------------------------------ */
 
@@ -253,15 +272,38 @@ export function buildOtlpPayload(
  * Fire-and-forget POST a single log event to the configured OTLP
  * endpoint. No-op when the exporter is disabled.
  *
+ * MASTER-009: accepts an optional `ConfigPort` so SaaS callers can
+ * supply a tenant-scoped lookup. When omitted, falls back to a fresh
+ * `ProcessEnvConfigAdapter` (legacy single-tenant CLI behaviour).
+ *
+ * Scheme guard: rejects non-HTTPS endpoints unless
+ * `ASSIGNEE_OTEL_ALLOW_HTTP=1` is set, to prevent accidental telemetry
+ * exfiltration over an unencrypted channel. The rejection is logged to
+ * stderr and the call is a no-op (fire-and-forget — never throws).
+ *
  * Returns a promise that always resolves (never rejects) so callers
  * can `void exportLogEvent(...)` without handling rejections.
  */
-export async function exportLogEvent(event: LogEvent): Promise<void> {
-  const endpoint = getOtelEndpoint();
+export async function exportLogEvent(
+  event: LogEvent,
+  config?: ConfigPort,
+): Promise<void> {
+  const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
+  const endpoint = getOtelEndpoint(effectiveConfig);
   if (endpoint === undefined) return;
 
+  // Scheme guard: only HTTPS is allowed unless the dev override is set.
+  if (!isEndpointSchemeAllowed(endpoint, effectiveConfig)) {
+    // Log to stderr — telemetry is fire-and-forget and must not throw.
+    process.stderr.write(
+      `[assignee/otel] Endpoint rejected: "${endpoint}" uses a non-HTTPS scheme. ` +
+        `Set ASSIGNEE_OTEL_ALLOW_HTTP=1 to allow HTTP (development only).\n`,
+    );
+    return;
+  }
+
   const url = endpoint.replace(/\/$/, "") + OTLP_LOGS_PATH;
-  const payload = buildOtlpPayload(event, getOtelServiceName());
+  const payload = buildOtlpPayload(event, getOtelServiceName(effectiveConfig));
 
   // AbortController gives us a deterministic timeout; the global fetch
   // in Node 20.11+ supports it natively.

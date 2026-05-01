@@ -269,13 +269,13 @@ export const planCommand = new Command(CommandName.PLAN)
         process.stderr.write(
           `[plan] ${validation.reason ?? "Invalid account ID"}\n`,
         );
-        process.exit(ProcessExitCode.GENERIC_ERROR);
+        process.exitCode = ProcessExitCode.GENERIC_ERROR;
         return;
       }
       process.stderr.write(
         `[plan] cross-account assume-role not yet available for ${rawOptsWithTarget.targetAccount}\n`,
       );
-      process.exit(ProcessExitCode.NOT_IMPLEMENTED);
+      process.exitCode = ProcessExitCode.NOT_IMPLEMENTED;
       return;
     }
 
