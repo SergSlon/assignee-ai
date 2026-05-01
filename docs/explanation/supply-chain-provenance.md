@@ -1,15 +1,23 @@
-# Supply-Chain Provenance (SLSA L2)
+# Supply-Chain Provenance (cosign blob signature + OIDC certificate)
 
 ## Overview
 
 Every Assignee.ai release is cryptographically signed using
-[cosign](https://github.com/sigstore/cosign) via GitHub's OIDC identity
-provider. The resulting provenance attestation ties the release tarball to the
-exact workflow run that produced it, satisfying **SLSA Level 2** requirements
-and the signing mandate from **US Executive Order 14028**.
+[cosign](https://github.com/sigstore/cosign) (`cosign sign-blob`) via GitHub's
+OIDC identity provider. The resulting detached signature (`.sig`) and
+OIDC-anchored certificate (`.pem`) tie each release tarball to the exact
+workflow run that produced it.
+
+> **Note on SLSA level:** the current mechanism is a cosign **blob signature**,
+> not a full SLSA Level 2 build-provenance attestation (which would require
+> `cosign attest-blob` / `slsa-github-generator`). Full SLSA L2 attestation is
+> a planned future upgrade. The blob-signature + OIDC-certificate chain
+> satisfies the signing mandate from **US Executive Order 14028** and provides
+> strong supply-chain integrity without long-lived keys.
 
 The signing certificate is anchored to the GitHub Actions workflow identity —
-no long-lived signing keys are used. Verification requires only:
+no long-lived signing keys are used. Verification uses `cosign verify-blob`
+and requires only:
 
 - The tarball (or its digest)
 - The workflow identity URL and OIDC issuer (both public, listed below)
@@ -86,7 +94,7 @@ Assignee.ai release workflow, running on GitHub's infrastructure, from the
 
 ## How provenance is generated
 
-The `generate-provenance` job in `.github/workflows/release.yml.disabled`:
+The `generate-provenance` job in `.github/workflows/release.yml`:
 
 1. Downloads all four platform tarballs from the GitHub Actions artefact store.
 2. Installs cosign via `sigstore/cosign-installer`.
@@ -98,20 +106,24 @@ The `generate-provenance` job in `.github/workflows/release.yml.disabled`:
    of each signed tarball — this manifest is used by `scripts/install.sh` and
    the Homebrew formula update step for allowlist verification.
 
-## SLSA Level 2 compliance
+## Supply-chain integrity posture
 
-SLSA L2 requires:
+The current signing mechanism provides strong blob-level integrity without
+long-lived keys. The table below shows how each SLSA L2 requirement maps to
+the current implementation:
 
-| Requirement                 | Mechanism                                     |
-| --------------------------- | --------------------------------------------- |
-| Hosted build platform       | GitHub Actions (managed runners)              |
-| Scripted build              | `npx turbo build` + `pnpm deploy --prod`      |
-| Build provenance exists     | cosign signature + OIDC certificate           |
-| Provenance is authenticated | Certificate anchored to OIDC issuer           |
-| Provenance is unforgeable   | GH OIDC token is ephemeral; no long-lived key |
+| Requirement                  | Status   | Mechanism                                                               |
+| ---------------------------- | -------- | ----------------------------------------------------------------------- |
+| Hosted build platform        | ✓ met    | GitHub Actions (managed runners)                                        |
+| Scripted build               | ✓ met    | `npx turbo build` + `pnpm deploy --prod`                                |
+| Build artifact signed        | ✓ met    | `cosign sign-blob` — detached `.sig` + `.pem`                           |
+| Signature authenticated      | ✓ met    | Certificate anchored to OIDC issuer                                     |
+| Signature unforgeable        | ✓ met    | GH OIDC token is ephemeral; no long-lived key                           |
+| Build provenance attestation | ✗ future | Requires `cosign attest-blob` / slsa-github-generator (planned upgrade) |
 
-SLSA L3 (hermetic builds) is out of scope for this release toolchain and
-requires a separate isolated build environment.
+SLSA L2 **proper** (with machine-readable provenance attestation) and SLSA L3
+(hermetic builds) are planned future upgrades and are out of scope for the
+current release toolchain.
 
 ## Relationship to SBOM
 

@@ -59,6 +59,80 @@ detect_platform() {
 }
 
 # ---------------------------------------------------------------------------
+# Node.js version check
+#
+# Reads the minimum Node.js version from the bundled package.json
+# `engines.node` field (e.g. ">=20.11") and aborts with an actionable
+# message if the running node binary does not meet it.
+#
+# Arguments:
+#   $1 — path to the extracted package.json (TMPDIR/package.json)
+#
+# POSIX sh-compatible. Silently skips if node is absent or package.json
+# cannot be parsed (the later binary-not-found check will catch bad archives).
+# ---------------------------------------------------------------------------
+
+check_node_version() {
+  PKG_JSON="$1"
+
+  if ! command -v node > /dev/null 2>&1; then
+    return
+  fi
+
+  if [ ! -f "$PKG_JSON" ]; then
+    return
+  fi
+
+  # Extract minimum numeric floor from engines.node (e.g. ">=20.11" → "20.11")
+  ENGINES_NODE=$(node -e "
+    try {
+      var p = JSON.parse(require('fs').readFileSync('$PKG_JSON', 'utf8'));
+      var eng = (p.engines && p.engines.node) ? p.engines.node : '';
+      // strip leading >=, >, ~, ^ and whitespace; keep first semver token
+      var m = eng.replace(/^[>=<~^\\s]+/, '').split(/\\s/)[0];
+      if (m) process.stdout.write(m);
+    } catch(e) {}
+  " 2>/dev/null || true)
+
+  if [ -z "$ENGINES_NODE" ]; then
+    return
+  fi
+
+  # Compare: split into major.minor components, compare numerically
+  REQUIRED_MAJOR=$(echo "$ENGINES_NODE" | cut -d. -f1)
+  REQUIRED_MINOR=$(echo "$ENGINES_NODE" | cut -d. -f2)
+  REQUIRED_MINOR="${REQUIRED_MINOR:-0}"
+
+  ACTUAL_NODE_VERSION=$(node --version 2>/dev/null | sed 's/^v//')
+  ACTUAL_MAJOR=$(echo "$ACTUAL_NODE_VERSION" | cut -d. -f1)
+  ACTUAL_MINOR=$(echo "$ACTUAL_NODE_VERSION" | cut -d. -f2)
+  ACTUAL_MINOR="${ACTUAL_MINOR:-0}"
+
+  if [ -z "$ACTUAL_MAJOR" ]; then
+    return
+  fi
+
+  MEETS_REQ=1
+  if [ "$ACTUAL_MAJOR" -lt "$REQUIRED_MAJOR" ] 2>/dev/null; then
+    MEETS_REQ=0
+  elif [ "$ACTUAL_MAJOR" -eq "$REQUIRED_MAJOR" ] 2>/dev/null; then
+    if [ "$ACTUAL_MINOR" -lt "$REQUIRED_MINOR" ] 2>/dev/null; then
+      MEETS_REQ=0
+    fi
+  fi
+
+  if [ "$MEETS_REQ" = "0" ]; then
+    err "Node.js >= ${ENGINES_NODE} is required to run assignee.
+  Found:    node v${ACTUAL_NODE_VERSION}
+  Required: node >= ${ENGINES_NODE} (from package.json engines.node)
+
+  Update Node.js at https://nodejs.org/ (LTS recommended: v22.x)"
+  fi
+
+  ok "Node.js v${ACTUAL_NODE_VERSION} meets requirement >= ${ENGINES_NODE}"
+}
+
+# ---------------------------------------------------------------------------
 # SHA256 utility (cross-platform: shasum on macOS, sha256sum on Linux)
 # ---------------------------------------------------------------------------
 
@@ -225,12 +299,22 @@ download_and_install() {
 
   TMPDIR="$(mktemp -d)"
   # Note: the manifest cleanup trap is set above; this extends it
-  old_trap=$(trap -p EXIT | sed "s/trap -- '//;s/' EXIT//")
   trap "rm -rf \"$TMPDIR\"" EXIT
 
-  info "Downloading ${URL}..."
-  if ! curl -sSL -o "${TMPDIR}/${TARBALL}" "$URL"; then
-    err "Download failed — check that ${URL} exists and you have network connectivity."
+  # ASSIGNEE_LOCAL_TARBALL allows CI / test environments to supply an already-
+  # downloaded tarball and skip the network download entirely.
+  if [ -n "${ASSIGNEE_LOCAL_TARBALL:-}" ]; then
+    if [ ! -f "$ASSIGNEE_LOCAL_TARBALL" ]; then
+      err "ASSIGNEE_LOCAL_TARBALL set but file not found: ${ASSIGNEE_LOCAL_TARBALL}"
+    fi
+    info "Using local tarball: ${ASSIGNEE_LOCAL_TARBALL}"
+    cp "$ASSIGNEE_LOCAL_TARBALL" "${TMPDIR}/${TARBALL}"
+  else
+    need_cmd curl
+    info "Downloading ${URL}..."
+    if ! curl -sSL -o "${TMPDIR}/${TARBALL}" "$URL"; then
+      err "Download failed — check that ${URL} exists and you have network connectivity."
+    fi
   fi
 
   # ── W7-02: SHA256 verification ────────────────────────────────────────────
@@ -272,8 +356,11 @@ download_and_install() {
     # pnpm deploy tarball layout: dist/ + node_modules/ + package.json
     # Create a wrapper script that invokes the bundled dist/index.js
     if ! command -v node > /dev/null 2>&1; then
-      err "Node.js is required to run assignee but was not found. Install node >= 20.11."
+      err "Node.js is required to run assignee but was not found.
+  Install Node.js LTS (v22.x recommended) at https://nodejs.org/"
     fi
+    # Validate the running Node.js version against the bundled engines.node field.
+    check_node_version "${TMPDIR}/package.json"
     mkdir -p "${INSTALL_DIR}"
     LIBEXEC_DIR="${HOME}/.assignee/libexec/${VERSION}"
     mkdir -p "$LIBEXEC_DIR"

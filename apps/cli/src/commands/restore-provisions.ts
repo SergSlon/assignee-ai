@@ -221,7 +221,7 @@ export async function restoreProvisions(
 // ── Commander command ─────────────────────────────────────────────────
 
 export const restoreProvisionsCommand = new Command("restore-provisions")
-  .description("Restore provisions.json from a dated backup (BCP/DR — W4-04)")
+  .description("Restore provisions.json from a dated backup (BCP/DR)")
   .option(
     "--from <date>",
     "Restore from a specific backup date (YYYY-MM-DD). Defaults to most recent backup.",

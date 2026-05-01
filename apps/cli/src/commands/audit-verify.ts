@@ -35,16 +35,16 @@ export interface AuditVerifyOptions {
 
 export const auditVerifyCommand = new Command("audit-verify")
   .description(
-    "Verify the HMAC chain integrity of the local audit log (W3-01). " +
+    "Verify the HMAC chain integrity of the local audit log. " +
       "Exits 0 on a clean chain; non-zero with diagnostics when the chain is broken.",
   )
   .option(
     "--from <date>",
-    "Start date for verification range (ISO 8601). Scaffold: full chain always verified; range filtering is Epic 101.",
+    "Start date for verification range (ISO 8601). Scaffold: full chain always verified; range filtering is planned for a future release.",
   )
   .option(
     "--to <date>",
-    "End date for verification range (ISO 8601). Scaffold: full chain always verified; range filtering is Epic 101.",
+    "End date for verification range (ISO 8601). Scaffold: full chain always verified; range filtering is planned for a future release.",
   )
   .option(
     "--log-file <path>",
@@ -63,7 +63,7 @@ Examples:
   $ assignee audit-verify --log-file /path/to/audit.log
         Verify a specific audit log file.
 
-Note: --from / --to date filtering defers to Epic 101 (identity-squad hire).
+Note: --from / --to date filtering is planned for a future release.
 The current implementation always walks the full chain.
 `,
   )
@@ -76,7 +76,7 @@ The current implementation always walks the full chain.
     if (opts.from !== undefined || opts.to !== undefined) {
       process.stderr.write(
         "[audit-verify] Note: --from / --to date filtering is not yet implemented " +
-          "(Epic 101 follow-on); the full chain will be verified.\n",
+          "(planned for a future release); the full chain will be verified.\n",
       );
     }
 
