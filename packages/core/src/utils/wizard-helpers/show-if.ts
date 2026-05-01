@@ -5,6 +5,14 @@
 
 import type { ResourceField } from "../../index.js";
 
+/** Module-level cache: pattern string → compiled RegExp (avoids recompilation per field per keystroke). */
+const _regexCache = new Map<string, RegExp>();
+
+/** Test-only helper — clears the pattern cache between test runs. */
+export function _clearRegexCache(): void {
+  _regexCache.clear();
+}
+
 /** Unique key for a field in fetchResults — disambiguates fields sharing the same name (e.g., EngineVersion per engine). */
 export function fieldFetchKey(field: ResourceField): string {
   if (field.question.showIf) {
@@ -25,7 +33,12 @@ export function evaluateShowIf(
 ): boolean {
   const depValue = answers[condition.field];
   if (condition.pattern) {
-    return new RegExp(condition.pattern).test(String(depValue ?? ""));
+    let re = _regexCache.get(condition.pattern);
+    if (!re) {
+      re = new RegExp(condition.pattern);
+      _regexCache.set(condition.pattern, re);
+    }
+    return re.test(String(depValue ?? ""));
   }
   // When value is boolean true, treat as a truthy check (supports arrays, strings, etc.)
   if (condition.value === true) {

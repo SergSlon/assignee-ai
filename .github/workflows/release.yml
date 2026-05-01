@@ -30,7 +30,8 @@ name: Release
 #        - HOMEBREW_TAP_TOKEN — fine-grained PAT with write access to the
 #                                homebrew-assignee tap repo.
 #        - (NPM_TOKEN is NOT required — npm provenance via OIDC is used
-#          instead; see `permissions: id-token: write` below.)
+#          instead; `id-token: write` is declared in generate-sbom +
+#          generate-provenance job-level permissions blocks.)
 #   5. Manually trigger the workflow:
 #        gh workflow run release.yml -f tag=vX.Y.Z -f confirm=YES_PUBLISH
 #
@@ -41,8 +42,9 @@ name: Release
 # Tooling notes:
 #   - Uses `pnpm -r publish` so `workspace:*` deps are rewritten to real
 #     versions at publish time. `npm publish` cannot resolve `workspace:*`.
-#   - Uses OIDC provenance (`permissions: id-token: write`). No long-lived
-#     NPM_TOKEN secret is required; npm picks up the OIDC identity.
+#   - Uses OIDC provenance (job-level `id-token: write` in generate-sbom /
+#     generate-provenance). No long-lived NPM_TOKEN secret is required; npm
+#     picks up the OIDC identity via the publish-npm job's setup-node step.
 #   - Runs `npm pack --dry-run` per publishable package first so metadata
 #     regressions (missing description/license/files) abort the run BEFORE
 #     anything hits the registry.
@@ -66,9 +68,13 @@ name: Release
 #   - `generate-sbom` (W7-06): generates a SPDX 2.3 SBOM from the
 #     production tarball and validates it via spdx-tools. Required for
 #     CRA 2027 / NIS2 artefact attestation.
-#   - `generate-provenance` (W7-08): attaches SLSA L2 build-provenance
-#     attestation via cosign + GH OIDC. Requires `id-token: write`
-#     (already present in the top-level permissions block).
+#   - `generate-provenance` (W7-08): signs each release tarball with
+#     `cosign sign-blob` + GH OIDC, producing a detached blob signature
+#     (.sig) and OIDC-anchored certificate (.pem). This is a cosign blob
+#     signature — NOT a full SLSA L2 build-provenance attestation (which
+#     would require `cosign attest-blob` / slsa-github-generator; a
+#     future upgrade path). Requires `id-token: write` (declared in the
+#     generate-provenance job's own permissions block).
 #   - `generate-release-notes` (W9-04): runs scripts/generate-release-notes.ts
 #     to produce external-facing notes with BMAD IDs stripped.
 # ──────────────────────────────────────────────────────────────────────────────
@@ -86,9 +92,11 @@ on:
 
 permissions:
   contents: write
-  # Required for npm provenance — replaces the legacy NPM_TOKEN secret.
-  # Also required for SLSA L2 cosign signing (W7-08).
-  id-token: write
+  # id-token: write is intentionally NOT set at workflow level — only the
+  # two jobs that need OIDC (generate-sbom, generate-provenance) declare it
+  # in their own job-level permissions blocks. GH Actions job-level blocks
+  # REPLACE the workflow-level block, so those jobs are correctly scoped;
+  # granting it here would give all 9 jobs an OIDC token they don't need.
 
 jobs:
   # --------------------------------------------------------------------------
@@ -224,8 +232,9 @@ jobs:
   # --------------------------------------------------------------------------
   # Publish to npm — gated on ASSIGNEE_RELEASE_PUBLISH=1 AND
   # confirm=YES_PUBLISH. Uses `pnpm -r publish` so `workspace:*` specs are
-  # rewritten to real versions. Provenance is attached automatically because
-  # `id-token: write` is in permissions.
+  # rewritten to real versions. npm provenance is attached via the OIDC
+  # identity that setup-node exposes through the registry-url + node-version
+  # step; this job does not need a separate id-token: write block.
   #
   # DRY-RUN default: this step is SKIPPED unless ASSIGNEE_RELEASE_PUBLISH=1
   # is set. The acquirer flips this env var post-go-decision.
@@ -237,7 +246,7 @@ jobs:
     # variables) so the gate actually evaluates instead of always-false.
     if: inputs.confirm == 'YES_PUBLISH' && vars.ASSIGNEE_RELEASE_PUBLISH == '1'
     env:
-      ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH || secrets.ASSIGNEE_RELEASE_PUBLISH || '' }}
+      ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -286,7 +295,7 @@ jobs:
     # job-level `if:` cannot read `env.*` — use `vars.*` (see publish-npm).
     if: inputs.confirm == 'YES_PUBLISH' && vars.ASSIGNEE_RELEASE_PUBLISH == '1'
     env:
-      ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH || secrets.ASSIGNEE_RELEASE_PUBLISH || '' }}
+      ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -403,7 +412,7 @@ jobs:
     # job-level `if:` cannot read `env.*` — use `vars.*` (see publish-npm).
     if: inputs.confirm == 'YES_PUBLISH' && vars.ASSIGNEE_RELEASE_PUBLISH == '1'
     env:
-      ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH || secrets.ASSIGNEE_RELEASE_PUBLISH || '' }}
+      ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -446,9 +455,13 @@ jobs:
     # job-level `if:` cannot read `env.*` — use `vars.*` (see publish-npm).
     if: inputs.confirm == 'YES_PUBLISH' && vars.ASSIGNEE_RELEASE_PUBLISH == '1'
     env:
-      ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH || secrets.ASSIGNEE_RELEASE_PUBLISH || '' }}
+      ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH }}
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.tag }}
+
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
@@ -479,6 +492,39 @@ jobs:
             echo "::error::Tarball version mismatch. Expected ${EXPECTED_STRIPPED}, got: $OUTPUT" >&2
             exit 1
           fi
+
+      - name: Smoke-test install.sh against downloaded tarball
+        # M-γ-21a: Exercise the install script end-to-end so any regression in
+        # install.sh is caught before users run `curl | sh`.
+        # We point ASSIGNEE_VERSION at the release tag and ASSIGNEE_TARBALL_DIR
+        # at the already-downloaded tarball directory so the script skips the
+        # network download and uses the artefact from the previous step.
+        # ASSIGNEE_INSTALL_DIR is set to a temp dir to avoid colliding with any
+        # system-level installation.
+        run: |
+          set -euo pipefail
+          EXPECTED="${{ inputs.tag }}"
+          EXPECTED_STRIPPED="${EXPECTED#v}"
+          SMOKE_INSTALL_DIR="$(mktemp -d)"
+
+          # Make the already-downloaded tarball available where install.sh looks
+          # for a local override. install.sh honours ASSIGNEE_LOCAL_TARBALL to
+          # skip the curl download when running in CI/test mode.
+          TARBALL_PATH="$(realpath smoke/assignee-${{ inputs.tag }}-linux-x64.tar.gz)"
+
+          ASSIGNEE_VERSION="${{ inputs.tag }}" \
+          ASSIGNEE_INSTALL_DIR="$SMOKE_INSTALL_DIR" \
+          ASSIGNEE_LOCAL_TARBALL="$TARBALL_PATH" \
+            sh scripts/install.sh
+
+          # Verify the installed wrapper runs and prints the expected version
+          INSTALL_OUTPUT="$("${SMOKE_INSTALL_DIR}/assignee" --version 2>&1 || true)"
+          echo "install.sh smoke output: $INSTALL_OUTPUT"
+          if ! echo "$INSTALL_OUTPUT" | grep -qE "(^|[^0-9])${EXPECTED_STRIPPED}([^0-9]|$)"; then
+            echo "::error::install.sh smoke version mismatch. Expected ${EXPECTED_STRIPPED}, got: $INSTALL_OUTPUT" >&2
+            exit 1
+          fi
+          echo "install.sh smoke-test passed."
 
   # --------------------------------------------------------------------------
   # W7-06: Generate SPDX SBOM from the release artefacts.
@@ -526,7 +572,7 @@ jobs:
     # gate would always read `null` and skip. Sourcing from `vars.*` first
     # mirrors the publish-npm pattern used elsewhere in this workflow.
     env:
-      ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH || secrets.ASSIGNEE_RELEASE_PUBLISH || '' }}
+      ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -614,9 +660,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # --------------------------------------------------------------------------
-  # W7-08: SLSA L2 build-provenance attestation via cosign + GH OIDC.
-  # Attestation is attached to the release and verifiable with:
-  #   cosign verify-attestation \
+  # W7-08: Cosign blob signature + OIDC-anchored certificate per tarball.
+  # Each tarball is signed with `cosign sign-blob` using GitHub's OIDC
+  # identity, producing a detached .sig and .pem certificate file.
+  # NOTE: this is a blob signature, NOT a full SLSA L2 build-provenance
+  # attestation (SLSA L2 would require cosign attest-blob / slsa-github-
+  # generator — future upgrade path).
+  # Verification command (verify-blob, not verify-attestation):
+  #   cosign verify-blob \
+  #     --certificate <tarball>.pem \
+  #     --signature  <tarball>.sig \
   #     --certificate-identity https://github.com/assignee-ai/assignee/.github/workflows/release.yml@refs/heads/main \
   #     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   #     <tarball>
@@ -628,7 +681,7 @@ jobs:
     # job-level `if:` cannot read `env.*` — use `vars.*` (see publish-npm).
     if: inputs.confirm == 'YES_PUBLISH' && vars.ASSIGNEE_RELEASE_PUBLISH == '1'
     env:
-      ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH || secrets.ASSIGNEE_RELEASE_PUBLISH || '' }}
+      ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH }}
     runs-on: ubuntu-latest
     permissions:
       # Required for cosign OIDC signing
@@ -661,9 +714,11 @@ jobs:
           sha256sum assignee-*.tar.gz
 
       - name: Sign release artefacts with cosign (GH OIDC keyless)
-        # W7-08: SLSA L2 — signs each tarball using GitHub's OIDC provider.
+        # W7-08: Blob-signs each tarball using GitHub's OIDC provider.
+        # Produces a detached .sig + OIDC-anchored .pem certificate per tarball.
+        # Verify with `cosign verify-blob` (see job comment above for full command).
         # The signing certificate is anchored to the workflow's GitHub identity,
-        # making the provenance chain verifiable without long-lived keys.
+        # making the signature chain verifiable without long-lived keys.
         run: |
           set -euo pipefail
           cd provenance-assets
@@ -734,8 +789,8 @@ jobs:
       vars.ASSIGNEE_RELEASE_PUBLISH == '1' &&
       vars.ASSIGNEE_TAP_PUBLISH == '1'
     env:
-      ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH || secrets.ASSIGNEE_RELEASE_PUBLISH || '' }}
-      ASSIGNEE_TAP_PUBLISH: ${{ vars.ASSIGNEE_TAP_PUBLISH || secrets.ASSIGNEE_TAP_PUBLISH || '' }}
+      ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH }}
+      ASSIGNEE_TAP_PUBLISH: ${{ vars.ASSIGNEE_TAP_PUBLISH }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2

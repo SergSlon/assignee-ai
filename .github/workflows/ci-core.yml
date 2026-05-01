@@ -112,6 +112,10 @@ jobs:
       - name: CI-multiplier stub lint
         run: pnpm lint:ci-multiplier
 
+      - name: Tracker-leak lint
+        # Reject internal tracker IDs (Epic NN, W<N>-<NN>) in user-facing CLI strings.
+        run: pnpm lint:tracker-leak
+
       - name: Action pin audit
         # W7-01: Ensure all uses: refs are SHA-pinned — no tag or branch refs
         run: npx tsx scripts/audit-action-pins.ts
