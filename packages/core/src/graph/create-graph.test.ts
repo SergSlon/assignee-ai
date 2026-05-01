@@ -33,8 +33,13 @@ vi.mock("../llm/adapter.js", () => ({
 }));
 
 // Mock the nodes that have external dependencies or side-effects
+// W11-S1: schemaFetcherNode is no longer exported directly — the module now
+// exports a factory `createSchemaFetcherNode(service)` that returns a node
+// function. Tests intercept by hoisting a single vi.fn() and having the
+// factory return it on every invocation.
+const mockSchemaFetcherFn = vi.hoisted(() => vi.fn());
 vi.mock("./nodes/schema-fetcher.js", () => ({
-  schemaFetcherNode: vi.fn(),
+  createSchemaFetcherNode: () => mockSchemaFetcherFn,
 }));
 
 vi.mock("./nodes/preflight-guard.js", () => ({
@@ -51,7 +56,9 @@ vi.mock("./nodes/result-formatter.js", () => ({
 
 import { createGraph } from "./create-graph.js";
 import { LlmAdapter } from "../llm/adapter.js";
-import { schemaFetcherNode } from "./nodes/schema-fetcher.js";
+// W11-S1: schemaFetcherNode replaced by createSchemaFetcherNode factory; the
+// mock returns `mockSchemaFetcherFn` so tests control behaviour via that spy
+// directly (no `vi.mocked(...)` wrapper needed).
 import { preflightGuardNode } from "./nodes/preflight-guard.js";
 import { humanApprovalNode } from "./nodes/human-approval.js";
 import { resultFormatterNode } from "./nodes/result-formatter.js";
@@ -87,7 +94,7 @@ beforeEach(() => {
           .mockResolvedValue([null, '{"BucketName":"test-bucket"}']),
       }) as unknown as InstanceType<typeof LlmAdapter>,
   );
-  vi.mocked(schemaFetcherNode).mockResolvedValue({
+  mockSchemaFetcherFn.mockResolvedValue({
     resourceSchema: {
       properties: { BucketName: { type: "string" } },
       required: ["BucketName"],

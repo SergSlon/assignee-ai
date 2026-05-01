@@ -190,7 +190,7 @@ vi.mock("../config/org-policy-cache.js", () => ({
 }));
 
 import { createGraph } from "../graph/create-graph.js";
-import { _resetSchemaService } from "../graph/nodes/schema-fetcher.js";
+// W11-S1: _resetSchemaService removed; schema service is now per-graph.
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -218,7 +218,7 @@ beforeEach(async () => {
   vi.mocked(display.renderDocHelp).mockResolvedValue(null);
   vi.mocked(display.renderAdvancedConfirm).mockResolvedValue(false);
   mockGenerateText.mockReset();
-  _resetSchemaService();
+  // W11-S1: schema service is per-graph; no singleton reset needed.
   mockGetSchema.mockImplementation((typeName: string) => {
     const schema = RawSchemasByType[typeName];
     if (schema) return Promise.resolve(schema);

@@ -205,7 +205,7 @@ vi.mock("../config/org-policy-cache.js", () => ({
 }));
 
 import { createGraph } from "./create-graph.js";
-import { _resetSchemaService } from "./nodes/schema-fetcher.js";
+// W11-S1: _resetSchemaService removed; schema service is now per-graph (no singleton to reset).
 const { renderPlanBox, renderError } = await import("../utils/display.js");
 
 // ── Test helpers ────────────────────────────────────────────────────────────
@@ -240,8 +240,7 @@ beforeEach(async () => {
   // mockReset is required to clear mockResolvedValueOnce queues
   // (vi.clearAllMocks only calls mockClear which may not flush them)
   mockGenerateText.mockReset();
-  // Reset schema service singleton so the mock constructor fires each test
-  _resetSchemaService();
+  // W11-S1: schema service is per-graph; no singleton reset needed.
   // Default schema mock: look up raw schema by resource type name
   mockGetSchema.mockImplementation((typeName: string) => {
     const schema = RawSchemasByType[typeName];
