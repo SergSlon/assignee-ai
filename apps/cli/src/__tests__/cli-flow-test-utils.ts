@@ -3,6 +3,7 @@
  *
  * Used by:
  *   - cli-flow-engine.test.ts
+ *   - cli-flow-reconcile.test.ts
  *
  * Not exported from any public barrel — test-only module, relative import only.
  */

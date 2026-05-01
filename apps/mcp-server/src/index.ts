@@ -11,6 +11,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { registerTools } from "./tools/index.js";
 import { createGraphContext } from "./services/graph-init.js";
 import { clearAllApplies } from "./tools/apply-plan/active-applies.js";
+import { connectTransport } from "./utils/connect-transport.js";
 
 // Story 50-2: graceful-shutdown parity with the CLI host. The stdio
 // transport normally exits on stream close, but cloud hosts (tmux, ECS,
@@ -111,18 +112,10 @@ async function main() {
   registerTools(server, ctx);
 
   // Start stdio transport.
-  // W20-S3 (M-β-038): wrap connect in its own try/catch so transport-layer
-  // failures emit a discriminated [transport] prefix and a restart hint
-  // rather than falling through to the generic "fatal:" catch below.
+  // W20-S3 (M-β-038): transport-layer failures emit a discriminated
+  // [transport] prefix + restart hint via connectTransport helper (W21-S1).
   const transport = new StdioServerTransport();
-  try {
-    await server.connect(transport);
-  } catch (err) {
-    process.stderr.write(
-      `assignee-mcp-server error: [transport] failed to connect to stdio; restart the MCP host (e.g. Claude Desktop, Cursor) to re-establish the connection. Detail: ${err instanceof Error ? err.message : String(err)}\n`,
-    );
-    process.exit(1);
-  }
+  await connectTransport(server, transport);
 }
 
 main().catch((err) => {
