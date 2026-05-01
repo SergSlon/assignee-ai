@@ -110,9 +110,19 @@ async function main() {
   // Register all 5 MCP tools
   registerTools(server, ctx);
 
-  // Start stdio transport
+  // Start stdio transport.
+  // W20-S3 (M-β-038): wrap connect in its own try/catch so transport-layer
+  // failures emit a discriminated [transport] prefix and a restart hint
+  // rather than falling through to the generic "fatal:" catch below.
   const transport = new StdioServerTransport();
-  await server.connect(transport);
+  try {
+    await server.connect(transport);
+  } catch (err) {
+    process.stderr.write(
+      `assignee-mcp-server error: [transport] failed to connect to stdio; restart the MCP host (e.g. Claude Desktop, Cursor) to re-establish the connection. Detail: ${err instanceof Error ? err.message : String(err)}\n`,
+    );
+    process.exit(1);
+  }
 }
 
 main().catch((err) => {

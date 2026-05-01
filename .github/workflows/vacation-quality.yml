@@ -127,14 +127,15 @@ jobs:
               labels: ['vacation-quality', 'automated']
             });
 
-  # DEF-02 (W19-S2): Validate the full test suite under Node 22 with
-  # --experimental-vm-modules. This is an observation-only job: it does NOT
-  # block the quality-gate green status (continue-on-error: true). Failures
-  # surface as annotations; if all green this confirms DEF-02 can be CLOSED.
+  # DEF-02 (W19-S2 → W20-S2): Validate the full test suite under Node 22 with
+  # --experimental-vm-modules. W20-S2 local simulation (NODE_OPTIONS=
+  # --experimental-vm-modules pnpm -r test, exit 0): 20 test files / 939 tests
+  # (best-practices), 315 / 8026 (core), 39 / 687 (mcp-server), 132 / 1781
+  # (cli) — all green. Gate promoted from observability to hard blocker.
+  # DEF-02 is FULLY CLOSED (HEAD 37d9272a, 2026-04-29).
   node22-strict:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    continue-on-error: true
 
     steps:
       - name: Check out

@@ -125,7 +125,7 @@ The current implementation always walks the full chain.
         );
       } else {
         process.stdout.write(
-          `[audit-verify] Chain OK — ${result.total} HMAC-bearing record(s) verified` +
+          `Chain OK — ${result.total} HMAC-bearing record(s) verified` +
             (result.legacyCount > 0
               ? `, ${result.legacyCount} pre-HMAC legacy record(s) skipped`
               : "") +
