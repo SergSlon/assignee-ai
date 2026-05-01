@@ -108,9 +108,16 @@ export async function loadCheckpointFromPath(
       // so the hash on load matches the hash computed at save time.
       const canonical = canonicalizeCheckpointPath(file);
       const desiredStateHash = computeDesiredStateHash(cp.desiredState);
-      if (!verifyCheckpoint(canonical, desiredStateHash)) {
+      const integrity = verifyCheckpoint(canonical, desiredStateHash);
+      if (!integrity.ok) {
+        // W18-S2 (DEF-07 M-β-012/013): switch on reason so the message
+        // steers the operator to the most likely remediation.
+        const detail =
+          integrity.reason === "not-registered"
+            ? "The file was not produced by this MCP server process. If the server was restarted between plan and apply, in-memory integrity keys are regenerated per process — re-plan to continue."
+            : "The file was produced by this process but its contents have been modified after writing. Investigate for tampering and re-plan.";
         throw new CheckpointError(
-          `Checkpoint integrity check failed: ${file}. The file was not produced by this MCP server process, or its contents have been modified after writing. Run plan_resource to generate a new plan. (If the MCP server was restarted between plan and apply, this is expected — in-memory integrity keys are regenerated per process.)`,
+          `Checkpoint integrity check failed: ${file}. ${detail} Run plan_resource to generate a new plan.`,
         );
       }
     },

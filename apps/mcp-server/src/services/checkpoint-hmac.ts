@@ -121,22 +121,53 @@ export function signCheckpoint(
 }
 
 /**
+ * Discriminated-union result for `verifyCheckpoint` / `verifyHmac`.
+ *
+ * Callers SHOULD switch on `reason` to emit actionable messages:
+ *
+ * ```typescript
+ * const result = verifyCheckpoint(canonical, hash);
+ * if (!result.ok) {
+ *   if (result.reason === "not-registered") {
+ *     // File was never saved by this process (attacker-planted or
+ *     // server-restart scenario).  Steer the user to re-plan.
+ *   } else {
+ *     // result.reason === "tampered"
+ *     // Saved by this process but desiredState was modified after write.
+ *     // Steer the user to investigate and re-plan.
+ *   }
+ * }
+ * ```
+ *
+ * W18-S2 (DEF-07 M-β-012/013): replaces the former opaque `boolean`
+ * return so callers can distinguish "never registered" from "HMAC
+ * mismatch" without calling two separate functions.
+ */
+export type CheckpointVerifyResult =
+  | { ok: true }
+  | { ok: false; reason: "not-registered" | "tampered" };
+
+/**
  * Recomputes the HMAC for the supplied path + desiredState hash and
  * compares it (timing-safely) with the signature recorded at save time.
  *
- * @returns true when the signature matches; false when either
- *   (a) the path has no registered signature (never saved by this
- *       process — most commonly an attacker-planted file or a
- *       server-restart scenario) OR
- *   (b) the recomputed HMAC differs from the stored one (the file
- *       was modified after saveCheckpoint registered the signature).
+ * @returns `{ ok: true }` when the signature matches.
+ *   `{ ok: false, reason: "not-registered" }` when the path has no
+ *   registered signature (never saved by this process — most commonly
+ *   an attacker-planted file or a server-restart scenario).
+ *   `{ ok: false, reason: "tampered" }` when the recomputed HMAC
+ *   differs from the stored one (the file was modified after
+ *   `saveCheckpoint` registered the signature).
+ *
+ * Callers should switch on `reason` to emit actionable error messages
+ * — see the `CheckpointVerifyResult` type declaration above.
  */
 export function verifyCheckpoint(
   canonicalPath: string,
   desiredStateHash: string,
-): boolean {
+): CheckpointVerifyResult {
   const stored = SIGNATURES.get(canonicalPath);
-  if (!stored) return false;
+  if (!stored) return { ok: false, reason: "not-registered" };
   const expected = createHmac("sha256", SECRET)
     .update(canonicalPath)
     .update("|")
@@ -144,11 +175,13 @@ export function verifyCheckpoint(
     .digest("hex");
   // Length-check before timingSafeEqual — the crypto primitive throws
   // on length mismatch, which would leak length info via error path.
-  if (expected.length !== stored.length) return false;
-  return timingSafeEqual(
+  if (expected.length !== stored.length)
+    return { ok: false, reason: "tampered" };
+  const match = timingSafeEqual(
     Buffer.from(expected, "hex"),
     Buffer.from(stored, "hex"),
   );
+  return match ? { ok: true } : { ok: false, reason: "tampered" };
 }
 
 /**
@@ -156,6 +189,10 @@ export function verifyCheckpoint(
  * import a symbol named `verifyHmac`, satisfying the Story 50-5 B-2
  * verification grep (`grep -n 'createHmac\\|verifyHmac'`) in
  * preflight.ts without that file having to call createHmac directly.
+ *
+ * Returns a `CheckpointVerifyResult` discriminated union — same as
+ * `verifyCheckpoint`. See that function's JSDoc for the switching
+ * pattern.
  */
 export const verifyHmac = verifyCheckpoint;
 

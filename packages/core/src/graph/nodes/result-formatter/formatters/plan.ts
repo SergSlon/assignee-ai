@@ -26,7 +26,7 @@ import { AWS_REGION } from "@/config/constants/aws.js";
 import { EnvVar } from "@/constants/env-vars.js";
 
 /**
- * Epic 94 Wave 3 N6 (C-05 / C-06): emit each advisory as a `[WARN]`
+ * Epic 94 Wave 3 N6 (C-05 / C-06): emit each advisory as a `warning:`
  * stderr line before the plan box. Lands on stderr to keep shell
  * captures of the plan render itself clean (stdout). Callable with
  * `undefined` so the caller can omit the guard check.
@@ -35,10 +35,10 @@ export function emitAdvisoryWarnings(advisories: Advisory[] | undefined): void {
   if (!advisories || advisories.length === 0) return;
   for (const advisory of advisories) {
     // One line per advisory keeps grep-ability intact:
-    //   `[WARN] <code>: <message>`
+    //   `warning: <code>: <message>`
     // with the hint on an indented continuation line so a casual
-    // `grep WARN` still shows the headline without losing context.
-    process.stderr.write(`[WARN] ${advisory.code}: ${advisory.message}\n`);
+    // `grep warning:` still shows the headline without losing context.
+    process.stderr.write(`warning: ${advisory.code}: ${advisory.message}\n`);
     if (advisory.hint) {
       process.stderr.write(`       hint: ${advisory.hint}\n`);
     }
@@ -287,7 +287,7 @@ export async function formatPlanResult(
       );
     } else {
       // Epic 94 Wave 3 N6 (C-05 / C-06): emit non-blocking advisories
-      // as `[WARN]` lines on stderr BEFORE the plan box so the
+      // as `warning:` lines on stderr BEFORE the plan box so the
       // operator sees why the preview is provisional. stderr keeps
       // shell captures of the plan render clean.
       emitAdvisoryWarnings(state.advisories);

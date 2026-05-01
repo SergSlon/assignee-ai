@@ -169,7 +169,7 @@ status is read-only. No --yes required.
           // minimal so scripted consumers don't get surprise bytes.
           if (opts.json !== true) {
             process.stderr.write(
-              `[WARN] \`status\` ignores the runId positional ("${runId}"). ` +
+              `warning: \`status\` ignores the runId positional ("${runId}"). ` +
                 "Use `assignee list --json` for per-run queries; continuing with fleet-level summary.\n",
             );
           }

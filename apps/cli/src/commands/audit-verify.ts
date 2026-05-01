@@ -75,7 +75,7 @@ The current implementation always walks the full chain.
     // scripts know range filtering is a no-op.
     if (opts.from !== undefined || opts.to !== undefined) {
       process.stderr.write(
-        "[audit-verify] Note: --from / --to date filtering is not yet implemented " +
+        "warning: --from / --to date filtering is not yet implemented " +
           "(planned for a future release); the full chain will be verified.\n",
       );
     }
@@ -90,7 +90,7 @@ The current implementation always walks the full chain.
           JSON.stringify({ valid: false, entries: 0, error: message }) + "\n",
         );
       } else {
-        process.stderr.write(`[audit-verify] ${message}\n`);
+        process.stderr.write(`error: ${message}\n`);
       }
       process.exitCode = ProcessExitCode.GENERIC_ERROR;
       return;
@@ -108,7 +108,7 @@ The current implementation always walks the full chain.
           JSON.stringify({ valid: false, entries: 0, error: message }) + "\n",
         );
       } else {
-        process.stderr.write(`[audit-verify] ${message}\n`);
+        process.stderr.write(`error: ${message}\n`);
       }
       process.exitCode = ProcessExitCode.GENERIC_ERROR;
       return;
@@ -138,7 +138,7 @@ The current implementation always walks the full chain.
       // Goes to stderr so JSON-mode stdout consumers are unaffected.
       if (result.chainMode !== "canonical") {
         process.stderr.write(
-          `[audit-verify] Warning: ${result.legacyCount} of ${result.total} entries verified via ${result.chainMode} HMAC. ` +
+          `warning: ${result.legacyCount} of ${result.total} entries verified via ${result.chainMode} HMAC. ` +
             `Run \`scripts/audit-migrate-legacy-chain.ts --input <logfile>\` to re-sign with canonical HMAC.\n`,
         );
       }
@@ -158,7 +158,7 @@ The current implementation always walks the full chain.
           }) + "\n",
         );
       } else {
-        process.stderr.write(`[audit-verify] ${reason}\n`);
+        process.stderr.write(`error: ${reason}\n`);
       }
       process.exitCode = ProcessExitCode.GENERIC_ERROR;
     }

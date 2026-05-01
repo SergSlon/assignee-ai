@@ -286,6 +286,13 @@ export function isEndpointSchemeAllowed(
  *
  * Returns a promise that always resolves (never rejects) so callers
  * can `void exportLogEvent(...)` without handling rejections.
+ *
+ * DEF-10 audit (HEAD 8a856878): This is the **only** exporter function
+ * in this module. Metric and span exporters (`exportMetric`,
+ * `exportSpan`, batch variants) do not exist — the module header
+ * explicitly limits scope to the logs signal (OTLP `v1/logs`). No
+ * additional ConfigPort guards or `isEndpointSchemeAllowed` calls are
+ * required. DEF-10 is closed: no sibling exporters found.
  */
 export async function exportLogEvent(
   event: LogEvent,

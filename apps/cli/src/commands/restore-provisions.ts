@@ -243,7 +243,7 @@ export const restoreProvisionsCommand = new Command("restore-provisions")
           }) + "\n",
         );
       } else {
-        process.stderr.write(`[restore-provisions] ${result.message}\n`);
+        process.stderr.write(`error: ${result.message}\n`);
       }
       process.exitCode = ProcessExitCode.GENERIC_ERROR;
       return;
