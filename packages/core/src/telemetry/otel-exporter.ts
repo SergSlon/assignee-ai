@@ -260,6 +260,9 @@ export function isEndpointSchemeAllowed(
   config: ConfigPort,
 ): boolean {
   if (endpoint.startsWith("https://")) return true;
+  // Only http:// is eligible for the dev-override — grpc://, ws://, etc.
+  // are never allowed, even when ASSIGNEE_OTEL_ALLOW_HTTP=1.
+  if (!endpoint.startsWith("http://")) return false;
   const override = config.get(EnvVar.ASSIGNEE_OTEL_ALLOW_HTTP);
   return override?.trim() === "1";
 }

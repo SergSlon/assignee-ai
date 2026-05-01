@@ -63,6 +63,17 @@ vi.mock("@assignee/core", async (importOriginal) => {
     CloudFormationSchemaService,
   };
 });
+// W11-S1 changed create-graph.ts to import CloudFormationSchemaService directly
+// from the service file rather than through the barrel (../index.js). The two
+// mocks above only intercept the barrel paths; add a third mock on the direct
+// service path so createGraph's `new CloudFormationSchemaService()` call
+// also gets the test-controlled mockGetSchema implementation.
+vi.mock("../services/cloudformation-schema-service.js", () => {
+  class CloudFormationSchemaService {
+    getSchema = mockGetSchema;
+  }
+  return { CloudFormationSchemaService };
+});
 
 // Mock CloudControl client — prevents real AWS API calls. Plain function
 // so impl survives mockReset:true.

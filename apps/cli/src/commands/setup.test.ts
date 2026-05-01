@@ -786,20 +786,19 @@ describe("setup command", () => {
       },
     );
 
-    // Make process.exit actually halt execution (throw) so code after the
-    // exit call cannot run and accidentally write .env.
-    mockExit.mockImplementation((code?: number) => {
-      throw new Error(`process.exit(${code})`);
-    });
+    // W15-S1: source uses process.exitCode = GENERIC_ERROR; return (not process.exit(1)).
+    // The command returns normally after setting exitCode — no throw needed.
+    const prevExitCode = process.exitCode;
+    process.exitCode = undefined;
 
     await resetSetupCommandOptions();
     const { setupCommand } = await import("./setup.js");
-    await expect(setupCommand.parseAsync(["node", "setup"])).rejects.toThrow(
-      /process\.exit\(1\)/,
-    );
+    await setupCommand.parseAsync(["node", "setup"]);
 
-    // process.exit(1) was called
-    expect(mockExit).toHaveBeenCalledWith(1);
+    // process.exitCode must be 1 (GENERIC_ERROR) — process.exit must NOT be called.
+    expect(process.exitCode).toBe(1);
+    expect(mockExit).not.toHaveBeenCalled();
+    process.exitCode = prevExitCode;
     // .env was NOT written — operator missing
     expect(mockMergeEnvFile).not.toHaveBeenCalled();
 

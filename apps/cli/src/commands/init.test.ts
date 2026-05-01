@@ -1698,24 +1698,26 @@ describe("assignee init --wizard alias (Epic 96 W2 R4)", () => {
         errBuf += String(chunk);
         return true;
       });
-    const exitSpy = vi
-      .spyOn(process, "exit")
-      .mockImplementation((code?: number | string | null | undefined) => {
-        throw new Error(`__TEST_EXIT__:${String(code ?? "")}`);
-      });
+    // W15-S1: source uses process.exitCode = GENERIC_ERROR; return (not process.exit(1)).
+    // Spy must NOT be called; the action returns normally after setting exitCode.
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {
+      throw new Error("process.exit called — should not happen");
+    }) as never);
 
-    let caughtMsg = "";
+    const prevExitCode = process.exitCode;
+    process.exitCode = undefined;
     try {
       await runInitAction(["node", "init", "--wizard"]);
-    } catch (err) {
-      caughtMsg = err instanceof Error ? err.message : String(err);
     } finally {
       stderrSpy.mockRestore();
       exitSpy.mockRestore();
     }
 
-    expect(caughtMsg).toBe("__TEST_EXIT__:1");
+    // W15-S1: process.exit must NOT be called; exitCode set to GENERIC_ERROR (1).
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(1);
     expect(errBuf).toContain("[ERROR] init requires a TTY OR --yes flag");
+    process.exitCode = prevExitCode;
   });
 
   it("--help output lists --wizard in the Options section", async () => {
