@@ -10,20 +10,30 @@
  * interrupt during shutdown; forcing exit.")` before the exit so the
  * terminal reflects why the cleanup handshake was abandoned.
  *
- * Testing approach: we mock Commander so `program.parseAsync` does not
- * actually run the CLI tree, import the entrypoint to register the
- * signal handlers, then emit two synchronous SIGINTs. The first one
- * flips the `shuttingDown` flag and schedules async cleanup; the second
- * immediately re-enters the guard branch and calls `process.exit(code)`.
+ * W14-S2 refactor: the signal handlers are now extracted to
+ * `../utils/signal-handlers.ts` (`installSignalHandlers`). The test
+ * imports that module directly — no Commander mock required. The
+ * 14-method Commander mock that previously existed here was brittle:
+ * every Commander release that added or renamed a method would break
+ * these tests even though signal handling has zero coupling to the
+ * Commander surface.
+ *
+ * Testing approach: stub `closeMcpClient` and `stopSpinner`, call
+ * `installSignalHandlers()` to register the handlers on the real process
+ * object, then emit synchronous SIGINTs. The first one flips the
+ * `shuttingDown` flag and schedules async cleanup; the second immediately
+ * re-enters the guard branch and calls `process.exit(code)`.
  * We spy on both `console.error` and `process.exit` so the test asserts
  * (a) the stderr marker fires BEFORE the hard exit, and (b) the exit
  * code matches the conventional 128 + signum (= 130 for SIGINT).
+ * Additional assertions verify (c) `closeMcpClient` is awaited before
+ * `process.exit` fires, and (d) SIGTERM handler exits with code 143.
  *
- * We do NOT assert on the full cleanup path (spinner stop, MCP close,
- * stderr drain) — those are validated by existing integration tests.
- * This file targets the single branch introduced by the L3-003 fix.
+ * Isolation: `vi.resetModules()` in afterEach ensures each test gets a
+ * fresh signal-handlers module with `shuttingDown = false`. Each
+ * beforeEach re-imports the module and re-registers the handlers.
  *
- * @see apps/cli/src/index.ts — installSignalHandler
+ * @see apps/cli/src/utils/signal-handlers.ts — installSignalHandlers
  */
 
 import {
@@ -36,43 +46,13 @@ import {
   type MockInstance,
 } from "vitest";
 
-// Mock commander so importing index.ts does not try to actually parse
-// process.argv / run commands / talk to stdout. This mirrors the shape
-// used by apps/cli/src/index.test.ts.
-vi.mock("commander", () => {
-  const MockCommand = vi.fn();
-  MockCommand.prototype.name = vi.fn().mockReturnThis();
-  MockCommand.prototype.description = vi.fn().mockReturnThis();
-  MockCommand.prototype.version = vi.fn().mockReturnThis();
-  MockCommand.prototype.addCommand = vi.fn().mockReturnThis();
-  MockCommand.prototype.argument = vi.fn().mockReturnThis();
-  MockCommand.prototype.option = vi.fn().mockReturnThis();
-  MockCommand.prototype.action = vi.fn().mockReturnThis();
-  MockCommand.prototype.command = vi.fn().mockReturnThis();
-  MockCommand.prototype.addHelpText = vi.fn().mockReturnThis();
-  MockCommand.prototype.configureHelp = vi.fn().mockReturnThis();
-  MockCommand.prototype.hook = vi.fn().mockReturnThis();
-  MockCommand.prototype.alias = vi.fn().mockReturnThis();
-  MockCommand.prototype.commands = [];
-  MockCommand.prototype.parseAsync = vi.fn().mockResolvedValue(undefined);
-  return { Command: MockCommand };
-});
-
 // MCP client close is async — stub it to resolve immediately so the
 // first signal's cleanup path doesn't linger past the test's lifecycle.
 vi.mock("../services/mcp-client.js", () => ({
   closeMcpClient: vi.fn().mockResolvedValue(undefined),
 }));
 
-// Update notifier, first-run bootstrap, and spinner stop all emit
-// side-effects on import/invoke — stub them so the test environment
-// is not polluted.
-vi.mock("../utils/update-notifier.js", () => ({
-  checkForUpdates: vi.fn(),
-}));
-vi.mock("../utils/first-run.js", () => ({
-  bootstrapFirstRun: vi.fn(),
-}));
+// Spinner stop and display side-effects — stub to keep test output clean.
 vi.mock("../utils/display.js", () => ({
   stopSpinner: vi.fn(),
 }));
@@ -81,8 +61,11 @@ describe("signal handler — re-entrancy warning (Epic 61-it1-01 L3-003)", () =>
   let exitSpy: MockInstance<typeof process.exit>;
   let errorSpy: MockInstance<typeof console.error>;
   let stderrSpy: MockInstance<typeof process.stderr.write>;
+  // closeMcpClient reference is refreshed in each beforeEach after
+  // vi.resetModules() so it matches the module imported by signal-handlers.
+  let closeMcpClientMock: ReturnType<typeof vi.fn>;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     // Prevent actual process termination. We turn process.exit into a
     // silent no-op so both the first signal's cleanup-path exit AND the
     // second signal's re-entrancy-path exit are recorded on the spy
@@ -103,31 +86,44 @@ describe("signal handler — re-entrancy warning (Epic 61-it1-01 L3-003)", () =>
     stderrSpy = vi
       .spyOn(process.stderr, "write")
       .mockImplementation((() => true) as typeof process.stderr.write);
+
+    // Obtain the live mock reference (refreshed after vi.resetModules)
+    // so we can instrument it in individual tests.
+    const mcpMod = await vi.importMock<
+      typeof import("../services/mcp-client.js")
+    >("../services/mcp-client.js");
+    closeMcpClientMock = vi.mocked(mcpMod.closeMcpClient);
+    closeMcpClientMock.mockResolvedValue(undefined);
+
+    // Dynamically import signal-handlers so vi.mock hoisting is in
+    // effect. Each test gets a fresh module (shuttingDown = false)
+    // because vi.resetModules() runs in afterEach before the next
+    // beforeEach.
+    const mod = await import("../utils/signal-handlers.js");
+    mod.installSignalHandlers();
   });
 
   afterEach(() => {
     exitSpy.mockRestore();
     errorSpy.mockRestore();
     stderrSpy.mockRestore();
-    // Remove any SIGINT/SIGTERM/SIGHUP listeners registered by index.ts
+    // Remove any SIGINT/SIGTERM/SIGHUP listeners registered by signal-handlers.ts
     // so repeated test runs do not accumulate handlers on the real
     // process object.
     process.removeAllListeners("SIGINT");
     process.removeAllListeners("SIGTERM");
     process.removeAllListeners("SIGHUP");
+    // Reset module registry so the next beforeEach gets a fresh
+    // shuttingDown = false state.
+    vi.resetModules();
   });
 
   it("emits stderr warning before hard-exiting on a repeated SIGINT during shutdown", async () => {
-    // Import the entrypoint to register the SIGINT handler. We import
-    // dynamically so the vi.mock hoisting above is in effect before
-    // index.ts's top-level statements run.
-    await import("../index.js");
-
     // First SIGINT: flips `shuttingDown = true` and kicks off the
     // async cleanup path. The cleanup eventually awaits closeMcpClient
     // (stubbed to resolve immediately) and then calls process.exit.
-    // Because we swallow process.exit with the sentinel throw, the
-    // async handler's unhandled rejection is caught below.
+    // Because we swallow process.exit with the spy, the async handler's
+    // continuation runs without actually terminating the worker.
     const firstSignalSettled = new Promise<void>((resolve) => {
       // Yield to the microtask queue so the async listener has a
       // chance to reach its first await. 2 microtask ticks are enough
@@ -164,5 +160,39 @@ describe("signal handler — re-entrancy warning (Epic 61-it1-01 L3-003)", () =>
     // re-entrancy branch is the one guarded by the console.error check
     // above.
     expect(exitSpy).toHaveBeenCalledWith(130);
+  });
+
+  it("awaits closeMcpClient before calling process.exit on the first SIGINT", async () => {
+    const callOrder: string[] = [];
+
+    // Capture the ordering: closeMcpClient resolves, then exit fires.
+    closeMcpClientMock.mockImplementationOnce(async () => {
+      callOrder.push("closeMcpClient");
+    });
+    exitSpy.mockImplementation(((_code?: number) => {
+      callOrder.push("exit");
+    }) as typeof process.exit);
+
+    const settled = new Promise<void>((resolve) => {
+      setImmediate(() => setImmediate(resolve));
+    });
+    process.emit("SIGINT");
+    await settled;
+
+    // closeMcpClient must appear before exit in the call order.
+    const closeIdx = callOrder.indexOf("closeMcpClient");
+    const exitIdx = callOrder.indexOf("exit");
+    expect(closeIdx).toBeGreaterThanOrEqual(0);
+    expect(exitIdx).toBeGreaterThan(closeIdx);
+  });
+
+  it("exits with code 143 on SIGTERM", async () => {
+    const settled = new Promise<void>((resolve) => {
+      setImmediate(() => setImmediate(resolve));
+    });
+    process.emit("SIGTERM");
+    await settled;
+
+    expect(exitSpy).toHaveBeenCalledWith(143);
   });
 });

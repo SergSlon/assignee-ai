@@ -36,32 +36,41 @@ import {
   EXAMPLES_HINT,
 } from "./config/constants.js";
 
-import { closeMcpClient } from "./services/mcp-client.js";
 import { bootstrapFirstRun } from "./utils/first-run.js";
-import { stopSpinner } from "./utils/display.js";
 import { checkForUpdates } from "./utils/update-notifier.js";
+import { installSignalHandlers } from "./utils/signal-handlers.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const pkg = JSON.parse(
-  readFileSync(resolve(__dirname, "..", "package.json"), "utf-8"),
-);
+
+// Lazy, memoized package.json reader — deferred until the first call site
+// that actually needs the version so that module load (including `--help`)
+// never pays the synchronous I/O cost.
+let _pkg: { name: string; version: string } | undefined;
+function getPkg(): { name: string; version: string } {
+  if (!_pkg) {
+    _pkg = JSON.parse(
+      readFileSync(resolve(__dirname, "..", "package.json"), "utf-8"),
+    ) as { name: string; version: string };
+  }
+  return _pkg;
+}
 
 // Self-update UX (Wave H1): non-intrusive banner when a newer version
 // of assignee is on npm. No-op pre-publish (private: true → registry
 // 404), silent in CI / piped stdout / --json, opt-outable via
 // ASSIGNEE_NO_UPDATE_CHECK=1. All errors are swallowed internally.
-checkForUpdates({ name: pkg.name as string, version: pkg.version as string });
+checkForUpdates({ name: getPkg().name, version: getPkg().version });
 
 // First-run detection: auto-create ~/.assignee/ and show welcome (Story 29.6)
-bootstrapFirstRun(pkg.version as string);
+bootstrapFirstRun(getPkg().version);
 
 const program = new Command();
 
 program
   .name("assignee")
   .description("Assignee.ai - AI-Native Cloud Operator")
-  .version(pkg.version as string)
+  .version(getPkg().version)
   .option(
     "--verbose",
     "Enable structured JSON diagnostic logs to stderr (also: ASSIGNEE_LOG_LEVEL=debug, ASSIGNEE_VERBOSITY=verbose)",
@@ -154,89 +163,10 @@ process.stdout.on("error", (err: NodeJS.ErrnoException) => {
   if (err.code === "EPIPE") process.exit(ProcessExitCode.SUCCESS);
 });
 
-// Graceful shutdown handlers (P2-R2-3).
-//
-// The signal handler MUST:
-//   1. Stop any active clack spinner first — otherwise the cursor stays
-//      hidden on some terminals and the label line stays partially drawn.
-//      Also emit the DECTCEM "show cursor" sequence as belt-and-suspenders
-//      so a crashed spinner can never leave the terminal with a hidden
-//      caret.
-//   2. Print a visible "Cancelled." marker to stderr so the user sees
-//      that their Ctrl-C was honored (prior behavior dropped silently
-//      while MCP clients closed in background).
-//   3. Close MCP child processes so no orphans remain.
-//   4. Flush stderr (async writes from the structured logger) before
-//      exiting, otherwise the last log line is lost on fast-exit.
-//   5. Exit with the conventional 128 + signum code.
-//
-// Story 50-2: added SIGHUP (nohup / tmux detach / SSH disconnect) and
-// SIGBREAK (Windows Ctrl-Break) handlers so cloud VMs, background
-// workflows and Windows users all get the same graceful teardown as
-// SIGINT / SIGTERM. SIGBREAK is Node-on-Windows-specific and raises a
-// runtime error if registered on non-Windows, so we gate on platform.
-//
-// Re-entrancy: a second signal during teardown bypasses cleanup and hard
-// exits — a stuck MCP close must not trap the user.
-let shuttingDown = false;
-type ShutdownSignal = "SIGINT" | "SIGTERM" | "SIGHUP" | "SIGBREAK";
-function installSignalHandler(signal: ShutdownSignal, code: number) {
-  process.on(signal, async () => {
-    if (shuttingDown) {
-      // Second signal during teardown — abandon cleanup.
-      //
-      // Epic 61-it1-01 (L3-003): emit a stderr marker before the hard
-      // exit so operators see why their repeated Ctrl-C bypassed the
-      // normal "Cancelled." handshake. Without this the process simply
-      // vanishes, leaving users to wonder whether the second signal
-      // was observed at all. `console.error` is sync on the stderr
-      // stream so the message reliably lands before process.exit.
-      console.error(
-        "assignee: received repeated interrupt during shutdown; forcing exit.",
-      );
-      process.exit(code);
-    }
-    shuttingDown = true;
-    try {
-      stopSpinner();
-    } catch {
-      /* spinner may not exist — non-fatal */
-    }
-    // Belt-and-suspenders: restore the cursor in case a crashed spinner
-    // left it hidden. DECTCEM "show cursor" — harmless if already shown.
-    if (process.stderr.isTTY) {
-      try {
-        process.stderr.write("\x1b[?25h");
-      } catch {
-        /* terminal already closed — non-fatal */
-      }
-    }
-    process.stderr.write(`\nCancelled (${signal}).\n`);
-    try {
-      await closeMcpClient();
-    } catch {
-      /* child processes may already be gone */
-    }
-    // Best-effort stderr flush so structured log lines are not dropped.
-    await new Promise<void>((resolve) => {
-      if (process.stderr.writableNeedDrain) {
-        process.stderr.once("drain", () => resolve());
-      } else {
-        resolve();
-      }
-    });
-    process.exit(code);
-  });
-}
-installSignalHandler("SIGINT", 128 + 2); // 130
-installSignalHandler("SIGTERM", 128 + 15); // 143
-installSignalHandler("SIGHUP", 128 + 1); // 129
-// SIGBREAK is Windows-only (raised by Ctrl-Break). Installing the
-// handler on POSIX is a no-op in Node but we gate explicitly so the
-// intent is clear.
-if (process.platform === "win32") {
-  installSignalHandler("SIGBREAK", 128 + 21); // 149 (Node's SIGBREAK signum)
-}
+// Graceful shutdown handlers (P2-R2-3) — extracted to utils/signal-handlers.ts
+// (W14-S2) so that tests can target the handler logic directly without
+// instantiating the full Commander program tree.
+installSignalHandlers();
 
 program.parseAsync(process.argv).catch((err) => {
   // Story 94-R7 (D-02): command-level catches (e.g. `list.ts`) that

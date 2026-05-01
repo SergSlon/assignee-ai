@@ -29,11 +29,24 @@
  *
  * Key management:
  *   - Production: `ASSIGNEE_AUDIT_KEY` env var (per-tenant secret).
- *   - Dev/CI: auto-generated per-process key with a console warning.
- *     KMS-backed key management defers to Epic 101.
+ *   - Dev/CI: persistent key written to `~/.assignee/audit-key` on first
+ *     generation (mode 0o600), read on subsequent invocations so HMAC
+ *     chains survive process restarts. KMS-backed key management defers
+ *     to Epic 101.
+ *
+ * ⚠ MIGRATION NOTE (W14-S3 — 2026-04-29):
+ *   Previously the fallback was a per-process random key (never persisted).
+ *   Any audit records written before this change used a key that was
+ *   discarded when the process exited — those chains CANNOT be verified
+ *   after upgrading (they were already unverifiable across process
+ *   boundaries). This is intentional: the fix makes new chains durable;
+ *   old chains remain orphaned. Do NOT add migration logic.
  */
 
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import {
   ProcessEnvConfigAdapter,
   type ConfigPort,
@@ -85,24 +98,56 @@ export const GENESIS_HMAC = "GENESIS";
  */
 export const AUDIT_KEY_MIN_LENGTH = 32;
 
-let _perProcessKey: string | undefined;
+/**
+ * Default path for the persistent audit key file.
+ *
+ * Stored at `~/.assignee/audit-key` with mode 0o600 (owner read+write only).
+ * Exported so the `init` wizard and `setup` command can pre-warm the file
+ * during workspace initialisation.
+ */
+export const DEFAULT_AUDIT_KEY_FILE = path.join(
+  os.homedir(),
+  ".assignee",
+  "audit-key",
+);
+
+// ── Internal in-process key cache ─────────────────────────────────────
+// Avoids redundant filesystem reads on repeated `getAuditKey()` calls
+// within the same process lifetime (the file never changes per-process).
+let _cachedKey: string | undefined;
 
 /**
- * Return the active audit key.
+ * Resolve the active HMAC audit key with the following priority:
  *
- * Priority:
- *   1. `ASSIGNEE_AUDIT_KEY` env var (per-tenant, persists across restarts).
- *   2. Per-process random key (emits a WARNING once; chain not durable
- *      across process restarts — configure the env var in production).
+ *   1. `ASSIGNEE_AUDIT_KEY` env var — per-tenant injected secret (SaaS / CI).
+ *      If set, the key file is neither read nor written.
+ *   2. Persistent key file at `keyFile` (default: `~/.assignee/audit-key`) —
+ *      read on every non-env-var call.  File is expected to contain exactly
+ *      the key as a single UTF-8 line (no trailing whitespace is stripped).
+ *   3. First-use generation — if neither source is present, a 32-byte
+ *      cryptographically-random key is generated, written to `keyFile`
+ *      with mode `0o600` (exclusive create — TOCTOU-safe: if two processes
+ *      race, only the winner writes; the loser retries the read path), and
+ *      returned.
  *
- * MASTER-009: accepts an optional `ConfigPort` so SaaS callers can
- * supply a tenant-scoped key source instead of the process-global
- * `process.env`. When omitted, falls back to a fresh
- * `ProcessEnvConfigAdapter` (legacy single-tenant CLI behaviour).
+ * Fallback (non-writable filesystem): if the file cannot be written (e.g.
+ * read-only filesystem, permission denied), `resolveAuditKey` logs a
+ * `console.warn` and returns an in-process ephemeral key.  Operators
+ * should configure `ASSIGNEE_AUDIT_KEY` on such systems.
+ *
+ * @param keyFile  - Override the default key-file path (useful in tests).
+ * @param config   - Optional `ConfigPort` for reading env vars (defaults to
+ *                   `ProcessEnvConfigAdapter`).
+ * @returns        - Hex-encoded HMAC key (≥ AUDIT_KEY_MIN_LENGTH chars).
  */
-export function getAuditKey(config?: ConfigPort): string {
+export function resolveAuditKey(
+  keyFile: string = DEFAULT_AUDIT_KEY_FILE,
+  config?: ConfigPort,
+): string {
   const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
   const envKey = effectiveConfig.get("ASSIGNEE_AUDIT_KEY");
+
+  // ── Priority 1: env var ────────────────────────────────────────────
   if (envKey && envKey.length > 0) {
     if (envKey.length < AUDIT_KEY_MIN_LENGTH) {
       throw new AssigneeError(
@@ -114,15 +159,107 @@ export function getAuditKey(config?: ConfigPort): string {
     return envKey;
   }
 
-  if (!_perProcessKey) {
-    _perProcessKey = randomBytes(32).toString("hex");
-    // Use process.stderr.write to avoid any log-level suppression.
-    process.stderr.write(
-      "WARNING: per-process audit key in use — chain is not durable across" +
-        " restarts; configure ASSIGNEE_AUDIT_KEY in production\n",
-    );
+  // ── Priority 2: in-process cache (avoids repeated fs reads) ──────
+  // Only valid when keyFile is the default (test overrides must bypass).
+  if (_cachedKey !== undefined && keyFile === DEFAULT_AUDIT_KEY_FILE) {
+    return _cachedKey;
   }
-  return _perProcessKey;
+
+  // ── Priority 3: read existing key file ────────────────────────────
+  try {
+    if (fs.existsSync(keyFile)) {
+      const fileKey = fs.readFileSync(keyFile, "utf8").trim();
+      if (fileKey.length >= AUDIT_KEY_MIN_LENGTH) {
+        // Warn if the file is not mode 0o600 (advisory; don't fail).
+        try {
+          const fileStat = fs.statSync(keyFile);
+          if ((fileStat.mode & 0o777) !== 0o600) {
+            process.stderr.write(
+              `WARNING: audit key file ${keyFile} has mode ` +
+                `${(fileStat.mode & 0o777).toString(8)} — expected 0600; ` +
+                `run: chmod 600 ${keyFile}\n`,
+            );
+          }
+        } catch {
+          // stat failure is non-fatal
+        }
+        if (keyFile === DEFAULT_AUDIT_KEY_FILE) {
+          _cachedKey = fileKey;
+        }
+        return fileKey;
+      }
+      // File exists but content is too short — treat as corrupt/missing.
+      process.stderr.write(
+        `WARNING: audit key file ${keyFile} contains a key shorter than ` +
+          `${AUDIT_KEY_MIN_LENGTH} characters — ignoring and regenerating\n`,
+      );
+    }
+  } catch {
+    // readFileSync failure handled below as a generate path
+  }
+
+  // ── Priority 4: generate, persist, and return ─────────────────────
+  const newKey = randomBytes(32).toString("hex");
+  try {
+    fs.mkdirSync(path.dirname(keyFile), { recursive: true });
+    // flag "wx" = exclusive create — if two processes race, only one wins.
+    // The loser gets EEXIST and will read the winner's file on next call.
+    fs.writeFileSync(keyFile, newKey, { mode: 0o600, flag: "wx" });
+  } catch (err) {
+    const errCode = (err as NodeJS.ErrnoException).code;
+    if (errCode === "EEXIST") {
+      // Another process won the race — read what they wrote.
+      try {
+        const raceKey = fs.readFileSync(keyFile, "utf8").trim();
+        if (raceKey.length >= AUDIT_KEY_MIN_LENGTH) {
+          if (keyFile === DEFAULT_AUDIT_KEY_FILE) {
+            _cachedKey = raceKey;
+          }
+          return raceKey;
+        }
+      } catch {
+        // fall through to ephemeral fallback below
+      }
+    }
+    // Non-writable filesystem or other error — fall back to ephemeral key.
+    process.stderr.write(
+      `WARNING: cannot persist audit key to ${keyFile} (${String(err)}); ` +
+        `chain will not be durable across restarts — ` +
+        `configure ASSIGNEE_AUDIT_KEY or fix filesystem permissions\n`,
+    );
+    return newKey; // ephemeral — not cached
+  }
+
+  if (keyFile === DEFAULT_AUDIT_KEY_FILE) {
+    _cachedKey = newKey;
+  }
+  return newKey;
+}
+
+/**
+ * Return the active audit key.
+ *
+ * Priority:
+ *   1. `ASSIGNEE_AUDIT_KEY` env var (per-tenant, persists across restarts).
+ *   2. Persistent key file at `~/.assignee/audit-key` (mode 0o600).
+ *      Written on first use; read on subsequent invocations — the key is
+ *      durable across process restarts.
+ *
+ * MASTER-009: accepts an optional `ConfigPort` so SaaS callers can
+ * supply a tenant-scoped key source instead of the process-global
+ * `process.env`. When omitted, falls back to a fresh
+ * `ProcessEnvConfigAdapter` (legacy single-tenant CLI behaviour).
+ *
+ * @deprecated Prefer `resolveAuditKey()` for new call sites; `getAuditKey`
+ *   is kept for backwards compatibility and delegates to `resolveAuditKey`.
+ */
+export function getAuditKey(config?: ConfigPort): string {
+  return resolveAuditKey(DEFAULT_AUDIT_KEY_FILE, config);
+}
+
+/** @internal Reset the in-process key cache — for use in tests only. */
+export function _resetAuditKeyCache(): void {
+  _cachedKey = undefined;
 }
 
 // ── Core primitives ────────────────────────────────────────────────────

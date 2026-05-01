@@ -13,7 +13,7 @@
  *      NOT present in the returned state (no unnecessary field pollution).
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ExecutionMode, ExecutionStatus } from "@/index.js";
 import type { AgentState } from "@/graph/graph-state.js";
 
@@ -40,17 +40,40 @@ vi.mock("@/utils/memory-recorder.js", () => ({
   upsertPatternRecord: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("../arn-display.js", () => ({
-  resolveDisplayArn: vi
-    .fn()
-    .mockResolvedValue("arn:aws:ec2:us-east-1:210987654321:vpc/vpc-12345"),
-  buildDisplayArnMap: vi.fn().mockResolvedValue({}),
+// W14-S0: use vi.hoisted() so the mock function references are stable across
+// tests. vitest.config has mockReset: true which wipes mock implementations
+// between tests. Without hoisted refs + beforeEach restoration, the 4th test
+// (terminal-success path) sees buildDisplayArnMap return undefined instead of
+// {} and crashes with "Cannot read properties of undefined". The factory
+// creates the functions once; beforeEach restores their implementations after
+// each mockReset cycle.
+const _arnDisplayMocks = vi.hoisted(() => ({
+  resolveDisplayArn: vi.fn(),
+  buildDisplayArnMap: vi.fn(),
 }));
+
+vi.mock("../arn-display.js", () => _arnDisplayMocks);
 
 vi.mock("./static-site-upload.js", () => ({
   printStaticWebsiteCloudFrontUrl: vi.fn(),
   runStaticSiteUploadFor: vi.fn().mockResolvedValue(undefined),
 }));
+
+// ── Restore mock implementations after each mockReset cycle ──────────────────
+//
+// vitest.config has mockReset: true which wipes mock implementations between
+// tests. Re-apply the expected return values here so every test (including
+// the terminal-success test that calls buildDisplayArnMap) sees correct
+// implementations.
+beforeEach(() => {
+  _arnDisplayMocks.resolveDisplayArn.mockResolvedValue(
+    "arn:aws:ec2:us-east-1:210987654321:vpc/vpc-12345",
+  );
+  // buildDisplayArnMap returns a map keyed by resourceId → resourceArn.
+  // For test purposes an empty map is sufficient: arnForRecord falls back
+  // to completed.resourceArn which is always defined in the test fixtures.
+  _arnDisplayMocks.buildDisplayArnMap.mockResolvedValue({});
+});
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
