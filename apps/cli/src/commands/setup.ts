@@ -18,7 +18,7 @@ import * as clack from "@clack/prompts";
 import { IAMClient } from "@aws-sdk/client-iam";
 import { AssigneeError } from "@assignee/core";
 import { CommandName, CommandDescription } from "../constants/commands.js";
-import { ErrorCode } from "../constants/errors.js";
+import { ErrorCode, ProcessExitCode } from "../constants/errors.js";
 import { UserMessage } from "../config/constants.js";
 import { resolveIntroContext, formatIntroContext } from "./init.js";
 import { printSetupIntro } from "./setup/intro.js";
@@ -174,8 +174,8 @@ Examples:
             "Inspect the IAM error above and re-run `assignee setup`.",
         );
         clack.outro("Setup aborted: operator role is required.");
-        process.exit(1);
-        return; // defensive: in tests, process.exit is mocked
+        process.exitCode = ProcessExitCode.GENERIC_ERROR;
+        return;
       }
 
       // ── Bedrock invocation logging (Tasks 1–4 from aws-bootstrap.md) ──

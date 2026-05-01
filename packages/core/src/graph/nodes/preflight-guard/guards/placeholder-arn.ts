@@ -38,9 +38,17 @@ const PLACEHOLDER_WALK_MAX_DEPTH = 32;
  * to appear anywhere inside the string; the angle-bracket + colon
  * pattern is specific enough that false-positives on real ARNs are
  * not a concern (real ARNs never contain `<` or `>`).
+ *
+ * W13-S1 (M-α-22): tightened the region segment from `[^:]*` (accepts
+ * any non-colon string, including garbage like `invalid..region` or
+ * uppercase `US-EAST-1`) to `(?:[a-z]{2}-(?:[a-z]+-)+\d+|)`, which
+ * accepts a valid AWS region name (e.g. `us-east-1`, `eu-west-2`,
+ * `us-gov-east-1`, `cn-north-1`, `eu-isoe-west-1`) or an empty string
+ * (global services such as IAM, S3 use an empty region segment in ARNs
+ * like `arn:aws:iam::123456789012:role/foo`).
  */
 const ARN_ANGLE_BRACKET_PLACEHOLDER_REGEX =
-  /arn:aws[\w-]*:[\w-]+:[^:]*:<[^>]+>:/;
+  /arn:aws[\w-]*:[\w-]+:(?:[a-z]{2}-(?:[a-z]+-)+\d+|):<[^>]+>:/;
 
 export function detectPlaceholderArn(
   desiredState: Record<string, unknown>,

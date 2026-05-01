@@ -54,6 +54,7 @@ import {
 import { log, LOG_ACTIONS, LogLevel } from "../utils/logger.js";
 import { installJsonStderrFilter } from "./json-stderr-filter.js";
 import { resolveJsonMode } from "./output-format.js";
+import { ProcessExitCode } from "../constants/errors.js";
 
 export const statusCommand = new Command(CommandName.STATUS)
   .description(CommandDescription.STATUS)
@@ -245,7 +246,7 @@ async function runStatusBody(opts: {
           renderBPCoverageGaps(reportedGaps);
         }
         if (reportedGaps.length > 0) {
-          process.exit(1);
+          process.exitCode = ProcessExitCode.GENERIC_ERROR;
         }
         return;
       }

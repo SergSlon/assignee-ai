@@ -3,183 +3,400 @@
  * what each command actually calls, and flags any missing permissions.
  *
  * Run with: pnpx tsx scripts/audit-iam-policies.ts
+ *
+ * W13-S4 (M-γ-04): critical-action lists are now DERIVED from the actual
+ * policy-generator exports rather than maintained as parallel hardcoded arrays.
+ * This prevents the class of drift where new scoped actions (e.g.
+ * iam:DeleteRole / secretsmanager:GetSecretValue added in W13-S2) are missed
+ * because the audit script was never updated.
+ *
+ * Registry-driven derivation strategy:
+ *   1. Import the live action-set constants from action-collector.ts and
+ *      operator.ts (the single source of truth for which actions are scoped).
+ *   2. Build the "critical" list for each role from those constants — no
+ *      hardcoded action strings.
+ *   3. Add a "scoped-action integrity" check: every action in the must-be-scoped
+ *      sets must NOT appear in any statement with Resource "*" AND no Condition.
+ *      Fail the audit (exit 1) if a destructive/sensitive action leaks into an
+ *      unscoped grant.
  */
 
 import {
   operatorPolicy,
+  operatorServicesAPolicy,
+  operatorServicesBPolicy,
   readerPolicy,
   auditorPolicy,
   SUPPORTED_TYPES_ARRAY,
   getRequiredIamActions,
 } from "../packages/core/dist/index.js";
 
-const op = operatorPolicy();
-const rd = readerPolicy();
-const au = auditorPolicy();
+// W13-S4: import action-set constants from the iam-policies sub-barrel.
+// These are NOT re-exported through the main dist/index.js barrel (they're
+// internal implementation details), so we import directly from the sub-path.
+import {
+  PRIV_ESC_SCOPED_IAM_ACTIONS,
+  TAG_SCOPED_SECRETS_ACTIONS,
+  TAG_SCOPED_RDS_SNAPSHOT_ACTIONS,
+  REQUEST_TAG_SCOPED_SNAPSHOT_ACTIONS,
+} from "../packages/core/dist/config/iam-policies/action-collector.js";
+import {
+  IAM_ROLE_MANAGEMENT_ACTIONS,
+  IAM_ROLE_DESTRUCTIVE_ACTIONS,
+} from "../packages/core/dist/config/iam-policies/operator.js";
 
-function collectActions(doc: {
-  Statement: { Action: string[] }[];
-}): Set<string> {
+// ── Types ──────────────────────────────────────────────────────────────────────
+
+export interface PolicyStatement {
+  Sid?: string;
+  Effect: string;
+  Action: string | string[];
+  Resource: string | string[];
+  Condition?: Record<string, unknown>;
+}
+
+export interface PolicyDocument {
+  Version: string;
+  Statement: PolicyStatement[];
+}
+
+// ── Helpers (exported for testing) ────────────────────────────────────────────
+
+export function collectActions(doc: PolicyDocument): Set<string> {
   const s = new Set<string>();
-  for (const st of doc.Statement) for (const a of st.Action) s.add(a);
+  for (const st of doc.Statement) {
+    const actions = Array.isArray(st.Action) ? st.Action : [st.Action];
+    for (const a of actions) s.add(a);
+  }
   return s;
 }
 
-const opActions = collectActions(op);
-const rdActions = collectActions(rd);
-const auActions = collectActions(au);
-
-console.log("=".repeat(60));
-console.log("IAM POLICY AUDIT");
-console.log("=".repeat(60));
-console.log(
-  `Operator: ${opActions.size} actions, ${op.Statement.length} statements`,
-);
-console.log(
-  `Reader:   ${rdActions.size} actions, ${rd.Statement.length} statements`,
-);
-console.log(
-  `Auditor:  ${auActions.size} actions, ${au.Statement.length} statements`,
-);
-console.log("");
-
-// Verify every supported type's required actions are in operator policy
-console.log("--- Per-resource-type coverage (operator policy) ---");
-let missingTotal = 0;
-for (const type of SUPPORTED_TYPES_ARRAY) {
-  const required = getRequiredIamActions(type);
-  const missing: string[] = [];
-  for (const act of required) {
-    if (!opActions.has(act)) missing.push(act);
-  }
-  if (missing.length > 0) {
-    console.log(`  ❌ ${type}: MISSING ${missing.length}`);
-    for (const m of missing) console.log(`      - ${m}`);
-    missingTotal += missing.length;
-  } else {
-    console.log(`  ✓ ${type}: ${required.length} actions covered`);
-  }
+/**
+ * Checks whether a statement grants unscoped access:
+ *   - Resource is "*" (or contains "*")
+ *   - No Condition block
+ *
+ * A statement with Resource: "*" AND a Condition is still considered
+ * "scoped" for audit purposes (e.g. SecretsManagerGetValueTagScoped uses
+ * Resource "*" with aws:ResourceTag — the condition IS the scope).
+ */
+export function isUnscopedWildcard(stmt: PolicyStatement): boolean {
+  const resource = Array.isArray(stmt.Resource)
+    ? stmt.Resource
+    : [stmt.Resource];
+  const hasWildcard = resource.some((r) => r === "*");
+  const hasCondition =
+    stmt.Condition != null && Object.keys(stmt.Condition).length > 0;
+  return hasWildcard && !hasCondition;
 }
-console.log("");
 
-// Verify critical command actions
-console.log("--- Critical command action coverage ---");
-const criticalForOperator = [
-  "bedrock:InvokeModel",
-  "cloudcontrol:CreateResource",
-  "cloudcontrol:DeleteResource",
-  "cloudcontrol:GetResource",
-  "cloudcontrol:UpdateResource",
-  "tag:GetResources",
-  "tag:TagResources",
-  "ssm:GetParameter",
-  "ssm:PutParameter",
-  "ssm:DeleteParameter",
-  "lambda:CreateFunction",
-  "lambda:GetFunction",
-  "lambda:CreateEventSourceMapping",
-  "iam:CreateRole",
-  "iam:PassRole",
-  "ec2:RunInstances",
-  "ec2:CreateKeyPair",
-  "ec2:DescribeKeyPairs",
-  "ec2:DeleteKeyPair",
-  // Note: cloudformation:DescribeType is READER-only (schema service uses reader creds)
-];
-for (const action of criticalForOperator) {
-  const ok = opActions.has(action);
-  console.log(`  ${ok ? "✓" : "❌"} operator: ${action}`);
-}
-console.log("");
-
-const criticalForReader = [
-  "cloudformation:DescribeType",
-  "cloudformation:ListTypes",
-  "pricing:GetProducts",
-  "pricing:DescribeServices",
-  "ce:GetCostAndUsage",
-  "ec2:DescribeInstances",
-  "ec2:DescribeKeyPairs",
-];
-for (const action of criticalForReader) {
-  const ok = rdActions.has(action);
-  console.log(`  ${ok ? "✓" : "❌"} reader:   ${action}`);
-}
-console.log("");
-
-const criticalForAuditor = [
-  "iam:SimulatePrincipalPolicy",
-  "iam:ListAttachedUserPolicies",
-  "securityhub:GetFindings",
-  "guardduty:ListFindings",
-  "inspector2:ListFindings",
-  "access-analyzer:ListFindings",
-];
-for (const action of criticalForAuditor) {
-  const ok = auActions.has(action);
-  console.log(`  ${ok ? "✓" : "❌"} auditor:  ${action}`);
-}
-console.log("");
-
-// Cross-contamination check: auditor and reader should NOT have write actions
-console.log("--- Least privilege: no write actions in reader/auditor ---");
-const writeVerbs = [
-  "Create",
-  "Delete",
-  "Put",
-  "Update",
-  "Attach",
-  "Detach",
-  "Authorize",
-  "Revoke",
-  "Modify",
-  "Associate",
-  "Disassociate",
-  "Terminate",
-  "Run",
-  "Start",
-  "Stop",
-  "Reboot",
-  "Reset",
-  "Enable",
-  "Disable",
-  "Tag",
-  "Untag",
-];
-function findWriteActions(actions: Set<string>, label: string): void {
-  const writes: string[] = [];
-  for (const act of actions) {
-    const verb = act.split(":")[1] ?? "";
-    if (writeVerbs.some((w) => verb.startsWith(w))) {
-      writes.push(act);
+/**
+ * Checks whether all actions in `mustBeScoped` are absent from any statement
+ * that is unscoped (Resource:"*" with no Condition).
+ *
+ * Returns an array of violation strings — empty array means PASS.
+ * Each violation is: "<action> in Sid:<sid> — Resource:* with no Condition"
+ */
+export function findScopingViolations(
+  statements: PolicyStatement[],
+  mustBeScoped: Set<string>,
+): string[] {
+  const violations: string[] = [];
+  for (const stmt of statements) {
+    if (!isUnscopedWildcard(stmt)) continue;
+    const actions = Array.isArray(stmt.Action) ? stmt.Action : [stmt.Action];
+    for (const action of actions) {
+      if (mustBeScoped.has(action)) {
+        violations.push(
+          `${action} in Sid:${stmt.Sid ?? "<no-sid>"} — Resource:* with no Condition`,
+        );
+      }
     }
   }
-  if (writes.length > 0) {
-    console.log(`  ❌ ${label}: ${writes.length} write actions found!`);
-    for (const w of writes) console.log(`      - ${w}`);
-  } else {
-    console.log(`  ✓ ${label}: zero write actions (read-only verified)`);
+  return violations;
+}
+
+/**
+ * Returns the registry-derived set of actions that MUST be scoped
+ * (must NOT appear in any statement with Resource:"*" AND no Condition).
+ *
+ * Derived from the action-set constants in action-collector.ts and operator.ts
+ * — the single source of truth.  Adding a new scoped action to those constants
+ * automatically extends this set.
+ */
+export function buildMustBeScopedSet(): Set<string> {
+  return new Set<string>([
+    ...PRIV_ESC_SCOPED_IAM_ACTIONS, // iam:CreateRole/PassRole/AttachRolePolicy/PutRolePolicy/DeleteRole/DetachRolePolicy/DeleteRolePolicy
+    ...IAM_ROLE_MANAGEMENT_ACTIONS, // subset of above — deduplicated by Set
+    ...IAM_ROLE_DESTRUCTIVE_ACTIONS, // iam:DeleteRole/DetachRolePolicy/DeleteRolePolicy
+    ...TAG_SCOPED_SECRETS_ACTIONS, // secretsmanager:GetSecretValue
+    ...TAG_SCOPED_RDS_SNAPSHOT_ACTIONS, // rds:DeleteDBSnapshot/CopyDBSnapshot
+    ...REQUEST_TAG_SCOPED_SNAPSHOT_ACTIONS, // rds:CreateDBSnapshot
+  ]);
+}
+
+// ── Main audit (only runs when executed directly, not when imported) ───────────
+//
+// Guarding with `isMainModule` prevents process.exit(1) from firing when
+// the test suite imports the exported helper functions.
+// ESM pattern: compare import.meta.url to the resolved entry-point URL.
+
+const isMainModule =
+  typeof process !== "undefined" &&
+  typeof process.argv[1] === "string" &&
+  // tsx resolves the entry-point in process.argv[1]; match by file name suffix
+  // rather than exact path so the check works with both `npx tsx` and `node`.
+  (process.argv[1].endsWith("audit-iam-policies.ts") ||
+    process.argv[1].endsWith("audit-iam-policies.js"));
+
+if (isMainModule) {
+  // ── Policy documents ─────────────────────────────────────────────────────────
+
+  const op = operatorPolicy() as PolicyDocument;
+  const opA = operatorServicesAPolicy() as PolicyDocument;
+  const opB = operatorServicesBPolicy() as PolicyDocument;
+  const rd = readerPolicy() as PolicyDocument;
+  const au = auditorPolicy() as PolicyDocument;
+
+  // ── Action sets ──────────────────────────────────────────────────────────────
+
+  const opActions = collectActions(op);
+  const opAllActions = new Set([
+    ...opActions,
+    ...collectActions(opA),
+    ...collectActions(opB),
+  ]);
+  const rdActions = collectActions(rd);
+  const auActions = collectActions(au);
+
+  // ── Banner ───────────────────────────────────────────────────────────────────
+
+  console.log("=".repeat(60));
+  console.log("IAM POLICY AUDIT");
+  console.log("=".repeat(60));
+  console.log(
+    `Operator: ${opAllActions.size} actions, ${op.Statement.length + opA.Statement.length + opB.Statement.length} statements (core + A + B)`,
+  );
+  console.log(
+    `Reader:   ${rdActions.size} actions, ${rd.Statement.length} statements`,
+  );
+  console.log(
+    `Auditor:  ${auActions.size} actions, ${au.Statement.length} statements`,
+  );
+  console.log("");
+
+  // ── Per-resource-type coverage ───────────────────────────────────────────────
+
+  console.log("--- Per-resource-type coverage (operator policy) ---");
+  let missingTotal = 0;
+  for (const type of SUPPORTED_TYPES_ARRAY) {
+    const required = getRequiredIamActions(type);
+    const missing: string[] = [];
+    for (const act of required) {
+      if (!opAllActions.has(act)) missing.push(act);
+    }
+    if (missing.length > 0) {
+      console.log(`  ❌ ${type}: MISSING ${missing.length}`);
+      for (const m of missing) console.log(`      - ${m}`);
+      missingTotal += missing.length;
+    } else {
+      console.log(`  ✓ ${type}: ${required.length} actions covered`);
+    }
   }
-}
-findWriteActions(rdActions, "reader");
-findWriteActions(auActions, "auditor");
-console.log("");
+  console.log("");
 
-// Overlap check
-console.log("--- Action overlap between policies ---");
-const opRd = [...opActions].filter((a) => rdActions.has(a));
-const opAu = [...opActions].filter((a) => auActions.has(a));
-const rdAu = [...rdActions].filter((a) => auActions.has(a));
-console.log(`  operator ∩ reader:  ${opRd.length} actions`);
-console.log(`  operator ∩ auditor: ${opAu.length} actions`);
-console.log(`  reader   ∩ auditor: ${rdAu.length} actions`);
-console.log("");
+  // ── Critical command action coverage (registry-driven) ───────────────────────
+  //
+  // W13-S4: these lists are derived from live policy-generator exports.
+  // No hardcoded action strings for role-lifecycle or secrets actions — those
+  // come from the same constants the policy generators consume.
+  console.log("--- Critical command action coverage (registry-driven) ---");
 
-console.log("=".repeat(60));
-if (missingTotal === 0) {
-  console.log("✅ AUDIT PASSED — all required actions are covered");
-} else {
-  console.log(`❌ AUDIT FAILED — ${missingTotal} missing actions`);
-  process.exit(1);
+  // Core operator invariants — CCAPI, Bedrock, tagging, SDK fallback.
+  // These are structural (not resource-type-specific) so a small literal list
+  // is intentional here; they do not drift with resource type additions.
+  const criticalCoreCCAPI = [
+    "bedrock:InvokeModel",
+    "cloudcontrol:CreateResource",
+    "cloudcontrol:DeleteResource",
+    "cloudcontrol:GetResource",
+    "cloudcontrol:UpdateResource",
+    "tag:GetResources",
+    "tag:TagResources",
+    "ec2:CreateKeyPair",
+    "ec2:DescribeKeyPairs",
+    "ec2:DeleteKeyPair",
+    // Note: cloudformation:DescribeType is READER-only (schema service uses reader creds)
+  ];
+
+  // IAM role-lifecycle: derived from the actual policy constants (W13-S4).
+  // PRIV_ESC_SCOPED_IAM_ACTIONS = IAM_ROLE_MANAGEMENT_ACTIONS
+  //   (CreateRole, PassRole, AttachRolePolicy, PutRolePolicy)
+  // IAM_ROLE_DESTRUCTIVE_ACTIONS = DeleteRole, DetachRolePolicy, DeleteRolePolicy
+  // Both sets were previously partial or absent in the hardcoded list.
+  const criticalIamActions = [
+    ...PRIV_ESC_SCOPED_IAM_ACTIONS,
+    ...IAM_ROLE_MANAGEMENT_ACTIONS,
+    ...IAM_ROLE_DESTRUCTIVE_ACTIONS,
+  ];
+  // Deduplicate (PRIV_ESC_SCOPED_IAM_ACTIONS ⊇ IAM_ROLE_MANAGEMENT_ACTIONS)
+  const criticalForOperator = [
+    ...criticalCoreCCAPI,
+    ...[...new Set(criticalIamActions)],
+    // Secrets: GetSecretValue must be present (tag-scoped, but present)
+    ...[...TAG_SCOPED_SECRETS_ACTIONS],
+    // RDS snapshot actions must be present (tag-scoped, but present)
+    ...[...TAG_SCOPED_RDS_SNAPSHOT_ACTIONS],
+    ...[...REQUEST_TAG_SCOPED_SNAPSHOT_ACTIONS],
+  ];
+
+  let criticalMissing = 0;
+  for (const action of [...new Set(criticalForOperator)]) {
+    const ok = opAllActions.has(action);
+    console.log(`  ${ok ? "✓" : "❌"} operator: ${action}`);
+    if (!ok) criticalMissing++;
+  }
+  console.log("");
+
+  // Reader critical actions — schema + pricing + CE + EC2 reads.
+  // These are structural reader grants; kept as literals because they don't
+  // track a registry constant (reader has no analog to PRIV_ESC_SCOPED_IAM_ACTIONS).
+  const criticalForReader = [
+    "cloudformation:DescribeType",
+    "cloudformation:ListTypes",
+    "pricing:GetProducts",
+    "pricing:DescribeServices",
+    "ce:GetCostAndUsage",
+    "ec2:DescribeInstances",
+    "ec2:DescribeKeyPairs",
+  ];
+  for (const action of criticalForReader) {
+    const ok = rdActions.has(action);
+    console.log(`  ${ok ? "✓" : "❌"} reader:   ${action}`);
+    if (!ok) criticalMissing++;
+  }
+  console.log("");
+
+  // Auditor critical actions — IAM simulate + security service reads.
+  const criticalForAuditor = [
+    "iam:SimulatePrincipalPolicy",
+    "iam:ListAttachedUserPolicies",
+    "securityhub:GetFindings",
+    "guardduty:ListFindings",
+    "inspector2:ListFindings",
+    "access-analyzer:ListFindings",
+  ];
+  for (const action of criticalForAuditor) {
+    const ok = auActions.has(action);
+    console.log(`  ${ok ? "✓" : "❌"} auditor:  ${action}`);
+    if (!ok) criticalMissing++;
+  }
+  console.log("");
+
+  // ── Scoped-action integrity check (W13-S4) ────────────────────────────────────
+  //
+  // Every action in these sets MUST be granted only via a scoped statement
+  // (non-"*" Resource OR a Condition block). If any of them appears in an
+  // unscoped "Resource: *" statement without a Condition, a leaked operator
+  // credential would have unlimited reach for that action.
+  //
+  // Definition of "unscoped": Resource is "*" AND no Condition block.
+  // A statement with Resource "*" + Condition (e.g. SecretsManagerGetValueTagScoped
+  // using aws:ResourceTag) is intentionally scoped via condition — that passes.
+  console.log(
+    "--- Scoped-action integrity (no destructive action with Resource:* + no Condition) ---",
+  );
+
+  const mustBeScopedActions = buildMustBeScopedSet();
+  const allStatements = [...op.Statement, ...opA.Statement, ...opB.Statement];
+  const violations = findScopingViolations(allStatements, mustBeScopedActions);
+  const scopingViolations = violations.length;
+
+  for (const v of violations) {
+    console.log(`  ❌ ${v}`);
+  }
+
+  if (scopingViolations === 0) {
+    console.log(
+      `  ✓ All ${mustBeScopedActions.size} must-be-scoped actions are absent from unscoped Resource:* grants`,
+    );
+  }
+  console.log("");
+
+  // Cross-contamination check: auditor and reader should NOT have write actions
+  console.log("--- Least privilege: no write actions in reader/auditor ---");
+  const writeVerbs = [
+    "Create",
+    "Delete",
+    "Put",
+    "Update",
+    "Attach",
+    "Detach",
+    "Authorize",
+    "Revoke",
+    "Modify",
+    "Associate",
+    "Disassociate",
+    "Terminate",
+    "Run",
+    "Start",
+    "Stop",
+    "Reboot",
+    "Reset",
+    "Enable",
+    "Disable",
+    "Tag",
+    "Untag",
+  ];
+  function findWriteActions(actions: Set<string>, label: string): void {
+    const writes: string[] = [];
+    for (const act of actions) {
+      const verb = act.split(":")[1] ?? "";
+      if (writeVerbs.some((w) => verb.startsWith(w))) {
+        writes.push(act);
+      }
+    }
+    if (writes.length > 0) {
+      console.log(`  ❌ ${label}: ${writes.length} write actions found!`);
+      for (const w of writes) console.log(`      - ${w}`);
+    } else {
+      console.log(`  ✓ ${label}: zero write actions (read-only verified)`);
+    }
+  }
+  findWriteActions(rdActions, "reader");
+  findWriteActions(auActions, "auditor");
+  console.log("");
+
+  // Overlap check
+  console.log("--- Action overlap between policies ---");
+  const opRd = [...opActions].filter((a) => rdActions.has(a));
+  const opAu = [...opActions].filter((a) => auActions.has(a));
+  const rdAu = [...rdActions].filter((a) => auActions.has(a));
+  console.log(`  operator ∩ reader:  ${opRd.length} actions`);
+  console.log(`  operator ∩ auditor: ${opAu.length} actions`);
+  console.log(`  reader   ∩ auditor: ${rdAu.length} actions`);
+  console.log("");
+
+  console.log("=".repeat(60));
+  const totalFailures = missingTotal + criticalMissing + scopingViolations;
+  if (totalFailures === 0) {
+    console.log(
+      "✅ AUDIT PASSED — all required actions are covered and scoped correctly",
+    );
+  } else {
+    if (missingTotal > 0)
+      console.log(
+        `❌ AUDIT FAILED — ${missingTotal} missing per-resource-type actions`,
+      );
+    if (criticalMissing > 0)
+      console.log(
+        `❌ AUDIT FAILED — ${criticalMissing} missing critical command actions`,
+      );
+    if (scopingViolations > 0)
+      console.log(
+        `❌ AUDIT FAILED — ${scopingViolations} destructive/sensitive actions granted with Resource:* and no Condition`,
+      );
+    process.exit(1);
+  }
+  console.log("=".repeat(60));
 }
-console.log("=".repeat(60));

@@ -232,3 +232,131 @@ describe("placeholder-arn — angle-bracketed wizard placeholders (RW-FIX-4 E-1)
     expect(result.kind).toBe("pass");
   });
 });
+
+describe("placeholder-arn — W13-S1 region segment tightening (M-α-22)", () => {
+  // -----------------------------------------------------------------------
+  // Valid region forms — all must still be detected as angle-bracket
+  // placeholders (the region is now validated but ARN is still caught).
+  // -----------------------------------------------------------------------
+
+  it("rejects angle-bracketed ARN with standard us-east-1 region", async () => {
+    const result = await placeholderArnGuard.run(
+      ctx({
+        Queue: "arn:aws:sqs:us-east-1:<account-id>:my-queue",
+      }),
+    );
+    expect(result.kind).toBe("fail");
+  });
+
+  it("rejects angle-bracketed ARN with eu-west-2 region", async () => {
+    const result = await placeholderArnGuard.run(
+      ctx({
+        Topic: "arn:aws:sns:eu-west-2:<your-account>:my-topic",
+      }),
+    );
+    expect(result.kind).toBe("fail");
+  });
+
+  it("rejects angle-bracketed ARN with ap-southeast-3 region", async () => {
+    const result = await placeholderArnGuard.run(
+      ctx({
+        Fn: "arn:aws:lambda:ap-southeast-3:<account-id>:function:my-fn",
+      }),
+    );
+    expect(result.kind).toBe("fail");
+  });
+
+  it("rejects angle-bracketed ARN with ca-central-1 region", async () => {
+    const result = await placeholderArnGuard.run(
+      ctx({
+        Bucket: "arn:aws:s3:ca-central-1:<account-id>:my-bucket",
+      }),
+    );
+    expect(result.kind).toBe("fail");
+  });
+
+  it("rejects angle-bracketed ARN with GovCloud us-gov-east-1 region", async () => {
+    const result = await placeholderArnGuard.run(
+      ctx({
+        Role: "arn:aws-us-gov:iam:us-gov-east-1:<account-id>:role/admin",
+      }),
+    );
+    expect(result.kind).toBe("fail");
+  });
+
+  it("rejects angle-bracketed ARN with GovCloud us-gov-west-1 region", async () => {
+    const result = await placeholderArnGuard.run(
+      ctx({
+        Key: "arn:aws-us-gov:kms:us-gov-west-1:<account-id>:key/1234",
+      }),
+    );
+    expect(result.kind).toBe("fail");
+  });
+
+  it("rejects angle-bracketed ARN with China cn-north-1 region", async () => {
+    const result = await placeholderArnGuard.run(
+      ctx({
+        Fn: "arn:aws-cn:lambda:cn-north-1:<account-id>:function:my-fn",
+      }),
+    );
+    expect(result.kind).toBe("fail");
+  });
+
+  it("rejects angle-bracketed ARN with China cn-northwest-1 region", async () => {
+    const result = await placeholderArnGuard.run(
+      ctx({
+        Key: "arn:aws-cn:kms:cn-northwest-1:<account-id>:key/abc",
+      }),
+    );
+    expect(result.kind).toBe("fail");
+  });
+
+  it("rejects angle-bracketed ARN with empty region (global IAM service)", async () => {
+    // IAM, S3 and other global services use an empty region segment.
+    const result = await placeholderArnGuard.run(
+      ctx({
+        Role: "arn:aws:iam::<your-12-digit-account-id>:role/foo",
+      }),
+    );
+    expect(result.kind).toBe("fail");
+  });
+
+  // -----------------------------------------------------------------------
+  // Invalid / garbage region forms — the regex must NOT match these
+  // (they don't look like valid ARN angle-bracket placeholders once the
+  // region segment is tightened, so the guard should NOT flag them as
+  // wizard-placeholder ARNs — they are simply structurally invalid strings
+  // that would fail at CloudControl rather than hitting this guard).
+  // -----------------------------------------------------------------------
+
+  it("does NOT match an ARN-like string with a double-dot region (invalid..region)", () => {
+    // The tightened region pattern rejects `invalid..region` — the string is
+    // not detected as a wizard-placeholder ARN by this guard. The overall
+    // ARN is malformed and will fail at CloudControl with a different error.
+    const result = detectPlaceholderArn({
+      Instance: "arn:aws:ec2:invalid..region:<your-account-id>:instance/i-abc",
+    });
+    // The angle-bracket placeholder guard should NOT fire because the
+    // tightened region pattern `(?:[a-z]{2}-(?:[a-z]+-)+\d+|)` does not
+    // match `invalid..region`. The ARN_ACCOUNT_REGEX (numeric account path)
+    // also does not fire since `<your-account-id>` is not a 12-digit number.
+    expect(result).toBeUndefined();
+  });
+
+  it("does NOT match an ARN-like string with uppercase region (US-EAST-1)", () => {
+    // Uppercase region segment does not match the tightened `[a-z]{2}-…`
+    // pattern, so the angle-bracket guard does not fire.
+    const result = detectPlaceholderArn({
+      Queue: "arn:aws:sqs:US-EAST-1:<account-id>:my-queue",
+    });
+    expect(result).toBeUndefined();
+  });
+
+  it("does NOT match an ARN-like string with a space in the region", () => {
+    // `us east 1` (with spaces) does not match `[a-z]{2}-(?:[a-z]+-)+\d+`.
+    const result = detectPlaceholderArn({
+      Queue: "arn:aws:sqs:us east 1:<account-id>:my-queue",
+    });
+    expect(result).toBeUndefined();
+  });
+});

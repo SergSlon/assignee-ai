@@ -22,6 +22,7 @@ import { Command } from "commander";
 import * as fs from "node:fs";
 import { verifyAuditLog } from "@assignee/core/audit";
 import { DEFAULT_AUDIT_LOG_FILE } from "@assignee/core/audit";
+import { ProcessExitCode } from "../constants/errors.js";
 
 // ── Command ────────────────────────────────────────────────────────────
 
@@ -91,7 +92,7 @@ The current implementation always walks the full chain.
       } else {
         process.stderr.write(`[audit-verify] ${message}\n`);
       }
-      process.exit(1);
+      process.exitCode = ProcessExitCode.GENERIC_ERROR;
       return;
     }
 
@@ -109,7 +110,7 @@ The current implementation always walks the full chain.
       } else {
         process.stderr.write(`[audit-verify] ${message}\n`);
       }
-      process.exit(1);
+      process.exitCode = ProcessExitCode.GENERIC_ERROR;
       return;
     }
 
@@ -142,7 +143,8 @@ The current implementation always walks the full chain.
         );
       }
 
-      process.exit(0);
+      process.exitCode = ProcessExitCode.SUCCESS;
+      return;
     } else {
       const reason =
         `Chain BROKEN at record index ${result.brokenAt}: ${result.reason}. ` +
@@ -158,6 +160,6 @@ The current implementation always walks the full chain.
       } else {
         process.stderr.write(`[audit-verify] ${reason}\n`);
       }
-      process.exit(1);
+      process.exitCode = ProcessExitCode.GENERIC_ERROR;
     }
   });
