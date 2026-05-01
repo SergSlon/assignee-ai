@@ -45,30 +45,53 @@ import {
   splitServiceActions,
   RESOURCE_TAG_SCOPED_SNAPSHOT_ACTIONS,
   REQUEST_TAG_SCOPED_SNAPSHOT_ACTIONS,
+  TAG_SCOPED_SECRETS_ACTIONS,
 } from "./action-collector.js";
 
 /**
  * IAM actions that the operator needs for role lifecycle management
  * (creation, trust/permission policy attachment, PassRole to AWS
- * services). These four actions form the classic priv-esc chain when
- * granted with Resource "*" — the operator could create a role with
- * `AdministratorAccess` and assume it.
+ * services, and teardown). These actions form the classic priv-esc
+ * chain when granted with Resource "*" — the operator could create a
+ * role with `AdministratorAccess` and assume it, or strip policies
+ * from any role in the account.
  *
- * Story 50-5 B-3: emitted in their own statement scoped to the
- * `role/assignee-*` name prefix under the caller's partition + account
- * with an `iam:PassedToService` condition restricting PassRole to the
- * small set of AWS services Assignee actually hands roles to.
+ * Story 50-5 B-3: original 4 actions (Create/Pass/Attach/Put) emitted
+ * in their own statement scoped to `role/assignee-*` with an
+ * `iam:PassedToService` condition restricting PassRole to the services
+ * Assignee actually hands roles to.
  *
- * The `action-collector` is taught to skip these four actions from
- * the unscoped service sweep so the scoped statement is the sole
- * grant path — IAM union semantics would otherwise let the unscoped
- * allow win and defeat the scoping.
+ * W13-S2 (M-α-16): 3 additional destructive actions (Delete/Detach/
+ * DeletePolicy) added. These must NOT carry the `iam:PassedToService`
+ * condition — AWS does not support PassedToService on delete/detach
+ * operations and the policy would be rejected. They are emitted in a
+ * separate `IamRoleDestructiveAssigneeScoped` statement with only the
+ * `role/assignee-*` resource scope.
+ *
+ * The `action-collector` is taught to skip ALL seven actions from the
+ * unscoped service sweep so the scoped statements are the sole grant
+ * paths.
  */
 export const IAM_ROLE_MANAGEMENT_ACTIONS = new Set<string>([
   "iam:CreateRole",
   "iam:PassRole",
   "iam:AttachRolePolicy",
   "iam:PutRolePolicy",
+]);
+
+/**
+ * Destructive IAM role-lifecycle actions that are scoped to
+ * `role/assignee-*` but do NOT use the `iam:PassedToService`
+ * condition (which is only valid for PassRole, not for
+ * delete/detach operations).
+ *
+ * W13-S2 (M-α-16): These were previously landing in
+ * `ServiceSpecificActionsA/B` with `Resource: "*"`.
+ */
+export const IAM_ROLE_DESTRUCTIVE_ACTIONS = new Set<string>([
+  "iam:DeleteRole",
+  "iam:DetachRolePolicy",
+  "iam:DeleteRolePolicy",
 ]);
 
 /**
@@ -206,6 +229,13 @@ export function operatorPolicy(
         // evaluated at policy-evaluation time). `iam:PassedToService`
         // restricts PassRole to the services Assignee actually
         // provisions roles for.
+        //
+        // NOTE: only the 4 create/pass/attach/put actions land here —
+        // the PassedToService Condition is ONLY valid for PassRole and
+        // the full group of non-destructive role management actions.
+        // AWS rejects a policy statement that applies PassedToService
+        // to Delete/Detach operations. Those 3 actions live in the
+        // sibling IamRoleDestructiveAssigneeScoped statement below.
         Sid: "IamRoleManagementAssigneeScoped",
         Effect: IamEffect.ALLOW,
         Action: [...IAM_ROLE_MANAGEMENT_ACTIONS].sort(),
@@ -214,6 +244,42 @@ export function operatorPolicy(
         Condition: {
           StringEquals: {
             "iam:PassedToService": [...ASSIGNEE_PASS_ROLE_SERVICES],
+          },
+        },
+      },
+      {
+        // W13-S2 (M-α-16): Destructive IAM role-lifecycle actions
+        // scoped to `role/assignee-*`. These were previously landing
+        // in ServiceSpecificActionsA/B with Resource "*" — a leaked
+        // operator credential could delete or strip policies from ANY
+        // IAM role in the account.
+        //
+        // Intentionally no iam:PassedToService Condition here — that
+        // condition is only valid for iam:PassRole (a "passing to
+        // service" context). AWS rejects policies that apply it to
+        // DeleteRole/DetachRolePolicy/DeleteRolePolicy.
+        Sid: "IamRoleDestructiveAssigneeScoped",
+        Effect: IamEffect.ALLOW,
+        Action: [...IAM_ROLE_DESTRUCTIVE_ACTIONS].sort(),
+        Resource:
+          "arn:${aws:PartitionId}:iam::${aws:AccountId}:role/assignee-*",
+      },
+      {
+        // W13-S2 (M-α-17): secretsmanager:GetSecretValue was
+        // previously in ServiceSpecificActionsA/B with Resource "*"
+        // — a leaked operator credential could read ANY secret in the
+        // account. Now scoped to secrets tagged managed-by=assignee-ai
+        // via aws:ResourceTag (evaluated at read-time against the
+        // secret's existing tags — NOT aws:RequestTag, which applies
+        // to creates and would always evaluate against an untagged
+        // resource at read time).
+        Sid: "SecretsManagerGetValueTagScoped",
+        Effect: IamEffect.ALLOW,
+        Action: [...TAG_SCOPED_SECRETS_ACTIONS].sort(),
+        Resource: "*",
+        Condition: {
+          StringEquals: {
+            "aws:ResourceTag/managed-by": "assignee-ai",
           },
         },
       },

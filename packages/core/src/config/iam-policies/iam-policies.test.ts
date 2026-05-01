@@ -322,6 +322,12 @@ describe("IAM Policy Generators", () => {
     // caller's partition + account, with an iam:PassedToService
     // condition restricting PassRole to the services Assignee actually
     // provisions for.
+    //
+    // W13-S2 (M-α-16): the 3 destructive actions (DeleteRole /
+    // DetachRolePolicy / DeleteRolePolicy) are emitted in a sibling
+    // IamRoleDestructiveAssigneeScoped statement — also scoped to
+    // `role/assignee-*` but WITHOUT the iam:PassedToService Condition
+    // (AWS does not support that condition on delete/detach operations).
     describe("IamRoleManagementAssigneeScoped statement (Story 50-5 B-3)", () => {
       const PRIVESC_ACTIONS = [
         "iam:CreateRole",
@@ -367,7 +373,21 @@ describe("IAM Policy Generators", () => {
             true,
           );
         }
+        // Exactly 4 actions — destructive ops live in the sibling
+        // IamRoleDestructiveAssigneeScoped statement (W13-S2).
         expect(actions.size).toBe(PRIVESC_ACTIONS.length);
+        // Destructive actions must NOT be in this statement — they
+        // cannot carry the iam:PassedToService Condition.
+        for (const destructive of [
+          "iam:DeleteRole",
+          "iam:DetachRolePolicy",
+          "iam:DeleteRolePolicy",
+        ]) {
+          expect(
+            actions.has(destructive),
+            `${destructive} must NOT be in IamRoleManagementAssigneeScoped`,
+          ).toBe(false);
+        }
       });
 
       it("restricts iam:PassedToService to the services assignee provisions for", () => {
@@ -408,6 +428,140 @@ describe("IAM Policy Generators", () => {
           for (const statement of doc.Statement) {
             for (const action of statement.Action) {
               expect(PRIVESC_ACTIONS.includes(action)).toBe(false);
+            }
+          }
+        }
+      });
+    });
+
+    // W13-S2 (M-α-16): destructive IAM role-lifecycle actions were
+    // previously landing in ServiceSpecificActionsA/B with Resource "*".
+    // They are now in a dedicated scoped statement WITHOUT the
+    // iam:PassedToService Condition (which AWS only supports for PassRole).
+    describe("IamRoleDestructiveAssigneeScoped statement (W13-S2 M-α-16)", () => {
+      const DESTRUCTIVE_ACTIONS = [
+        "iam:DeleteRole",
+        "iam:DetachRolePolicy",
+        "iam:DeleteRolePolicy",
+      ];
+
+      it("exists as a dedicated statement in the core operator policy", () => {
+        const policy = operatorPolicy();
+        const stmt = policy.Statement.find(
+          (s) => s.Sid === "IamRoleDestructiveAssigneeScoped",
+        );
+        expect(stmt).toBeDefined();
+        expect(stmt!.Effect).toBe("Allow");
+      });
+
+      it("scopes Resource to assignee-* roles (not Resource: *)", () => {
+        const policy = operatorPolicy();
+        const stmt = policy.Statement.find(
+          (s) => s.Sid === "IamRoleDestructiveAssigneeScoped",
+        )!;
+        expect(stmt.Resource).toBe(
+          "arn:${aws:PartitionId}:iam::${aws:AccountId}:role/assignee-*",
+        );
+        expect(stmt.Resource).not.toBe("*");
+        expect(stmt.Resource).not.toContain("arn:aws:iam");
+      });
+
+      it("covers all three destructive IAM actions", () => {
+        const policy = operatorPolicy();
+        const stmt = policy.Statement.find(
+          (s) => s.Sid === "IamRoleDestructiveAssigneeScoped",
+        )!;
+        const actions = new Set(stmt.Action);
+        for (const a of DESTRUCTIVE_ACTIONS) {
+          expect(
+            actions.has(a),
+            `${a} must be in IamRoleDestructiveAssigneeScoped`,
+          ).toBe(true);
+        }
+        expect(actions.size).toBe(DESTRUCTIVE_ACTIONS.length);
+      });
+
+      it("does NOT carry iam:PassedToService Condition (invalid for delete/detach)", () => {
+        // AWS rejects a policy statement that applies iam:PassedToService
+        // to delete/detach operations. The Condition must be absent here.
+        const policy = operatorPolicy();
+        const stmt = policy.Statement.find(
+          (s) => s.Sid === "IamRoleDestructiveAssigneeScoped",
+        )!;
+        const passedTo =
+          stmt.Condition?.["StringEquals"]?.["iam:PassedToService"];
+        expect(passedTo).toBeUndefined();
+      });
+
+      it("does NOT appear in operatorServicesA or operatorServicesB (no Resource:* bypass)", () => {
+        // W13-S2: all three destructive actions must be absent from the
+        // unscoped service sweep — IAM union semantics would otherwise
+        // let the Resource:* allow win and defeat the scoping.
+        for (const policyFn of [
+          operatorServicesAPolicy,
+          operatorServicesBPolicy,
+        ]) {
+          const doc = policyFn();
+          for (const statement of doc.Statement) {
+            for (const action of statement.Action) {
+              expect(
+                DESTRUCTIVE_ACTIONS.includes(action),
+                `${action} must NOT appear in unscoped service sweep`,
+              ).toBe(false);
+            }
+          }
+        }
+      });
+    });
+
+    // W13-S2 (M-α-17): secretsmanager:GetSecretValue was previously in
+    // ServiceSpecificActionsA/B with Resource "*" — a leaked operator
+    // credential could read any secret in the account. Now scoped to
+    // secrets tagged managed-by=assignee-ai.
+    describe("SecretsManagerGetValueTagScoped statement (W13-S2 M-α-17)", () => {
+      it("exists as a dedicated statement in the core operator policy", () => {
+        const policy = operatorPolicy();
+        const stmt = policy.Statement.find(
+          (s) => s.Sid === "SecretsManagerGetValueTagScoped",
+        );
+        expect(stmt).toBeDefined();
+        expect(stmt!.Effect).toBe("Allow");
+      });
+
+      it("contains secretsmanager:GetSecretValue as its action", () => {
+        const policy = operatorPolicy();
+        const stmt = policy.Statement.find(
+          (s) => s.Sid === "SecretsManagerGetValueTagScoped",
+        )!;
+        expect(stmt.Action).toContain("secretsmanager:GetSecretValue");
+      });
+
+      it("uses Resource: * with aws:ResourceTag/managed-by=assignee-ai condition", () => {
+        // aws:ResourceTag is evaluated at read-time against the secret's
+        // existing tags (NOT aws:RequestTag which applies to creates and
+        // would always evaluate against an untagged resource on reads).
+        const policy = operatorPolicy();
+        const stmt = policy.Statement.find(
+          (s) => s.Sid === "SecretsManagerGetValueTagScoped",
+        )!;
+        expect(stmt.Resource).toBe("*");
+        expect(
+          stmt.Condition?.["StringEquals"]?.["aws:ResourceTag/managed-by"],
+        ).toBe("assignee-ai");
+      });
+
+      it("does NOT appear in operatorServicesA or operatorServicesB (no Resource:* bypass)", () => {
+        // W13-S2: secretsmanager:GetSecretValue must be absent from the
+        // unscoped service sweep — IAM union semantics would otherwise
+        // allow reading any secret in the account regardless of tags.
+        for (const policyFn of [
+          operatorServicesAPolicy,
+          operatorServicesBPolicy,
+        ]) {
+          const doc = policyFn();
+          for (const statement of doc.Statement) {
+            for (const action of statement.Action) {
+              expect(action).not.toBe("secretsmanager:GetSecretValue");
             }
           }
         }

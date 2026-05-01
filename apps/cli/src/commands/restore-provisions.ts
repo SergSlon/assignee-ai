@@ -32,6 +32,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { randomBytes } from "node:crypto";
 import { Command } from "commander";
+import { ProcessExitCode } from "../constants/errors.js";
 
 // ── Constants ─────────────────────────────────────────────────────────
 
@@ -244,7 +245,7 @@ export const restoreProvisionsCommand = new Command("restore-provisions")
       } else {
         process.stderr.write(`[restore-provisions] ${result.message}\n`);
       }
-      process.exit(1);
+      process.exitCode = ProcessExitCode.GENERIC_ERROR;
       return;
     }
 

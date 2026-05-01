@@ -42,12 +42,43 @@ export const TAG_SCOPED_RDS_SNAPSHOT_ACTIONS = new Set([
  * Story 50-5 B-3: leaving these in operatorServicesA/B would allow
  * IAM union semantics to bypass the `role/assignee-*` scoping. See
  * operator.ts `IAM_ROLE_MANAGEMENT_ACTIONS` — kept in lock-step.
+ *
+ * W13-S2 (M-α-16): `iam:DeleteRole`, `iam:DetachRolePolicy`,
+ * `iam:DeleteRolePolicy` added — destructive actions that were
+ * previously landing in `ServiceSpecificActionsA/B` with
+ * `Resource: "*"`. A leaked operator credential could delete or
+ * strip policies from ANY IAM role in the account. Now scoped to
+ * `role/assignee-*` in the `IamRoleManagementAssigneeScoped`
+ * statement (without the `iam:PassedToService` condition, which only
+ * applies to PassRole, not to delete/detach operations).
  */
 export const PRIV_ESC_SCOPED_IAM_ACTIONS = new Set<string>([
   "iam:CreateRole",
   "iam:PassRole",
   "iam:AttachRolePolicy",
   "iam:PutRolePolicy",
+  "iam:DeleteRole",
+  "iam:DetachRolePolicy",
+  "iam:DeleteRolePolicy",
+]);
+
+/**
+ * SecretsManager actions that must be excluded from the unscoped
+ * service sweep and emitted instead via a tag-scoped statement in
+ * operatorPolicy(). Follows the same pattern as
+ * TAG_SCOPED_RDS_SNAPSHOT_ACTIONS.
+ *
+ * W13-S2 (M-α-17): `secretsmanager:GetSecretValue` was landing in
+ * `ServiceSpecificActionsA/B` with `Resource: "*"` — a leaked
+ * operator credential could read ANY secret in the account. Now
+ * scoped to secrets tagged `managed-by=assignee-ai` via the
+ * `SecretsManagerGetValueTagScoped` statement using
+ * `aws:ResourceTag/managed-by` (evaluated at read-time against the
+ * secret's existing tags — NOT `aws:RequestTag` which applies to
+ * creates).
+ */
+export const TAG_SCOPED_SECRETS_ACTIONS = new Set<string>([
+  "secretsmanager:GetSecretValue",
 ]);
 
 export function collectServiceActions(): {
@@ -77,6 +108,15 @@ export function collectServiceActions(): {
       // `role/assignee-*` resource scope + iam:PassedToService
       // allowlist. Leaving them in the unscoped sweep would let
       // IAM union semantics bypass the scope.
+      // W13-S2 (M-α-16): also covers DeleteRole/DetachRolePolicy/
+      // DeleteRolePolicy — emitted in the same scoped statement
+      // (without PassedToService Condition, which is PassRole-only).
+      continue;
+    } else if (TAG_SCOPED_SECRETS_ACTIONS.has(action)) {
+      // W13-S2 (M-α-17): emitted separately in operatorPolicy()
+      // via SecretsManagerGetValueTagScoped with
+      // aws:ResourceTag/managed-by = assignee-ai. Leaving it in
+      // the unscoped sweep would allow reading any secret.
       continue;
     } else {
       serviceActionsRaw.push(action);
