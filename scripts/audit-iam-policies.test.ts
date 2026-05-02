@@ -445,6 +445,175 @@ describe("Regression: actual operator policy scoping (W13-S4)", () => {
   });
 });
 
+// ── (j) buildMustBeScopedSet — SEC-011 destructive service actions ────────────
+
+describe("buildMustBeScopedSet — SEC-011 destructive service actions", () => {
+  it("contains lambda:DeleteFunction (SEC-011)", () => {
+    expect(buildMustBeScopedSet().has("lambda:DeleteFunction")).toBe(true);
+  });
+
+  it("contains ec2:TerminateInstances (SEC-011)", () => {
+    expect(buildMustBeScopedSet().has("ec2:TerminateInstances")).toBe(true);
+  });
+
+  it("contains ecs:DeleteCluster (SEC-011)", () => {
+    expect(buildMustBeScopedSet().has("ecs:DeleteCluster")).toBe(true);
+  });
+
+  it("contains sqs:DeleteQueue (SEC-011)", () => {
+    expect(buildMustBeScopedSet().has("sqs:DeleteQueue")).toBe(true);
+  });
+
+  it("contains sns:DeleteTopic (SEC-011)", () => {
+    expect(buildMustBeScopedSet().has("sns:DeleteTopic")).toBe(true);
+  });
+
+  it("contains rds:DeleteDBInstance (SEC-011)", () => {
+    expect(buildMustBeScopedSet().has("rds:DeleteDBInstance")).toBe(true);
+  });
+
+  it("contains s3:DeleteBucket (SEC-011)", () => {
+    expect(buildMustBeScopedSet().has("s3:DeleteBucket")).toBe(true);
+  });
+
+  it("contains s3:DeleteBucketPolicy (SEC-011)", () => {
+    expect(buildMustBeScopedSet().has("s3:DeleteBucketPolicy")).toBe(true);
+  });
+});
+
+// ── (k) Regression: SEC-009/010/011 contract assertions ──────────────────────
+
+describe("Regression: SEC-009 — ResourceTagging split (tag:GetResources vs tag:TagResources)", () => {
+  it("ResourceTaggingRead statement does NOT have aws:RequestTag/managed-by condition", () => {
+    // tag:GetResources is a read — aws:RequestTag (the tags SET in the
+    // request) is absent on reads and would silently deny all GetResources
+    // calls if present.
+    const op = operatorPolicy();
+    const stmt = op.Statement.find((s) => s.Sid === "ResourceTaggingRead") as
+      | PolicyStatement
+      | undefined;
+    expect(stmt).toBeDefined();
+    const requestTag = (
+      stmt!.Condition?.["StringEquals"] as Record<string, unknown> | undefined
+    )?.["aws:RequestTag/managed-by"];
+    expect(requestTag).toBeUndefined();
+  });
+
+  it("ResourceTaggingRead statement covers only tag:GetResources (not TagResources)", () => {
+    const op = operatorPolicy();
+    const stmt = op.Statement.find((s) => s.Sid === "ResourceTaggingRead") as
+      | PolicyStatement
+      | undefined;
+    const actions = Array.isArray(stmt!.Action) ? stmt!.Action : [stmt!.Action];
+    expect(actions).toContain("tag:GetResources");
+    expect(actions).not.toContain("tag:TagResources");
+  });
+
+  it("ResourceTaggingWrite statement DOES have aws:RequestTag/managed-by=assignee-ai condition", () => {
+    const op = operatorPolicy();
+    const stmt = op.Statement.find((s) => s.Sid === "ResourceTaggingWrite") as
+      | PolicyStatement
+      | undefined;
+    expect(stmt).toBeDefined();
+    const requestTag = (
+      stmt!.Condition?.["StringEquals"] as Record<string, unknown> | undefined
+    )?.["aws:RequestTag/managed-by"];
+    expect(requestTag).toBe("assignee-ai");
+  });
+
+  it("ResourceTaggingWrite statement covers only tag:TagResources (not GetResources)", () => {
+    const op = operatorPolicy();
+    const stmt = op.Statement.find((s) => s.Sid === "ResourceTaggingWrite") as
+      | PolicyStatement
+      | undefined;
+    const actions = Array.isArray(stmt!.Action) ? stmt!.Action : [stmt!.Action];
+    expect(actions).toContain("tag:TagResources");
+    expect(actions).not.toContain("tag:GetResources");
+  });
+
+  it("old unified ResourceTagging statement no longer exists", () => {
+    const op = operatorPolicy();
+    const old = op.Statement.find((s) => s.Sid === "ResourceTagging");
+    expect(old).toBeUndefined();
+  });
+});
+
+describe("Regression: SEC-010 — IamRoleDestructiveAssigneeScoped has ResourceTag condition", () => {
+  it("IamRoleDestructiveAssigneeScoped carries aws:ResourceTag/managed-by=assignee-ai condition", () => {
+    // Without this condition, any role named assignee-* (even one not
+    // created by Assignee) could be deleted by a leaked operator credential.
+    const op = operatorPolicy();
+    const stmt = op.Statement.find(
+      (s) => s.Sid === "IamRoleDestructiveAssigneeScoped",
+    ) as PolicyStatement | undefined;
+    expect(stmt).toBeDefined();
+    const resourceTag = (
+      stmt!.Condition?.["StringEquals"] as Record<string, unknown> | undefined
+    )?.["aws:ResourceTag/managed-by"];
+    expect(resourceTag).toBe("assignee-ai");
+  });
+});
+
+describe("Regression: SEC-011 — ServiceDestructiveResourceTagScoped replaces unscoped grants", () => {
+  const SEC_011_ACTIONS = [
+    "lambda:DeleteFunction",
+    "ec2:TerminateInstances",
+    "ecs:DeleteCluster",
+    "sqs:DeleteQueue",
+    "sns:DeleteTopic",
+    "rds:DeleteDBInstance",
+    "s3:DeleteBucket",
+    "s3:DeleteBucketPolicy",
+  ];
+
+  it("ServiceDestructiveResourceTagScoped exists with aws:ResourceTag/managed-by=assignee-ai", () => {
+    const op = operatorPolicy();
+    const stmt = op.Statement.find(
+      (s) => s.Sid === "ServiceDestructiveResourceTagScoped",
+    ) as PolicyStatement | undefined;
+    expect(stmt).toBeDefined();
+    expect(stmt!.Effect).toBe("Allow");
+    const resourceTag = (
+      stmt!.Condition?.["StringEquals"] as Record<string, unknown> | undefined
+    )?.["aws:ResourceTag/managed-by"];
+    expect(resourceTag).toBe("assignee-ai");
+  });
+
+  it("SEC-011 actions are absent from the combined operator policy scoping violations", () => {
+    // The regression check: none of the SEC-011 actions should appear in
+    // an unscoped statement (Resource:"*" with no Condition).
+    const op = operatorPolicy();
+    const opA = operatorServicesAPolicy();
+    const opB = operatorServicesBPolicy();
+    const allStatements = [
+      ...op.Statement,
+      ...opA.Statement,
+      ...opB.Statement,
+    ] as PolicyStatement[];
+    const mustBeScoped = new Set(SEC_011_ACTIONS);
+    const violations = findScopingViolations(allStatements, mustBeScoped);
+    expect(violations, violations.join("\n")).toHaveLength(0);
+  });
+
+  it("SEC-011 destructive actions are absent from ServiceSpecificActionsA and ServiceSpecificActionsB", () => {
+    const destructiveSet = new Set(SEC_011_ACTIONS);
+    for (const policyFn of [operatorServicesAPolicy, operatorServicesBPolicy]) {
+      const doc = policyFn();
+      for (const stmt of doc.Statement) {
+        const actions = Array.isArray(stmt.Action)
+          ? stmt.Action
+          : [stmt.Action];
+        for (const action of actions) {
+          expect(
+            destructiveSet.has(action),
+            `${action} must NOT appear in unscoped service sweep (${stmt.Sid})`,
+          ).toBe(false);
+        }
+      }
+    }
+  });
+});
+
 // ── (i) collectActions ────────────────────────────────────────────────────────
 
 describe("collectActions", () => {

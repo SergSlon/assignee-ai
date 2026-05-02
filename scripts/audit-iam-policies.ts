@@ -39,6 +39,7 @@ import {
   TAG_SCOPED_SECRETS_ACTIONS,
   TAG_SCOPED_RDS_SNAPSHOT_ACTIONS,
   REQUEST_TAG_SCOPED_SNAPSHOT_ACTIONS,
+  DESTRUCTIVE_SERVICE_ACTIONS,
 } from "../packages/core/dist/config/iam-policies/action-collector.js";
 import {
   IAM_ROLE_MANAGEMENT_ACTIONS,
@@ -132,6 +133,7 @@ export function buildMustBeScopedSet(): Set<string> {
     ...TAG_SCOPED_SECRETS_ACTIONS, // secretsmanager:GetSecretValue
     ...TAG_SCOPED_RDS_SNAPSHOT_ACTIONS, // rds:DeleteDBSnapshot/CopyDBSnapshot
     ...REQUEST_TAG_SCOPED_SNAPSHOT_ACTIONS, // rds:CreateDBSnapshot
+    ...DESTRUCTIVE_SERVICE_ACTIONS, // SEC-011: lambda:DeleteFunction/ec2:TerminateInstances/etc.
   ]);
 }
 

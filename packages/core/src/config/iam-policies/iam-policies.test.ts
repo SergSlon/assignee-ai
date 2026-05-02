@@ -227,18 +227,35 @@ describe("IAM Policy Generators", () => {
       expect(xrayStatement.Action).toContain("xray:PutTelemetryRecords");
     });
 
-    it("includes resource tagging actions", () => {
-      // Tier C: strengthened
+    it("includes resource tagging actions (split into Read + Write after SEC-009)", () => {
+      // SEC-009 (full-audit-2026-04-29): tag:GetResources and
+      // tag:TagResources were previously in a single ResourceTagging
+      // statement. aws:RequestTag applies only to writes — sharing it
+      // with a read operation silently over-conditions the read.
+      // They are now in separate ResourceTaggingRead / ResourceTaggingWrite
+      // statements. Both must be present; neither should carry the
+      // other's action.
       const policy = operatorPolicy();
-      const tagStatement = policy.Statement.find(
-        (s) => s.Sid === "ResourceTagging",
+      const readStmt = policy.Statement.find(
+        (s) => s.Sid === "ResourceTaggingRead",
       )!;
-      expect(tagStatement).toMatchObject({
-        Sid: "ResourceTagging",
+      const writeStmt = policy.Statement.find(
+        (s) => s.Sid === "ResourceTaggingWrite",
+      )!;
+      expect(readStmt).toMatchObject({
+        Sid: "ResourceTaggingRead",
         Effect: "Allow",
       });
-      expect(tagStatement.Action).toContain("tag:TagResources");
-      expect(tagStatement.Action).toContain("tag:GetResources");
+      expect(writeStmt).toMatchObject({
+        Sid: "ResourceTaggingWrite",
+        Effect: "Allow",
+      });
+      expect(readStmt.Action).toContain("tag:GetResources");
+      expect(writeStmt.Action).toContain("tag:TagResources");
+      // No old merged statement
+      expect(
+        policy.Statement.find((s) => s.Sid === "ResourceTagging"),
+      ).toBeUndefined();
     });
 
     // Security MEDIUM (security-expert #2) + epic47-final blind S2.
@@ -493,6 +510,19 @@ describe("IAM Policy Generators", () => {
         expect(passedTo).toBeUndefined();
       });
 
+      // SEC-010 (full-audit-2026-04-29): add aws:ResourceTag/managed-by
+      // for cross-tenant safety — without it any `role/assignee-*` in
+      // the account could be deleted even if Assignee did not create it.
+      it("carries aws:ResourceTag/managed-by=assignee-ai condition (SEC-010)", () => {
+        const policy = operatorPolicy();
+        const stmt = policy.Statement.find(
+          (s) => s.Sid === "IamRoleDestructiveAssigneeScoped",
+        )!;
+        expect(
+          stmt.Condition?.["StringEquals"]?.["aws:ResourceTag/managed-by"],
+        ).toBe("assignee-ai");
+      });
+
       it("does NOT appear in operatorServicesA or operatorServicesB (no Resource:* bypass)", () => {
         // W13-S2: all three destructive actions must be absent from the
         // unscoped service sweep — IAM union semantics would otherwise
@@ -568,15 +598,25 @@ describe("IAM Policy Generators", () => {
       });
     });
 
-    // Story 50-5 H-1: tag:TagResources previously granted Resource "*"
-    // unconditionally — an operator credential leak could strip the
-    // managed-by tag off any resource in the account (breaking the
-    // "destroy TOCTOU tag missing" refusal) or overwrite managed-by
-    // to hijack another principal's tag-scoped IAM grants.
-    describe("ResourceTagging statement (Story 50-5 H-1)", () => {
-      it("carries ForAllValues:StringEquals aws:TagKeys allowlist", () => {
+    // Story 50-5 H-1 + SEC-009 (full-audit-2026-04-29):
+    //   - tag:TagResources previously granted Resource "*" unconditionally.
+    //   - tag:GetResources shared the aws:RequestTag condition with TagResources,
+    //     but aws:RequestTag applies only to write operations. The read was
+    //     either silently denied (condition evaluates to missing-key → deny)
+    //     or left with an irrelevant condition.
+    //   Fix: split into ResourceTaggingRead (GetResources, TagKeys-only) and
+    //   ResourceTaggingWrite (TagResources, TagKeys + RequestTag).
+    describe("ResourceTaggingRead statement (SEC-009 split — GetResources)", () => {
+      it("exists and carries only ForAllValues:StringEquals aws:TagKeys condition (no RequestTag)", () => {
+        // aws:RequestTag must NOT be present on the read statement —
+        // it evaluates tags being SET in the request (absent for reads)
+        // and would silently over-condition or deny all GetResources calls.
         const policy = operatorPolicy();
-        const stmt = policy.Statement.find((s) => s.Sid === "ResourceTagging")!;
+        const stmt = policy.Statement.find(
+          (s) => s.Sid === "ResourceTaggingRead",
+        )!;
+        expect(stmt).toBeDefined();
+        expect(stmt.Effect).toBe("Allow");
         const tagKeysCondition =
           stmt.Condition?.["ForAllValues:StringEquals"]?.["aws:TagKeys"];
         expect(tagKeysCondition).toBeInstanceOf(Array);
@@ -585,24 +625,129 @@ describe("IAM Policy Generators", () => {
         expect(keys.has("assignee-run-id")).toBe(true);
         expect(keys.has("assignee-environment")).toBe(true);
         expect(keys.has("Name")).toBe(true);
-        // No wildcard — an operator that tries to mutate an unknown
-        // key fails authorization.
         expect(keys.has("*")).toBe(false);
+        // SEC-009: the read statement must NOT carry aws:RequestTag
+        const requestTag =
+          stmt.Condition?.["StringEquals"]?.["aws:RequestTag/managed-by"];
+        expect(requestTag).toBeUndefined();
       });
 
-      it("forces aws:RequestTag/managed-by to equal assignee-ai", () => {
+      it("covers tag:GetResources only (not TagResources)", () => {
         const policy = operatorPolicy();
-        const stmt = policy.Statement.find((s) => s.Sid === "ResourceTagging")!;
+        const stmt = policy.Statement.find(
+          (s) => s.Sid === "ResourceTaggingRead",
+        )!;
+        expect(stmt.Action).toContain("tag:GetResources");
+        expect(stmt.Action).not.toContain("tag:TagResources");
+      });
+    });
+
+    describe("ResourceTaggingWrite statement (SEC-009 split — TagResources)", () => {
+      it("carries both ForAllValues:StringEquals aws:TagKeys AND aws:RequestTag/managed-by=assignee-ai", () => {
+        // aws:RequestTag is valid for TagResources (it evaluates the tags
+        // being SET in the call — exactly what we want to enforce on writes).
+        const policy = operatorPolicy();
+        const stmt = policy.Statement.find(
+          (s) => s.Sid === "ResourceTaggingWrite",
+        )!;
+        expect(stmt).toBeDefined();
+        expect(stmt.Effect).toBe("Allow");
+        const tagKeysCondition =
+          stmt.Condition?.["ForAllValues:StringEquals"]?.["aws:TagKeys"];
+        expect(tagKeysCondition).toBeInstanceOf(Array);
+        const keys = new Set(tagKeysCondition as string[]);
+        expect(keys.has("managed-by")).toBe(true);
+        expect(keys.has("assignee-run-id")).toBe(true);
+        expect(keys.has("assignee-environment")).toBe(true);
+        expect(keys.has("Name")).toBe(true);
+        expect(keys.has("*")).toBe(false);
         expect(
           stmt.Condition?.["StringEquals"]?.["aws:RequestTag/managed-by"],
         ).toBe("assignee-ai");
       });
 
-      it("still covers tag:TagResources + tag:GetResources", () => {
+      it("covers tag:TagResources only (not GetResources)", () => {
         const policy = operatorPolicy();
-        const stmt = policy.Statement.find((s) => s.Sid === "ResourceTagging")!;
+        const stmt = policy.Statement.find(
+          (s) => s.Sid === "ResourceTaggingWrite",
+        )!;
         expect(stmt.Action).toContain("tag:TagResources");
-        expect(stmt.Action).toContain("tag:GetResources");
+        expect(stmt.Action).not.toContain("tag:GetResources");
+      });
+    });
+
+    // SEC-011 (full-audit-2026-04-29): destructive service actions
+    // (lambda:DeleteFunction, ec2:TerminateInstances, etc.) were in
+    // ServiceSpecificActionsA/B with Resource:"*" and no Condition.
+    // They are now in ServiceDestructiveResourceTagScoped, scoped to
+    // aws:ResourceTag/managed-by=assignee-ai.
+    describe("ServiceDestructiveResourceTagScoped statement (SEC-011)", () => {
+      const DESTRUCTIVE = [
+        "lambda:DeleteFunction",
+        "ec2:TerminateInstances",
+        "ecs:DeleteCluster",
+        "sqs:DeleteQueue",
+        "sns:DeleteTopic",
+        "rds:DeleteDBInstance",
+        "s3:DeleteBucket",
+        "s3:DeleteBucketPolicy",
+      ];
+
+      it("exists as a dedicated statement in the core operator policy", () => {
+        const policy = operatorPolicy();
+        const stmt = policy.Statement.find(
+          (s) => s.Sid === "ServiceDestructiveResourceTagScoped",
+        );
+        expect(stmt).toBeDefined();
+        expect(stmt!.Effect).toBe("Allow");
+      });
+
+      it("carries aws:ResourceTag/managed-by=assignee-ai condition", () => {
+        // aws:ResourceTag is correct for destructive operations — it
+        // evaluates the target resource's existing tags at auth time.
+        const policy = operatorPolicy();
+        const stmt = policy.Statement.find(
+          (s) => s.Sid === "ServiceDestructiveResourceTagScoped",
+        )!;
+        expect(stmt.Resource).toBe("*");
+        expect(
+          stmt.Condition?.["StringEquals"]?.["aws:ResourceTag/managed-by"],
+        ).toBe("assignee-ai");
+      });
+
+      it("covers all SEC-011 destructive actions", () => {
+        const policy = operatorPolicy();
+        const stmt = policy.Statement.find(
+          (s) => s.Sid === "ServiceDestructiveResourceTagScoped",
+        )!;
+        const actions = new Set(stmt.Action);
+        for (const a of DESTRUCTIVE) {
+          expect(
+            actions.has(a),
+            `${a} must be in ServiceDestructiveResourceTagScoped`,
+          ).toBe(true);
+        }
+      });
+
+      it("all SEC-011 destructive actions are absent from ServiceSpecificActionsA and ServiceSpecificActionsB", () => {
+        const destructiveSet = new Set(DESTRUCTIVE);
+        for (const policyFn of [
+          operatorServicesAPolicy,
+          operatorServicesBPolicy,
+        ]) {
+          const doc = policyFn();
+          for (const statement of doc.Statement) {
+            const stmtActions = Array.isArray(statement.Action)
+              ? statement.Action
+              : [statement.Action];
+            for (const action of stmtActions) {
+              expect(
+                destructiveSet.has(action),
+                `${action} must NOT appear in unscoped service sweep (${statement.Sid})`,
+              ).toBe(false);
+            }
+          }
+        }
       });
     });
 

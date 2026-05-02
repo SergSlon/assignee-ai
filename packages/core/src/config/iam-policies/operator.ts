@@ -46,6 +46,7 @@ import {
   RESOURCE_TAG_SCOPED_SNAPSHOT_ACTIONS,
   REQUEST_TAG_SCOPED_SNAPSHOT_ACTIONS,
   TAG_SCOPED_SECRETS_ACTIONS,
+  DESTRUCTIVE_SERVICE_ACTIONS,
 } from "./action-collector.js";
 
 /**
@@ -198,19 +199,48 @@ export function operatorPolicy(
         Resource: "*",
       },
       {
-        // Story 50-5 H-1: previously unscoped tag:TagResources /
-        // tag:GetResources could re-tag any resource in the account
-        // — including stripping managed-by on a resource owned by a
-        // different principal. Now scoped to:
-        //   (a) only mutate the assignee-owned tag key set, and
-        //   (b) always stamp managed-by=assignee-ai on writes.
+        // SEC-009 (full-audit-2026-04-29): tag:GetResources is a READ
+        // operation — aws:RequestTag does not apply to reads (it
+        // evaluates the tags being SET in the request, which is absent
+        // for a list/read call). Applying aws:RequestTag to GetResources
+        // would either silently deny ALL reads (condition evaluates to
+        // missing-key → deny) or be ignored. The correct condition for a
+        // read is aws:TagKeys (limits which tag keys the caller can
+        // filter by) — that's sufficient to prevent an operator from
+        // listing resources via arbitrary tag keys outside the
+        // assignee-owned set.
+        //
         // feedback_partition_aware_arn_matching note: the tag API
-        // operates on ARNs across partitions; the condition uses the
-        // partition-agnostic `aws:RequestTag` / `aws:TagKeys` keys so
-        // no partition literal is needed here.
-        Sid: "ResourceTagging",
+        // operates on ARNs across partitions; aws:TagKeys is
+        // partition-agnostic so no partition literal is needed.
+        Sid: "ResourceTaggingRead",
         Effect: IamEffect.ALLOW,
-        Action: [IamAction.TAG_TAG_RESOURCES, IamAction.TAG_GET_RESOURCES],
+        Action: [IamAction.TAG_GET_RESOURCES],
+        Resource: "*",
+        Condition: {
+          "ForAllValues:StringEquals": {
+            "aws:TagKeys": [...ASSIGNEE_MANAGED_TAG_KEYS],
+          },
+        },
+      },
+      {
+        // Story 50-5 H-1: tag:TagResources previously granted Resource "*"
+        // unconditionally — an operator credential leak could strip the
+        // managed-by tag off any resource in the account (breaking the
+        // "destroy TOCTOU tag missing" refusal) or overwrite managed-by
+        // to hijack another principal's tag-scoped IAM grants.
+        //
+        // SEC-009 (full-audit-2026-04-29): split from ResourceTagging so
+        // the write-only conditions (aws:RequestTag + aws:TagKeys) apply
+        // only to tag:TagResources. aws:RequestTag is valid for writes
+        // (evaluates the tags being SET in this call); the TagKeys
+        // allowlist prevents adding arbitrary key-value pairs.
+        //
+        // feedback_partition_aware_arn_matching: condition keys are
+        // partition-agnostic — no ARN literal needed.
+        Sid: "ResourceTaggingWrite",
+        Effect: IamEffect.ALLOW,
+        Action: [IamAction.TAG_TAG_RESOURCES],
         Resource: "*",
         Condition: {
           "ForAllValues:StringEquals": {
@@ -258,11 +288,27 @@ export function operatorPolicy(
         // condition is only valid for iam:PassRole (a "passing to
         // service" context). AWS rejects policies that apply it to
         // DeleteRole/DetachRolePolicy/DeleteRolePolicy.
+        //
+        // SEC-010 (full-audit-2026-04-29): add aws:ResourceTag/managed-by
+        // = assignee-ai as an additional condition for cross-tenant safety.
+        // Without this, ANY `role/assignee-*` in the account could be
+        // deleted even if it was not created by Assignee (e.g. a
+        // manually-created role whose name starts with "assignee-" but
+        // belongs to a different team). aws:ResourceTag is evaluated at
+        // authorization time against the role's existing tags — the
+        // correct key for destructive operations on existing resources
+        // (NOT aws:RequestTag, which applies to the tags being SET in
+        // the API call and is irrelevant for delete/detach operations).
         Sid: "IamRoleDestructiveAssigneeScoped",
         Effect: IamEffect.ALLOW,
         Action: [...IAM_ROLE_DESTRUCTIVE_ACTIONS].sort(),
         Resource:
           "arn:${aws:PartitionId}:iam::${aws:AccountId}:role/assignee-*",
+        Condition: {
+          StringEquals: {
+            "aws:ResourceTag/managed-by": "assignee-ai",
+          },
+        },
       },
       {
         // W13-S2 (M-α-17): secretsmanager:GetSecretValue was
@@ -310,6 +356,39 @@ export function operatorPolicy(
         Condition: {
           StringEquals: {
             "aws:RequestTag/managed-by": "assignee-ai",
+          },
+        },
+      },
+      {
+        // SEC-011 (full-audit-2026-04-29): destructive service actions
+        // (lambda:DeleteFunction, ec2:TerminateInstances, etc.) were
+        // previously in ServiceSpecificActionsA/B with `Resource: "*"`
+        // and no Condition — a leaked operator credential could delete
+        // or terminate ANY resource of these types in the account,
+        // regardless of whether Assignee provisioned it.
+        //
+        // All actions here are moved out of the unscoped service sweep
+        // (see DESTRUCTIVE_SERVICE_ACTIONS in action-collector.ts) and
+        // granted only when the target resource carries the
+        // `managed-by=assignee-ai` tag.
+        //
+        // aws:ResourceTag is the correct condition key for destructive
+        // operations: it evaluates against the resource's EXISTING tags
+        // at authorization time. aws:RequestTag would evaluate the tags
+        // being SET in the API call — inappropriate here because delete
+        // and terminate operations do not accept tag parameters.
+        //
+        // Resource: "*" is intentional — the ARN format differs across
+        // services (Lambda functions, EC2 instances, ECS clusters, SQS
+        // queues, SNS topics, RDS instances, S3 buckets). The
+        // aws:ResourceTag condition provides the effective scope.
+        Sid: "ServiceDestructiveResourceTagScoped",
+        Effect: IamEffect.ALLOW,
+        Action: [...DESTRUCTIVE_SERVICE_ACTIONS].sort(),
+        Resource: "*",
+        Condition: {
+          StringEquals: {
+            "aws:ResourceTag/managed-by": "assignee-ai",
           },
         },
       },
