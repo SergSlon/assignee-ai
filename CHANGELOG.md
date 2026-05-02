@@ -1001,5 +1001,5 @@ Internal development baseline. Not published to npm.
 
 ---
 
-[Unreleased]: https://github.com/assignee-ai/assignee.ai/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/assignee-ai/assignee.ai/releases/tag/v0.1.0
+[Unreleased]: https://github.com/SergSlon/assignee-ai/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/SergSlon/assignee-ai/releases/tag/v0.1.0

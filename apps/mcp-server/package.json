@@ -22,12 +22,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/assignee-ai/assignee.git",
+    "url": "https://github.com/SergSlon/assignee-ai.git",
     "directory": "apps/mcp-server"
   },
   "homepage": "https://assignee.ai",
   "bugs": {
-    "url": "https://github.com/assignee-ai/assignee/issues"
+    "url": "https://github.com/SergSlon/assignee-ai/issues"
   },
   "keywords": [
     "assignee",

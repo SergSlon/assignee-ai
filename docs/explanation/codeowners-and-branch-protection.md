@@ -94,7 +94,7 @@ To verify via the GitHub API (requires a personal access token with
 `repo` scope):
 
 ```sh
-gh api repos/assignee-ai/assignee/branches/main/protection \
+gh api repos/SergSlon/assignee-ai/branches/main/protection \
   --jq '{required_reviewers: .required_pull_request_reviews.required_approving_review_count, required_checks: [.required_status_checks.contexts[]]}'
 ```
 

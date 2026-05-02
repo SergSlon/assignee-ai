@@ -16,7 +16,7 @@ installation begins.
 
 ```sh
 # 1. Add the Assignee.ai tap
-brew tap assignee-ai/assignee
+brew tap SergSlon/assignee-ai
 
 # 2. Install
 brew install assignee
@@ -55,7 +55,7 @@ VERSION=$(assignee --version | awk '{print $NF}')
 PLATFORM="darwin-arm64"  # or darwin-x64
 
 # 3. Download the signing certificate and signature from the release
-BASE_URL="https://github.com/assignee-ai/assignee/releases/download/v${VERSION}"
+BASE_URL="https://github.com/SergSlon/assignee-ai/releases/download/v${VERSION}"
 TARBALL="assignee-v${VERSION}-${PLATFORM}.tar.gz"
 
 curl -LO "${BASE_URL}/${TARBALL}"
@@ -66,7 +66,7 @@ curl -LO "${BASE_URL}/${TARBALL}.sig"
 cosign verify-blob \
   --certificate "${TARBALL}.pem" \
   --signature "${TARBALL}.sig" \
-  --certificate-identity "https://github.com/assignee-ai/assignee/.github/workflows/release.yml@refs/heads/main" \
+  --certificate-identity "https://github.com/SergSlon/assignee-ai/.github/workflows/release.yml@refs/heads/main" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
   "${TARBALL}"
 ```
@@ -87,13 +87,13 @@ brew upgrade assignee
 
 ```sh
 brew uninstall assignee
-brew untap assignee-ai/assignee  # optional — removes the tap too
+brew untap SergSlon/assignee-ai  # optional — removes the tap too
 ```
 
 ## Private tap / pre-public-release install
 
 The Homebrew tap is **not yet public** — `ASSIGNEE_TAP_PUBLISH=1` must be
-flipped by the acquirer post-go-decision before `brew tap assignee-ai/assignee`
+flipped by the acquirer post-go-decision before `brew tap SergSlon/assignee-ai`
 works for end users (see `docs/how-to/release-process.md`).
 
 Until the tap is public, install from source or use the pre-built tarball:
@@ -145,7 +145,7 @@ Use this for pre-release QA only.
 
 ### `Error: No available formula with the name "assignee"`
 
-The tap is not added yet (or not yet public). Run `brew tap assignee-ai/assignee` first.
+The tap is not added yet (or not yet public). Run `brew tap SergSlon/assignee-ai` first.
 If the tap is not yet public, use the tarball install path above.
 
 ### `SHA256 mismatch`
@@ -155,7 +155,7 @@ This should never happen with a clean install. If it does:
 1. Run `brew update` to refresh the tap formula.
 2. If the error persists, the CDN may be serving a cached old artefact.
    Wait 15 minutes and retry.
-3. If still failing, open an issue at https://github.com/assignee-ai/assignee/issues
+3. If still failing, open an issue at https://github.com/SergSlon/assignee-ai/issues
 
 ### `node: command not found` inside the wrapper
 

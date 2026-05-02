@@ -10,7 +10,7 @@ export const GENERIC_ERROR_MESSAGES: Record<string, ErrorMessageEntry> = {
     what: "An unexpected error occurred.",
     why: "An unclassified error was encountered. This may be a bug or an unusual edge case.",
     howToFix:
-      "Retry the command. If it persists, run with ASSIGNEE_LOG_LEVEL=debug for more details and report the issue at https://github.com/assignee-ai/assignee.ai/issues.",
+      "Retry the command. If it persists, run with ASSIGNEE_LOG_LEVEL=debug for more details and report the issue at https://github.com/SergSlon/assignee-ai/issues.",
   },
   [ErrorCode.MISSING_INTENT]: {
     code: ErrorCode.MISSING_INTENT,

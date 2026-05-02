@@ -59,15 +59,15 @@ CERT="assignee-${VERSION}-${PLATFORM}.tar.gz.pem"
 SIG="assignee-${VERSION}-${PLATFORM}.tar.gz.sig"
 
 # Download all three files from the GitHub release
-curl -LO "https://github.com/assignee-ai/assignee/releases/download/${VERSION}/${TARBALL}"
-curl -LO "https://github.com/assignee-ai/assignee/releases/download/${VERSION}/${CERT}"
-curl -LO "https://github.com/assignee-ai/assignee/releases/download/${VERSION}/${SIG}"
+curl -LO "https://github.com/SergSlon/assignee-ai/releases/download/${VERSION}/${TARBALL}"
+curl -LO "https://github.com/SergSlon/assignee-ai/releases/download/${VERSION}/${CERT}"
+curl -LO "https://github.com/SergSlon/assignee-ai/releases/download/${VERSION}/${SIG}"
 
 # Verify the signature
 cosign verify-blob \
   --certificate "${CERT}" \
   --signature "${SIG}" \
-  --certificate-identity "https://github.com/assignee-ai/assignee/.github/workflows/release.yml@refs/heads/main" \
+  --certificate-identity "https://github.com/SergSlon/assignee-ai/.github/workflows/release.yml@refs/heads/main" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
   "${TARBALL}"
 ```

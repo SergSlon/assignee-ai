@@ -619,7 +619,7 @@ Each architectural choice gets one paragraph of rationale: why LangGraph (checkp
 #### Fixed
 
 - `README.md` Install section had **three** user-breaking bugs, caught when the user ran the instructions verbatim and hit `ERR_PNPM_NO_GLOBAL_BIN_DIR`:
-  1. **Wrong clone URL / directory name.** README said `git clone https://github.com/assignee-ai/assignee.ai.git` and `cd assignee.ai`. The actual repo is `https://github.com/SergSlon/assignee-ai.git` (different org, different dir name). Following the README would `git clone` a non-existent org.
+  1. **Wrong clone URL / directory name.** README had a stale clone URL pointing to the old org; the actual repo is `https://github.com/SergSlon/assignee-ai.git` with `cd assignee-ai`. Following the stale README would `git clone` a non-existent org/repo.
   2. **`pnpm link --global` fails on fresh machines.** The README recommended `pnpm link --global` immediately after build, but pnpm v10 requires `PNPM_HOME` / `global-bin-dir` to be set first — those come from a one-time `pnpm setup` that modifies shell profile and needs a shell reload. The user's trace: `pnpm install && pnpm build` succeeded, then `pnpm link --global` failed with _"Unable to find the global bin directory. Run 'pnpm setup' to create it automatically, or set the global-bin-dir setting, or the PNPM_HOME env variable."_
   3. **Implied `pnpm link` is the only invocation path.** The CLI actually runs cleanly via direct `node apps/cli/dist/index.js <cmd>` after `pnpm build` — verified during Epic 84 hero-capture. No global bin required. That option was never mentioned.
 
@@ -1629,7 +1629,7 @@ Initial internal development baseline. Not published to npm.
 - Drift detection, reconcile, cost-rightsizing optimizer (Graviton
   swap recommendations).
 
-[Unreleased]: https://github.com/assignee-ai/assignee.ai/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/SergSlon/assignee-ai/compare/v0.1.0...HEAD
 
 ---
 
@@ -2612,4 +2612,4 @@ ec2-vpc}.ts` — first three SDK-direct adapters covering S3 buckets, IAM
 - `packages/core/src/graph/nodes/plan-generator/llm-helpers.ts` — ARN
   redactor wired into `buildPrompt` (user-intent) and `readMemoryHints`
   (previous-error hint) before content reaches the LLM boundary.
-  [0.1.0]: https://github.com/assignee-ai/assignee.ai/releases/tag/v0.1.0
+  [0.1.0]: https://github.com/SergSlon/assignee-ai/releases/tag/v0.1.0

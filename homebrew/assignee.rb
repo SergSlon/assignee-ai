@@ -1,6 +1,6 @@
 # Homebrew formula for assignee CLI
 # Tap repository: homebrew-assignee
-# Install: brew tap assignee-ai/assignee && brew install assignee
+# Install: brew tap SergSlon/assignee-ai && brew install assignee
 #
 # NOTE: This file is a TEMPLATE. The release workflow
 # (`.github/workflows/release.yml`) renders the $VERSION / $SHA_*
@@ -19,7 +19,7 @@
 #       --certificate "${TARBALL}.pem" \
 #       --signature "${TARBALL}.sig" \
 #       --certificate-identity \
-#         "https://github.com/assignee-ai/assignee/.github/workflows/release.yml@refs/heads/main" \
+#         "https://github.com/SergSlon/assignee-ai/.github/workflows/release.yml@refs/heads/main" \
 #       --certificate-oidc-issuer \
 #         "https://token.actions.githubusercontent.com" \
 #       "${TARBALL}"
@@ -41,22 +41,22 @@ class Assignee < Formula
 
   on_macos do
     on_arm do
-      url "https://github.com/assignee-ai/assignee/releases/download/${VERSION}/assignee-${VERSION}-darwin-arm64.tar.gz"
+      url "https://github.com/SergSlon/assignee-ai/releases/download/${VERSION}/assignee-${VERSION}-darwin-arm64.tar.gz"
       sha256 "${SHA_DARWIN_ARM64}"
     end
     on_intel do
-      url "https://github.com/assignee-ai/assignee/releases/download/${VERSION}/assignee-${VERSION}-darwin-x64.tar.gz"
+      url "https://github.com/SergSlon/assignee-ai/releases/download/${VERSION}/assignee-${VERSION}-darwin-x64.tar.gz"
       sha256 "${SHA_DARWIN_X64}"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/assignee-ai/assignee/releases/download/${VERSION}/assignee-${VERSION}-linux-arm64.tar.gz"
+      url "https://github.com/SergSlon/assignee-ai/releases/download/${VERSION}/assignee-${VERSION}-linux-arm64.tar.gz"
       sha256 "${SHA_LINUX_ARM64}"
     end
     on_intel do
-      url "https://github.com/assignee-ai/assignee/releases/download/${VERSION}/assignee-${VERSION}-linux-x64.tar.gz"
+      url "https://github.com/SergSlon/assignee-ai/releases/download/${VERSION}/assignee-${VERSION}-linux-x64.tar.gz"
       sha256 "${SHA_LINUX_X64}"
     end
   end

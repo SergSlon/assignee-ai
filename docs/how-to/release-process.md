@@ -67,7 +67,7 @@ What is SKIPPED:
    - Set `ASSIGNEE_RELEASE_PUBLISH=1` in GitHub repository variables.
    - Set `ASSIGNEE_TAP_PUBLISH=1` in GitHub repository variables (if tap push is wanted).
    - Ensure the `HOMEBREW_TAP_TOKEN` secret is set (PAT with write access to
-     the `assignee-ai/homebrew-assignee` tap repo).
+     the `SergSlon/homebrew-assignee` tap repo).
    - Create and push the release tag: `git tag v0.1.0 && git push origin v0.1.0`
 
 2. Go to **Actions → Release → Run workflow**.
@@ -122,7 +122,7 @@ After a full publish, the release artefacts can be verified:
 cosign verify-blob \
   --certificate "${TARBALL}.pem" \
   --signature "${TARBALL}.sig" \
-  --certificate-identity "https://github.com/assignee-ai/assignee/.github/workflows/release.yml@refs/heads/main" \
+  --certificate-identity "https://github.com/SergSlon/assignee-ai/.github/workflows/release.yml@refs/heads/main" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
   "${TARBALL}"
 ```
@@ -133,10 +133,134 @@ See `docs/explanation/supply-chain-provenance.md` for the full guide.
 
 The `update-homebrew` job renders `homebrew/assignee.rb` (a template with
 `$VERSION` and `$SHA_*` placeholders) via `envsubst` and pushes the rendered
-formula to the `assignee-ai/homebrew-assignee` tap repository. This is gated
+formula to the `SergSlon/homebrew-assignee` tap repository. This is gated
 behind `ASSIGNEE_TAP_PUBLISH=1` in addition to `ASSIGNEE_RELEASE_PUBLISH=1`.
 
 See `docs/how-to/install-via-homebrew.md` for the installation guide.
+
+## Release Rollback
+
+<!-- W24a-S2 (PR-002) -->
+
+When a bad release ships, follow this procedure to deprecate the npm package,
+hide the GitHub release, regenerate the manifest, and revert the Homebrew
+formula. For automated assistance use `scripts/rollback-release.sh`.
+
+### Prerequisites
+
+- `npm` CLI authenticated as the `assignee-ai` npm org member.
+- `gh` CLI authenticated with write access to `SergSlon/assignee-ai`.
+- `git` remote `origin` pointing to `SergSlon/assignee-ai`.
+- (If tap revert needed) PAT with write access to the
+  `assignee-ai/homebrew-assignee` tap repo set as `HOMEBREW_TAP_TOKEN`.
+
+### Step 1 — Deprecate on npm
+
+Mark the bad version so `npm install` warns all future installers. This does
+**not** unpublish — it just sets a deprecation notice.
+
+```sh
+npm deprecate assignee@<bad-version> "Critical bug — do not install. Use <last-good-version> instead."
+```
+
+Re-verify: `npm info assignee@<bad-version> deprecated`
+
+### Step 2 — Hide the GitHub release
+
+Marking the release as draft removes it from the "latest" pointer and from the
+public releases page. This is reversible and preferred over deletion.
+
+```sh
+# Mark as draft (reversible — keeps assets intact)
+gh release edit <tag> --draft --repo SergSlon/assignee-ai
+
+# If assets must be removed (e.g., binary contained a security vulnerability):
+gh release delete-asset <tag> <asset-filename> --repo SergSlon/assignee-ai
+```
+
+To fully delete a release and its tag (use only for accidental test releases):
+
+```sh
+gh release delete <tag> --yes --repo SergSlon/assignee-ai
+git push origin --delete <tag>
+```
+
+### Step 3 — Regenerate the release manifest
+
+The signed manifest at `scripts/release-manifest.signed.json` drives the
+installer allowlist. After a rollback the bad version entry must be removed and
+`minimum_version` bumped to the last-good version so existing installs can
+self-update past the bad release.
+
+```sh
+# Edit scripts/release-manifest.signed.json:
+#   1. Remove the entry for <bad-version> from "entries"
+#   2. Set "minimum_version" to <last-good-version>
+#   3. Increment "generated_at" to current ISO timestamp
+
+# Commit + push directly to main so install.sh fetches the patched manifest:
+git add scripts/release-manifest.signed.json
+git commit -m "rollback: remove <bad-version> from release manifest"
+git push origin main
+
+# Alternatively, re-trigger the generate-provenance workflow on the patched tag
+# to rebuild and re-sign the manifest automatically.
+```
+
+### Step 4 — Revert the Homebrew formula
+
+The tap formula must point back to the last-good release SHA. Open a PR
+against `assignee-ai/homebrew-assignee`:
+
+```sh
+# Clone (or pull) the tap repo
+git clone https://github.com/assignee-ai/homebrew-assignee.git
+cd homebrew-assignee
+
+# Edit Formula/assignee.rb:
+#   - url: change to the <last-good-version> tarball URL
+#   - sha256: change to the <last-good-version> SHA256
+#   - version: change to <last-good-version>
+
+git checkout -b rollback/<bad-version>
+git add Formula/assignee.rb
+git commit -m "rollback: revert formula to <last-good-version>"
+git push origin rollback/<bad-version>
+gh pr create --title "rollback: revert to <last-good-version>" \
+  --body "Bad release <bad-version> rolled back. Formula reverted." \
+  --repo assignee-ai/homebrew-assignee
+```
+
+### Step 5 — Announce in CHANGELOG
+
+If the release was public, add an entry under `[Unreleased]` (or a new
+`[<next-patch>]` section) describing the rollback:
+
+```md
+### Security / Rollback
+
+- v<bad-version> deprecated and removed from install path. Upgrade to v<last-good-version>.
+```
+
+Push the CHANGELOG update to `main`.
+
+### Automation helper
+
+`scripts/rollback-release.sh` automates Steps 1–4 with dry-run support:
+
+```sh
+# Dry-run (prints all commands, executes nothing):
+ROLLBACK_DRY_RUN=1 BAD_VERSION=v0.2.1 LAST_GOOD_VERSION=v0.2.0 \
+  ./scripts/rollback-release.sh
+
+# Live execution (requires authenticated npm + gh CLI):
+BAD_VERSION=v0.2.1 LAST_GOOD_VERSION=v0.2.0 ROLLBACK_REASON="critical data-loss bug" \
+  ./scripts/rollback-release.sh
+```
+
+See `scripts/rollback-release.sh --help` for the full option reference.
+
+---
 
 ## Troubleshooting
 

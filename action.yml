@@ -11,7 +11,7 @@ branding:
 # `.github/actions/apply/`). Those installs will fail until `assignee` is
 # published to npm — which stays gated behind a manual workflow_dispatch +
 # confirm=YES_PUBLISH trigger while packages remain `"private": true`. Once
-# published, `uses: assignee-ai/assignee@v1` from a consumer repo will work
+# published, `uses: SergSlon/assignee-ai@v1` from a consumer repo will work
 # end-to-end with no further changes.
 # ──────────────────────────────────────────────────────────────────────────────
 
