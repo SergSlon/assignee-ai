@@ -941,6 +941,69 @@ Waves 1–9 are documented in the subsections above. Highlights for Waves 10–1
   batching in MCP IAM enumeration; Monday cron stagger across 3 workflows;
   Diátaxis redirect stubs for 12 root-level orphan docs.
 
+### Full-audit-2026-04-29 PROD-READINESS Waves 24a–24d — cycle close
+
+41/41 prod-readiness findings closed across 4 waves (commits
+`6a1cd553` W24a, `512d3660` W24b, `0e8f00c5` W24c, `fd76363a` W24d).
+
+- **W24a** (PR-001/002/003/010/011/012/023/029/033) — install and
+  release pipeline hardening: version-floor downgrade gate with POSIX
+  `semver_lt`, token-safe install URLs, release-manifest now published
+  as a GitHub Release asset, org-name canonicalization to
+  `SergSlon/assignee-ai` across 24 files, `audit-github-org.ts` CI
+  scanner, and a new operator rollback runbook
+  (`scripts/rollback-release.sh`, +358 LOC).
+- **W24b** (PR-006/007/008/009/015/016/017/024/025/034) — MCP host
+  integration and Bedrock UX: per-OS Claude Desktop config paths,
+  AWS_PROFILE promoted over static keys in MCP docs, incident-response
+  runbook sections for partial MCP credential failure and regional
+  Bedrock outages, Bedrock model end-of-life detection in `doctor`,
+  `~/.aws/config` region fallback in `detect-aws-region.ts`,
+  partition-aware `classifyPartition()`, and dynamic MCP server version
+  from `package.json`.
+- **W24c** (PR-013/018/019/020/026/027/030/035/036/037/040 + OOS-1/2/3)
+  — Medium/Low advisory polish and W24b carryovers: ISO partition branch
+  in `classifyPartition`, data-integrity hardening (HMAC cache-flag
+  dedup, structured `lock_contention` JSON events, `zod`-validated
+  backup restore), npm-registry `doctor` check, `version --json`
+  extended fields, update-check suppressed for `--help`/`--version`,
+  node-count drift corrected to 14-node in 3 docs, and un-redacted
+  fingerprint removed from `README.md`.
+- **W24d** (RES-1/2/3) — final carryover sweep: `version --json`
+  `region` field now consults `~/.aws/config` default-profile fallback,
+  un-redacted fingerprint removed from `docs/explanation/ai-architecture.md`,
+  and `file-advisory-lock.ts` gains full JSDoc for the new structured
+  stderr event schema.
+
+### Full-audit-2026-04-29 SECURITY Waves SEC-A + SEC-C — cycle close
+
+44/48 security findings closed across 2 waves (commits `19910a75`
+SEC-A, `fab62ee2` SEC-C); 4 findings remain open.
+
+- **SEC-A** (SEC-001/002/003/004/005/006/035/037) — audit-log hardening:
+  5-minute TTL on the process-lifetime audit-key cache with `rotateAuditKey()`
+  API and SIGHUP handler; symlink and hardlink attack guards; parent-dir
+  mode enforcement (0o700); post-write `fs.chmod(0o600)` on every
+  `appendFile`; legacy HMAC fallback gated behind
+  `ASSIGNEE_AUDIT_ALLOW_LEGACY`; chain-rollback threat boundary scoped
+  and documented in `docs/explanation/audit-threat-model.md`
+  (full external-anchor implementation deferred to Epic 101).
+- **SEC-C** (33 findings: SEC-007/008/013/014/015/016/017/018/019/020/021/022/023/024/025/026/027/028/029/030/031/032/033/034/036/038/039/040/041/042/043/044/045/046/047)
+  — boundary, supply-chain, and DoS hardening: redaction patterns
+  extended to Anthropic/OpenAI/GitHub/Slack/Google AI/JWT tokens with
+  a DoS depth/node guard; install.sh SHA256 fail-closed + HTTPS-only
+  curl + atomic wrapper write; LLM prompt sanitization with
+  `GuardrailRequiredError` fail-closed and INST_TAG/ROLE_PREFIX boundary
+  tags; LLM response wildcard-policy rejection and 512 KB size cap;
+  audit consecutive-failure alarm (3) and fail-fast (10/60 s) circuit
+  breaker; checkpoint HMAC secret persistence and symlink rejection;
+  file-advisory-lock overflow alarms; OTEL hostname allowlist;
+  randomized temp-file paths; AWS session-token length bounds; and
+  15 further mechanical hardening items.
+- **Open** (4 findings): SEC-009/010/011 IAM scope tightening (Wave
+  SEC-B in flight, needs live AWS integration tests) and SEC-002
+  external chain-anchor (Epic 101 dependency).
+
 ---
 
 ## [0.1.0] — 2026-04-24

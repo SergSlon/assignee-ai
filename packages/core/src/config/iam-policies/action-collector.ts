@@ -81,6 +81,45 @@ export const TAG_SCOPED_SECRETS_ACTIONS = new Set<string>([
   "secretsmanager:GetSecretValue",
 ]);
 
+/**
+ * Destructive service actions that must be excluded from the unscoped
+ * service sweep (ServiceSpecificActionsA/B) and emitted instead via a
+ * dedicated `ServiceDestructiveResourceTagScoped` statement in
+ * operatorPolicy() with `aws:ResourceTag/managed-by = assignee-ai`.
+ *
+ * SEC-011 (full-audit-2026-04-29): these actions had `Resource: "*"` with
+ * no Condition in operatorServicesA/B — a leaked operator credential could
+ * delete/terminate any resource in the account, regardless of whether it
+ * was provisioned by Assignee. Scoping to `aws:ResourceTag/managed-by =
+ * assignee-ai` limits the blast radius to Assignee-managed resources only.
+ *
+ * aws:ResourceTag is evaluated at request time against the target resource's
+ * existing tags — the correct condition key for mutating/destructive
+ * operations on already-existing resources (as opposed to aws:RequestTag,
+ * which applies to the tags being SET on a create call).
+ *
+ * Keep in sync with `ServiceDestructiveResourceTagScoped` in operator.ts.
+ * Action granularity rationale:
+ *   lambda:DeleteFunction  → deletes a Lambda function; taggable in Lambda API
+ *   ec2:TerminateInstances → terminates EC2 instances; tags on instance
+ *   ecs:DeleteCluster      → deletes ECS cluster; tags on cluster
+ *   sqs:DeleteQueue        → deletes SQS queue; tags on queue
+ *   sns:DeleteTopic        → deletes SNS topic; tags on topic
+ *   rds:DeleteDBInstance   → deletes RDS instance; tags on DBInstance
+ *   s3:DeleteBucket        → deletes S3 bucket; tags on bucket
+ *   s3:DeleteBucketPolicy  → removes bucket policy; same bucket-level tag scope
+ */
+export const DESTRUCTIVE_SERVICE_ACTIONS = new Set<string>([
+  "lambda:DeleteFunction",
+  "ec2:TerminateInstances",
+  "ecs:DeleteCluster",
+  "sqs:DeleteQueue",
+  "sns:DeleteTopic",
+  "rds:DeleteDBInstance",
+  "s3:DeleteBucket",
+  "s3:DeleteBucketPolicy",
+]);
+
 export function collectServiceActions(): {
   ccapiActions: string[];
   serviceActions: string[];
@@ -117,6 +156,13 @@ export function collectServiceActions(): {
       // via SecretsManagerGetValueTagScoped with
       // aws:ResourceTag/managed-by = assignee-ai. Leaving it in
       // the unscoped sweep would allow reading any secret.
+      continue;
+    } else if (DESTRUCTIVE_SERVICE_ACTIONS.has(action)) {
+      // SEC-011 (full-audit-2026-04-29): emitted separately in
+      // operatorPolicy() via ServiceDestructiveResourceTagScoped
+      // with aws:ResourceTag/managed-by = assignee-ai. Leaving
+      // destructive actions in the unscoped sweep would allow
+      // deleting/terminating any resource in the account.
       continue;
     } else {
       serviceActionsRaw.push(action);
