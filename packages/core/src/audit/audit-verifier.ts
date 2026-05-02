@@ -57,6 +57,7 @@ import { readAuditLog, type AuditEntry } from "./audit-log.js";
 export type VerifyReason =
   | "payload-mismatch"
   | "hmac-mismatch"
+  | "hmac-malformed"
   | "missing-prev"
   | "index-gap"
   | "legacy-hmac-not-allowed";
@@ -100,6 +101,25 @@ export async function verifyAuditLog(
   logFile?: string,
   key: string = getAuditKey(),
 ): Promise<VerifyResult> {
+  // SEC-041: if the caller explicitly passed a key that differs from the
+  // cached active key, emit a stderr hint so operators debugging key-rotation
+  // issues know they are verifying with a non-current key. The hint is
+  // informational only — the verification proceeds with whatever key was
+  // passed, which is the correct behaviour for migration flows.
+  try {
+    const activeKey = getAuditKey();
+    if (key !== activeKey) {
+      process.stderr.write(
+        `[audit-verifier] HINT: the supplied key differs from the current active key ` +
+          `(~/.assignee/audit-key or ASSIGNEE_AUDIT_KEY). ` +
+          `If you are verifying an old chain segment, this is expected. ` +
+          `If you see unexpected hmac-mismatch failures, verify with the active key.\n`,
+      );
+    }
+  } catch {
+    // getAuditKey() can throw if the key file is corrupt; ignore here —
+    // the verification will proceed with the caller-supplied key.
+  }
   const lines = await readAuditLog(logFile);
 
   let legacyCount = 0;
@@ -165,6 +185,25 @@ export async function verifyAuditLog(
     //    succeeds AND the opt-in flag is set — this distinguishes old-format
     //    entries from tampered new ones (both checks would fail for tampering).
     // Legacy fallback: remove after 2027-04-29 once all chains have been re-signed.
+
+    // SEC-048: distinguish a structurally malformed HMAC (wrong length /
+    // truncated partial write) from a genuine cryptographic mismatch.
+    // HMAC-SHA256 produces exactly 64 hex characters; any stored value of a
+    // different length is "malformed" (corrupt write) not "tampered". Reporting
+    // the distinction helps operators triage: malformed → look for partial
+    // writes or FS corruption; mismatch → look for insider tampering.
+    const expectedHmacLength = 64; // HMAC-SHA256 hex output is always 64 chars
+    if (entry.hmac.length !== expectedHmacLength) {
+      return {
+        ok: false,
+        brokenAt: entry.index,
+        reason: "hmac-malformed",
+        total,
+        legacyCount,
+        chainMode: "failed",
+      };
+    }
+
     const canonicalValid = verifyChainLink(
       entry.record,
       entry.prevHmac,

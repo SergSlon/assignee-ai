@@ -15,6 +15,10 @@
  * ARN or instance-profile examples (observability leak noted by agent C).
  */
 import { RESOURCE_TYPES } from "@/index.js";
+import {
+  LlmResponseTooLargeError,
+  LlmPolicyShapeViolationError,
+} from "@/errors.js";
 import { SCHEMA_EXCERPT_MAX_CHARS } from "@/config/constants/limits.js";
 import { TWENTY_FOUR_HOURS_MS } from "@/config/constants/timeouts.js";
 import {
@@ -293,13 +297,113 @@ export function buildPrompt(input: {
   ].join("\n");
 }
 
-/** Parses the LLM response text into a JSON object, stripping markdown fences. */
+/**
+ * SEC-029: Maximum byte length of a raw LLM response text before `JSON.parse`.
+ * A Bedrock `maxOutputTokens` limit is advisory (tokens ≠ bytes), and a
+ * compromised VPC endpoint could return arbitrary-length text. 512 KB is a
+ * generous upper bound: a valid CFN resource properties object is typically
+ * < 10 KB; even the most schema-heavy type (e.g. EC2 Launch Template) with
+ * all optional fields populated does not approach 512 KB.
+ */
+export const MAX_LLM_RESPONSE_BYTES = 512_000;
+
+/**
+ * SEC-018: Allowlist of IAM statement SIDs that are explicitly permitted to
+ * carry `Action: "*"` + `Resource: "*"`. Empty by default — all wildcard-
+ * privilege shapes are rejected. Extend here if a legitimate resource type
+ * requires such a shape (document the rationale inline).
+ *
+ * False-positive tradeoff: the plan generator emits CFN *resource property*
+ * objects, not IAM policy documents. The only realistic false-positive path
+ * is a Lambda `Policies[].PolicyDocument.Statement[]` nested deep inside the
+ * desired-state object. The walk visits all nested objects recursively, so
+ * an adversarial prompt that embeds a policy with Action:* + Resource:* in
+ * any property (however deeply nested) is caught.
+ */
+const POLICY_SHAPE_ALLOWLIST: ReadonlySet<string> = new Set<string>();
+
+/**
+ * SEC-018: Recursively walks `value` looking for IAM policy statement shapes
+ * where both `Action` and `Resource` contain `"*"`. Returns the dotted path
+ * of the first violating node, or `null` if none found.
+ *
+ * This is a heuristic guard — see `POLICY_SHAPE_ALLOWLIST` for the
+ * false-positive tradeoff note above.
+ */
+function findWildcardPolicyShape(
+  value: unknown,
+  path: string = "root",
+): string | null {
+  if (value === null || typeof value !== "object") return null;
+
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      const hit = findWildcardPolicyShape(value[i], `${path}[${i}]`);
+      if (hit !== null) return hit;
+    }
+    return null;
+  }
+
+  const obj = value as Record<string, unknown>;
+
+  // Check if this node looks like an IAM statement with wildcard Action + Resource.
+  const hasAction =
+    "Action" in obj &&
+    (obj["Action"] === "*" ||
+      (Array.isArray(obj["Action"]) && obj["Action"].includes("*")));
+  const hasResource =
+    "Resource" in obj &&
+    (obj["Resource"] === "*" ||
+      (Array.isArray(obj["Resource"]) && obj["Resource"].includes("*")));
+  const sid = typeof obj["Sid"] === "string" ? obj["Sid"] : undefined;
+
+  if (hasAction && hasResource) {
+    // Allow if the statement SID is in the explicit allowlist.
+    if (sid !== undefined && POLICY_SHAPE_ALLOWLIST.has(sid)) {
+      // Allowlisted — do not flag, but continue walking children.
+    } else {
+      return path;
+    }
+  }
+
+  // Recurse into all object properties.
+  for (const [key, child] of Object.entries(obj)) {
+    const hit = findWildcardPolicyShape(child, `${path}.${key}`);
+    if (hit !== null) return hit;
+  }
+
+  return null;
+}
+
+/**
+ * Parses the LLM response text into a JSON object, stripping markdown fences.
+ *
+ * SEC-029: Enforces a byte-length limit before `JSON.parse` to prevent
+ * heap exhaustion from a malicious/misbehaving upstream LLM or proxy.
+ *
+ * SEC-018: After parsing, walks the output for any IAM policy shape carrying
+ * both `Action: "*"` and `Resource: "*"` (wildcard privilege escalation
+ * heuristic). Throws `LlmPolicyShapeViolationError` on detection.
+ */
 export function parseLlmJsonResponse(text: string): Record<string, unknown> {
+  // SEC-029: size guard before JSON.parse
+  if (text.length > MAX_LLM_RESPONSE_BYTES) {
+    throw new LlmResponseTooLargeError(text.length, MAX_LLM_RESPONSE_BYTES);
+  }
+
   const cleaned = text
     .trim()
     .replace(/^```(?:json)?\n?/, "")
     .replace(/\n?```$/, "");
-  return JSON.parse(cleaned) as Record<string, unknown>;
+  const parsed = JSON.parse(cleaned) as Record<string, unknown>;
+
+  // SEC-018: wildcard IAM policy shape heuristic guard
+  const violatingPath = findWildcardPolicyShape(parsed);
+  if (violatingPath !== null) {
+    throw new LlmPolicyShapeViolationError(violatingPath);
+  }
+
+  return parsed;
 }
 
 /**

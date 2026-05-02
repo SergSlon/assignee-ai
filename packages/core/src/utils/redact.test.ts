@@ -279,6 +279,137 @@ describe("redactAccountIdsInPrompt — preserves ARN skeleton, scrubs account sl
   });
 });
 
+// ── SEC-007: Multi-provider secret pattern coverage ───────────────────────────
+//
+// Each sub-suite uses a real-shaped example value (matching the provider's
+// documented format) plus a canary that must not appear in the output.
+// For the JWT suite, a synthetic header.payload.signature triple is used.
+
+describe("redactSensitive — Anthropic API key (SEC-007)", () => {
+  it("redacts a legacy sk-ant-... key embedded in an error message", () => {
+    const key = "sk-ant-api03-AAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBB";
+    const input = `Authentication failed: invalid key ${key} check your credentials`;
+    const result = redactSensitive(input);
+    expect(result).toContain("[ANTHROPIC_KEY]");
+    expect(result).not.toContain(key);
+  });
+
+  it("redacts a standalone Anthropic key (no surrounding context)", () => {
+    const key =
+      "sk-ant-api03-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
+    expect(redactSensitive(key)).toBe("[ANTHROPIC_KEY]");
+  });
+
+  it("does not affect unrelated sk- prefixed strings shorter than the pattern", () => {
+    // Generic "sk-" without the "ant-" sub-prefix must NOT be matched.
+    const safe = "sk-short";
+    expect(redactSensitive(safe)).toBe(safe);
+  });
+});
+
+describe("redactSensitive — OpenAI key (SEC-007)", () => {
+  it("redacts an sk-proj-... project key", () => {
+    const key = "sk-proj-AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHHIIIIJJJJKKKKLLLL";
+    const input = `API call failed with key=${key}`;
+    const result = redactSensitive(input);
+    expect(result).toContain("[OPENAI_KEY]");
+    expect(result).not.toContain(key);
+  });
+
+  it("does not match bare sk- without a recognised sub-prefix", () => {
+    // Legacy OpenAI keys (sk-<48 chars> without sub-prefix) are intentionally
+    // not matched because the shape overlaps too broadly with other tokens.
+    const safe = "sk-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    expect(redactSensitive(safe)).toBe(safe);
+  });
+});
+
+describe("redactSensitive — GitHub token (SEC-007)", () => {
+  it("redacts a classic PAT (ghp_...)", () => {
+    const token = "ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1234";
+    const input = `Authorization: Bearer ${token}`;
+    const result = redactSensitive(input);
+    expect(result).toContain("[GITHUB_TOKEN]");
+    expect(result).not.toContain(token);
+  });
+
+  it("redacts an OAuth token (gho_...)", () => {
+    const token = "gho_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB5678";
+    const result = redactSensitive(`clone with ${token} failed`);
+    expect(result).toContain("[GITHUB_TOKEN]");
+    expect(result).not.toContain(token);
+  });
+
+  it("redacts a fine-grained PAT (github_pat_...)", () => {
+    const token = "github_pat_CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC9012";
+    const result = redactSensitive(`token=${token}`);
+    expect(result).toContain("[GITHUB_TOKEN]");
+    expect(result).not.toContain(token);
+  });
+});
+
+describe("redactSensitive — Slack token (SEC-007)", () => {
+  it("redacts a bot token (xoxb-...)", () => {
+    const token = "xoxb-1234567890-12345678901-abcdefghijklmnopqrst";
+    const result = redactSensitive(`slack error token=${token}`);
+    expect(result).toContain("[SLACK_TOKEN]");
+    expect(result).not.toContain(token);
+  });
+
+  it("redacts a user token (xoxp-...)", () => {
+    const token = "xoxp-9876543210-98765432101-zyxwvutsrqponmlkjihg";
+    const result = redactSensitive(`xoxp token: ${token}`);
+    expect(result).toContain("[SLACK_TOKEN]");
+    expect(result).not.toContain(token);
+  });
+});
+
+describe("redactSensitive — Google AI key (SEC-007)", () => {
+  it("redacts a Google AI API key (AIza + 35 chars)", () => {
+    const key = "AIzaSyBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx1";
+    const input = `Google key=${key} rejected`;
+    const result = redactSensitive(input);
+    expect(result).toContain("[GOOGLE_KEY]");
+    expect(result).not.toContain(key);
+  });
+
+  it("does not false-positive on AIza with fewer than 35 trailing chars", () => {
+    // Pattern requires exactly 35 chars after AIza.
+    const short = "AIzaShort";
+    expect(redactSensitive(short)).toBe(short);
+  });
+});
+
+describe("redactSensitive — JWT (SEC-007)", () => {
+  it("redacts a three-part JWT (header.payload.signature)", () => {
+    // Real-shaped: base64url-encoded header + payload + signature separated by dots.
+    const jwt =
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" +
+      ".eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ" +
+      ".SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
+    const input = `bearer ${jwt} expired`;
+    const result = redactSensitive(input);
+    expect(result).toContain("[JWT]");
+    expect(result).not.toContain("eyJhbGci");
+  });
+
+  it("redacts a two-part JWT (header.payload without signature)", () => {
+    const jwt =
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" +
+      ".eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIn0";
+    const result = redactSensitive(`token=${jwt}`);
+    expect(result).toContain("[JWT]");
+    expect(result).not.toContain("eyJhbGci");
+  });
+
+  it("does not false-positive on bare eyJ prefix without a dot separator", () => {
+    // Pattern requires at least one dot separator to avoid false-positives
+    // on short base64 strings that happen to start with eyJ.
+    const safe = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9";
+    expect(redactSensitive(safe)).toBe(safe);
+  });
+});
+
 // ── W1-01 (Epic 100): stripSensitiveFromElicited ──────────────────────────────
 //
 // Covers all acceptance-criteria cases:
@@ -437,4 +568,38 @@ describe("stripSensitiveFromElicited", () => {
   it("ELICITED_REDACTED_VALUE is the string literal '[REDACTED]'", () => {
     expect(ELICITED_REDACTED_VALUE).toBe("[REDACTED]");
   });
+});
+
+// ── SEC-025: partition-aware ARN redaction — stderr boundary ─────────────
+// Regression test: confirms that `redactSensitive` (the function called on
+// every `mcpLogError` message before it reaches stderr) correctly scrubs ARNs
+// from ALL five AWS partitions. Treat stderr as a redaction boundary — each
+// partition variant of a sensitive ARN MUST be replaced with [ARN].
+describe("redactSensitive — SEC-025 stderr/mcpLogError partition coverage", () => {
+  const partitionCases: Array<[string, string]> = [
+    ["aws", "arn:aws:iam::123456789012:role/assignee-operator"],
+    ["aws-cn", "arn:aws-cn:iam::123456789012:role/assignee-operator"],
+    ["aws-us-gov", "arn:aws-us-gov:iam::123456789012:role/gov-role"],
+    ["aws-iso", "arn:aws-iso:kms:us-iso-east-1:123456789012:key/abcd-1234"],
+    [
+      "aws-iso-b",
+      "arn:aws-iso-b:lambda:us-isob-east-1:123456789012:function:fn",
+    ],
+  ];
+
+  it.each(partitionCases)(
+    "partition '%s' ARN is redacted (as if routed through mcpLogError message)",
+    (partition, arn) => {
+      // Simulate what mcpLogError does: pass err.message through redactSensitive
+      // before writing to stderr. The result must not contain the raw ARN or
+      // the embedded 12-digit account ID.
+      const errMsg = `AccessDenied for principal ${arn} on resource s3:::bucket`;
+      const redacted = redactSensitive(errMsg);
+      expect(redacted).toContain("[ARN]");
+      expect(redacted).not.toContain(arn);
+      expect(redacted).not.toContain("123456789012");
+      // Partition name must NOT leak either (it's absorbed into [ARN]).
+      void partition; // partition is checked implicitly via arn shape
+    },
+  );
 });

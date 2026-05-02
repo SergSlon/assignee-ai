@@ -33,6 +33,82 @@ import { LocalFsStorageAdapter } from "../adapters/storage/local-fs-adapter.js";
 import type { AdvisoryLockPort } from "../ports/advisory-lock-port.js";
 import type { StoragePort } from "../ports/storage-port.js";
 
+// ── SEC-022: audit-lock circuit-breaker ───────────────────────────────
+// Per-path counter: consecutive LockAcquisitionErrors within a 60s window
+// escalate to a structured stderr alarm after LOCK_ALARM_THRESHOLD failures.
+const LOCK_ALARM_THRESHOLD = 3;
+const LOCK_ALARM_WINDOW_MS = 60_000;
+
+interface LockFailureRecord {
+  count: number;
+  windowStart: number; // epoch ms of first failure in this window
+  alarmed: boolean; // true once the alarm has fired this window
+}
+const _lockFailures = new Map<string, LockFailureRecord>();
+
+function recordLockFailure(lockName: string): void {
+  const now = Date.now();
+  let rec = _lockFailures.get(lockName);
+  if (!rec || now - rec.windowStart > LOCK_ALARM_WINDOW_MS) {
+    rec = { count: 0, windowStart: now, alarmed: false };
+    _lockFailures.set(lockName, rec);
+  }
+  rec.count++;
+  if (rec.count >= LOCK_ALARM_THRESHOLD && !rec.alarmed) {
+    rec.alarmed = true;
+    process.stderr.write(
+      JSON.stringify({
+        event: "audit_lock_alarm",
+        severity: "CRITICAL",
+        lockName,
+        consecutiveFailures: rec.count,
+        windowMs: LOCK_ALARM_WINDOW_MS,
+        pid: process.pid,
+        message:
+          "Lock acquisition failures exceed threshold — audit pipeline may be blinded.",
+      }) + "\n",
+    );
+  }
+}
+
+// ── SEC-039: stale-lock reclaim counter per path ──────────────────────
+// If the same lock path is stale-reclaimed N+ times within a window,
+// emit a structured alarm (attacker may be re-planting the lock file).
+const STALE_RECLAIM_ALARM_THRESHOLD = 3;
+const STALE_RECLAIM_WINDOW_MS = 60_000;
+
+interface StaleLockRecord {
+  count: number;
+  windowStart: number;
+  alarmed: boolean;
+}
+const _staleReclaimCounts = new Map<string, StaleLockRecord>();
+
+function recordStaleReclaim(lockName: string): void {
+  const now = Date.now();
+  let rec = _staleReclaimCounts.get(lockName);
+  if (!rec || now - rec.windowStart > STALE_RECLAIM_WINDOW_MS) {
+    rec = { count: 0, windowStart: now, alarmed: false };
+    _staleReclaimCounts.set(lockName, rec);
+  }
+  rec.count++;
+  if (rec.count >= STALE_RECLAIM_ALARM_THRESHOLD && !rec.alarmed) {
+    rec.alarmed = true;
+    process.stderr.write(
+      JSON.stringify({
+        event: "stale_lock_alarm",
+        severity: "WARN",
+        lockName,
+        reclaimCount: rec.count,
+        windowMs: STALE_RECLAIM_WINDOW_MS,
+        pid: process.pid,
+        message:
+          "Repeated stale-lock reclamation on the same path — possible DoS via lock re-planting.",
+      }) + "\n",
+    );
+  }
+}
+
 // ── LockAcquisitionError ──────────────────────────────────────────────
 
 /**
@@ -85,6 +161,14 @@ function resolvePortForLock(
   name: string,
   storage: StoragePort | undefined,
 ): { port: StoragePort; key: string } {
+  // SEC-046: validate the FULL path shape before splitting basename so that
+  // error messages (and future log sites) never include a `..`-containing
+  // basename from an attacker-controlled `name` argument.
+  if (name.includes("..")) {
+    throw new Error(
+      `FileAdvisoryLock: lock name must not contain '..' path-traversal segments; got '${name}'`,
+    );
+  }
   const lp = lockPath(name);
   const key = path.basename(lp);
   const port =
@@ -144,6 +228,10 @@ export class FileAdvisoryLockAdapter implements AdvisoryLockPort {
       }
       // Stale — remove via the port and proceed to create.
       await port.delete(key).catch(() => {});
+      // SEC-039: track repeated stale-lock reclamations on the same path.
+      // If an attacker re-plants the lock file rapidly, this counter fires a
+      // structured alarm rather than silently looping.
+      recordStaleReclaim(name);
     }
 
     const pidBytes = new TextEncoder().encode(String(process.pid));
@@ -271,6 +359,11 @@ export class FileAdvisoryLockAdapter implements AdvisoryLockPort {
           holderStat: holderInfo,
         }) + "\n",
       );
+      // SEC-022: record this lock-acquisition failure for circuit-breaker
+      // tracking. After LOCK_ALARM_THRESHOLD consecutive failures within the
+      // window, a structured alarm is emitted to stderr so operators and log
+      // aggregators can detect audit-lock saturation attacks.
+      recordLockFailure(name);
       throw new LockAcquisitionError(name, totalAttempts);
     }
 

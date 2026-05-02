@@ -7,6 +7,7 @@
  *   - confirmed gate (the ADR-008 safety mechanism)
  *   - graph context availability
  *   - canonical-path traversal check on the checkpointPath
+ *   - realpath symlink check (SEC-020)
  *
  * Each guard returns either `null` (pass) or a ready-to-return
  * ToolEnvelope describing the error.
@@ -16,8 +17,15 @@
  * services/checkpoint-hmac.ts — createHmac / verifyHmac). The path
  * check here remains as the cheap fail-fast layer; the HMAC is the
  * security-critical layer.
+ *
+ * SEC-020: at LOAD time, `checkCheckpointSymlink` resolves the path
+ * via `fs.realpath` and compares it to `path.resolve`.  If they
+ * differ the request is rejected with `reason: "symlink-detected"` —
+ * an attacker who planted a symlink at the checkpoint path cannot
+ * substitute attacker-controlled content.
  */
 
+import * as fs from "node:fs";
 import * as path from "node:path";
 import type { GraphContext } from "../../services/graph-init.js";
 // Story 50-5 B-2: the HMAC primitives live in the checkpoint-hmac
@@ -87,4 +95,62 @@ export function checkCheckpointPath(
     });
   }
   return null;
+}
+
+/**
+ * Discriminated-union result for `checkCheckpointSymlink`.
+ *
+ * `ok: true` — the path is a plain file (not a symlink); safe to load.
+ * `ok: false, reason: "symlink-detected"` — `fs.realpath` resolved to a
+ *   different path than `path.resolve`, indicating a symlink in the chain.
+ * `ok: false, reason: "not-found"` — the file does not exist yet (caller
+ *   should treat as "not registered" rather than "tampered").
+ */
+export type CheckpointSymlinkResult =
+  | { ok: true }
+  | { ok: false; reason: "symlink-detected" | "not-found" };
+
+/**
+ * SEC-020: at LOAD time, uses `fs.lstatSync` (does NOT follow symlinks)
+ * to detect whether the checkpoint file at `requestedPath` is itself a
+ * symlink.  If it is, the request is rejected with
+ * `{ ok: false, reason: "symlink-detected" }` so an attacker cannot
+ * substitute content by planting a symlink at the expected location.
+ *
+ * `lstat` is preferred over `realpath` comparison because:
+ *  - It directly answers "is this specific file a symlink?" without
+ *    being confused by system-level directory symlinks (e.g. `/var →
+ *    /private/var` on macOS) that are unrelated to the attack.
+ *  - `fs.realpath` on `/var/folders/.../checkpoint.json` returns
+ *    `/private/var/folders/.../checkpoint.json` on macOS, causing a
+ *    false positive when comparing to `path.resolve(requestedPath)`.
+ *
+ * The check returns `{ ok: false, reason: "not-found" }` if the file
+ * does not yet exist — callers should treat this like "not registered".
+ *
+ * @param requestedPath  The absolute path passed by the MCP tool caller.
+ */
+export function checkCheckpointSymlink(
+  requestedPath: string,
+): CheckpointSymlinkResult {
+  const normalized = path.resolve(requestedPath);
+
+  let lstat: fs.Stats;
+  try {
+    // lstatSync does NOT follow symlinks — it returns info about the
+    // symlink itself when the path is a symlink.
+    lstat = fs.lstatSync(normalized);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      return { ok: false, reason: "not-found" };
+    }
+    // EACCES or other error — fail closed.
+    return { ok: false, reason: "symlink-detected" };
+  }
+
+  if (lstat.isSymbolicLink()) {
+    return { ok: false, reason: "symlink-detected" };
+  }
+  return { ok: true };
 }

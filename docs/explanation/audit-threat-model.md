@@ -29,13 +29,13 @@ HMAC forgery, entry deletion, and index gaps.
 
 ## What the audit chain defends against
 
-| Threat                                  | Defended? | Mechanism                                                                              |
-| --------------------------------------- | --------- | -------------------------------------------------------------------------------------- |
-| External attacker modifying log entries | Yes       | HMAC mismatch detected by verifier                                                     |
-| Entry deletion / reordering             | Yes       | Index gap or prevHmac linkage break detected                                           |
-| Accidental log rotation / truncation    | Yes       | `guardAuditLogTruncation` enforces retention floor                                     |
-| Partial write / filesystem corruption   | Yes       | Index-gap + prevHmac check catches truncated tail                                      |
-| Legacy HMAC downgrade by outsider       | Yes       | `legacyVerifyChainLink` requires `ASSIGNEE_AUDIT_ALLOW_LEGACY_HMAC=1` opt-in (SEC-035) |
+| Threat                                  | Defended? | Mechanism                                                                         |
+| --------------------------------------- | --------- | --------------------------------------------------------------------------------- |
+| External attacker modifying log entries | Yes       | HMAC mismatch detected by verifier                                                |
+| Entry deletion / reordering             | Yes       | Index gap or prevHmac linkage break detected                                      |
+| Accidental log rotation / truncation    | Yes       | `guardAuditLogTruncation` enforces retention floor                                |
+| Partial write / filesystem corruption   | Yes       | Index-gap + prevHmac check catches truncated tail                                 |
+| Legacy HMAC downgrade by outsider       | Yes       | `legacyVerifyChainLink` requires `ASSIGNEE_AUDIT_ALLOW_LEGACY=1` opt-in (SEC-035) |
 
 ---
 

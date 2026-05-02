@@ -69,6 +69,7 @@ function lastSentPromptContent(): string {
 
 describe("LlmAdapter outbound redaction — generateText", () => {
   beforeEach(() => {
+    process.env["ASSIGNEE_ALLOW_NO_GUARDRAIL"] = "1";
     vi.clearAllMocks();
     vi.mocked(generateText).mockResolvedValue({
       text: "mock text",
@@ -78,6 +79,7 @@ describe("LlmAdapter outbound redaction — generateText", () => {
   });
 
   afterEach(() => {
+    delete process.env["ASSIGNEE_ALLOW_NO_GUARDRAIL"];
     process.env = { ...savedEnv };
   });
 
@@ -207,6 +209,7 @@ describe("LlmAdapter outbound redaction — generateText", () => {
 
 describe("LlmAdapter outbound redaction — generateStructured", () => {
   beforeEach(() => {
+    process.env["ASSIGNEE_ALLOW_NO_GUARDRAIL"] = "1";
     vi.clearAllMocks();
     vi.mocked(generateText).mockResolvedValue({
       text: "mock text",
@@ -216,6 +219,7 @@ describe("LlmAdapter outbound redaction — generateStructured", () => {
   });
 
   afterEach(() => {
+    delete process.env["ASSIGNEE_ALLOW_NO_GUARDRAIL"];
     process.env = { ...savedEnv };
   });
 
@@ -295,6 +299,7 @@ describe("LlmAdapter outbound redaction — generateStructured", () => {
  */
 describe("LlmAdapter boundary-tag sanitize — generateText (Story 55-it1-04)", () => {
   beforeEach(() => {
+    process.env["ASSIGNEE_ALLOW_NO_GUARDRAIL"] = "1";
     vi.clearAllMocks();
     vi.mocked(generateText).mockResolvedValue({
       text: "mock text",
@@ -304,6 +309,7 @@ describe("LlmAdapter boundary-tag sanitize — generateText (Story 55-it1-04)", 
   });
 
   afterEach(() => {
+    delete process.env["ASSIGNEE_ALLOW_NO_GUARDRAIL"];
     process.env = { ...savedEnv };
   });
 
@@ -387,6 +393,7 @@ describe("LlmAdapter boundary-tag sanitize — generateText (Story 55-it1-04)", 
 
 describe("LlmAdapter boundary-tag sanitize — generateStructured (Story 55-it1-04)", () => {
   beforeEach(() => {
+    process.env["ASSIGNEE_ALLOW_NO_GUARDRAIL"] = "1";
     vi.clearAllMocks();
     vi.mocked(generateText).mockResolvedValue({
       text: "mock text",
@@ -396,6 +403,7 @@ describe("LlmAdapter boundary-tag sanitize — generateStructured (Story 55-it1-
   });
 
   afterEach(() => {
+    delete process.env["ASSIGNEE_ALLOW_NO_GUARDRAIL"];
     process.env = { ...savedEnv };
   });
 

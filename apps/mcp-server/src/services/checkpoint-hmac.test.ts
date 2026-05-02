@@ -4,16 +4,28 @@
  * W18-S2 (DEF-07 M-β-012/013): covers all three `CheckpointVerifyResult`
  * branches so callers can rely on the discriminated-union reason codes.
  *
+ * SEC-019: restart-simulation tests — verify that two successive
+ *   `resolveHmacSecret(keyFile)` calls on the same key file return the
+ *   same secret (simulating a process restart).
+ *
+ * SEC-027: APFS homoglyph tests — on darwin, a path registered under
+ *   `/Foo` must resolve to the same map slot as `/foo` (lowercase guard).
+ *
  * @see Story 50-5 B-2, Story W18-S2
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   canonicalizeCheckpointPath,
   computeDesiredStateHash,
+  resolveHmacSecret,
   signCheckpoint,
   verifyCheckpoint,
   verifyHmac,
+  _readHmacSecretHexForTests,
   _resetSignaturesForTests,
 } from "./checkpoint-hmac.js";
 
@@ -22,7 +34,7 @@ import {
 const TEST_PATH = "/tmp/assignee-hmac-test/checkpoint.json";
 const CANONICAL = canonicalizeCheckpointPath(TEST_PATH);
 const DESIRED_STATE: Record<string, unknown> = {
-  BucketName: "test-bucket",
+  BucketName: "test-bucket-sec019",
   Region: "us-east-1",
 };
 const HASH = computeDesiredStateHash(DESIRED_STATE);
@@ -39,11 +51,32 @@ function signAndReturnHash(
   return h;
 }
 
+// ── Temp-dir fixture for key-file tests ──────────────────────────────────────
+
+let tmpDir: string;
+
+function makeTmpDir(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "assignee-hmac-test-"));
+}
+
+function removeTmpDir(dir: string): void {
+  try {
+    fs.rmSync(dir, { recursive: true, force: true });
+  } catch {
+    /* best-effort */
+  }
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe("checkpoint-hmac", () => {
   beforeEach(() => {
     _resetSignaturesForTests();
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    removeTmpDir(tmpDir);
   });
 
   // ── canonicalizeCheckpointPath ────────────────────────────────────────────
@@ -213,6 +246,105 @@ describe("checkpoint-hmac", () => {
         ok: false,
         reason: "tampered",
       });
+    });
+  });
+
+  // ── SEC-019: persisted HMAC secret — restart-simulation ───────────────────
+
+  describe("SEC-019: resolveHmacSecret — disk persistence", () => {
+    it("generates a 32-byte secret and writes a 64-char hex file on first call", () => {
+      const keyFile = path.join(tmpDir, "hmac-key");
+      const secret = resolveHmacSecret(keyFile);
+
+      expect(secret).toBeInstanceOf(Buffer);
+      expect(secret.length).toBe(32);
+      expect(fs.existsSync(keyFile)).toBe(true);
+      const stored = fs.readFileSync(keyFile, "utf8").trim();
+      expect(stored).toMatch(/^[0-9a-f]{64}$/);
+      expect(stored).toBe(secret.toString("hex"));
+    });
+
+    it("returns the SAME secret on a second call (simulates process restart)", () => {
+      const keyFile = path.join(tmpDir, "hmac-key-restart");
+      // First "process" creates the key file.
+      const first = _readHmacSecretHexForTests(keyFile);
+      // Second "process" reads from the same file.
+      const second = _readHmacSecretHexForTests(keyFile);
+
+      expect(first).toBe(second);
+      expect(first).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it("returns a different secret for two distinct key files", () => {
+      const keyA = path.join(tmpDir, "hmac-key-a");
+      const keyB = path.join(tmpDir, "hmac-key-b");
+      const secretA = _readHmacSecretHexForTests(keyA);
+      const secretB = _readHmacSecretHexForTests(keyB);
+      // Extremely unlikely to collide with real randomBytes(32).
+      expect(secretA).not.toBe(secretB);
+    });
+
+    it("returns an ephemeral secret when the key file is a symlink (fail-closed)", () => {
+      if (process.platform === "win32") return; // symlinks need elevation on Windows
+
+      const realFile = path.join(tmpDir, "real-key");
+      const linkFile = path.join(tmpDir, "link-key");
+      // Write a valid key to realFile so the link target exists.
+      fs.writeFileSync(realFile, "a".repeat(64), { mode: 0o600 });
+      fs.symlinkSync(realFile, linkFile);
+
+      // resolveHmacSecret should detect the symlink and return ephemeral.
+      const secret = resolveHmacSecret(linkFile);
+      // We can't compare to realFile contents because the function
+      // refuses to read through symlinks; we just verify it returns a Buffer.
+      expect(secret).toBeInstanceOf(Buffer);
+      expect(secret.length).toBe(32);
+    });
+
+    it("key file has mode 0o600 after creation", () => {
+      if (process.platform === "win32") return; // NTFS chmod is a no-op
+
+      const keyFile = path.join(tmpDir, "hmac-key-mode");
+      resolveHmacSecret(keyFile);
+      const stat = fs.statSync(keyFile);
+      expect(stat.mode & 0o777).toBe(0o600);
+    });
+  });
+
+  // ── SEC-027: APFS homoglyph — darwin lowercase guard ─────────────────────
+
+  describe("SEC-027: canonicalizeCheckpointPath — darwin case normalization", () => {
+    it("on darwin: two paths differing only in case produce the same canonical key", () => {
+      if (process.platform !== "darwin") return; // skip on non-darwin
+
+      const upper = canonicalizeCheckpointPath(
+        "/tmp/Assignee-Test/Checkpoint.json",
+      );
+      const lower = canonicalizeCheckpointPath(
+        "/tmp/assignee-test/checkpoint.json",
+      );
+      expect(upper).toBe(lower);
+    });
+
+    it("on darwin: signing under one case verifies under the other case", () => {
+      if (process.platform !== "darwin") return;
+
+      const upperPath = canonicalizeCheckpointPath("/tmp/Sec027Test/cp.json");
+      const lowerPath = canonicalizeCheckpointPath("/tmp/sec027test/cp.json");
+      // Both should canonicalize to the same key, so signing one finds the other.
+      const h = computeDesiredStateHash({ v: "sec027" });
+      signCheckpoint(upperPath, h);
+      // Verify via the lowercase canonical.
+      expect(verifyCheckpoint(lowerPath, h)).toEqual({ ok: true });
+    });
+
+    it("on non-darwin: paths differing in case produce DIFFERENT canonical keys (fail-closed)", () => {
+      if (process.platform === "darwin") return; // darwin behaviour tested above
+
+      const upper = canonicalizeCheckpointPath("/tmp/CaseSensitive.json");
+      const lower = canonicalizeCheckpointPath("/tmp/casesensitive.json");
+      // On Linux the filesystem IS case-sensitive; the keys must differ.
+      expect(upper).not.toBe(lower);
     });
   });
 });

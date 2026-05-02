@@ -50,7 +50,11 @@ export function installMcpSignalHandler(
 ): void {
   process.on(signal, () => {
     if (mcpShuttingDown) {
-      // Second signal during shutdown — bail out immediately.
+      // SEC-021: Second signal during shutdown — do a synchronous best-effort
+      // clearAllApplies() before forcing exit so advisory-lock files are not
+      // left dangling on disk (stale "Active-applies cap reached" error on
+      // the next process start).
+      clearAllApplies();
       process.exit(code);
     }
     mcpShuttingDown = true;

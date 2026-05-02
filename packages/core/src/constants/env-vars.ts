@@ -32,14 +32,25 @@ export const EnvVar = {
   BEDROCK_GUARDRAIL_ID: "BEDROCK_GUARDRAIL_ID",
   BEDROCK_GUARDRAIL_VERSION: "BEDROCK_GUARDRAIL_VERSION",
   /**
-   * When set to "1" or "true", suppresses the startup warning that fires
+   * When set to "1" (ONLY "1"), suppresses the startup warning that fires
    * when Bedrock is the active provider but no Guardrail has been
    * configured. This is an explicit operator opt-out: the operator
    * acknowledges that LLM-generated content may include PII, harmful
    * topics, or jailbreak responses without a Guardrail in place.
+   * NOTE: only the value "1" is accepted — "true", "True", "TRUE" are
+   * all rejected (parseBoolEnv strict mode). SEC-036.
    * @see P018 — acquisition-DD finding, L5 Aiko L5.3 S12
    */
   BEDROCK_GUARDRAIL_DISABLE: "BEDROCK_GUARDRAIL_DISABLE",
+
+  /**
+   * When set to "1", skips the `GuardrailRequiredError` gate that fires
+   * when Bedrock is the active provider and BEDROCK_GUARDRAIL_ID is unset.
+   * This is also the global opt-out for the one-time non-Bedrock provider
+   * guardrail-absence warning (SEC-042). Only the value "1" is accepted.
+   * SEC-016, SEC-042.
+   */
+  ASSIGNEE_ALLOW_NO_GUARDRAIL: "ASSIGNEE_ALLOW_NO_GUARDRAIL",
 
   // ── LLM routing ───────────────────────────────────────────────
   /**
@@ -149,6 +160,14 @@ export const EnvVar = {
    * @see packages/core/src/telemetry/otel-exporter.ts
    */
   ASSIGNEE_OTEL_ALLOW_HTTP: "ASSIGNEE_OTEL_ALLOW_HTTP",
+
+  /**
+   * SEC-023: comma-separated list of acceptable OTLP endpoint hostnames.
+   * When set, the OTEL exporter rejects any endpoint whose hostname is not
+   * in this list. Default is no allowlist (all hostnames permitted).
+   * Example: `ASSIGNEE_OTEL_ENDPOINT_ALLOWLIST=collector.example.com,otel.internal`
+   */
+  ASSIGNEE_OTEL_ENDPOINT_ALLOWLIST: "ASSIGNEE_OTEL_ENDPOINT_ALLOWLIST",
 
   // `ASSIGNEE_ENABLE_REMOTE_MCP` was previously defined here to gate the
   // opt-in remote knowledge MCP server. REMOVED per acquisition-DD L4-S01

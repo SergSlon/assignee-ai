@@ -50,6 +50,12 @@ import {
   resolveAuditRetentionDays,
 } from "../utils/logger/retention.js";
 
+// ── SEC-043: one-time warning for ASSIGNEE_AUDIT_FSYNC=0 ──────────────
+// Emitted at first audit append, not at module load, so that test code
+// that never appends sees no noise, and operators who run production
+// with fsync disabled see a clear message on the first write.
+let _fsyncDisabledWarned = false;
+
 // ── Paths ──────────────────────────────────────────────────────────────
 
 export const DEFAULT_AUDIT_LOG_DIR = path.join(
@@ -157,7 +163,18 @@ export async function appendAuditRecord(
     //      size) is also durable. Without this, a kernel crash between the
     //      appendFile and the OS directory-flush can leave the bytes on disk
     //      but invisible to subsequent reads (directory entry not committed).
-    if (process.env["ASSIGNEE_AUDIT_FSYNC"] !== "0") {
+    // SEC-043: warn once when fsync is disabled so operators don't
+    // silently lose audit entries on crash.
+    if (process.env["ASSIGNEE_AUDIT_FSYNC"] === "0") {
+      if (!_fsyncDisabledWarned) {
+        _fsyncDisabledWarned = true;
+        process.stderr.write(
+          `[audit] WARNING: ASSIGNEE_AUDIT_FSYNC=0 — audit durability is ` +
+            `disabled (kernel-crash may lose the last append). ` +
+            `Do NOT set this in production.\n`,
+        );
+      }
+    } else {
       // 1. File fsync.
       const fileFd = await fs.open(logFile, "r");
       try {

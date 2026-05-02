@@ -39,12 +39,60 @@ const ACCOUNT_ID_PATTERN = /\b\d{12}\b/g;
  */
 const AKIA_STRING_PATTERN = /A[KS]IA[0-9A-Z]{16}/g;
 
+// ── SEC-007: Multi-provider secret patterns ───────────────────────────────
+//
+// Each pattern is prefix-anchored and character-class-bounded to minimise
+// false-positives on bucket names, ARNs, and other long opaque identifiers.
+//
+// Provider inventory:
+//   Anthropic   sk-ant-[api03|apikey]-...  (legacy + current API key shapes)
+//   OpenAI      sk-proj-... (project key) or sk-[20 base58 chars] (legacy)
+//   GitHub PAT  ghp_... (classic PAT), gho_... (OAuth token),
+//               github_pat_... (fine-grained PAT)
+//   Slack       xoxb-... (bot token), xoxp-... (user token)
+//   Google AI   AIza followed by 35 base64url chars
+//   JWT         eyJ prefix (base64url-encoded JSON header) — prefix only,
+//               stops at whitespace to avoid collateral on short test strings
+//
+// AWS session tokens are handled by the SENSITIVE_KEY_NAMES allowlist in
+// checkpoint/redaction.ts (key-name path) and must not be added here because
+// the base64 shape is too generic and would produce false-positives.
+
+/** Anthropic API key: sk-ant-api03-... or sk-ant-... (legacy) */
+const ANTHROPIC_KEY_PATTERN = /sk-ant-[A-Za-z0-9_-]{20,}/g;
+
+/** OpenAI project key (sk-proj-...) or legacy user key (sk- + ~48 base58 chars) */
+const OPENAI_KEY_PATTERN = /sk-(?:proj-)[A-Za-z0-9_-]{20,}/g;
+
+/** GitHub classic PAT (ghp_), OAuth token (gho_), fine-grained PAT (github_pat_) */
+const GITHUB_TOKEN_PATTERN = /(?:ghp_|gho_|github_pat_)[A-Za-z0-9_]{20,}/g;
+
+/** Slack bot token (xoxb-) and user token (xoxp-) */
+const SLACK_TOKEN_PATTERN = /xox[bp]-[A-Za-z0-9-]{10,}/g;
+
+/** Google AI / Cloud API key: AIza + 35 URL-safe base64 chars */
+const GOOGLE_AI_KEY_PATTERN = /AIza[0-9A-Za-z_-]{35}/g;
+
+/**
+ * JWT prefix: eyJ (base64url-encoded `{`) as used in header + payload parts.
+ * Stops at whitespace — does NOT attempt to match the full dot-separated token
+ * to avoid false-positives on short strings in unit tests.
+ * Minimum 20 chars after prefix to avoid matching the literal string "eyJ" alone.
+ */
+const JWT_PATTERN = /eyJ[A-Za-z0-9_-]{20,}(?:\.[A-Za-z0-9_-]+){1,2}/g;
+
 export function redactSensitive(message: string): string {
   if (!message) return message;
   return message
     .replace(ARN_PATTERN, "[ARN]")
     .replace(ACCOUNT_ID_PATTERN, "[ACCOUNT]")
-    .replace(AKIA_STRING_PATTERN, "[AKIA]");
+    .replace(AKIA_STRING_PATTERN, "[AKIA]")
+    .replace(ANTHROPIC_KEY_PATTERN, "[ANTHROPIC_KEY]")
+    .replace(OPENAI_KEY_PATTERN, "[OPENAI_KEY]")
+    .replace(GITHUB_TOKEN_PATTERN, "[GITHUB_TOKEN]")
+    .replace(SLACK_TOKEN_PATTERN, "[SLACK_TOKEN]")
+    .replace(GOOGLE_AI_KEY_PATTERN, "[GOOGLE_KEY]")
+    .replace(JWT_PATTERN, "[JWT]");
 }
 
 /**

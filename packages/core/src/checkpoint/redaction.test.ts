@@ -25,6 +25,7 @@ import {
   redactSensitiveFields,
   stripRedactedFields,
   REDACTED_VALUE,
+  CheckpointRedactionError,
 } from "./redaction.js";
 
 describe("redactSensitiveFields — allowlist coverage", () => {
@@ -455,6 +456,146 @@ describe("W12-S2 — case-insensitive key lookup (M-α-007)", () => {
     };
     const result = redactSensitiveFields(input);
     expect(result["PasswordPolicy"]).toEqual(input.PasswordPolicy);
+  });
+});
+
+// ── SEC-007: Multi-provider secret pattern coverage in checkpoint layer ───────
+//
+// Mirrors the pattern suite in `utils/redact.test.ts` but exercises the
+// `redactValue` path inside `redactSensitiveFields` — i.e., the patterns
+// are applied to VALUES of NON-sensitive keys (defense-in-depth).
+
+describe("SEC-007 — multi-provider patterns in redactSensitiveFields (defense-in-depth)", () => {
+  it("scrubs Anthropic key leaked into a Description field", () => {
+    const key = "sk-ant-api03-AAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBB";
+    const input = { Description: `Created with key ${key}` };
+    const result = redactSensitiveFields(input);
+    expect(result["Description"]).not.toContain(key);
+    expect(result["Description"]).toContain(REDACTED_VALUE);
+  });
+
+  it("scrubs OpenAI project key leaked into a Notes field", () => {
+    const key = "sk-proj-AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHHIIIIJJJJKKKKLLLL";
+    const input = { Notes: `openai api key: ${key}` };
+    const result = redactSensitiveFields(input);
+    expect(result["Notes"]).not.toContain(key);
+    expect(result["Notes"]).toContain(REDACTED_VALUE);
+  });
+
+  it("scrubs GitHub PAT leaked into a Tags value (array of strings)", () => {
+    const token = "ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1234";
+    const input = { Tags: [`Authorization: Bearer ${token}`, "env:prod"] };
+    const result = redactSensitiveFields(input);
+    const tags = result["Tags"] as string[];
+    expect(tags[0]).not.toContain(token);
+    expect(tags[0]).toContain(REDACTED_VALUE);
+    expect(tags[1]).toBe("env:prod");
+  });
+
+  it("scrubs Slack bot token leaked into a nested Metadata object", () => {
+    const token = "xoxb-1234567890-12345678901-abcdefghijklmnopqrst";
+    const input = { Metadata: { SlackToken: token } };
+    const result = redactSensitiveFields(input);
+    const meta = result["Metadata"] as Record<string, unknown>;
+    expect(meta["SlackToken"]).not.toContain(token);
+    expect(meta["SlackToken"]).toContain(REDACTED_VALUE);
+  });
+
+  it("scrubs Google AI key leaked into a Config string", () => {
+    const key = "AIzaSyBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx1";
+    const input = { Config: `api_key=${key}&version=2` };
+    const result = redactSensitiveFields(input);
+    expect(result["Config"]).not.toContain(key);
+    expect(result["Config"]).toContain(REDACTED_VALUE);
+  });
+
+  it("scrubs a JWT leaked into an arbitrary log-message field", () => {
+    const jwt =
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" +
+      ".eyJzdWIiOiIxMjM0NTY3ODkwIn0" +
+      ".SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
+    const input = { LogMessage: `bearer token=${jwt}` };
+    const result = redactSensitiveFields(input);
+    expect(result["LogMessage"]).not.toContain("eyJhbGci");
+    expect(result["LogMessage"]).toContain(REDACTED_VALUE);
+  });
+
+  it("does not false-positive on bucket names or ARNs (regression guard)", () => {
+    const input = {
+      BucketName: "assignee-logs-prod",
+      RoleArn: "arn:aws:iam::123456789012:role/assignee-operator",
+      Tags: [{ Key: "env", Value: "prod" }],
+    };
+    const result = redactSensitiveFields(input);
+    expect(result["BucketName"]).toBe("assignee-logs-prod");
+    expect(result["RoleArn"]).toBe(
+      "arn:aws:iam::123456789012:role/assignee-operator",
+    );
+    const tags = result["Tags"] as Array<Record<string, unknown>>;
+    expect(tags[0]!["Value"]).toBe("prod");
+  });
+});
+
+// ── SEC-044: Recursion / node-count depth guards ───────────────────────────────
+
+describe("SEC-044 — redactSensitiveFields depth + node-count guards", () => {
+  it("accepts a 32-level deeply nested object (at the limit)", () => {
+    // Build a chain of 32 nested objects — should NOT throw.
+    let payload: Record<string, unknown> = { leaf: "value" };
+    for (let i = 0; i < 31; i++) {
+      payload = { nested: payload };
+    }
+    expect(() => redactSensitiveFields(payload)).not.toThrow();
+  });
+
+  it("throws CheckpointRedactionError when nesting exceeds 32 levels", () => {
+    // Build a 33-level nested object — must throw.
+    let payload: Record<string, unknown> = { leaf: "value" };
+    for (let i = 0; i < 33; i++) {
+      payload = { nested: payload };
+    }
+    expect(() => redactSensitiveFields(payload)).toThrow(
+      CheckpointRedactionError,
+    );
+    expect(() => redactSensitiveFields(payload)).toThrow(
+      /maximum nesting depth/,
+    );
+  });
+
+  it("throws CheckpointRedactionError when node count exceeds 10 000", () => {
+    // Build a flat object with 10 001 keys — must throw.
+    const payload: Record<string, unknown> = {};
+    for (let i = 0; i < 10_001; i++) {
+      payload[`key${i}`] = "value";
+    }
+    expect(() => redactSensitiveFields(payload)).toThrow(
+      CheckpointRedactionError,
+    );
+    expect(() => redactSensitiveFields(payload)).toThrow(/maximum node count/);
+  });
+
+  it("accepts an object with exactly 10 000 nodes (at the limit)", () => {
+    // 10 000 keys — should NOT throw.
+    const payload: Record<string, unknown> = {};
+    for (let i = 0; i < 10_000; i++) {
+      payload[`key${i}`] = "value";
+    }
+    expect(() => redactSensitiveFields(payload)).not.toThrow();
+  });
+
+  it("error message names the exceeded limit type", () => {
+    let depthPayload: Record<string, unknown> = { leaf: "x" };
+    for (let i = 0; i < 34; i++) {
+      depthPayload = { n: depthPayload };
+    }
+    let depthError: Error | undefined;
+    try {
+      redactSensitiveFields(depthPayload);
+    } catch (e) {
+      depthError = e as Error;
+    }
+    expect(depthError).toBeInstanceOf(CheckpointRedactionError);
+    expect(depthError!.message).toMatch(/nesting depth/);
   });
 });
 

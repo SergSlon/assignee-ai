@@ -6,21 +6,24 @@
  * which accepts any attacker-planted file in world-writable locations.
  *
  * This module closes the gap by:
- *   1. Holding a per-process random 32-byte HMAC secret generated at
- *      module-load time. The secret never touches disk.
+ *   1. Holding a per-process 32-byte HMAC secret. The secret is persisted
+ *      to `~/.assignee/checkpoint-hmac-key` (mode 0o600) so MCP server
+ *      restarts do not open a re-sign window (SEC-019). On module load the
+ *      secret is read from disk; if absent it is generated and written.
  *   2. Registering an HMAC over `(canonical-path, sha256(desiredState))`
  *      every time `saveCheckpoint` writes a new plan. The HMAC is kept
- *      in a Map keyed by the canonical path so restarting the server
- *      wipes all outstanding signatures — an accepted trade-off per
- *      the story spec (post-restart resume refused with a clear message).
+ *      in a Map keyed by the canonical path.
  *   3. Exposing `verifyCheckpoint` for the loader to confirm the file
- *      it is about to consume was written by THIS process AND has not
+ *      it is about to consume was written by THIS server AND has not
  *      been mutated since (the desiredState hash is checked against
  *      what was signed at write time).
  *
- * No HMAC material is persisted to disk — defeating an attacker who
- * plants a hand-crafted `/tmp/evil.json`, because they cannot compute
- * a valid HMAC without the secret.
+ * SEC-027: On macOS (APFS — case-insensitive-but-case-preserving) the
+ * canonical path is lowercased before HMAC map lookup so that
+ * `/path/Foo` and `/path/foo` resolve to the same key, preventing a
+ * homoglyph bypass.  The guard is fail-closed: a case variant that was
+ * registered under one casing will NOT be found under a different casing,
+ * causing a `not-registered` result rather than a false positive.
  */
 
 import {
@@ -29,14 +32,130 @@ import {
   randomBytes,
   timingSafeEqual,
 } from "node:crypto";
+import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 
+// ── SEC-019: persisted HMAC secret ─────────────────────────────────────
 /**
- * Per-process HMAC secret. 32 bytes is 256-bit strength, matching
- * SHA-256's security margin. Generated once at module load. NEVER
- * serialized, NEVER exported — callers go through the signed API.
+ * Default path for the persisted checkpoint HMAC key file.
+ *
+ * Stored at `~/.assignee/checkpoint-hmac-key` with mode 0o600
+ * (owner read+write only).  Mirrors the audit-key pattern in
+ * `packages/core/src/audit/hmac-chain.ts`.
+ *
+ * Exported so tests can inject a temp-dir path without touching the
+ * real home directory.
  */
-const SECRET: Buffer = randomBytes(32);
+export const DEFAULT_HMAC_KEY_FILE = path.join(
+  os.homedir(),
+  ".assignee",
+  "checkpoint-hmac-key",
+);
+
+/**
+ * Resolves the 32-byte HMAC secret for checkpoint signing.
+ *
+ * Priority:
+ *  1. Read from `keyFile` if it exists and is a plain file (not symlink).
+ *  2. Generate `randomBytes(32)`, write to `keyFile` with
+ *     `O_CREAT | O_EXCL | O_NOFOLLOW` (0o600).  EEXIST means another
+ *     process won the race — read their file.
+ *  3. Fallback: generate an ephemeral Buffer and emit a stderr warning.
+ *
+ * @param keyFile  Override the default key-file path (useful in tests).
+ */
+export function resolveHmacSecret(
+  keyFile: string = DEFAULT_HMAC_KEY_FILE,
+): Buffer {
+  // ── Try to read existing file ──────────────────────────────────────
+  try {
+    if (fs.existsSync(keyFile)) {
+      // Reject symlinks to avoid symlink-following attacks.
+      if (process.platform !== "win32") {
+        const lstat = fs.lstatSync(keyFile);
+        if (lstat.isSymbolicLink()) {
+          process.stderr.write(
+            `WARNING: checkpoint HMAC key file ${keyFile} is a symbolic ` +
+              `link — refusing to use it; generating ephemeral secret.\n`,
+          );
+          return randomBytes(32);
+        }
+      }
+      const hex = fs.readFileSync(keyFile, "utf8").trim();
+      if (hex.length === 64) {
+        return Buffer.from(hex, "hex");
+      }
+      // File exists but is malformed — fall through to generate.
+      process.stderr.write(
+        `WARNING: checkpoint HMAC key file ${keyFile} has unexpected ` +
+          `length ${hex.length} (expected 64 hex chars); regenerating.\n`,
+      );
+    }
+  } catch {
+    // Unreadable — fall through to generate.
+  }
+
+  // ── Generate and persist ─────────────────────────────────────────
+  const newKey = randomBytes(32);
+  const newHex = newKey.toString("hex");
+  try {
+    const parentDir = path.dirname(keyFile);
+    fs.mkdirSync(parentDir, { recursive: true, mode: 0o700 });
+    // O_WRONLY | O_CREAT | O_EXCL = exclusive create (TOCTOU-safe).
+    // OR O_NOFOLLOW on POSIX to reject a symlink injected after mkdir.
+    const O_NOFOLLOW_PLATFORM =
+      process.platform === "linux"
+        ? 0x20000
+        : process.platform === "darwin"
+          ? 0x100
+          : 0; // Windows: no-op
+    const openFlags =
+      fs.constants.O_WRONLY |
+      fs.constants.O_CREAT |
+      fs.constants.O_EXCL |
+      O_NOFOLLOW_PLATFORM;
+    const fd = fs.openSync(keyFile, openFlags, 0o600);
+    try {
+      fs.writeSync(fd, newHex, 0, "utf8");
+    } finally {
+      fs.closeSync(fd);
+    }
+    return newKey;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EEXIST") {
+      // Another process won the create race — read their key.
+      try {
+        const raceHex = fs.readFileSync(keyFile, "utf8").trim();
+        if (raceHex.length === 64) {
+          return Buffer.from(raceHex, "hex");
+        }
+      } catch {
+        // fall through to ephemeral
+      }
+    }
+    process.stderr.write(
+      `WARNING: cannot persist checkpoint HMAC key to ${keyFile} ` +
+        `(${String(err)}); using ephemeral secret — ` +
+        `post-restart verification will fail.\n`,
+    );
+    return newKey; // ephemeral
+  }
+}
+
+/**
+ * Per-process HMAC secret. 32 bytes / 256-bit strength, matching
+ * SHA-256's security margin.
+ *
+ * SEC-019: loaded from (or written to) disk at module load so that
+ * MCP server restarts use the same secret and can verify checkpoints
+ * written before the restart.
+ *
+ * NEVER serialized beyond the key file, NEVER exported — callers go
+ * through the signed API.
+ */
+const SECRET: Buffer = resolveHmacSecret();
 
 /**
  * In-memory signature store. Key = canonical absolute path of the
@@ -63,9 +182,26 @@ const SIGNATURES = new Map<string, string>();
  * `fs.readFile` time inside `loadCheckpointFromPath` — the integrity
  * check here runs against the path string that the tool was asked to
  * load, which is the surface an attacker can control.
+ *
+ * SEC-027 (APFS homoglyph): on macOS, APFS is case-insensitive-but-
+ * case-preserving. `path.resolve("/tmp/Foo")` and
+ * `path.resolve("/tmp/foo")` produce different strings but both open
+ * the same inode.  An attacker who saves a checkpoint at `/path/Foo`
+ * could attempt to verify-load at `/path/foo`, causing a SIGNATURES
+ * map miss (the canonical path differs) and a `not-registered` result
+ * — which is the desired fail-closed behaviour, but the mismatch also
+ * means a legitimate restart after a case change would fail.
+ *
+ * Fix: on darwin, lowercase the resolved path before keying so that
+ * both spellings of the same APFS path land on the same map slot.
+ * The guard is still fail-closed: a lowercase-keyed registration will
+ * NOT match a path that hashes differently after lowercasing (e.g.
+ * two paths that differ only in non-case characters).
  */
 export function canonicalizeCheckpointPath(filePath: string): string {
-  return path.resolve(filePath);
+  const resolved = path.resolve(filePath);
+  // SEC-027: lowercase on APFS (macOS) to prevent homoglyph bypass.
+  return process.platform === "darwin" ? resolved.toLowerCase() : resolved;
 }
 
 /**
@@ -204,4 +340,14 @@ export const verifyHmac = verifyCheckpoint;
  */
 export function _resetSignaturesForTests(): void {
   SIGNATURES.clear();
+}
+
+/**
+ * @internal Test-only. Reads (or generates) the HMAC secret from the
+ * provided key-file path and returns it as a hex string.  Used by
+ * restart-simulation tests that want to verify that two successive
+ * `resolveHmacSecret(keyFile)` calls return the same value.
+ */
+export function _readHmacSecretHexForTests(keyFile: string): string {
+  return resolveHmacSecret(keyFile).toString("hex");
 }

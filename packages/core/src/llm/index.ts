@@ -29,7 +29,13 @@ export {
   LlmProvider,
   type LlmProviderType,
 } from "../constants/llm-providers.js";
-export { LlmAdapter, type LlmAdapterConfig } from "./adapter.js";
+export {
+  LlmAdapter,
+  type LlmAdapterConfig,
+  parseBoolEnv,
+  recordThrottleRetry,
+  _resetRetryBudgetForTest,
+} from "./adapter.js";
 export { createLanguageModel } from "./client-factory.js";
 export {
   stripPromptBoundaryTags,
