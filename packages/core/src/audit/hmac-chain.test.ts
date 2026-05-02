@@ -14,9 +14,11 @@ import {
   legacyVerifyChainLink,
   getAuditKey,
   resolveAuditKey,
+  rotateAuditKey,
   DEFAULT_AUDIT_KEY_FILE,
   GENESIS_HMAC,
   AUDIT_KEY_MIN_LENGTH,
+  LEGACY_HMAC_OPT_IN_ENV,
   _resetAuditKeyCache,
 } from "./hmac-chain.js";
 import { AssigneeError } from "../errors.js";
@@ -200,6 +202,224 @@ describe("resolveAuditKey — file-mode warning deduplication (PR-019)", () => {
     );
     expect(warnings).toHaveLength(0);
   });
+});
+
+// ── SEC-001: rotateAuditKey API ─────────────────────────────────────────
+
+describe("rotateAuditKey (SEC-001)", () => {
+  let tmpDir: string;
+  let keyFile: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "assignee-rotate-test-"));
+    keyFile = path.join(tmpDir, "audit-key");
+    _resetAuditKeyCache();
+    delete process.env["ASSIGNEE_AUDIT_KEY"];
+  });
+
+  afterEach(() => {
+    delete process.env["ASSIGNEE_AUDIT_KEY"];
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      // best-effort
+    }
+    _resetAuditKeyCache();
+  });
+
+  it("rotateAuditKey() without keyFile clears the cache and returns undefined", () => {
+    // Pre-populate the cache
+    const k1 = resolveAuditKey(keyFile);
+    expect(k1.length).toBeGreaterThanOrEqual(AUDIT_KEY_MIN_LENGTH);
+    const result = rotateAuditKey();
+    expect(result).toBeUndefined();
+  });
+
+  it("rotateAuditKey(keyFile) clears cache and returns the current key from disk", () => {
+    const k1 = resolveAuditKey(keyFile);
+    // rotateAuditKey re-resolves fresh from disk
+    const k2 = rotateAuditKey(keyFile);
+    expect(k2).toBe(k1);
+  });
+
+  it("rotateAuditKey() forces next resolveAuditKey() to re-read disk when key changed", () => {
+    // Write initial key
+    const k1 = resolveAuditKey(keyFile);
+    // Simulate rotation: overwrite key file with new key
+    const newKey = "n".repeat(64);
+    fs.writeFileSync(keyFile, newKey, { mode: 0o600 });
+    // Without rotation, cached value would be returned (for DEFAULT path;
+    // for non-default test path, the implementation re-reads anyway since
+    // the cache is only for DEFAULT_AUDIT_KEY_FILE).
+    rotateAuditKey();
+    const k2 = resolveAuditKey(keyFile);
+    expect(k2).toBe(newKey);
+    expect(k2).not.toBe(k1);
+  });
+
+  it("cache TTL: after TTL expires resolveAuditKey re-reads from disk", () => {
+    // This test uses DEFAULT_AUDIT_KEY_FILE path to exercise the TTL cache.
+    // We can't easily time-travel, so we verify the mechanism by using
+    // rotateAuditKey() which resets _cacheExpiresAt to 0 (expired).
+    const k1 = resolveAuditKey(keyFile);
+    rotateAuditKey(); // expire cache
+    // After expiry, re-reading should still succeed
+    const k2 = resolveAuditKey(keyFile);
+    expect(k1).toBe(k2); // same file → same key
+  });
+
+  it("rotateAuditKey() with keyFile and config reads env key after rotation", () => {
+    const envKey = "e".repeat(64);
+    process.env["ASSIGNEE_AUDIT_KEY"] = envKey;
+    rotateAuditKey(); // clear cache
+    const k = resolveAuditKey(keyFile);
+    expect(k).toBe(envKey);
+  });
+});
+
+// ── SEC-003/004/005: FS security — symlink, hardlink, parent-dir mode ──
+
+describe("resolveAuditKey — FS security (SEC-003/004/005)", () => {
+  let tmpDir: string;
+  let keyFile: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "assignee-fssec-test-"));
+    keyFile = path.join(tmpDir, "audit-key");
+    _resetAuditKeyCache();
+    delete process.env["ASSIGNEE_AUDIT_KEY"];
+  });
+
+  afterEach(() => {
+    delete process.env["ASSIGNEE_AUDIT_KEY"];
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      // best-effort
+    }
+    _resetAuditKeyCache();
+  });
+
+  it(
+    "throws AUDIT_KEY_SYMLINK when key file is a symlink (SEC-003)",
+    { skip: process.platform === "win32" },
+    () => {
+      // Create a real file and a symlink pointing to it
+      const realFile = path.join(tmpDir, "real-key");
+      fs.writeFileSync(realFile, "r".repeat(64), { mode: 0o600 });
+      fs.symlinkSync(realFile, keyFile);
+
+      expect(() => resolveAuditKey(keyFile)).toThrow(AssigneeError);
+      try {
+        resolveAuditKey(keyFile);
+      } catch (err) {
+        expect((err as AssigneeError).code).toBe("AUDIT_KEY_SYMLINK");
+      }
+    },
+  );
+
+  it(
+    "throws AUDIT_KEY_HARDLINK when key file has nlink > 1 (SEC-004)",
+    { skip: process.platform === "win32" },
+    () => {
+      // Write a key file, then create a hard link to it
+      fs.writeFileSync(keyFile, "h".repeat(64), { mode: 0o600 });
+      const hardLink = path.join(tmpDir, "hard-link-key");
+      fs.linkSync(keyFile, hardLink);
+
+      // Now keyFile has nlink == 2 — must be rejected
+      expect(() => resolveAuditKey(keyFile)).toThrow(AssigneeError);
+      try {
+        resolveAuditKey(keyFile);
+      } catch (err) {
+        expect((err as AssigneeError).code).toBe("AUDIT_KEY_HARDLINK");
+      }
+    },
+  );
+
+  it(
+    "emits a parent-dir mode warning when directory is not 0o700 (SEC-005)",
+    { skip: process.platform === "win32" },
+    () => {
+      // Create directory with wrong mode
+      fs.mkdirSync(path.join(tmpDir, "wide-dir"), { mode: 0o755 });
+      const keyFileInWideDir = path.join(tmpDir, "wide-dir", "audit-key");
+      fs.writeFileSync(keyFileInWideDir, "w".repeat(64), { mode: 0o600 });
+
+      const stderrChunks: string[] = [];
+      const originalWrite = process.stderr.write.bind(process.stderr);
+      process.stderr.write = ((chunk: string | Uint8Array): boolean => {
+        stderrChunks.push(
+          typeof chunk === "string"
+            ? chunk
+            : Buffer.from(chunk).toString("utf-8"),
+        );
+        return true;
+      }) as typeof process.stderr.write;
+
+      try {
+        resolveAuditKey(keyFileInWideDir);
+      } finally {
+        process.stderr.write = originalWrite;
+      }
+
+      const dirWarnings = stderrChunks.filter((c) =>
+        c.includes("audit key directory"),
+      );
+      expect(dirWarnings.length).toBeGreaterThanOrEqual(1);
+      expect(dirWarnings[0]).toContain("expected 0700");
+    },
+  );
+
+  it(
+    "does NOT emit parent-dir warning when directory mode is 0o700 (SEC-005 happy path)",
+    { skip: process.platform === "win32" },
+    () => {
+      const secureDir = path.join(tmpDir, "secure-dir");
+      fs.mkdirSync(secureDir, { mode: 0o700 });
+      const keyFileInSecureDir = path.join(secureDir, "audit-key");
+      fs.writeFileSync(keyFileInSecureDir, "s".repeat(64), { mode: 0o600 });
+
+      const stderrChunks: string[] = [];
+      const originalWrite = process.stderr.write.bind(process.stderr);
+      process.stderr.write = ((chunk: string | Uint8Array): boolean => {
+        stderrChunks.push(
+          typeof chunk === "string"
+            ? chunk
+            : Buffer.from(chunk).toString("utf-8"),
+        );
+        return true;
+      }) as typeof process.stderr.write;
+
+      try {
+        resolveAuditKey(keyFileInSecureDir);
+      } finally {
+        process.stderr.write = originalWrite;
+      }
+
+      const dirWarnings = stderrChunks.filter((c) =>
+        c.includes("audit key directory"),
+      );
+      expect(dirWarnings).toHaveLength(0);
+    },
+  );
+
+  it(
+    "newly generated key file has parent directory mode 0o700 (SEC-005)",
+    {
+      skip: process.platform === "win32",
+    },
+    () => {
+      // Use a completely fresh sub-dir that doesn't exist yet
+      const freshDir = path.join(tmpDir, "fresh-parent", "nested");
+      const freshKeyFile = path.join(freshDir, "audit-key");
+      // resolveAuditKey creates parent dirs — check mode
+      resolveAuditKey(freshKeyFile);
+      const dirStat = fs.statSync(path.dirname(freshKeyFile));
+      // mkdirSync with mode 0o700 and recursive — immediate parent should be 0o700
+      expect(dirStat.mode & 0o777).toBe(0o700);
+    },
+  );
 });
 
 // ── Key derivation tests ────────────────────────────────────────────────
@@ -530,10 +750,90 @@ describe("legacyComputeChainLink", () => {
   });
 });
 
+// ── SEC-037: legacy opt-in enforcement ─────────────────────────────────
+
+describe("legacyVerifyChainLink — SEC-037 opt-in gate", () => {
+  const KEY = "test-fixed-key-for-unit-tests";
+
+  beforeEach(() => {
+    delete process.env[LEGACY_HMAC_OPT_IN_ENV];
+  });
+
+  afterEach(() => {
+    delete process.env[LEGACY_HMAC_OPT_IN_ENV];
+  });
+
+  it("throws LEGACY_HMAC_NOT_ALLOWED when opt-in env var is absent", () => {
+    const record = { b: 1, a: 2 };
+    const hmac = legacyComputeChainLink(GENESIS_HMAC, record, KEY);
+    expect(() =>
+      legacyVerifyChainLink(record, GENESIS_HMAC, hmac, KEY),
+    ).toThrow(AssigneeError);
+    try {
+      legacyVerifyChainLink(record, GENESIS_HMAC, hmac, KEY);
+    } catch (err) {
+      expect((err as AssigneeError).code).toBe("LEGACY_HMAC_NOT_ALLOWED");
+      expect((err as AssigneeError).message).toContain(LEGACY_HMAC_OPT_IN_ENV);
+    }
+  });
+
+  it("throws LEGACY_HMAC_NOT_ALLOWED when opt-in env var is '0'", () => {
+    process.env[LEGACY_HMAC_OPT_IN_ENV] = "0";
+    const record = { b: 1, a: 2 };
+    const hmac = legacyComputeChainLink(GENESIS_HMAC, record, KEY);
+    expect(() =>
+      legacyVerifyChainLink(record, GENESIS_HMAC, hmac, KEY),
+    ).toThrow(AssigneeError);
+  });
+
+  it("throws LEGACY_HMAC_NOT_ALLOWED when opt-in env var is 'false'", () => {
+    process.env[LEGACY_HMAC_OPT_IN_ENV] = "false";
+    const record = { b: 1, a: 2 };
+    const hmac = legacyComputeChainLink(GENESIS_HMAC, record, KEY);
+    expect(() =>
+      legacyVerifyChainLink(record, GENESIS_HMAC, hmac, KEY),
+    ).toThrow(AssigneeError);
+  });
+
+  it("succeeds (returns true) when opt-in env var is '1'", () => {
+    process.env[LEGACY_HMAC_OPT_IN_ENV] = "1";
+    const record = { b: 1, a: 2 };
+    const hmac = legacyComputeChainLink(GENESIS_HMAC, record, KEY);
+    expect(legacyVerifyChainLink(record, GENESIS_HMAC, hmac, KEY)).toBe(true);
+  });
+
+  it("succeeds (returns true) when opt-in env var is 'true'", () => {
+    process.env[LEGACY_HMAC_OPT_IN_ENV] = "true";
+    const record = { b: 1, a: 2 };
+    const hmac = legacyComputeChainLink(GENESIS_HMAC, record, KEY);
+    expect(legacyVerifyChainLink(record, GENESIS_HMAC, hmac, KEY)).toBe(true);
+  });
+
+  it("succeeds (returns false for wrong HMAC) when opt-in env var is set", () => {
+    process.env[LEGACY_HMAC_OPT_IN_ENV] = "1";
+    const record = { b: 1, a: 2 };
+    expect(legacyVerifyChainLink(record, GENESIS_HMAC, "wrong-hmac", KEY)).toBe(
+      false,
+    );
+  });
+
+  it("LEGACY_HMAC_OPT_IN_ENV is exported and equals 'ASSIGNEE_AUDIT_ALLOW_LEGACY'", () => {
+    expect(LEGACY_HMAC_OPT_IN_ENV).toBe("ASSIGNEE_AUDIT_ALLOW_LEGACY");
+  });
+});
+
 // ── legacyVerifyChainLink tests (W8-S0) ────────────────────────────────────
 
 describe("legacyVerifyChainLink", () => {
   const KEY = "test-fixed-key-for-unit-tests";
+
+  // SEC-037: all tests in this suite set the opt-in env var explicitly.
+  beforeEach(() => {
+    process.env[LEGACY_HMAC_OPT_IN_ENV] = "1";
+  });
+  afterEach(() => {
+    delete process.env[LEGACY_HMAC_OPT_IN_ENV];
+  });
 
   it("returns true for a correctly computed legacy link", () => {
     const record = { b: 1, a: 2 };

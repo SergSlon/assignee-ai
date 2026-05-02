@@ -1,6 +1,7 @@
 /**
  * W3-01 — Audit chain verifier tests.
  * W9-S2 — Auto-fallback to legacy HMAC + chainMode field.
+ * SEC-A-4 — Legacy HMAC gate (ASSIGNEE_AUDIT_ALLOW_LEGACY_HMAC=1) tests.
  *
  * Tests cover:
  *   - Clean chain → ok: true, chainMode: "canonical"
@@ -11,8 +12,12 @@
  *   - Mixed legacy + HMAC → verifies HMAC portion only
  *   - 100-record fixture: exit 0 on clean, non-zero on broken
  *   - Pre-W7 (legacy-HMAC) chain → ok: true, chainMode: "legacy"
+ *     (requires ASSIGNEE_AUDIT_ALLOW_LEGACY_HMAC=1)
  *   - Mixed canonical + legacy-HMAC chain → ok: true, chainMode: "mixed"
+ *     (requires ASSIGNEE_AUDIT_ALLOW_LEGACY_HMAC=1)
  *   - Tampered legacy-format entry fails both checks → hmac-mismatch
+ *   - Legacy entry rejected without opt-in → legacy-hmac-not-allowed (SEC-035)
+ *   - Legacy entry accepted with opt-in → ok: true (SEC-035 migration window)
  */
 
 import { describe, it, expect, vi, afterEach } from "vitest";
@@ -24,6 +29,7 @@ import {
   computeChainLink,
   legacyComputeChainLink,
   GENESIS_HMAC,
+  LEGACY_HMAC_OPT_IN_ENV,
 } from "./hmac-chain.js";
 import type { AuditEntry } from "./audit-log.js";
 import { verifyAuditLog } from "./audit-verifier.js";
@@ -186,6 +192,10 @@ describe("verifyAuditLog — clean chain", () => {
 });
 
 describe("verifyAuditLog — 100-record fixture (acceptance criterion)", () => {
+  afterEach(() => {
+    delete process.env[LEGACY_HMAC_OPT_IN_ENV];
+  });
+
   it("verifies a 100-record clean chain successfully", async () => {
     const logFile = tempLogFile();
     await buildChain(logFile, 100);
@@ -199,6 +209,11 @@ describe("verifyAuditLog — 100-record fixture (acceptance criterion)", () => {
   });
 
   it("reports broken chain when record 50 payload is corrupted", async () => {
+    // Set legacy opt-in so the verifier tries both canonical and legacy checks
+    // and can distinguish "tampered" (both fail → hmac-mismatch) from
+    // "legacy-formatted" (canonical fails, legacy passes → legacy-hmac-count).
+    process.env[LEGACY_HMAC_OPT_IN_ENV] = "1";
+
     const logFile = tempLogFile();
     const entries = await buildChain(logFile, 100);
 
@@ -232,7 +247,15 @@ describe("verifyAuditLog — 100-record fixture (acceptance criterion)", () => {
 });
 
 describe("verifyAuditLog — corrupted records", () => {
+  afterEach(() => {
+    delete process.env[LEGACY_HMAC_OPT_IN_ENV];
+  });
+
   it("detects corrupted HMAC at record N (hmac-mismatch)", async () => {
+    // Set legacy opt-in so the verifier tries legacy after canonical fails,
+    // allowing it to distinguish tampering (both fail) from legacy-format.
+    process.env[LEGACY_HMAC_OPT_IN_ENV] = "1";
+
     const logFile = tempLogFile();
     await buildChain(logFile, 5);
 
@@ -438,9 +461,14 @@ describe("verifyAuditLog — legacy backward compatibility", () => {
 describe("verifyAuditLog — W9-S2 auto-fallback to legacy HMAC", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    // Ensure each test cleans up the opt-in env var.
+    delete process.env[LEGACY_HMAC_OPT_IN_ENV];
   });
 
-  it("emits a per-entry stderr WARN for each legacy-HMAC entry", async () => {
+  it("emits a per-entry stderr WARN for each legacy-HMAC entry (with opt-in)", async () => {
+    // SEC-035: legacy fallback requires ASSIGNEE_AUDIT_ALLOW_LEGACY=1.
+    process.env[LEGACY_HMAC_OPT_IN_ENV] = "1";
+
     const logFile = tempLogFile();
     // 3-entry legacy chain: each entry will trigger the legacy fallback path
     // because the record keys (zval, action) are in reverse alphabetical order,
@@ -474,7 +502,10 @@ describe("verifyAuditLog — W9-S2 auto-fallback to legacy HMAC", () => {
     await cleanupFile(logFile);
   });
 
-  it("verifies a pre-W7 chain (all legacy-HMAC entries) → chainMode: legacy", async () => {
+  it("verifies a pre-W7 chain (all legacy-HMAC entries) → chainMode: legacy (with opt-in)", async () => {
+    // SEC-035: legacy fallback requires ASSIGNEE_AUDIT_ALLOW_LEGACY=1.
+    process.env[LEGACY_HMAC_OPT_IN_ENV] = "1";
+
     const logFile = tempLogFile();
     await buildLegacyChain(logFile, 5);
     const result = await verifyAuditLog(logFile, FIXED_KEY);
@@ -487,7 +518,10 @@ describe("verifyAuditLog — W9-S2 auto-fallback to legacy HMAC", () => {
     await cleanupFile(logFile);
   });
 
-  it("verifies a mixed chain (legacy entries then canonical) → chainMode: mixed", async () => {
+  it("verifies a mixed chain (legacy entries then canonical) → chainMode: mixed (with opt-in)", async () => {
+    // SEC-035: legacy fallback requires ASSIGNEE_AUDIT_ALLOW_LEGACY=1.
+    process.env[LEGACY_HMAC_OPT_IN_ENV] = "1";
+
     const logFile = tempLogFile();
     // Build 3 legacy entries, then 3 canonical entries.
     const legacyEntries = await buildLegacyChain(logFile, 3);
@@ -505,6 +539,10 @@ describe("verifyAuditLog — W9-S2 auto-fallback to legacy HMAC", () => {
   });
 
   it("does NOT fall back to legacy when the canonical entry is tampered → hmac-mismatch", async () => {
+    // Tampered canonical entries fail regardless of the legacy opt-in flag;
+    // but set the flag to confirm the tamper check fires, not the gate.
+    process.env[LEGACY_HMAC_OPT_IN_ENV] = "1";
+
     const logFile = tempLogFile();
     await buildChain(logFile, 3);
 
@@ -534,7 +572,10 @@ describe("verifyAuditLog — W9-S2 auto-fallback to legacy HMAC", () => {
     await cleanupFile(logFile);
   });
 
-  it("does NOT fall back to legacy when a legacy entry is tampered → hmac-mismatch", async () => {
+  it("does NOT fall back to legacy when a legacy entry is tampered → hmac-mismatch (with opt-in)", async () => {
+    // SEC-035: with opt-in, a tampered legacy entry still fails both checks.
+    process.env[LEGACY_HMAC_OPT_IN_ENV] = "1";
+
     const logFile = tempLogFile();
     await buildLegacyChain(logFile, 3);
 
@@ -566,5 +607,73 @@ describe("verifyAuditLog — W9-S2 auto-fallback to legacy HMAC", () => {
   it("chainMode type is exported from the module", () => {
     const mode: import("./audit-verifier.js").ChainMode = "mixed";
     expect(mode).toBe("mixed");
+  });
+});
+
+// ── SEC-035: Legacy HMAC gate ─────────────────────────────────────────────
+
+describe("verifyAuditLog — SEC-035 legacy HMAC gate", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env[LEGACY_HMAC_OPT_IN_ENV];
+  });
+
+  it("rejects a legacy-HMAC entry when ASSIGNEE_AUDIT_ALLOW_LEGACY is unset", async () => {
+    // Ensure the env var is absent.
+    delete process.env[LEGACY_HMAC_OPT_IN_ENV];
+
+    const logFile = tempLogFile();
+    // Single legacy entry: canonical verification will fail, triggering the
+    // legacy gate (since the env var is unset, it must return not-allowed).
+    await buildLegacyChain(logFile, 1);
+
+    const result = await verifyAuditLog(logFile, FIXED_KEY);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("legacy-hmac-not-allowed");
+      expect(result.brokenAt).toBe(0);
+      expect(result.chainMode).toBe("failed");
+    }
+    await cleanupFile(logFile);
+  });
+
+  it("accepts a legacy-HMAC entry when ASSIGNEE_AUDIT_ALLOW_LEGACY=1", async () => {
+    // Set the opt-in flag for the migration window.
+    process.env[LEGACY_HMAC_OPT_IN_ENV] = "1";
+
+    const logFile = tempLogFile();
+    await buildLegacyChain(logFile, 3);
+
+    const result = await verifyAuditLog(logFile, FIXED_KEY);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.total).toBe(3);
+      expect(result.chainMode).toBe("legacy");
+    }
+    await cleanupFile(logFile);
+  });
+
+  it("rejects the first legacy entry in a mixed chain when opt-in is unset", async () => {
+    delete process.env[LEGACY_HMAC_OPT_IN_ENV];
+
+    const logFile = tempLogFile();
+    // 2 legacy entries at start of chain.
+    await buildLegacyChain(logFile, 2);
+
+    const result = await verifyAuditLog(logFile, FIXED_KEY);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      // First legacy entry at index 0 triggers the gate.
+      expect(result.reason).toBe("legacy-hmac-not-allowed");
+      expect(result.brokenAt).toBe(0);
+    }
+    await cleanupFile(logFile);
+  });
+
+  it("VerifyReason type includes legacy-hmac-not-allowed", () => {
+    // Compile-time + runtime check that the new reason is exported.
+    const reason: import("./audit-verifier.js").VerifyReason =
+      "legacy-hmac-not-allowed";
+    expect(reason).toBe("legacy-hmac-not-allowed");
   });
 });
