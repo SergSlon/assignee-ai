@@ -30,6 +30,11 @@ export {
   checkBestPractices,
   type BpCheckDeps,
 } from "./checks/best-practices.js";
+export {
+  checkRegistry,
+  type RegistryCheckDeps,
+  type RegistryFetchFn,
+} from "./checks/registry.js";
 
 export { runDoctor, type RunDoctorDeps } from "./runner.js";
 export {

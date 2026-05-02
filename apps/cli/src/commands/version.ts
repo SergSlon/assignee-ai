@@ -99,6 +99,18 @@ export async function loadMcpPinsOrFallback(): Promise<McpPinsRecord> {
   }
 }
 
+/**
+ * Detect whether the audit key is sourced from the `ASSIGNEE_AUDIT_KEY`
+ * env var ("env") or falls back to the on-disk key file ("file").
+ *
+ * PR-030 (W24c-S3): included in `assignee version --json` so bug reports
+ * carry the audit-key provenance without exposing the key material itself.
+ */
+function resolveAuditKeySource(): "env" | "file" {
+  const envKey = process.env["ASSIGNEE_AUDIT_KEY"];
+  return envKey && envKey.length > 0 ? "env" : "file";
+}
+
 export const versionCommand = new Command("version")
   .description("Show version and environment info")
   .option(
@@ -110,7 +122,18 @@ export const versionCommand = new Command("version")
     const version = readPackageVersion();
 
     if (opts.json) {
-      process.stdout.write(JSON.stringify({ version }) + "\n");
+      // PR-030 (W24c-S3): emit a compact self-describe blob for bug reports.
+      // Fields: cli (semver), node (engine version), platform, arch,
+      // region (AWS_REGION or "unset"), auditKeySource ("env"|"file").
+      const blob = {
+        cli: version,
+        node: process.version,
+        platform: process.platform,
+        arch: process.arch,
+        region: process.env["AWS_REGION"] ?? "unset",
+        auditKeySource: resolveAuditKeySource(),
+      };
+      process.stdout.write(JSON.stringify(blob) + "\n");
       return;
     }
 

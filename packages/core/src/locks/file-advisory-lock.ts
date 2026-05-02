@@ -172,6 +172,10 @@ export class FileAdvisoryLockAdapter implements AdvisoryLockPort {
    * Throws `LockAcquisitionError` when the retry budget is exhausted —
    * `fn()` is NEVER called without the lock held (prevents corrupted
    * HMAC-chain writes under concurrent load).
+   *
+   * Emits warn-level events to stderr for observability (PR-018):
+   *   - `lock_contention` on every retry attempt (attempt > 0)
+   *   - `lock_acquisition_failed` with holder-stat info on final failure
    */
   async withLock<T>(name: string, fn: () => Promise<T> | T): Promise<T> {
     let acquired = false;
@@ -182,6 +186,16 @@ export class FileAdvisoryLockAdapter implements AdvisoryLockPort {
     for (let i = 0; i < totalAttempts; i++) {
       acquired = await this.acquire(name);
       if (acquired) break;
+      // Emit contention warning on every retry so operators have breadcrumbs
+      // when concurrent processes (CI matrix, IDE + CLI) collide on the lock.
+      process.stderr.write(
+        JSON.stringify({
+          event: "lock_contention",
+          lockName: name,
+          attempt: i + 1,
+          pid: process.pid,
+        }) + "\n",
+      );
       if (i < totalAttempts - 1) {
         await new Promise<void>((resolve) =>
           setTimeout(resolve, this.retryDelayMs),
@@ -190,6 +204,29 @@ export class FileAdvisoryLockAdapter implements AdvisoryLockPort {
     }
 
     if (!acquired) {
+      // Emit acquisition-failed event with lock-file stat for post-mortem.
+      const lockFilePath = `${name}.lock`;
+      let holderInfo: { mtime?: string; size?: number } = {};
+      try {
+        const st = await import("node:fs").then((m) =>
+          m.statSync(lockFilePath),
+        );
+        holderInfo = {
+          mtime: new Date(st.mtimeMs).toISOString(),
+          size: st.size,
+        };
+      } catch {
+        // stat failure is non-fatal — lock file may already be gone
+      }
+      process.stderr.write(
+        JSON.stringify({
+          event: "lock_acquisition_failed",
+          lockName: name,
+          attempts: totalAttempts,
+          pid: process.pid,
+          holderStat: holderInfo,
+        }) + "\n",
+      );
       throw new LockAcquisitionError(name, totalAttempts);
     }
 

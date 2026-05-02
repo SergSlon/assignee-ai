@@ -80,6 +80,20 @@ export function shouldSuppressUpdateCheck(
     return true;
   }
 
+  // Help / version invocations — these are "snappy help" calls where a
+  // background registry HEAD degrades perceived responsiveness and adds
+  // noise on slow-proxy networks.  The notifier is UX polish for upgrade
+  // awareness; it has no relevance when the operator just wants `--help`
+  // output.
+  //
+  // PR-036 (W24c-S3): suppress for --help, -h, --version, -V, and the
+  // `help` sub-command token (Commander's built-in help dispatch).
+  for (const token of argv) {
+    if (["--help", "-h", "--version", "-V", "help"].includes(token)) {
+      return true;
+    }
+  }
+
   // Machine-readable flags — preserve parseable JSON output.
   // Check the tokenized argv (not a joined string) so `--jsonify` or
   // `--output-json-path` never match accidentally.

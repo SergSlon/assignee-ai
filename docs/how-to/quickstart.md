@@ -102,7 +102,7 @@ The apply flow adds these steps after planning:
 
 ## What Just Happened
 
-The 13-node LangGraph pipeline processed your intent through these stages:
+The 14-node LangGraph pipeline processed your intent through these stages:
 
 ```
 intent_parser -> schema_fetcher -> option_elicitor -> compound_dispatcher

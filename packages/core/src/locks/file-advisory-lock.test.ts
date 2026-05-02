@@ -190,3 +190,98 @@ describe("FileAdvisoryLockAdapter — withLock throws on lock exhaustion", () =>
     expect(fs.existsSync(`${name}.lock`)).toBe(false);
   });
 });
+
+// ── PR-018: lock_contention and lock_acquisition_failed stderr events ──
+
+describe("FileAdvisoryLockAdapter — contention warn events (PR-018)", () => {
+  let stderrChunks: string[];
+  let originalStderrWrite: typeof process.stderr.write;
+
+  beforeEach(() => {
+    stderrChunks = [];
+    originalStderrWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: string | Uint8Array): boolean => {
+      stderrChunks.push(
+        typeof chunk === "string"
+          ? chunk
+          : Buffer.from(chunk).toString("utf-8"),
+      );
+      return true;
+    }) as typeof process.stderr.write;
+  });
+
+  afterEach(() => {
+    process.stderr.write = originalStderrWrite;
+  });
+
+  it("emits lock_contention to stderr when a retry is needed", async () => {
+    const adapter = new FileAdvisoryLockAdapter({
+      staleLockTimeoutMs: 60_000,
+      maxRetries: 20,
+      retryDelayMs: 10,
+    });
+    const name = lockName("contention-event");
+
+    // Hold the lock so the first attempt fails.
+    await adapter.acquire(name);
+    // Release after a short delay so a retry eventually succeeds.
+    // 30ms gives 3 retries (3 × 10ms) before release, guaranteeing at least
+    // one lock_contention event.
+    setTimeout(() => void adapter.release(name), 30);
+
+    await adapter.withLock(name, () => Promise.resolve());
+
+    const contentionEvents = stderrChunks
+      .map((c) => {
+        try {
+          return JSON.parse(c.trim()) as Record<string, unknown>;
+        } catch {
+          return null;
+        }
+      })
+      .filter((o) => o !== null && o["event"] === "lock_contention");
+
+    expect(contentionEvents.length).toBeGreaterThanOrEqual(1);
+    const first = contentionEvents[0]!;
+    expect(first["lockName"]).toBe(name);
+    expect(typeof first["attempt"]).toBe("number");
+    expect(first["pid"]).toBe(process.pid);
+  });
+
+  it("emits lock_acquisition_failed to stderr when all retries are exhausted", async () => {
+    const adapter = new FileAdvisoryLockAdapter({
+      staleLockTimeoutMs: 60_000,
+      maxRetries: 1,
+      retryDelayMs: 0,
+    });
+    const name = lockName("acquisition-failed-event");
+
+    // Hold the lock so all attempts fail.
+    await adapter.acquire(name);
+
+    try {
+      await adapter.withLock(name, () => Promise.resolve());
+    } catch (err) {
+      expect(err).toBeInstanceOf(LockAcquisitionError);
+    } finally {
+      await adapter.release(name);
+    }
+
+    const failEvents = stderrChunks
+      .map((c) => {
+        try {
+          return JSON.parse(c.trim()) as Record<string, unknown>;
+        } catch {
+          return null;
+        }
+      })
+      .filter((o) => o !== null && o["event"] === "lock_acquisition_failed");
+
+    expect(failEvents).toHaveLength(1);
+    const ev = failEvents[0]!;
+    expect(ev["lockName"]).toBe(name);
+    expect(ev["attempts"]).toBe(2); // maxRetries=1 → totalAttempts=2
+    expect(ev["pid"]).toBe(process.pid);
+    expect(typeof ev["holderStat"]).toBe("object");
+  });
+});

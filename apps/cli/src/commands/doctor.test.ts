@@ -685,6 +685,10 @@ describe("runDoctor", () => {
         version: "9.9.9",
         skipBedrock: true,
         skipMcp: true,
+        // PR-013 (W24c-S3): skip registry HTTP probe in unit tests to avoid
+        // real network calls. skipRegistry produces a "skipped" section (warn)
+        // just like skipBedrock/skipMcp, contributing to the exitCode 2 below.
+        skipRegistry: true,
         credentialsDeps: {
           stsClientFactory: () => ({ send }),
         },
@@ -696,8 +700,9 @@ describe("runDoctor", () => {
       expect(report.version).toBe("9.9.9");
       // Story 50-3 removed the MCP version drift section → 6 sections.
       // R9a-03 (P045) added "Log retention" → 7 sections total
-      // (credentials, bedrock, mcp, cache, config, best-practices, log retention).
-      expect(report.sections).toHaveLength(7);
+      // PR-013 (W24c-S3) added "npm registry" → 8 sections total
+      // (credentials, bedrock, mcp, cache, config, best-practices, log retention, npm registry).
+      expect(report.sections).toHaveLength(8);
       // Skip flags should produce 'warn' rather than 0/SUCCESS — they're
       // unverified, not "ok".
       expect(report.exitCode).toBe(2);
@@ -719,6 +724,7 @@ describe("runDoctor", () => {
         version: "1.0.0",
         skipBedrock: true,
         skipMcp: true,
+        skipRegistry: true,
         credentialsDeps: {
           stsClientFactory: () => ({ send: vi.fn() }),
         },

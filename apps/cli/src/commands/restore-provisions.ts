@@ -33,6 +33,7 @@ import * as os from "node:os";
 import { randomBytes } from "node:crypto";
 import { Command } from "commander";
 import { ProcessExitCode } from "../constants/errors.js";
+import { ProvisionLogSchema } from "@assignee/core";
 
 // ── Constants ─────────────────────────────────────────────────────────
 
@@ -174,6 +175,41 @@ export async function restoreProvisions(
       targetPath,
       safetyBackupPath: null,
       message: `Failed to read backup file: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  // Validate the backup against the live-store schema before overwriting.
+  // A corrupted or schema-mismatched backup must never reach the live ledger
+  // because the backup is the disaster-recovery artifact — corruption there
+  // is the single point of failure (PR-020).
+  try {
+    const parsed: unknown = JSON.parse(content.toString("utf8"));
+    const validation = ProvisionLogSchema.safeParse(parsed);
+    if (!validation.success) {
+      const firstError = validation.error.errors[0];
+      const errorDetail = firstError
+        ? `${firstError.path.join(".") || "<root>"}: ${firstError.message}`
+        : validation.error.message;
+      return {
+        restored: false,
+        sourcePath,
+        targetPath,
+        safetyBackupPath: null,
+        message:
+          `Backup file failed schema validation — refusing to overwrite live ledger. ` +
+          `Examine the backup manually or provide a different date. ` +
+          `Validation error: ${errorDetail}`,
+      };
+    }
+  } catch {
+    return {
+      restored: false,
+      sourcePath,
+      targetPath,
+      safetyBackupPath: null,
+      message:
+        `Backup file is not valid JSON — refusing to overwrite live ledger. ` +
+        `Examine the backup manually or provide a different date.`,
     };
   }
 

@@ -60,7 +60,18 @@ function getPkg(): { name: string; version: string } {
 // of assignee is on npm. No-op pre-publish (private: true → registry
 // 404), silent in CI / piped stdout / --json, opt-outable via
 // ASSIGNEE_NO_UPDATE_CHECK=1. All errors are swallowed internally.
-checkForUpdates({ name: getPkg().name, version: getPkg().version });
+//
+// PR-036 (W24c-S3): skip the registry HTTP check entirely when the
+// invocation is --help / -h / --version / -V / help sub-command. These
+// are "snappy help" calls — a background registry HEAD pollutes the
+// event loop and can add perceived latency on slow-proxy networks even
+// though the check is deferred.
+const _isHelpOrVersion = process.argv.some((a) =>
+  ["--help", "-h", "--version", "-V", "help"].includes(a),
+);
+if (!_isHelpOrVersion) {
+  checkForUpdates({ name: getPkg().name, version: getPkg().version });
+}
 
 // First-run detection: auto-create ~/.assignee/ and show welcome (Story 29.6)
 bootstrapFirstRun(getPkg().version);

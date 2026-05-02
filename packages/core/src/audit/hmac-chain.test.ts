@@ -131,6 +131,77 @@ describe("resolveAuditKey", () => {
   });
 });
 
+// ── PR-019: file-mode warning deduplication ─────────────────────────────
+
+describe("resolveAuditKey — file-mode warning deduplication (PR-019)", () => {
+  let tmpDir: string;
+  let keyFile: string;
+  let stderrChunks: string[];
+  let originalStderrWrite: typeof process.stderr.write;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "assignee-audit-warn-test-"),
+    );
+    keyFile = path.join(tmpDir, "audit-key");
+    _resetAuditKeyCache();
+    delete process.env["ASSIGNEE_AUDIT_KEY"];
+
+    stderrChunks = [];
+    originalStderrWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: string | Uint8Array): boolean => {
+      stderrChunks.push(
+        typeof chunk === "string"
+          ? chunk
+          : Buffer.from(chunk).toString("utf-8"),
+      );
+      return true;
+    }) as typeof process.stderr.write;
+  });
+
+  afterEach(() => {
+    process.stderr.write = originalStderrWrite;
+    delete process.env["ASSIGNEE_AUDIT_KEY"];
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      // best-effort cleanup
+    }
+    _resetAuditKeyCache();
+  });
+
+  it("emits file-mode warning exactly once per process even when called multiple times", () => {
+    // Write key with wrong mode so the warning fires.
+    fs.writeFileSync(keyFile, "a".repeat(64), { mode: 0o644 });
+
+    // Reset to ensure _keyModeWarned starts false.
+    _resetAuditKeyCache();
+
+    // Call resolveAuditKey three times — warning must appear exactly once.
+    resolveAuditKey(keyFile);
+    resolveAuditKey(keyFile);
+    resolveAuditKey(keyFile);
+
+    const warnings = stderrChunks.filter((c) =>
+      c.includes("WARNING: audit key file"),
+    );
+    expect(warnings).toHaveLength(1);
+  });
+
+  it("does NOT emit file-mode warning when file mode is 0o600", () => {
+    fs.writeFileSync(keyFile, "b".repeat(64), { mode: 0o600 });
+    _resetAuditKeyCache();
+
+    resolveAuditKey(keyFile);
+    resolveAuditKey(keyFile);
+
+    const warnings = stderrChunks.filter((c) =>
+      c.includes("WARNING: audit key file"),
+    );
+    expect(warnings).toHaveLength(0);
+  });
+});
+
 // ── Key derivation tests ────────────────────────────────────────────────
 
 describe("getAuditKey", () => {

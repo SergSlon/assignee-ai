@@ -467,6 +467,9 @@ consistent with live state.
 - `ASSIGNEE_LOG_LEVEL=debug` — verbose JSON logs to stderr.
 - `~/.assignee/logs/cli-YYYY-MM-DD.jsonl` — persistent warn/error log,
   retained for `ASSIGNEE_LOG_RETENTION_DAYS` (default 14).
+- `assignee version --json` — compact self-describe blob (CLI version,
+  Node version, platform, arch, AWS region, audit-key source) — paste
+  this into any bug report to provide full environment context.
 - `assignee doctor --json` — structured snapshot suitable for bug
   reports.
 - `assignee doctor --short` — resolved account/region/profile before any

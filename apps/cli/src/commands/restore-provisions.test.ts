@@ -37,6 +37,37 @@ function makeBackupName(daysAgo: number): string {
   return `${BACKUP_PREFIX}${d.toISOString().slice(0, 10)}.json`;
 }
 
+/**
+ * Build a minimal valid ProvisionLogSchema-conforming record.
+ * All fields are required by the schema; runId must be a UUID.
+ */
+function makeValidRecord(
+  overrides: Partial<{
+    runId: string;
+    resourceType: string;
+    resourceArn: string;
+    region: string;
+    desiredStateHash: string;
+    estimatedMonthlyCost: string;
+    timestamp: string;
+  }> = {},
+) {
+  return {
+    runId: overrides.runId ?? "123e4567-e89b-12d3-a456-426614174000",
+    resourceType: overrides.resourceType ?? "AWS::S3::Bucket",
+    resourceArn: overrides.resourceArn ?? "arn:aws:s3:::test-bucket",
+    region: overrides.region ?? "us-east-1",
+    desiredStateHash: overrides.desiredStateHash ?? "abc123",
+    estimatedMonthlyCost: overrides.estimatedMonthlyCost ?? "$0.023",
+    timestamp: overrides.timestamp ?? "2026-04-29T00:00:00.000Z",
+  };
+}
+
+/** Serialise a valid single-record provisions log as JSON. */
+function validLog(runId = "123e4567-e89b-12d3-a456-426614174000"): string {
+  return JSON.stringify([makeValidRecord({ runId })]);
+}
+
 beforeEach(() => {
   tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "assignee-restore-test-"));
   memoryDir = path.join(tmpRoot, "memory");
@@ -52,12 +83,15 @@ afterEach(() => {
 
 describe("restoreProvisions", () => {
   it("restores from the latest backup when --from is omitted", async () => {
-    const content = JSON.stringify([{ runId: "latest-run" }]);
+    // UUIDs chosen to be distinguishable and valid.
+    const latestRunId = "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa";
+    const olderRunId = "bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb";
+    const content = validLog(latestRunId);
     const olderName = makeBackupName(3);
     const newerName = makeBackupName(1);
     fs.writeFileSync(
       path.join(backupDir, olderName),
-      JSON.stringify([{ runId: "older" }]),
+      validLog(olderRunId),
       "utf-8",
     );
     fs.writeFileSync(path.join(backupDir, newerName), content, "utf-8");
@@ -68,14 +102,16 @@ describe("restoreProvisions", () => {
       path.join(memoryDir, "provisions.json"),
       "utf-8",
     );
-    expect(JSON.parse(restored)[0].runId).toBe("latest-run");
+    expect(JSON.parse(restored)[0].runId).toBe(latestRunId);
   });
 
   it("restores from a specific --from date", async () => {
     const targetDate = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)
       .toISOString()
       .slice(0, 10);
-    const backupContent = JSON.stringify([{ runId: "specific-date-run" }]);
+    const specificRunId = "cccccccc-cccc-4ccc-cccc-cccccccccccc";
+    const newerRunId = "dddddddd-dddd-4ddd-dddd-dddddddddddd";
+    const backupContent = validLog(specificRunId);
     fs.writeFileSync(
       path.join(backupDir, `provisions-${targetDate}.json`),
       backupContent,
@@ -84,7 +120,7 @@ describe("restoreProvisions", () => {
     // Also plant a newer backup to ensure --from overrides latest
     fs.writeFileSync(
       path.join(backupDir, makeBackupName(0)),
-      JSON.stringify([{ runId: "newer-run" }]),
+      validLog(newerRunId),
       "utf-8",
     );
 
@@ -98,7 +134,7 @@ describe("restoreProvisions", () => {
       path.join(memoryDir, "provisions.json"),
       "utf-8",
     );
-    expect(JSON.parse(restored)[0].runId).toBe("specific-date-run");
+    expect(JSON.parse(restored)[0].runId).toBe(specificRunId);
   });
 
   it("returns error on invalid --from date format", async () => {
@@ -136,17 +172,19 @@ describe("restoreProvisions", () => {
   });
 
   it("creates a safety copy of the current file before overwriting", async () => {
-    // Create an existing provisions.json
+    // Create an existing provisions.json (empty array is a valid ProvisionLogSchema).
     fs.mkdirSync(memoryDir, { recursive: true });
+    const originalContent = "[]";
     fs.writeFileSync(
       path.join(memoryDir, "provisions.json"),
-      '["original"]',
+      originalContent,
       "utf-8",
     );
 
+    // Backup must be a valid ProvisionLogSchema document.
     fs.writeFileSync(
       path.join(backupDir, makeBackupName(1)),
-      '["backup"]',
+      validLog(),
       "utf-8",
     );
     const result = await restoreProvisions({ memoryDir, backupDir });
@@ -154,11 +192,12 @@ describe("restoreProvisions", () => {
     expect(result.safetyBackupPath).not.toBeNull();
     // Safety copy exists and has original content
     const safetyContent = fs.readFileSync(result.safetyBackupPath!, "utf-8");
-    expect(safetyContent).toBe('["original"]');
+    expect(safetyContent).toBe(originalContent);
   });
 
   it("is idempotent — restoring the same backup twice yields identical content", async () => {
-    const content = JSON.stringify([{ runId: "idempotent-run" }]);
+    const idempotentRunId = "eeeeeeee-eeee-4eee-eeee-eeeeeeeeeeee";
+    const content = validLog(idempotentRunId);
     fs.writeFileSync(path.join(backupDir, makeBackupName(1)), content, "utf-8");
 
     await restoreProvisions({ memoryDir, backupDir });
@@ -182,6 +221,124 @@ describe("restoreProvisions", () => {
     );
     const result = await restoreProvisions({ memoryDir, backupDir });
     expect(result.message).toContain(yesterday);
+  });
+});
+
+// ── PR-020: schema validation before overwrite ────────────────────────────
+
+describe("restoreProvisions — zod schema validation (PR-020)", () => {
+  it("refuses to restore when backup JSON fails schema validation", async () => {
+    // Write a backup with records missing required fields.
+    const invalidContent = JSON.stringify([
+      { notAValidField: "garbage", foo: 123 },
+    ]);
+    fs.writeFileSync(
+      path.join(backupDir, makeBackupName(1)),
+      invalidContent,
+      "utf-8",
+    );
+
+    const result = await restoreProvisions({ memoryDir, backupDir });
+
+    expect(result.restored).toBe(false);
+    expect(result.message).toContain("schema validation");
+    expect(result.message).toContain("refusing to overwrite live ledger");
+    // Live ledger must NOT have been written.
+    expect(fs.existsSync(path.join(memoryDir, "provisions.json"))).toBe(false);
+  });
+
+  it("refuses to restore when backup file is not valid JSON", async () => {
+    fs.writeFileSync(
+      path.join(backupDir, makeBackupName(1)),
+      "not-valid-json{{{",
+      "utf-8",
+    );
+
+    const result = await restoreProvisions({ memoryDir, backupDir });
+
+    expect(result.restored).toBe(false);
+    expect(result.message).toContain("not valid JSON");
+    expect(result.message).toContain("refusing to overwrite live ledger");
+    expect(fs.existsSync(path.join(memoryDir, "provisions.json"))).toBe(false);
+  });
+
+  it("refuses to restore when backup root is not an array", async () => {
+    // Root is an object, not an array — schema expects an array.
+    fs.writeFileSync(
+      path.join(backupDir, makeBackupName(1)),
+      JSON.stringify({ runId: "oops", resourceType: "AWS::S3::Bucket" }),
+      "utf-8",
+    );
+
+    const result = await restoreProvisions({ memoryDir, backupDir });
+
+    expect(result.restored).toBe(false);
+    expect(result.message).toContain("schema validation");
+    expect(fs.existsSync(path.join(memoryDir, "provisions.json"))).toBe(false);
+  });
+
+  it("successfully restores a backup that passes schema validation", async () => {
+    // Write a fully valid ProvisionLogSchema-conforming backup.
+    const validRecord = {
+      runId: "123e4567-e89b-12d3-a456-426614174000",
+      resourceType: "AWS::S3::Bucket",
+      resourceArn: "arn:aws:s3:::my-bucket",
+      region: "us-east-1",
+      desiredStateHash: "abc123",
+      estimatedMonthlyCost: "$0.023",
+      timestamp: "2026-04-29T00:00:00.000Z",
+    };
+    fs.writeFileSync(
+      path.join(backupDir, makeBackupName(1)),
+      JSON.stringify([validRecord]),
+      "utf-8",
+    );
+
+    const result = await restoreProvisions({ memoryDir, backupDir });
+
+    expect(result.restored).toBe(true);
+    expect(fs.existsSync(path.join(memoryDir, "provisions.json"))).toBe(true);
+  });
+
+  it("successfully restores an empty array backup (zero provisions)", async () => {
+    fs.writeFileSync(path.join(backupDir, makeBackupName(1)), "[]", "utf-8");
+
+    const result = await restoreProvisions({ memoryDir, backupDir });
+
+    expect(result.restored).toBe(true);
+    const content = fs.readFileSync(
+      path.join(memoryDir, "provisions.json"),
+      "utf-8",
+    );
+    expect(JSON.parse(content)).toEqual([]);
+  });
+
+  it("does NOT overwrite live ledger when validation fails (existing ledger preserved)", async () => {
+    // Plant a valid existing ledger.
+    fs.mkdirSync(memoryDir, { recursive: true });
+    const existingContent = JSON.stringify([]);
+    fs.writeFileSync(
+      path.join(memoryDir, "provisions.json"),
+      existingContent,
+      "utf-8",
+    );
+
+    // Backup is invalid.
+    fs.writeFileSync(
+      path.join(backupDir, makeBackupName(1)),
+      JSON.stringify([{ bad: "data" }]),
+      "utf-8",
+    );
+
+    const result = await restoreProvisions({ memoryDir, backupDir });
+
+    expect(result.restored).toBe(false);
+    // Original live ledger must be unchanged.
+    const liveContent = fs.readFileSync(
+      path.join(memoryDir, "provisions.json"),
+      "utf-8",
+    );
+    expect(liveContent).toBe(existingContent);
   });
 });
 
@@ -237,7 +394,7 @@ describe("restoreProvisionsCommand — --json output", () => {
     const backupFilename = `provisions-${yesterday}.json`;
     fs.writeFileSync(
       path.join(bakDir, backupFilename),
-      JSON.stringify([{ runId: "json-test-run" }]),
+      validLog("ffffffff-ffff-4fff-ffff-ffffffffffff"),
       "utf-8",
     );
 

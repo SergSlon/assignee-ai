@@ -164,6 +164,86 @@ describe("detectBedrockRegionError", () => {
       expect(hint).toContain(r);
     }
   });
+
+  // ---------------------------------------------------------------------------
+  // W24c-S0 (OOS-2) — ISO partition hints
+  // ---------------------------------------------------------------------------
+
+  it("emits ISO-partition hint and suppresses commercial region list for us-iso-east-1", () => {
+    const err = new Error("AccessDeniedException — model not available");
+    const hint = detectBedrockRegionError(
+      err,
+      "us-iso-east-1",
+      "bedrock/anthropic.claude-sonnet",
+    );
+    expect(hint).not.toBeNull();
+    expect(hint).toContain("ISO-partition");
+    // Must NOT suggest commercial regions to an ISO operator.
+    expect(hint).not.toContain("us-east-1");
+    expect(hint).not.toContain("eu-west-1");
+  });
+
+  it("emits ISO-partition hint for us-isob-east-1 (aws-iso-b partition)", () => {
+    const err = new Error(
+      "ValidationException — could not resolve the foundation model",
+    );
+    const hint = detectBedrockRegionError(
+      err,
+      "us-isob-east-1",
+      "bedrock/anthropic.claude-sonnet",
+    );
+    expect(hint).not.toBeNull();
+    expect(hint).toContain("ISO-partition");
+    expect(hint).not.toContain("us-east-1");
+  });
+
+  it("emits ISO-partition hint for eu-isoe-west-1 (aws-iso-e partition)", () => {
+    const err = new Error("ResourceNotFoundException — model not found");
+    const hint = detectBedrockRegionError(
+      err,
+      "eu-isoe-west-1",
+      "bedrock/anthropic.claude-sonnet",
+    );
+    expect(hint).not.toBeNull();
+    expect(hint).toContain("ISO-partition");
+    expect(hint).not.toContain("us-east-1");
+    expect(hint).not.toContain("eu-west-1");
+  });
+
+  // ---------------------------------------------------------------------------
+  // W24c-S0 (OOS-3) — hint messages must not contain the unparseable @KEY syntax
+  // ---------------------------------------------------------------------------
+
+  it("China hint does not reference the @ANTHROPIC_API_KEY unparseable syntax", () => {
+    const err = new Error("ResourceNotFoundException — model not found");
+    const hint = detectBedrockRegionError(
+      err,
+      "cn-north-1",
+      "bedrock/anthropic.claude-sonnet",
+    );
+    expect(hint).not.toBeNull();
+    expect(hint).not.toContain("@ANTHROPIC_API_KEY");
+  });
+
+  it("GovCloud hint does not reference the @ANTHROPIC_API_KEY unparseable syntax", () => {
+    const err = new Error("AccessDeniedException — model not available");
+    const hint = detectBedrockRegionError(
+      err,
+      "us-gov-west-1",
+      "bedrock/anthropic.claude-sonnet",
+    );
+    expect(hint).not.toBeNull();
+    expect(hint).not.toContain("@ANTHROPIC_API_KEY");
+  });
+
+  it("commercial non-canonical hint does not reference the @ANTHROPIC_API_KEY unparseable syntax", () => {
+    const err = new Error(
+      "ValidationException — could not resolve the foundation model",
+    );
+    const hint = detectBedrockRegionError(err, "ap-east-1", "bedrock/x");
+    expect(hint).not.toBeNull();
+    expect(hint).not.toContain("@ANTHROPIC_API_KEY");
+  });
 });
 
 describe("KNOWN_BEDROCK_REGIONS", () => {

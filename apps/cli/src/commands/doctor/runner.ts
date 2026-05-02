@@ -27,6 +27,7 @@ import {
   type BpCheckDeps,
 } from "./checks/best-practices.js";
 import { checkLogs, type LogsCheckDeps } from "./checks/logs.js";
+import { checkRegistry, type RegistryCheckDeps } from "./checks/registry.js";
 import type { CheckStatus, DoctorReport, DoctorSection } from "./types.js";
 import { buildSummary, statusToExit } from "./formatter.js";
 import { worse } from "./util.js";
@@ -40,10 +41,13 @@ export interface RunDoctorDeps {
   configDeps?: ConfigCheckDeps;
   bpDeps?: BpCheckDeps;
   logsDeps?: LogsCheckDeps;
+  registryDeps?: RegistryCheckDeps;
   /** Skip the Bedrock invoke (fast path used by tests / CI smoke). */
   skipBedrock?: boolean;
   /** Skip the MCP launch probe (fast path used by tests). */
   skipMcp?: boolean;
+  /** Skip the npm registry reachability probe (offline / air-gapped). */
+  skipRegistry?: boolean;
 }
 
 /** Build a standard "section skipped" placeholder. */
@@ -64,7 +68,7 @@ export async function runDoctor(
 ): Promise<DoctorReport> {
   const version = deps.version ?? "0.0.0";
 
-  const [credentials, bedrock, mcp] = await Promise.all([
+  const [credentials, bedrock, mcp, registry] = await Promise.all([
     checkCredentials(deps.credentialsDeps),
     deps.skipBedrock
       ? Promise.resolve(skippedSection("Bedrock (skipped)", "skipBedrock=true"))
@@ -72,6 +76,11 @@ export async function runDoctor(
     deps.skipMcp
       ? Promise.resolve(skippedSection("MCP servers (skipped)", "skipMcp=true"))
       : checkMcpServers(deps.mcpDeps),
+    deps.skipRegistry
+      ? Promise.resolve(
+          skippedSection("npm registry (skipped)", "skipRegistry=true"),
+        )
+      : checkRegistry(deps.registryDeps),
   ]);
 
   const cache = checkCache(deps.cacheDeps);
@@ -90,6 +99,7 @@ export async function runDoctor(
     config,
     bp,
     logs,
+    registry,
   ];
 
   const overall = sections.reduce<CheckStatus>(

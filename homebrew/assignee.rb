@@ -37,6 +37,12 @@ class Assignee < Formula
   license "MIT"
   version "${VERSION}"
 
+  # Node version pin: matches engines.node (>=20.11) in package.json.
+  # When Homebrew core retires node@22 (typically ~2 years after LTS release),
+  # bump to the next LTS: change "node@22" here AND in the wrapper below.
+  # Also update the Formula["node@22"] reference in the bin/assignee wrapper.
+  # Track the current Homebrew node formula at:
+  #   https://github.com/Homebrew/homebrew-core/blob/HEAD/Formula/n/node.rb
   depends_on "node@22"
 
   on_macos do
