@@ -1,7 +1,7 @@
 /**
  * W3-01 — Audit chain verifier tests.
  * W9-S2 — Auto-fallback to legacy HMAC + chainMode field.
- * SEC-A-4 — Legacy HMAC gate (ASSIGNEE_AUDIT_ALLOW_LEGACY_HMAC=1) tests.
+ * SEC-A-4 — Legacy HMAC gate (ASSIGNEE_AUDIT_ALLOW_LEGACY=1) tests.
  *
  * Tests cover:
  *   - Clean chain → ok: true, chainMode: "canonical"
@@ -12,9 +12,9 @@
  *   - Mixed legacy + HMAC → verifies HMAC portion only
  *   - 100-record fixture: exit 0 on clean, non-zero on broken
  *   - Pre-W7 (legacy-HMAC) chain → ok: true, chainMode: "legacy"
- *     (requires ASSIGNEE_AUDIT_ALLOW_LEGACY_HMAC=1)
+ *     (requires ASSIGNEE_AUDIT_ALLOW_LEGACY=1)
  *   - Mixed canonical + legacy-HMAC chain → ok: true, chainMode: "mixed"
- *     (requires ASSIGNEE_AUDIT_ALLOW_LEGACY_HMAC=1)
+ *     (requires ASSIGNEE_AUDIT_ALLOW_LEGACY=1)
  *   - Tampered legacy-format entry fails both checks → hmac-mismatch
  *   - Legacy entry rejected without opt-in → legacy-hmac-not-allowed (SEC-035)
  *   - Legacy entry accepted with opt-in → ok: true (SEC-035 migration window)

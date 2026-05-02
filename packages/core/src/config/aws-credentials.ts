@@ -148,10 +148,20 @@ export class InvalidSessionTokenError extends Error {
   }
 }
 
-/** Minimum plausible length for an AWS STS session token. Tokens issued
- *  by STS are typically 100–1000+ characters. A value shorter than this
- *  is almost certainly a typo or truncated paste. */
-const MIN_SESSION_TOKEN_LEN = 16;
+/**
+ * Minimum plausible length for an AWS STS session token.
+ * Tokens issued by STS are typically 100–1000+ characters.
+ * SEC-031: raised from 16 to 100 — a 16-char value is almost certainly
+ * a truncated paste or a copy of a wrong env var.
+ */
+export const MIN_SESSION_TOKEN_LEN = 100;
+
+/**
+ * Maximum plausible length for an AWS STS session token.
+ * SEC-031: real STS tokens are bounded well below 4096 characters.
+ * Values exceeding this are almost certainly corrupted or injected.
+ */
+export const MAX_SESSION_TOKEN_LEN = 4096;
 
 /**
  * Returns the credentials for a given role, or throws a clear error if
@@ -192,11 +202,15 @@ export function requireAssigneeCredentials(
   }
 
   // W2-01: read optional session token. Validate if present.
+  // SEC-031: enforce both MIN and MAX length bounds.
   let sessionToken: string | undefined;
   if (vars.sessionTokenKey) {
     const rawToken = effectiveConfig.get(vars.sessionTokenKey)?.trim();
     if (rawToken) {
-      if (rawToken.length < MIN_SESSION_TOKEN_LEN) {
+      if (
+        rawToken.length < MIN_SESSION_TOKEN_LEN ||
+        rawToken.length > MAX_SESSION_TOKEN_LEN
+      ) {
         throw new InvalidSessionTokenError(vars.sessionTokenKey);
       }
       sessionToken = rawToken;
@@ -230,11 +244,27 @@ export function tryAssigneeCredentials(
   if (!accessKeyId || !secretAccessKey) return undefined;
 
   // W2-01: also pick up session token when present.
+  // SEC-040: warn (not throw) when a token is present but fails the length
+  // bounds, so operators get a diagnostic instead of a silent drop that
+  // leads to a confusing AWS AccessDenied error downstream.
   let sessionToken: string | undefined;
   if (vars.sessionTokenKey) {
     const rawToken = effectiveConfig.get(vars.sessionTokenKey)?.trim();
-    if (rawToken && rawToken.length >= MIN_SESSION_TOKEN_LEN) {
-      sessionToken = rawToken;
+    if (rawToken) {
+      if (
+        rawToken.length >= MIN_SESSION_TOKEN_LEN &&
+        rawToken.length <= MAX_SESSION_TOKEN_LEN
+      ) {
+        sessionToken = rawToken;
+      } else {
+        process.stderr.write(
+          `[assignee] WARNING: ${vars.sessionTokenKey} contains a session token ` +
+            `of length ${rawToken.length}, which is outside the expected range ` +
+            `[${MIN_SESSION_TOKEN_LEN}, ${MAX_SESSION_TOKEN_LEN}]. ` +
+            `The token has been ignored — AWS SDK will use long-term credentials. ` +
+            `If you are using AWS SSO, run \`aws sso login\` to refresh your session.\n`,
+        );
+      }
     }
   }
 

@@ -221,13 +221,16 @@ describe("buildOtlpPayload", () => {
       key: "nullExtra",
       value: { stringValue: "" },
     });
+    // SEC-024: non-primitive extras (object/array) are replaced with
+    // [REDACTED_OBJECT] to prevent nested ARNs / account IDs from bypassing
+    // the PII gate at the LogEvent boundary.
     expect(attrs).toContainEqual({
       key: "objExtra",
-      value: { stringValue: '{"nested":"value"}' },
+      value: { stringValue: "[REDACTED_OBJECT]" },
     });
     expect(attrs).toContainEqual({
       key: "arrExtra",
-      value: { stringValue: "[1,2,3]" },
+      value: { stringValue: "[REDACTED_OBJECT]" },
     });
   });
 
@@ -252,8 +255,10 @@ describe("buildOtlpPayload", () => {
     );
     const attrs =
       payload.resourceLogs[0].scopeLogs[0].logRecords[0]!.attributes;
+    // SEC-024: circular-reference objects are also replaced with [REDACTED_OBJECT]
+    // since the non-primitive path no longer calls JSON.stringify at all.
     const loopAttr = attrs.find((a) => a.key === "loop");
-    expect(loopAttr?.value.stringValue).toBe("[unserializable]");
+    expect(loopAttr?.value.stringValue).toBe("[REDACTED_OBJECT]");
   });
 });
 

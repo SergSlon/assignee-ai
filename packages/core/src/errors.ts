@@ -76,6 +76,24 @@ export class LlmError extends AssigneeError {
   }
 }
 
+/**
+ * Thrown when the Bedrock provider is active but no guardrail is configured
+ * AND the operator has not explicitly set ASSIGNEE_ALLOW_NO_GUARDRAIL=1.
+ * Fail-closed gate: the call is rejected before any Bedrock invocation.
+ * SEC-016.
+ */
+export class GuardrailRequiredError extends AssigneeError {
+  constructor() {
+    super(
+      "BEDROCK_GUARDRAIL_ID is required for Bedrock LLM calls. " +
+        "Set BEDROCK_GUARDRAIL_ID + BEDROCK_GUARDRAIL_VERSION to enable guardrail filtering, " +
+        "or set ASSIGNEE_ALLOW_NO_GUARDRAIL=1 to explicitly opt out (not recommended for production).",
+      "GUARDRAIL_REQUIRED",
+    );
+    this.name = "GuardrailRequiredError";
+  }
+}
+
 /** Error when live resource state differs from plan-time state. */
 export class StateGuardError extends AssigneeError {
   constructor(message: string, code = "STATE_GUARD_ERROR") {
@@ -168,5 +186,46 @@ export class ProvisioningError extends AssigneeError {
   ) {
     super(message, "PROVISIONING_ERROR");
     this.name = "ProvisioningError";
+  }
+}
+
+/**
+ * SEC-029: Thrown by `parseLlmJsonResponse` when the LLM response text
+ * exceeds `MAX_LLM_RESPONSE_BYTES`. Prevents a malicious or misbehaving
+ * upstream LLM/proxy from exhausting heap via a giant `JSON.parse` call.
+ */
+export class LlmResponseTooLargeError extends AssigneeError {
+  constructor(
+    public readonly actualBytes: number,
+    public readonly maxBytes: number,
+  ) {
+    super(
+      `LLM response too large: ${actualBytes} bytes exceeds limit of ${maxBytes} bytes.`,
+      "LLM_RESPONSE_TOO_LARGE",
+    );
+    this.name = "LlmResponseTooLargeError";
+  }
+}
+
+/**
+ * SEC-018: Thrown by `parseLlmJsonResponse` when the parsed LLM output
+ * contains an IAM policy shape with both `Action: "*"` and `Resource: "*"`,
+ * which is a wildcard-privilege escalation heuristic.
+ *
+ * NOTE: This is a heuristic guard. False-positive risk is low in practice
+ * (the plan generator outputs CFN resource properties, not IAM policy
+ * documents), but a clever adversarial prompt could embed such a shape in
+ * a Lambda `Policies` property or similar free-form field. If a legitimate
+ * use-case is blocked, add the statement's logical ID to the explicit
+ * `POLICY_SHAPE_ALLOWLIST` in `llm-helpers.ts`.
+ */
+export class LlmPolicyShapeViolationError extends AssigneeError {
+  constructor(public readonly violatingPath: string) {
+    super(
+      `LLM response contains a wildcard IAM policy shape (Action:* + Resource:*) at "${violatingPath}". ` +
+        "This is a security guardrail. If this is a legitimate use-case, contact your operator.",
+      "LLM_POLICY_SHAPE_VIOLATION",
+    );
+    this.name = "LlmPolicyShapeViolationError";
   }
 }

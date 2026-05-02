@@ -177,7 +177,7 @@ fetch_manifest() {
   # MANIFEST_FILE is declared at script top; global cleanup() trap handles removal.
   MANIFEST_FILE="$(mktemp)"
 
-  if ! curl -sSL -o "$MANIFEST_FILE" "$MANIFEST_URL" 2>/dev/null; then
+  if ! curl -sSL --proto '=https' --tlsv1.2 --max-redirs 5 -o "$MANIFEST_FILE" "$MANIFEST_URL" 2>/dev/null; then
     warn "Could not fetch release manifest from ${MANIFEST_URL}"
     warn "SHA256 verification will be skipped — install at your own risk."
     MANIFEST_FILE=""
@@ -222,6 +222,28 @@ lookup_sha256() {
 
   if [ -n "$EXPECTED_SHA256" ]; then
     info "Expected SHA256: ${EXPECTED_SHA256}"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# SEC-032: Log ASSIGNEE_DOWNGRADE_ACK bypass to a tamper-evident local trail.
+# Appends a timestamped record to ~/.assignee/install-bypasses.log so that
+# security audits can detect when the version allowlist was deliberately bypassed.
+# ---------------------------------------------------------------------------
+
+log_downgrade_bypass() {
+  _bypass_reason="$1"
+  _bypass_log="${HOME}/.assignee/install-bypasses.log"
+  mkdir -p "${HOME}/.assignee"
+  # Append timestamp + version + reason; failure is non-fatal but warned.
+  if printf '%s ASSIGNEE_DOWNGRADE_ACK version=%s reason="%s"\n' \
+      "$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date '+%Y-%m-%dT%H:%M:%SZ')" \
+      "${VERSION}" \
+      "${_bypass_reason}" >> "$_bypass_log" 2>/dev/null; then
+    chmod 0600 "$_bypass_log" 2>/dev/null || true
+    warn "Bypass recorded in ${_bypass_log}"
+  else
+    warn "Could not write bypass record to ${_bypass_log} — proceeding anyway."
   fi
 }
 
@@ -288,6 +310,7 @@ check_version_allowlist() {
     if [ "${ASSIGNEE_DOWNGRADE_ACK:-}" = "1" ]; then
       warn "ASSIGNEE_DOWNGRADE_ACK=1 set — installing version ${VERSION} below minimum ${MINIMUM_VERSION}."
       warn "This bypasses the version floor. Proceed with caution."
+      log_downgrade_bypass "version-below-minimum: ${VERSION} < ${MINIMUM_VERSION}"
     else
       err "Version ${VERSION} is below the minimum allowed version ${MINIMUM_VERSION}.
   This version has been removed from the release allowlist (e.g. critical security fix).
@@ -320,6 +343,7 @@ check_version_allowlist() {
     if [ "${ASSIGNEE_DOWNGRADE_ACK:-}" = "1" ]; then
       warn "ASSIGNEE_DOWNGRADE_ACK=1 set — installing unverified version ${VERSION}."
       warn "This bypasses the version allowlist. Proceed with caution."
+      log_downgrade_bypass "version-not-in-allowlist: ${VERSION}"
     else
       err "Version ${VERSION} is not in the release allowlist.
   This could mean:
@@ -342,7 +366,7 @@ resolve_version() {
   VERSION="${ASSIGNEE_VERSION:-}"
   if [ -z "$VERSION" ]; then
     info "Fetching latest release..."
-    VERSION="$(curl -sSL "https://api.github.com/repos/${REPO}/releases/latest" \
+    VERSION="$(curl -sSL --proto '=https' --tlsv1.2 --max-redirs 5 "https://api.github.com/repos/${REPO}/releases/latest" \
       | grep '"tag_name"' \
       | head -1 \
       | sed 's/.*"tag_name": *"//;s/".*//')"
@@ -377,16 +401,26 @@ download_and_install() {
 
   # ASSIGNEE_LOCAL_TARBALL allows CI / test environments to supply an already-
   # downloaded tarball and skip the network download entirely.
+  # SEC-033: When a local tarball is supplied, the manifest MUST have been fetched
+  # and EXPECTED_SHA256 MUST be non-empty.  Skipping the network download must not
+  # also skip the trust check — a CI pipeline that sets ASSIGNEE_LOCAL_TARBALL is
+  # still responsible for ensuring the tarball matches the release manifest.
   if [ -n "${ASSIGNEE_LOCAL_TARBALL:-}" ]; then
     if [ ! -f "$ASSIGNEE_LOCAL_TARBALL" ]; then
       err "ASSIGNEE_LOCAL_TARBALL set but file not found: ${ASSIGNEE_LOCAL_TARBALL}"
+    fi
+    if [ -z "${EXPECTED_SHA256:-}" ]; then
+      err "ASSIGNEE_LOCAL_TARBALL is set but SHA256 verification cannot be performed.
+  The release manifest was unavailable or could not be parsed (node may be absent).
+  A local tarball without manifest verification provides no supply-chain protection.
+  Ensure the manifest is reachable and node is installed before using ASSIGNEE_LOCAL_TARBALL."
     fi
     info "Using local tarball: ${ASSIGNEE_LOCAL_TARBALL}"
     cp "$ASSIGNEE_LOCAL_TARBALL" "${TMPDIR}/${TARBALL}"
   else
     need_cmd curl
     info "Downloading ${SAFE_URL}..."
-    if ! curl -sSL -o "${TMPDIR}/${TARBALL}" "$URL"; then
+    if ! curl -sSL --proto '=https' --tlsv1.2 --max-redirs 5 -o "${TMPDIR}/${TARBALL}" "$URL"; then
       err "Download failed — check that ${SAFE_URL} exists and you have network connectivity."
     fi
   fi
@@ -411,7 +445,18 @@ download_and_install() {
     fi
     ok "SHA256 verified: ${ACTUAL_SHA256}"
   else
-    warn "SHA256 verification skipped (manifest unavailable or no entry for this platform/version)."
+    # SEC-013: Fail-closed — never install without SHA256 verification.
+    # A missing EXPECTED_SHA256 means either the manifest was unavailable or node
+    # was absent (needed to parse the manifest JSON).  Either condition is a trust
+    # failure: we cannot authenticate the tarball, so we must refuse to install.
+    err "FATAL: SHA256 verification required but could not be performed.
+  The release manifest was unavailable or could not be parsed (node may be absent).
+  Refusing to install an unverified tarball to protect against supply-chain attacks.
+
+  To resolve:
+    1. Ensure 'node' is installed before running the installer, OR
+    2. Retry — a transient network error may have prevented manifest fetch.
+  (download URL: ${SAFE_URL})"
   fi
 
   info "Extracting..."
@@ -443,11 +488,16 @@ download_and_install() {
     # Restrict libexec directory to owner-only — node_modules may contain files
     # with elevated permissions from the tarball; deny group/other read+write+exec.
     chmod -R go-rwx "$LIBEXEC_DIR"
-    cat > "${INSTALL_DIR}/assignee" <<WRAPPER
+    # SEC-015: Write wrapper atomically — write to a temp file, chmod, then mv.
+    # This prevents a race between the cat/write and the chmod where an attacker
+    # could replace the file with a symlink (e.g. to /etc/sudoers) before chmod runs.
+    WRAPPER_TMP="${INSTALL_DIR}/assignee.tmp.$$"
+    cat > "$WRAPPER_TMP" <<WRAPPER
 #!/bin/sh
 exec node "${LIBEXEC_DIR}/dist/index.js" "\$@"
 WRAPPER
-    chmod +x "${INSTALL_DIR}/assignee"
+    chmod +x "$WRAPPER_TMP"
+    mv "$WRAPPER_TMP" "${INSTALL_DIR}/assignee"
   else
     err "Binary not found in archive. Expected: assignee, bin/assignee, or dist/index.js"
   fi

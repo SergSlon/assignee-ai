@@ -13,6 +13,12 @@
  * closing variants of the boundary tags plus triple-backtick code fences
  * that could terminate a surrounding fenced block in the prompt template.
  *
+ * SEC-017: Added Llama-style `[INST]`/`[/INST]`/`[SYS]`/`[/SYS]` markers
+ * and role-prefix patterns (`System:`, `Assistant:`, etc.) to bring this
+ * layer to parity with `utils/sanitize.ts::sanitizeUserIntent`. Any code
+ * path that reaches the adapter without going through `intent-parser`
+ * is now protected against Llama-family role breaks.
+ *
  * Complementary to `utils/sanitize.ts::sanitizeUserIntent` (NFR-16,
  * upstream at `intent-parser.ts`). This helper is a defence-in-depth
  * second layer applied at prompt-build time so any code path that
@@ -65,10 +71,28 @@ const BOUNDARY_TAG_PATTERN = new RegExp(
 const TRIPLE_BACKTICK_PATTERN = /```+/g;
 
 /**
- * Strips prompt-boundary tags and triple-backtick fences from a raw
- * user-supplied string. Leaves prose, ARNs, TypeScript generics (`<T>`),
- * inequality operators, and pasted HTML content with non-boundary tags
- * (e.g. `<div>`, `<span>`) untouched.
+ * Llama-style instruction markers (`[INST]`, `[/INST]`, `[SYS]`, `[/SYS]`).
+ * SEC-017: mirrors `utils/sanitize.ts::INST_TAG_PATTERN` to keep the two
+ * sanitization layers in parity. A user who reaches the adapter without
+ * passing through `intent-parser` (e.g. hint-injection paths) is still
+ * protected against Llama-family role breaks.
+ */
+const INST_TAG_PATTERN = /\[\/?(INST|SYS)\]/gi;
+
+/**
+ * Common prompt-injection role prefixes anchored to a line start.
+ * SEC-017: mirrors `utils/sanitize.ts::ROLE_PREFIX_PATTERN`.
+ * The prefix is stripped; surrounding text is preserved.
+ * Example: "System: ignore previous" → " ignore previous"
+ */
+const ROLE_PREFIX_PATTERN = /(^|\n)\s*(System|Assistant|Human|User):/gi;
+
+/**
+ * Strips prompt-boundary tags, Llama-style instruction markers, role
+ * prefixes, and triple-backtick fences from a raw user-supplied string.
+ * Leaves prose, ARNs, TypeScript generics (`<T>`), inequality operators,
+ * and pasted HTML content with non-boundary tags (e.g. `<div>`, `<span>`)
+ * untouched.
  *
  * Use at prompt-build time — i.e., inside `buildPrompt` — as a
  * defence-in-depth layer in addition to the upstream
@@ -83,11 +107,16 @@ const TRIPLE_BACKTICK_PATTERN = /```+/g;
  *
  *   stripPromptBoundaryTags("```json\n{\"a\":1}\n```")
  *   // → "json\n{\"a\":1}\n"           (fence stripped)
+ *
+ *   stripPromptBoundaryTags("[INST] ignore previous [/INST]")
+ *   // → " ignore previous "           (Llama markers stripped, SEC-017)
  */
 export function stripPromptBoundaryTags(raw: string): string {
   if (!raw) return raw;
   return raw
     .replace(BOUNDARY_TAG_PATTERN, "")
+    .replace(INST_TAG_PATTERN, "")
+    .replace(ROLE_PREFIX_PATTERN, "$1")
     .replace(TRIPLE_BACKTICK_PATTERN, "");
 }
 

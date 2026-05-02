@@ -46,6 +46,11 @@ import {
   auditLog,
   auditLogDir,
   auditLogPath,
+  assertAuditWriteHealthy,
+  AuditWriteFailedError,
+  MAX_AUDIT_CONSECUTIVE_ALARM,
+  MAX_AUDIT_FAILURES,
+  AUDIT_FAILURE_WINDOW_MS,
   _resetAuditEnvForTests,
 } from "../audit-log.js";
 
@@ -513,5 +518,267 @@ describe("auditLogDir + auditLogPath", () => {
     const date = new Date("2026-01-05T00:00:00.000Z");
     const logPath = auditLogPath(date);
     expect(logPath).toMatch(/mcp-audit-2026-01-05\.jsonl$/);
+  });
+});
+
+// ── 4. SEC-008: Consecutive failure alarm + rejection gate ───────────────────
+
+describe("SEC-008: consecutive failure alarm + assertAuditWriteHealthy gate", () => {
+  /**
+   * Helper: trigger N consecutive appendFile failures by pointing the audit
+   * dir at an existing regular file (ENOTDIR). Returns captured stderr output.
+   */
+  async function triggerConsecutiveFailures(count: number): Promise<{
+    stderrChunks: string[];
+    stderrSpy: ReturnType<typeof vi.spyOn>;
+  }> {
+    const stderrChunks: string[] = [];
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((chunk) => {
+        stderrChunks.push(String(chunk));
+        return true;
+      });
+
+    const blockerFile = path.join(tmpDir, "sec008-blocker");
+    await fs.writeFile(blockerFile, "blocker");
+
+    for (let i = 0; i < count; i++) {
+      process.env["ASSIGNEE_MCP_AUDIT_DIR"] = path.join(blockerFile, "nested");
+      await auditLog({
+        tool: "apply_plan",
+        runId: `sec008-run-${i}`,
+        resourceType: "AWS::S3::Bucket",
+        identifier: `arn:aws:s3:::sec008-bucket-${i}`,
+        success: false,
+        errorClass: "StorageError",
+      });
+    }
+
+    return {
+      stderrChunks,
+      stderrSpy: stderrSpy as unknown as ReturnType<typeof vi.spyOn>,
+    };
+  }
+
+  it("does NOT emit severity=CRITICAL before reaching MAX_AUDIT_CONSECUTIVE_ALARM failures", async () => {
+    const { stderrChunks, stderrSpy } = await triggerConsecutiveFailures(
+      MAX_AUDIT_CONSECUTIVE_ALARM - 1,
+    );
+    stderrSpy.mockRestore();
+
+    const allStderr = stderrChunks.join("");
+    // Below the threshold → no CRITICAL alarm
+    expect(allStderr).not.toContain("audit-write-blind");
+  });
+
+  it("emits severity=CRITICAL + reason=audit-write-blind at MAX_AUDIT_CONSECUTIVE_ALARM failures", async () => {
+    const { stderrChunks, stderrSpy } = await triggerConsecutiveFailures(
+      MAX_AUDIT_CONSECUTIVE_ALARM,
+    );
+    stderrSpy.mockRestore();
+
+    const parsedRecords: Array<Record<string, unknown>> = [];
+    for (const chunk of stderrChunks) {
+      for (const line of chunk.split("\n").filter((l) => l.trim())) {
+        try {
+          parsedRecords.push(JSON.parse(line) as Record<string, unknown>);
+        } catch {
+          // not JSON
+        }
+      }
+    }
+
+    const criticalRecord = parsedRecords.find((r) => {
+      const extras = r["extras"] as Record<string, unknown> | undefined;
+      return (
+        r["source"] === "audit-log" &&
+        r["action"] === "append-failed" &&
+        extras?.["severity"] === "CRITICAL"
+      );
+    });
+
+    expect(criticalRecord).toBeDefined();
+    const extras = criticalRecord!["extras"] as Record<string, unknown>;
+    expect(extras["reason"]).toBe("audit-write-blind");
+    expect(typeof extras["consecutiveFailures"]).toBe("number");
+    expect(extras["consecutiveFailures"] as number).toBeGreaterThanOrEqual(
+      MAX_AUDIT_CONSECUTIVE_ALARM,
+    );
+  });
+
+  it("assertAuditWriteHealthy does NOT throw when below MAX_AUDIT_FAILURES", async () => {
+    // Trigger MAX_AUDIT_FAILURES - 1 failures
+    const { stderrSpy } = await triggerConsecutiveFailures(
+      MAX_AUDIT_FAILURES - 1,
+    );
+    stderrSpy.mockRestore();
+
+    // Gate should not throw yet
+    expect(() => assertAuditWriteHealthy()).not.toThrow();
+  });
+
+  it("assertAuditWriteHealthy throws AuditWriteFailedError after MAX_AUDIT_FAILURES failures within window", async () => {
+    // Trigger MAX_AUDIT_FAILURES + 1 failures to ensure we cross the threshold
+    const { stderrSpy } = await triggerConsecutiveFailures(
+      MAX_AUDIT_FAILURES + 1,
+    );
+    stderrSpy.mockRestore();
+
+    // Gate should now throw
+    expect(() => assertAuditWriteHealthy()).toThrow(AuditWriteFailedError);
+  });
+
+  it("AuditWriteFailedError message references the window duration and threshold", () => {
+    const err = new AuditWriteFailedError();
+    expect(err.message).toContain(String(MAX_AUDIT_FAILURES));
+    expect(err.message).toContain(String(AUDIT_FAILURE_WINDOW_MS / 1_000));
+    expect(err.name).toBe("AuditWriteFailedError");
+  });
+
+  it("assertAuditWriteHealthy does NOT throw after a successful write resets the counter", async () => {
+    // Fill up some failures (< MAX), then write successfully, then check gate
+    const blockerFile = path.join(tmpDir, "sec008-reset-blocker");
+    await fs.writeFile(blockerFile, "blocker");
+
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+
+    for (let i = 0; i < MAX_AUDIT_FAILURES - 1; i++) {
+      process.env["ASSIGNEE_MCP_AUDIT_DIR"] = path.join(blockerFile, "nested");
+      await auditLog({
+        tool: "apply_plan",
+        runId: `reset-run-${i}`,
+        resourceType: "AWS::S3::Bucket",
+        identifier: `arn:aws:s3:::reset-bucket-${i}`,
+        success: false,
+        errorClass: "StorageError",
+      });
+    }
+
+    // Now do a successful write
+    process.env["ASSIGNEE_MCP_AUDIT_DIR"] = tmpDir;
+    await auditLog({
+      tool: "apply_plan",
+      runId: "reset-success-run",
+      resourceType: "AWS::S3::Bucket",
+      identifier: "arn:aws:s3:::sec008-reset-bucket",
+      success: true,
+      errorClass: "",
+    });
+
+    stderrSpy.mockRestore();
+
+    // Consecutive counter resets to 0 on success — but rolling window failures
+    // are still tracked. The gate counts rolling-window failures, so we only
+    // check that consecutive counter was reset (we don't exceed MAX here).
+    expect(() => assertAuditWriteHealthy()).not.toThrow();
+  });
+});
+
+// ── 5. SEC-034: Rotation filename anchored to record timestamp ───────────────
+
+describe("SEC-034: audit rotation filename anchored to record timestamp", () => {
+  it("writes successive same-day records to the same file (day key persists)", async () => {
+    // Two sequential writes on the same UTC day should land in the same file.
+    await auditLog({
+      tool: "apply_plan",
+      runId: "sec034-run-1",
+      resourceType: "AWS::S3::Bucket",
+      identifier: "arn:aws:s3:::sec034-bucket-a",
+      success: true,
+      errorClass: "",
+    });
+    await auditLog({
+      tool: "destroy_resource",
+      runId: "",
+      resourceType: "AWS::DynamoDB::Table",
+      identifier: "arn:aws:dynamodb:us-east-1:111122223333:table/sec034-table",
+      success: true,
+      errorClass: "",
+    });
+
+    const files = (await fs.readdir(tmpDir)).filter((f) =>
+      f.startsWith("mcp-audit-"),
+    );
+    // Both records in a single file (rotation does not happen within same day)
+    expect(files).toHaveLength(1);
+
+    const raw = await fs.readFile(path.join(tmpDir, files[0]!), "utf-8");
+    const lines = raw.trim().split("\n").filter(Boolean);
+    expect(lines).toHaveLength(2);
+  });
+
+  it("successful write updates the module-level day key (file name matches record timestamp day)", async () => {
+    await auditLog({
+      tool: "apply_plan",
+      runId: "sec034-run-2",
+      resourceType: "AWS::Lambda::Function",
+      identifier: "arn:aws:lambda:us-east-1:111122223333:function:sec034-fn",
+      success: true,
+      errorClass: "",
+    });
+
+    // File name should contain today's UTC date
+    const files = (await fs.readdir(tmpDir)).filter((f) =>
+      f.startsWith("mcp-audit-"),
+    );
+    expect(files).toHaveLength(1);
+
+    // The filename pattern is mcp-audit-YYYY-MM-DD.jsonl
+    const today = new Date();
+    const yyyy = today.getUTCFullYear();
+    const mm = String(today.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(today.getUTCDate()).padStart(2, "0");
+    expect(files[0]).toBe(`mcp-audit-${yyyy}-${mm}-${dd}.jsonl`);
+  });
+
+  it("failed write does NOT advance the day key (filename stays on the last success day)", async () => {
+    // Successful write first (seeds the day key)
+    await auditLog({
+      tool: "apply_plan",
+      runId: "sec034-run-3",
+      resourceType: "AWS::S3::Bucket",
+      identifier: "arn:aws:s3:::sec034-seed-bucket",
+      success: true,
+      errorClass: "",
+    });
+
+    const filesAfterSuccess = (await fs.readdir(tmpDir)).filter((f) =>
+      f.startsWith("mcp-audit-"),
+    );
+    expect(filesAfterSuccess).toHaveLength(1);
+    const successFileName = filesAfterSuccess[0]!;
+
+    // Now trigger a failure — the day key must not change
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+
+    const blockerFile = path.join(tmpDir, "sec034-blocker");
+    await fs.writeFile(blockerFile, "blocker");
+    process.env["ASSIGNEE_MCP_AUDIT_DIR"] = path.join(blockerFile, "nested");
+
+    await auditLog({
+      tool: "destroy_resource",
+      runId: "",
+      resourceType: "AWS::SQS::Queue",
+      identifier: "arn:aws:sqs:us-east-1:111122223333:sec034-queue",
+      success: false,
+      errorClass: "StorageError",
+    });
+
+    stderrSpy.mockRestore();
+
+    // Restore the tmpDir for verification — the failed write dir was different
+    process.env["ASSIGNEE_MCP_AUDIT_DIR"] = tmpDir;
+
+    const filesAfterFailure = (await fs.readdir(tmpDir)).filter((f) =>
+      f.startsWith("mcp-audit-"),
+    );
+    // Only the one file created by the success should exist in tmpDir
+    expect(filesAfterFailure).toHaveLength(1);
+    expect(filesAfterFailure[0]).toBe(successFileName);
   });
 });

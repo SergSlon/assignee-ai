@@ -172,14 +172,17 @@ describe("resolveAuditKey — file-mode warning deduplication (PR-019)", () => {
     _resetAuditKeyCache();
   });
 
-  it("emits file-mode warning exactly once per process even when called multiple times", () => {
-    // Write key with wrong mode so the warning fires.
+  it("SEC-026: emits file-mode warning on every cache-miss when mode is wrong", () => {
+    // SEC-026: `_keyModeWarned` is reset on every cache-miss so that an
+    // attacker who widens the key-file permissions AFTER first read sees
+    // fresh warnings on each subsequent append (when the TTL window elapses).
+    // For non-default keyFile paths the cache is NEVER populated, so the
+    // warning fires on every call — this is the correct new behaviour.
     fs.writeFileSync(keyFile, "a".repeat(64), { mode: 0o644 });
-
-    // Reset to ensure _keyModeWarned starts false.
     _resetAuditKeyCache();
 
-    // Call resolveAuditKey three times — warning must appear exactly once.
+    // Call resolveAuditKey three times — each call is a cache-miss for a
+    // non-default keyFile path, so the warning fires 3 times.
     resolveAuditKey(keyFile);
     resolveAuditKey(keyFile);
     resolveAuditKey(keyFile);
@@ -187,7 +190,7 @@ describe("resolveAuditKey — file-mode warning deduplication (PR-019)", () => {
     const warnings = stderrChunks.filter((c) =>
       c.includes("WARNING: audit key file"),
     );
-    expect(warnings).toHaveLength(1);
+    expect(warnings).toHaveLength(3);
   });
 
   it("does NOT emit file-mode warning when file mode is 0o600", () => {

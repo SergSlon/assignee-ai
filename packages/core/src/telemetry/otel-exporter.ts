@@ -35,6 +35,37 @@ import {
   type ConfigPort,
 } from "../config/config-port.js";
 
+// ── SEC-023: hostname allowlist ────────────────────────────────────────
+/**
+ * If `ASSIGNEE_OTEL_ENDPOINT_ALLOWLIST` is set (comma-separated hostnames),
+ * only endpoints whose hostname matches the list are accepted. Default is
+ * no allowlist (current behaviour preserved for backward compat).
+ *
+ * Example: `ASSIGNEE_OTEL_ENDPOINT_ALLOWLIST=collector.example.com,otel.internal`
+ */
+export function isEndpointHostnameAllowed(
+  endpoint: string,
+  config: ConfigPort,
+): boolean {
+  const raw = config.get(EnvVar.ASSIGNEE_OTEL_ENDPOINT_ALLOWLIST);
+  if (raw === undefined || raw.trim().length === 0) {
+    // No allowlist configured — all hostnames allowed (default behaviour).
+    return true;
+  }
+  const allowed = raw
+    .split(",")
+    .map((h) => h.trim().toLowerCase())
+    .filter((h) => h.length > 0);
+  if (allowed.length === 0) return true;
+  try {
+    const url = new URL(endpoint);
+    return allowed.includes(url.hostname.toLowerCase());
+  } catch {
+    // Unparseable endpoint — reject as a security-safe default.
+    return false;
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
 /* ------------------------------------------------------------------ */
@@ -206,15 +237,11 @@ export function buildOtlpPayload(
       // is still present (so users can filter on "key exists").
       attributes.push({ key: k, value: { stringValue: "" } });
     } else {
-      // Object/array/etc. — JSON-stringify so the receiver can re-parse.
-      // try/catch the stringify in case of circular references.
-      let serialized: string;
-      try {
-        serialized = JSON.stringify(v);
-      } catch {
-        serialized = "[unserializable]";
-      }
-      attributes.push({ key: k, value: { stringValue: serialized } });
+      // SEC-024: non-primitive extras values (object / Array / Error) bypass
+      // the PII gate at LogEvent-build time. Reject with a sentinel rather
+      // than JSON-stringifying, which could emit nested ARNs/account IDs
+      // to the OTEL collector without going through redaction.
+      attributes.push({ key: k, value: { stringValue: "[REDACTED_OBJECT]" } });
     }
   }
 
@@ -308,6 +335,17 @@ export async function exportLogEvent(
     process.stderr.write(
       `[assignee/otel] Endpoint rejected: "${endpoint}" uses a non-HTTPS scheme. ` +
         `Set ASSIGNEE_OTEL_ALLOW_HTTP=1 to allow HTTP (development only).\n`,
+    );
+    return;
+  }
+
+  // SEC-023: hostname allowlist guard. If ASSIGNEE_OTEL_ENDPOINT_ALLOWLIST
+  // is set, reject endpoints whose hostname is not in the list to prevent
+  // accidental telemetry exfiltration to a rogue collector.
+  if (!isEndpointHostnameAllowed(endpoint, effectiveConfig)) {
+    process.stderr.write(
+      `[assignee/otel] Endpoint rejected: hostname of "${endpoint}" is not in ` +
+        `ASSIGNEE_OTEL_ENDPOINT_ALLOWLIST. Add it to the allowlist to export telemetry.\n`,
     );
     return;
   }

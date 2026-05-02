@@ -226,7 +226,9 @@ describe("aws-credentials helpers", () => {
     const VALID_KEY = "ASIAIOSFODNN7STSEXAMP";
     const VALID_SECRET = "stsSecretKeyValueExample123456789012345";
     const VALID_TOKEN =
-      "AQoXnyc4lcK4w4OIaHPGTq6EXAMPLEsessionTOKEN1234567890abcdefghijklmno";
+      // Real STS session tokens are typically 100–1000+ chars (base64-encoded
+      // blob). This fixture is ≥ 100 chars (SEC-031: MIN_SESSION_TOKEN_LEN=100).
+      "AQoXnyc4lcK4w4OIaHPGTq6EXAMPLEsessionTOKEN1234567890abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabc";
 
     it("row-1: env-var-only (AKIA + secret, no session token) — resolver returns correct shape without sessionToken", () => {
       process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
@@ -312,7 +314,9 @@ describe("aws-credentials helpers", () => {
     const VALID_KEY = "ASIAIOSFODNN7STSEXAMP";
     const VALID_SECRET = "stsSecretKeyValueExample123456789012345";
     const VALID_TOKEN =
-      "AQoXnyc4lcK4w4OIaHPGTq6EXAMPLEsessionTOKEN1234567890abcdefghijklmno";
+      // Real STS session tokens are typically 100–1000+ chars (base64-encoded
+      // blob). This fixture is ≥ 100 chars (SEC-031: MIN_SESSION_TOKEN_LEN=100).
+      "AQoXnyc4lcK4w4OIaHPGTq6EXAMPLEsessionTOKEN1234567890abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabc";
 
     it("reader: propagates sessionToken when ASSIGNEE_READER_SESSION_TOKEN is set", () => {
       process.env["ASSIGNEE_READER_ACCESS_KEY_ID"] = VALID_KEY;

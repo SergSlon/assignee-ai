@@ -84,19 +84,99 @@ const SENSITIVE_KEY_NAMES_LOWER: ReadonlySet<string> = new Set(
  */
 const AKIA_PATTERN_G = /A[KS]IA[0-9A-Z]{16}/g;
 
+// ── SEC-007: Multi-provider secret patterns for checkpoint redaction ──────
+//
+// These mirror the patterns in `utils/redact.ts` so that CFN desiredState
+// objects routed through `redactSensitiveFields` are equally protected.
+// Both files must be kept in sync when new patterns are added.
+//
+// See `utils/redact.ts` for full provider rationale.
+
+/** Anthropic API key: sk-ant-api03-... or sk-ant-... */
+const ANTHROPIC_KEY_PATTERN_G = /sk-ant-[A-Za-z0-9_-]{20,}/g;
+
+/** OpenAI project key (sk-proj-...) */
+const OPENAI_KEY_PATTERN_G = /sk-(?:proj-)[A-Za-z0-9_-]{20,}/g;
+
+/** GitHub classic PAT (ghp_), OAuth token (gho_), fine-grained PAT (github_pat_) */
+const GITHUB_TOKEN_PATTERN_G = /(?:ghp_|gho_|github_pat_)[A-Za-z0-9_]{20,}/g;
+
+/** Slack bot token (xoxb-) and user token (xoxp-) */
+const SLACK_TOKEN_PATTERN_G = /xox[bp]-[A-Za-z0-9-]{10,}/g;
+
+/** Google AI / Cloud API key: AIza + 35 URL-safe base64 chars */
+const GOOGLE_AI_KEY_PATTERN_G = /AIza[0-9A-Za-z_-]{35}/g;
+
+/**
+ * JWT prefix guard — base64url-encoded header eyJ, followed by payload + optional signature.
+ * Stops at whitespace; requires at least one dot separator to distinguish from random base64.
+ */
+const JWT_PATTERN_G = /eyJ[A-Za-z0-9_-]{20,}(?:\.[A-Za-z0-9_-]+){1,2}/g;
+
+// ── SEC-044: Recursion / size guards ─────────────────────────────────────
+
+/**
+ * Maximum object nesting depth accepted by `redactSensitiveFields`.
+ * Exceeding this limit throws `CheckpointRedactionError` to prevent
+ * adversarial payloads from causing a stack overflow.
+ */
+const MAX_REDACTION_DEPTH = 32;
+
+/**
+ * Maximum total node (key) count processed by `redactSensitiveFields`
+ * across the entire recursive walk. Exceeding this throws
+ * `CheckpointRedactionError`. Prevents CPU / memory exhaustion on
+ * payloads with thousands of keys (e.g. a malicious desiredState blob).
+ */
+const MAX_REDACTION_NODES = 10_000;
+
+/**
+ * Error thrown when `redactSensitiveFields` encounters a payload that
+ * exceeds the depth or node-count safety limits (SEC-044).
+ */
+export class CheckpointRedactionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CheckpointRedactionError";
+  }
+}
+
 /** Value used to mask redacted fields. */
 export const REDACTED_VALUE = "[REDACTED]";
 
 /**
- * Recursively redact sensitive keys and AKIA-pattern values from a
+ * Recursively redact sensitive keys and secret-pattern values from a
  * desiredState record. Walks arrays and nested objects. Pure — returns a new
  * object rather than mutating the input.
+ *
+ * SEC-044: enforces `MAX_REDACTION_DEPTH` and `MAX_REDACTION_NODES` to
+ * prevent stack overflow and CPU exhaustion on adversarial payloads. Both
+ * limits throw `CheckpointRedactionError` with a descriptive message.
+ *
+ * @param state  - The CFN desiredState record to redact.
+ * @param _depth - Internal recursion depth counter (do not pass from callers).
+ * @param _nodes - Shared mutable node-count box (do not pass from callers).
  */
 export function redactSensitiveFields(
   state: Record<string, unknown>,
+  _depth = 0,
+  _nodes: { count: number } = { count: 0 },
 ): Record<string, unknown> {
+  if (_depth > MAX_REDACTION_DEPTH) {
+    throw new CheckpointRedactionError(
+      `redactSensitiveFields: exceeded maximum nesting depth (${MAX_REDACTION_DEPTH}). ` +
+        "This is a safety guard against adversarial deep-nested payloads (SEC-044).",
+    );
+  }
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(state)) {
+    _nodes.count++;
+    if (_nodes.count > MAX_REDACTION_NODES) {
+      throw new CheckpointRedactionError(
+        `redactSensitiveFields: exceeded maximum node count (${MAX_REDACTION_NODES}). ` +
+          "This is a safety guard against adversarial wide payloads (SEC-044).",
+      );
+    }
     if (
       SENSITIVE_KEY_NAMES.has(key) ||
       SENSITIVE_KEY_NAMES_LOWER.has(key.toLowerCase())
@@ -104,28 +184,50 @@ export function redactSensitiveFields(
       result[key] = REDACTED_VALUE;
       continue;
     }
-    result[key] = redactValue(value);
+    result[key] = redactValue(value, _depth + 1, _nodes);
   }
   return result;
 }
 
 /**
- * Recursively redact a value. Scalars that match the AKIA pattern are masked.
- * Objects and arrays are walked element-by-element.
+ * Recursively redact a value. Scalars that match any known secret pattern
+ * are masked. Objects and arrays are walked element-by-element.
+ *
+ * SEC-007: in addition to AKIA/ASIA, also scrubs Anthropic, OpenAI, GitHub,
+ * Slack, Google AI, and JWT patterns from free-form string values.
+ *
+ * @param value  - The value to inspect.
+ * @param _depth - Current nesting depth (forwarded from redactSensitiveFields).
+ * @param _nodes - Shared mutable node-count box.
  */
-function redactValue(value: unknown): unknown {
+function redactValue(
+  value: unknown,
+  _depth: number,
+  _nodes: { count: number },
+): unknown {
   if (typeof value === "string") {
     // Use .replace() directly (not .test()) to avoid lastIndex statefulness
-    // with the global regex. Substring replacement preserves surrounding
-    // context — only the AKIA/ASIA key-ID token is masked (M-α-005).
-    const replaced = value.replace(AKIA_PATTERN_G, REDACTED_VALUE);
-    return replaced !== value ? replaced : value;
+    // with global regexes. Substring replacement preserves surrounding
+    // context — only the matched secret token is masked (M-α-005).
+    let v = value;
+    v = v.replace(AKIA_PATTERN_G, REDACTED_VALUE);
+    v = v.replace(ANTHROPIC_KEY_PATTERN_G, REDACTED_VALUE);
+    v = v.replace(OPENAI_KEY_PATTERN_G, REDACTED_VALUE);
+    v = v.replace(GITHUB_TOKEN_PATTERN_G, REDACTED_VALUE);
+    v = v.replace(SLACK_TOKEN_PATTERN_G, REDACTED_VALUE);
+    v = v.replace(GOOGLE_AI_KEY_PATTERN_G, REDACTED_VALUE);
+    v = v.replace(JWT_PATTERN_G, REDACTED_VALUE);
+    return v;
   }
   if (Array.isArray(value)) {
-    return value.map((v) => redactValue(v));
+    return value.map((element) => redactValue(element, _depth, _nodes));
   }
   if (value && typeof value === "object") {
-    return redactSensitiveFields(value as Record<string, unknown>);
+    return redactSensitiveFields(
+      value as Record<string, unknown>,
+      _depth,
+      _nodes,
+    );
   }
   return value;
 }

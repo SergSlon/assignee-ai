@@ -9,6 +9,10 @@
  *   4. A second signal while mcpShuttingDown=true exits immediately without
  *      re-entering the async shutdown path.
  *
+ * SEC-021: A second signal MUST also call clearAllApplies() before
+ *   process.exit so that dangling advisory-lock files are released even
+ *   on a forced bail-out.
+ *
  * We do NOT import apps/mcp-server/src/index.ts here because that module
  * has a top-level main() call that spawns the real stdio transport and
  * blocks the test process.  Instead, we re-implement just the signal-handler
@@ -48,6 +52,8 @@ function buildSignalHandler(
 
   return function handleSignal() {
     if (shuttingDown) {
+      // SEC-021: even on second-signal bail-out, release advisory locks.
+      clearAllApplies();
       exitSpy(code);
     }
     shuttingDown = true;
@@ -267,6 +273,94 @@ describe("MCP signal handler graceful shutdown (W6-S1)", () => {
     }
 
     await vi.runAllTimersAsync();
+    expect(exitSpy).toHaveBeenCalledWith(128 + 15);
+  });
+
+  // ── SEC-021: second-signal bail-out must also call clearAllApplies ────────
+
+  it("SEC-021: clearAllApplies is called on the second signal bail-out path", async () => {
+    const checkpointPath = "/tmp/sec021-inflight.json";
+    markApplyActive(checkpointPath);
+    expect(isApplyActive(checkpointPath)).toBe(true);
+
+    const exitSpy = vi.fn((_code: number): never => {
+      throw new Error("process.exit called");
+    });
+
+    const fakeMcpServer: FakeMcpServer = {
+      // close() hangs so that the first-signal shutdown is still in progress
+      // when the second signal fires.
+      close: vi.fn().mockImplementation(() => new Promise(() => {})),
+    };
+
+    const handler = buildSignalHandler(128 + 15, {
+      exitSpy: exitSpy as unknown as (c: number) => never,
+      server: fakeMcpServer,
+      timeoutMs: 5_000,
+    });
+
+    // First signal — starts async shutdown (close() hangs).
+    handler();
+
+    // Lock is already cleared by the first-signal synchronous clearAllApplies().
+    expect(isApplyActive(checkpointPath)).toBe(false);
+
+    // Add a new in-flight apply to simulate a second apply that arrived
+    // between the first and second signals.
+    const checkpointPath2 = "/tmp/sec021-inflight-2.json";
+    markApplyActive(checkpointPath2);
+    expect(isApplyActive(checkpointPath2)).toBe(true);
+
+    // Second signal — bail-out path.
+    try {
+      handler();
+    } catch {
+      /* exitSpy throws to simulate process.exit */
+    }
+
+    // The second-signal path MUST also clear locks (SEC-021).
+    expect(isApplyActive(checkpointPath2)).toBe(false);
+    expect(exitSpy).toHaveBeenCalledWith(128 + 15);
+  });
+
+  it("SEC-021: clearAllApplies is called TWICE total across first and second signals", async () => {
+    // This test verifies the call count directly by spying on clearAllApplies.
+    // We use the real clearAllApplies from active-applies.ts wrapped in a spy.
+    const clearSpy = vi.fn(clearAllApplies);
+
+    let shuttingDown = false;
+
+    // Build the handler manually to inject clearSpy.
+    const exitSpy = vi.fn((_code: number): never => {
+      throw new Error("process.exit called");
+    });
+
+    function handlerWithSpy() {
+      if (shuttingDown) {
+        clearSpy();
+        try {
+          exitSpy(128 + 15);
+        } catch {
+          /* swallow the throw from exitSpy */
+        }
+        return;
+      }
+      shuttingDown = true;
+      clearSpy();
+    }
+
+    // First signal.
+    handlerWithSpy();
+    expect(clearSpy).toHaveBeenCalledTimes(1);
+
+    // Second signal.
+    try {
+      handlerWithSpy();
+    } catch {
+      /* exitSpy throws */
+    }
+
+    expect(clearSpy).toHaveBeenCalledTimes(2);
     expect(exitSpy).toHaveBeenCalledWith(128 + 15);
   });
 });

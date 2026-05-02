@@ -17,17 +17,14 @@
 import { generateText, Output } from "ai";
 import type { LanguageModel } from "ai";
 import type { ZodSchema } from "zod";
-import { LlmError } from "../errors.js";
+import { LlmError, GuardrailRequiredError } from "../errors.js";
 import { safeTry } from "../types/result.js";
 import type { Result } from "../types/result.js";
 import type { LlmPort, LlmCallOptions } from "../ports/llm-port.js";
 import { AWS_REGION } from "../config/constants/aws.js";
 import { LlmProvider } from "../constants/llm-providers.js";
 import { EnvVar } from "../constants/env-vars.js";
-import {
-  ProcessEnvConfigAdapter,
-  type ConfigPort,
-} from "../config/config-port.js";
+import { type ConfigPort } from "../config/config-port.js";
 import { recordTokenUsage, type RawLlmUsage } from "../utils/token-usage.js";
 import { redactAccountIdsInPrompt } from "../utils/redact.js";
 import {
@@ -61,6 +58,65 @@ const DEFAULT_RETRY_BASE_MS = 1_000;
 /** Hard ceiling on any single sleep to avoid runaway waits (~30s total). */
 const MAX_JITTER_WINDOW_MS = 1_000;
 
+// ── SEC-028: Global retry circuit-breaker ────────────────────────────────────
+
+/**
+ * Maximum cumulative throttle retries (across ALL concurrent calls) within
+ * the circuit-breaker window before fast-failing subsequent throttle errors.
+ * Default: 20. Configurable via ASSIGNEE_LLM_MAX_GLOBAL_RETRIES.
+ */
+const DEFAULT_BEDROCK_MAX_GLOBAL_RETRIES = 20;
+
+/** Time window in ms for the global retry circuit-breaker. Default: 60s. */
+const RETRY_BUDGET_WINDOW_MS = 60_000;
+
+/** Process-global throttle-retry counter (count + window start timestamp). */
+const _retryBudget = {
+  count: 0,
+  windowStart: 0,
+};
+
+/**
+ * Reads the global-retry budget limit from the environment.
+ * Falls back to DEFAULT_BEDROCK_MAX_GLOBAL_RETRIES.
+ */
+function readGlobalRetryLimit(): number {
+  const raw = process.env["ASSIGNEE_LLM_MAX_GLOBAL_RETRIES"];
+  if (raw !== undefined && /^\d+$/.test(raw)) {
+    return Math.max(parseInt(raw, 10), 1);
+  }
+  return DEFAULT_BEDROCK_MAX_GLOBAL_RETRIES;
+}
+
+/**
+ * Records a throttle retry in the process-global budget window.
+ * Returns `true` when the budget is exhausted (fast-fail should be applied).
+ *
+ * SEC-028: Prevents retry storms under coordinated DoS by capping the total
+ * number of ThrottlingException retries across all concurrent calls within
+ * a 60s sliding window.
+ */
+export function recordThrottleRetry(): boolean {
+  const now = Date.now();
+  if (now - _retryBudget.windowStart > RETRY_BUDGET_WINDOW_MS) {
+    // Reset the window.
+    _retryBudget.count = 0;
+    _retryBudget.windowStart = now;
+  }
+  _retryBudget.count += 1;
+  return _retryBudget.count > readGlobalRetryLimit();
+}
+
+/**
+ * Resets the global retry budget. Exposed for tests only — do NOT call in
+ * production code.
+ * @internal
+ */
+export function _resetRetryBudgetForTest(): void {
+  _retryBudget.count = 0;
+  _retryBudget.windowStart = 0;
+}
+
 /**
  * Returns true when the error message contains one of the retryable exception
  * names. AWS SDK errors embed the code in the message and/or a `name` property.
@@ -69,6 +125,16 @@ export function isRetryableError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   const text = `${err.name ?? ""} ${err.message}`;
   return RETRYABLE_ERROR_PATTERNS.some((pattern) => text.includes(pattern));
+}
+
+/**
+ * Returns true when the error is specifically a ThrottlingException (the only
+ * error type counted against the global retry budget).
+ */
+function isThrottlingError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const text = `${err.name ?? ""} ${err.message}`;
+  return text.includes("ThrottlingException");
 }
 
 /**
@@ -107,6 +173,11 @@ function readRetryConfig(): { maxRetries: number; baseMs: number } {
 /**
  * Invoke `fn` with exponential-backoff retry on retryable errors.
  * Non-retryable errors surface immediately without delay.
+ *
+ * SEC-028: ThrottlingExceptions also contribute to the process-global
+ * retry budget. Once the budget is exhausted within the 60s window,
+ * subsequent ThrottlingExceptions fast-fail without retrying and emit a
+ * structured `retryBudgetExhausted` log event to stderr.
  */
 async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
   const { maxRetries, baseMs } = readRetryConfig();
@@ -120,6 +191,22 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
       if (!isRetryableError(err) || attempt === maxRetries) {
         throw err;
       }
+      // SEC-028: count ThrottlingException retries against the global budget.
+      if (isThrottlingError(err)) {
+        const budgetExhausted = recordThrottleRetry();
+        if (budgetExhausted) {
+          process.stderr.write(
+            JSON.stringify({
+              level: "ERROR",
+              event: "retryBudgetExhausted",
+              message:
+                "Global ThrottlingException retry budget exhausted within 60s window. " +
+                "Fast-failing subsequent throttle errors to prevent retry storm.",
+            }) + "\n",
+          );
+          throw err;
+        }
+      }
       const delay = backoffDelayMs(attempt, baseMs);
       await new Promise<void>((resolve) => setTimeout(resolve, delay));
     }
@@ -127,6 +214,23 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
 
   // Should never reach here — the loop always throws or returns.
   throw lastErr;
+}
+
+// ── SEC-036: Strict boolean env-var parser ───────────────────────────────────
+
+/**
+ * Parses a boolean environment variable using strict mode: only the value
+ * `"1"` is treated as truthy. All other values (including `"true"`, `"True"`,
+ * `"TRUE"`, `"yes"`, `"on"`) return `false`.
+ *
+ * SEC-036: Normalises bool env-var parsing across assignee so typo variants
+ * like "True" cannot silently disable security-critical flags.
+ *
+ * @param name - The environment variable name to read from `process.env`.
+ * @returns `true` iff the env var is set to the string `"1"`.
+ */
+export function parseBoolEnv(name: string): boolean {
+  return process.env[name] === "1";
 }
 
 export interface LlmAdapterConfig {
@@ -137,6 +241,9 @@ export interface LlmAdapterConfig {
   /** Optional Bedrock guardrail version. Defaults to "1". */
   guardrailVersion?: string;
 }
+
+/** Set of non-Bedrock providers that have already emitted the no-guardrail warning (per-adapter). */
+const _nonBedrockWarned = new WeakSet<LlmAdapter>();
 
 export class LlmAdapter implements LlmPort {
   private readonly parsed: ParsedModel;
@@ -155,37 +262,74 @@ export class LlmAdapter implements LlmPort {
           }
         : {};
 
-    // P018 (acquisition-DD L5 Aiko L5.3 S12): surface missing-guardrail
-    // state to operators immediately at adapter construction time, once per
-    // instance. This fires when Bedrock is active and no guardrail is
-    // configured, unless the operator has explicitly opted out with
-    // BEDROCK_GUARDRAIL_DISABLE=1.
+    // SEC-016 / P018: Bedrock without a guardrail now emits a warning at
+    // construction time. The fail-closed gate (GuardrailRequiredError) fires
+    // at call time (generateText / generateStructured) so callers that set
+    // ASSIGNEE_ALLOW_NO_GUARDRAIL=1 still get a warning here.
+    if (this.parsed.provider === LlmProvider.BEDROCK && !config.guardrailId) {
+      if (
+        !LlmAdapter.isGuardrailDisabled() &&
+        !LlmAdapter.isAllowNoGuardrail()
+      ) {
+        process.stderr.write(
+          "WARNING: Bedrock invocations are running WITHOUT a Guardrail. LLM-generated\n" +
+            "content may include PII, harmful topics, or jailbreak responses. Set\n" +
+            "BEDROCK_GUARDRAIL_ID + BEDROCK_GUARDRAIL_VERSION to enable, or set\n" +
+            "BEDROCK_GUARDRAIL_DISABLE=1 to suppress this warning. See `assignee doctor`\n" +
+            "for setup guidance.\n",
+        );
+      }
+    }
+
+    // SEC-042: Non-Bedrock providers have no guardrail coverage at all.
+    // Emit a one-time per-adapter warning unless the operator has explicitly
+    // set ASSIGNEE_ALLOW_NO_GUARDRAIL=1.
     if (
-      this.parsed.provider === LlmProvider.BEDROCK &&
-      !config.guardrailId &&
-      !LlmAdapter.isGuardrailDisabled()
+      this.parsed.provider !== LlmProvider.BEDROCK &&
+      !LlmAdapter.isAllowNoGuardrail() &&
+      !_nonBedrockWarned.has(this)
     ) {
+      _nonBedrockWarned.add(this);
       process.stderr.write(
-        "WARNING: Bedrock invocations are running WITHOUT a Guardrail. LLM-generated\n" +
-          "content may include PII, harmful topics, or jailbreak responses. Set\n" +
-          "BEDROCK_GUARDRAIL_ID + BEDROCK_GUARDRAIL_VERSION to enable, or set\n" +
-          "BEDROCK_GUARDRAIL_DISABLE=1 to suppress this warning. See `assignee doctor`\n" +
-          "for setup guidance.\n",
+        `WARNING: Provider ${this.parsed.provider} has no guardrail coverage. ` +
+          "Set ASSIGNEE_ALLOW_NO_GUARDRAIL=1 to suppress.\n",
       );
     }
   }
 
   /**
-   * Returns true if the operator has explicitly opted out of the guardrail warning.
+   * Returns true if the operator has explicitly opted out of the guardrail
+   * warning AND the fail-closed gate via `BEDROCK_GUARDRAIL_DISABLE=1`.
+   *
+   * SEC-036: accepts ONLY the value `"1"` (via `parseBoolEnv`). `"true"`,
+   * `"True"`, `"TRUE"` etc. are no longer accepted — use `"1"` consistently
+   * with all other assignee bool env vars.
    *
    * MASTER-009: accepts an optional `ConfigPort` so SaaS callers can
    * supply a tenant-scoped lookup. When omitted, falls back to a fresh
    * `ProcessEnvConfigAdapter` (legacy single-tenant CLI behaviour).
    */
   static isGuardrailDisabled(config?: ConfigPort): boolean {
-    const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
-    const val = effectiveConfig.get(EnvVar.BEDROCK_GUARDRAIL_DISABLE);
-    return val === "1" || val === "true";
+    if (config) {
+      // ConfigPort path: still check for strict "1" only.
+      return config.get(EnvVar.BEDROCK_GUARDRAIL_DISABLE) === "1";
+    }
+    return parseBoolEnv(EnvVar.BEDROCK_GUARDRAIL_DISABLE);
+  }
+
+  /**
+   * Returns true if the operator has explicitly opted out of the
+   * guardrail-required gate via `ASSIGNEE_ALLOW_NO_GUARDRAIL=1`.
+   *
+   * SEC-016 / SEC-042: when set to `"1"`, the fail-closed Bedrock gate and
+   * the non-Bedrock per-adapter warning are both suppressed. Only `"1"` is
+   * accepted (strict `parseBoolEnv`).
+   */
+  static isAllowNoGuardrail(config?: ConfigPort): boolean {
+    if (config) {
+      return config.get(EnvVar.ASSIGNEE_ALLOW_NO_GUARDRAIL) === "1";
+    }
+    return parseBoolEnv(EnvVar.ASSIGNEE_ALLOW_NO_GUARDRAIL);
   }
 
   /** Lazily initialize the language model on first call. */
@@ -201,6 +345,18 @@ export class LlmAdapter implements LlmPort {
     schema: ZodSchema<T>,
     options?: LlmCallOptions,
   ): Promise<Result<T, LlmError>> {
+    // SEC-016: Fail-closed guardrail gate. If the Bedrock provider is active
+    // and no guardrailId was provided at construction time, reject the call
+    // unless the operator has explicitly set ASSIGNEE_ALLOW_NO_GUARDRAIL=1.
+    if (
+      this.parsed.provider === LlmProvider.BEDROCK &&
+      !this.config.guardrailId &&
+      !LlmAdapter.isAllowNoGuardrail() &&
+      !LlmAdapter.isGuardrailDisabled()
+    ) {
+      return [new GuardrailRequiredError(), null] as const;
+    }
+
     const [err, model] = await safeTry(this.getModel());
     if (err) {
       return [
@@ -286,6 +442,16 @@ export class LlmAdapter implements LlmPort {
     prompt: string,
     options?: LlmCallOptions,
   ): Promise<Result<string, LlmError>> {
+    // SEC-016: Fail-closed guardrail gate — mirrors generateStructured above.
+    if (
+      this.parsed.provider === LlmProvider.BEDROCK &&
+      !this.config.guardrailId &&
+      !LlmAdapter.isAllowNoGuardrail() &&
+      !LlmAdapter.isGuardrailDisabled()
+    ) {
+      return [new GuardrailRequiredError(), null] as const;
+    }
+
     const [err, model] = await safeTry(this.getModel());
     if (err) {
       return [

@@ -13,6 +13,7 @@
  */
 
 import { constants as fsConstants, promises as fs } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { dirname, join, sep } from "node:path";
 
 import type { StoragePort } from "../../ports/storage-port.js";
@@ -72,7 +73,11 @@ export class LocalFsStorageAdapter implements StoragePort {
   async writeBytes(key: string, value: Uint8Array): Promise<void> {
     const path = this.resolveKey(key);
     await fs.mkdir(dirname(path), { recursive: true, mode: DIR_MODE });
-    const tempPath = `${path}.${process.pid}.${Date.now()}.tmp`;
+    // SEC-030: use per-call random suffix instead of Date.now() so two
+    // concurrent writeBytes calls from the same process (or two processes
+    // that happen to share a recycled PID + same-millisecond timing) cannot
+    // collide on the same temp path. Mirrors the saveCheckpoint() pattern.
+    const tempPath = `${path}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
     await fs.writeFile(tempPath, value, { mode: FILE_MODE });
     try {
       await fs.rename(tempPath, path);
@@ -171,7 +176,14 @@ export class LocalFsStorageAdapter implements StoragePort {
       const childAbs = join(absDir, entry.name);
       if (entry.isDirectory()) {
         await this.collectKeys(childAbs, childRel, out);
-      } else if (entry.isFile() && !entry.name.endsWith(".tmp")) {
+      } else if (
+        entry.isFile() &&
+        !entry.name.endsWith(".tmp") &&
+        // SEC-045: skip dotfiles so an attacker-planted `.evil.json` in the
+        // storage root does not pollute the returned key list. Legitimate
+        // keys never start with "." in the Assignee storage layout.
+        !entry.name.startsWith(".")
+      ) {
         out.push(childRel);
       }
     }

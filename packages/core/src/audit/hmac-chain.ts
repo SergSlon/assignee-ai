@@ -136,9 +136,13 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 let _cachedKey: string | undefined;
 let _cacheExpiresAt = 0; // epoch ms; 0 means "not set"
 
-// ── Per-process file-mode warning deduplication (PR-019) ──────────────
-// Emit the file-mode warning at most once per process, and never on
-// Windows where NTFS chmod(600) is a no-op and the warning is misleading.
+// ── Per-append file-mode warning (SEC-026) ────────────────────────────
+// SEC-026: `_keyModeWarned` is reset to false on every call to
+// `resolveAuditKey` (see the cache-expiry path below) so that an
+// attacker who widens the key-file mode AFTER first read will trigger a
+// fresh warning on the next audit append, rather than being invisible
+// for the rest of the process lifetime. Only suppressed on Windows where
+// NTFS chmod is a no-op and the warning is misleading.
 let _keyModeWarned = false;
 
 // ── SEC-001: SIGHUP handler ────────────────────────────────────────────
@@ -217,6 +221,11 @@ export function resolveAuditKey(
   }
 
   // ── Priority 3: read existing key file ────────────────────────────
+  // SEC-026: reset the mode-warning flag on every cache-miss so that if
+  // an attacker widens the key-file permissions AFTER first read, the
+  // warning fires again on the next non-cached resolveAuditKey call
+  // (which happens on every append once the TTL window elapses).
+  _keyModeWarned = false;
   try {
     if (fs.existsSync(keyFile)) {
       // ── SEC-003/004: reject symlinks and hardlinks ─────────────────

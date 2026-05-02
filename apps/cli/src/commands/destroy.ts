@@ -91,6 +91,7 @@ import { pickFromMatches } from "./destroy/multi-match-prompt.js";
 import { startSpinner, stopSpinner } from "../utils/display.js";
 import { installJsonStderrFilter } from "./json-stderr-filter.js";
 import { redactAccountIdIfDemoMode } from "./output-format.js";
+import { redactSensitive } from "../utils/error-messages.js";
 import { validateAccountId } from "../utils/account-id-validator.js";
 import { ProcessExitCode } from "../constants/errors.js";
 
@@ -593,6 +594,45 @@ function installJsonStdoutSuppressor(enabled: boolean): {
   };
 }
 
+// ── SEC-047: demo-mode stderr redactor ────────────────────────────────
+/**
+ * When `ASSIGNEE_DEMO_REDACT_ACCOUNT=1`, installs a process-level stderr
+ * interceptor that runs `redactSensitive` on every write. This ensures
+ * that AWS SDK error messages emitted to stderr during a demo/screen-
+ * recording session do not leak real account IDs or other sensitive
+ * strings, mirroring the same protection that `redactAccountIdIfDemoMode`
+ * applies to the structured JSON stdout envelope.
+ *
+ * Returns a `restore` callback the caller MUST invoke in a `finally`
+ * block. When demo mode is inactive the function is a no-op.
+ */
+function installDemoModeStderrRedactor(): { restore: () => void } {
+  if (process.env["ASSIGNEE_DEMO_REDACT_ACCOUNT"] !== "1") {
+    return { restore: () => {} };
+  }
+  const originalWrite = process.stderr.write;
+  process.stderr.write = ((
+    chunk: string | Uint8Array,
+    ...rest: unknown[]
+  ): boolean => {
+    const text =
+      typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
+    const redacted = redactSensitive(text);
+    return (
+      originalWrite as (this: NodeJS.WriteStream, ...args: unknown[]) => boolean
+    ).call(process.stderr, redacted, ...rest);
+  }) as typeof process.stderr.write;
+
+  let restored = false;
+  return {
+    restore: (): void => {
+      if (restored) return;
+      process.stderr.write = originalWrite;
+      restored = true;
+    },
+  };
+}
+
 /**
  * Extended option shape recognised by the outer Commander wrapper. The
  * json/output keys are read here and stripped before delegating to
@@ -694,6 +734,9 @@ the resource is still billing and recoverable during the window.
       // lands on stdout as the error envelope; duplicating it on
       // stderr is noise for machine consumers.
       const stderrFilter = installJsonStderrFilter(json);
+      // SEC-047: in demo mode, redact sensitive strings from every stderr
+      // write so screen recordings don't leak account IDs via AWS SDK errors.
+      const demoStderrRedactor = installDemoModeStderrRedactor();
 
       try {
         let runErrored: Error | null = null;
@@ -761,6 +804,7 @@ the resource is still billing and recoverable during the window.
       } finally {
         suppressor.restore();
         stderrFilter.restore();
+        demoStderrRedactor.restore();
       }
     },
   );
