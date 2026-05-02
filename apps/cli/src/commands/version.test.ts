@@ -3,8 +3,9 @@
  *
  * Covers:
  *   - Command shape: name, description, --json flag registered.
- *   - --json: emits `{"version":"<semver>"}` as a single JSON line.
- *   - --json: version string is a valid semver (x.y.z).
+ *   - --json: emits a compact self-describe JSON blob with required fields.
+ *   - --json: cli field is a valid semver (x.y.z).
+ *   - --json: all required PR-030 fields present (cli, node, platform, arch, region, auditKeySource).
  *   - Without --json: human-readable output is retained (regression guard).
  */
 
@@ -83,31 +84,52 @@ describe("versionCommand — --json output", () => {
     process.stdout.write = originalStdoutWrite;
   });
 
-  it("emits a single JSON line with a 'version' string field", async () => {
+  it("emits a single JSON line with a 'cli' string field (PR-030)", async () => {
     await versionCommand.parseAsync(["--json"], { from: "user" });
 
     const raw = writtenChunks.join("").trim();
     expect(raw.length).toBeGreaterThan(0);
 
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    expect(typeof parsed["version"]).toBe("string");
-    expect((parsed["version"] as string).length).toBeGreaterThan(0);
+    expect(typeof parsed["cli"]).toBe("string");
+    expect((parsed["cli"] as string).length).toBeGreaterThan(0);
   });
 
-  it("version field in JSON matches readPackageVersion()", async () => {
+  it("cli field in JSON matches readPackageVersion() (PR-030)", async () => {
     await versionCommand.parseAsync(["--json"], { from: "user" });
 
     const raw = writtenChunks.join("").trim();
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    expect(parsed["version"]).toBe(readPackageVersion());
+    expect(parsed["cli"]).toBe(readPackageVersion());
   });
 
-  it("JSON output contains no extra top-level fields beyond 'version'", async () => {
+  it("JSON output contains all required PR-030 fields: cli, node, platform, arch, region, auditKeySource", async () => {
     await versionCommand.parseAsync(["--json"], { from: "user" });
 
     const raw = writtenChunks.join("").trim();
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    expect(Object.keys(parsed)).toStrictEqual(["version"]);
+    const keys = Object.keys(parsed);
+    expect(keys).toContain("cli");
+    expect(keys).toContain("node");
+    expect(keys).toContain("platform");
+    expect(keys).toContain("arch");
+    expect(keys).toContain("region");
+    expect(keys).toContain("auditKeySource");
+  });
+
+  it("JSON output has exactly the PR-030 required fields (no undocumented extras)", async () => {
+    await versionCommand.parseAsync(["--json"], { from: "user" });
+
+    const raw = writtenChunks.join("").trim();
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    expect(Object.keys(parsed).sort()).toStrictEqual([
+      "arch",
+      "auditKeySource",
+      "cli",
+      "node",
+      "platform",
+      "region",
+    ]);
   });
 
   it("--json output is a single JSON object (not array, not primitive)", async () => {
@@ -118,6 +140,70 @@ describe("versionCommand — --json output", () => {
     expect(parsed).not.toBeNull();
     expect(typeof parsed).toBe("object");
     expect(Array.isArray(parsed)).toBe(false);
+  });
+
+  it("auditKeySource is 'env' when ASSIGNEE_AUDIT_KEY is set (PR-030)", async () => {
+    const original = process.env["ASSIGNEE_AUDIT_KEY"];
+    process.env["ASSIGNEE_AUDIT_KEY"] = "a".repeat(64); // meets min-length floor
+    try {
+      await versionCommand.parseAsync(["--json"], { from: "user" });
+      const raw = writtenChunks.join("").trim();
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      expect(parsed["auditKeySource"]).toBe("env");
+    } finally {
+      if (original === undefined) {
+        delete process.env["ASSIGNEE_AUDIT_KEY"];
+      } else {
+        process.env["ASSIGNEE_AUDIT_KEY"] = original;
+      }
+    }
+  });
+
+  it("auditKeySource is 'file' when ASSIGNEE_AUDIT_KEY is absent (PR-030)", async () => {
+    const original = process.env["ASSIGNEE_AUDIT_KEY"];
+    delete process.env["ASSIGNEE_AUDIT_KEY"];
+    try {
+      await versionCommand.parseAsync(["--json"], { from: "user" });
+      const raw = writtenChunks.join("").trim();
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      expect(parsed["auditKeySource"]).toBe("file");
+    } finally {
+      if (original !== undefined) {
+        process.env["ASSIGNEE_AUDIT_KEY"] = original;
+      }
+    }
+  });
+
+  it("region field reflects AWS_REGION env var when set (PR-030)", async () => {
+    const original = process.env["AWS_REGION"];
+    process.env["AWS_REGION"] = "us-gov-west-1";
+    try {
+      await versionCommand.parseAsync(["--json"], { from: "user" });
+      const raw = writtenChunks.join("").trim();
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      expect(parsed["region"]).toBe("us-gov-west-1");
+    } finally {
+      if (original === undefined) {
+        delete process.env["AWS_REGION"];
+      } else {
+        process.env["AWS_REGION"] = original;
+      }
+    }
+  });
+
+  it("region field is 'unset' when AWS_REGION is absent (PR-030)", async () => {
+    const original = process.env["AWS_REGION"];
+    delete process.env["AWS_REGION"];
+    try {
+      await versionCommand.parseAsync(["--json"], { from: "user" });
+      const raw = writtenChunks.join("").trim();
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      expect(parsed["region"]).toBe("unset");
+    } finally {
+      if (original !== undefined) {
+        process.env["AWS_REGION"] = original;
+      }
+    }
   });
 });
 

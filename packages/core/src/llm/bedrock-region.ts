@@ -112,15 +112,27 @@ export async function detectBedrockModelLifecycle(
  * operators from seeing a commercial-region suggestion list that is
  * inapplicable to their environment.
  *
+ * W24c-S0 (OOS-2): ISO partitions (us-iso-*, us-isob-*, eu-isoe-*) were
+ * previously falling through to "commercial", producing wrong region
+ * suggestions for ISO operators. Extended to 4-way classification:
+ * commercial | govcloud | china | iso.
+ *
  * feedback_partition_aware_arn_matching: never use literal "arn:aws:" or
  * exact region prefixes — always check via the ^arn:aws[\w-]*: pattern for
  * ARNs, and startsWith("us-gov-") / startsWith("cn-") for regions.
  */
 function classifyPartition(
   region: string,
-): "govcloud" | "china" | "commercial" {
+): "govcloud" | "china" | "iso" | "commercial" {
   if (region.startsWith("us-gov-")) return "govcloud";
   if (region.startsWith("cn-")) return "china";
+  // ISO partitions: aws-iso (us-iso-*), aws-iso-b (us-isob-*), aws-iso-e (eu-isoe-*)
+  if (
+    region.startsWith("us-iso-") ||
+    region.startsWith("us-isob-") ||
+    region.startsWith("eu-isoe-")
+  )
+    return "iso";
   return "commercial";
 }
 
@@ -159,7 +171,7 @@ export function detectBedrockRegionError(
     suggestion =
       `Bedrock is not available in the AWS China partition. ` +
       `Set ASSIGNEE_LLM_DEFAULT to a non-Bedrock provider ` +
-      `(e.g. anthropic/claude-sonnet-4-5@ANTHROPIC_API_KEY).`;
+      `(e.g. anthropic/claude-sonnet-4-5 with ANTHROPIC_API_KEY set in your environment).`;
   } else if (partition === "govcloud") {
     // GovCloud has limited Bedrock availability — don't list commercial regions.
     suggestion =
@@ -168,13 +180,21 @@ export function detectBedrockRegionError(
       `for current availability). ` +
       `Set AWS_REGION to a GovCloud region where Bedrock is available, ` +
       `OR set ASSIGNEE_LLM_DEFAULT to a non-Bedrock provider ` +
-      `(e.g. anthropic/claude-sonnet-4-5@ANTHROPIC_API_KEY).`;
+      `(e.g. anthropic/claude-sonnet-4-5 with ANTHROPIC_API_KEY set in your environment).`;
+  } else if (partition === "iso") {
+    // ISO partitions (aws-iso / aws-iso-b / aws-iso-e) have extremely limited
+    // and classified Bedrock availability — do not suggest commercial regions.
+    suggestion =
+      `ISO-partition Bedrock availability is restricted and region-specific. ` +
+      `Consult your agency network boundary documentation for available endpoints, ` +
+      `OR set ASSIGNEE_LLM_DEFAULT to a non-Bedrock provider that is reachable ` +
+      `from your ISO environment.`;
   } else {
     // Commercial partition — use the known region list.
     const onKnownRegion = KNOWN_BEDROCK_REGIONS.includes(region);
     suggestion = onKnownRegion
       ? `Your account may not be enrolled in this model in ${region}. Open the Bedrock console → Model access → request access to the model, OR set ASSIGNEE_LLM_DEFAULT to a different model that IS enabled in ${region}.`
-      : `${region} is not on the canonical Bedrock-enabled list. Set AWS_REGION to one of: ${KNOWN_BEDROCK_REGIONS.join(", ")}, OR set ASSIGNEE_LLM_DEFAULT to a non-Bedrock provider (e.g. anthropic/claude-sonnet-4-5 with ANTHROPIC_API_KEY).`;
+      : `${region} is not on the canonical Bedrock-enabled list. Set AWS_REGION to one of: ${KNOWN_BEDROCK_REGIONS.join(", ")}, OR set ASSIGNEE_LLM_DEFAULT to a non-Bedrock provider (e.g. anthropic/claude-sonnet-4-5 with ANTHROPIC_API_KEY set in your environment).`;
   }
 
   return (

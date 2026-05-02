@@ -116,6 +116,11 @@ export const DEFAULT_AUDIT_KEY_FILE = path.join(
 // within the same process lifetime (the file never changes per-process).
 let _cachedKey: string | undefined;
 
+// ── Per-process file-mode warning deduplication (PR-019) ──────────────
+// Emit the file-mode warning at most once per process, and never on
+// Windows where NTFS chmod(600) is a no-op and the warning is misleading.
+let _keyModeWarned = false;
+
 /**
  * Resolve the active HMAC audit key with the following priority:
  *
@@ -171,17 +176,22 @@ export function resolveAuditKey(
       const fileKey = fs.readFileSync(keyFile, "utf8").trim();
       if (fileKey.length >= AUDIT_KEY_MIN_LENGTH) {
         // Warn if the file is not mode 0o600 (advisory; don't fail).
-        try {
-          const fileStat = fs.statSync(keyFile);
-          if ((fileStat.mode & 0o777) !== 0o600) {
-            process.stderr.write(
-              `WARNING: audit key file ${keyFile} has mode ` +
-                `${(fileStat.mode & 0o777).toString(8)} — expected 0600; ` +
-                `run: chmod 600 ${keyFile}\n`,
-            );
+        // Suppressed on Windows (NTFS chmod is a no-op) and after the
+        // first emission per process to avoid flooding CI logs (PR-019).
+        if (!_keyModeWarned && process.platform !== "win32") {
+          try {
+            const fileStat = fs.statSync(keyFile);
+            if ((fileStat.mode & 0o777) !== 0o600) {
+              _keyModeWarned = true;
+              process.stderr.write(
+                `WARNING: audit key file ${keyFile} has mode ` +
+                  `${(fileStat.mode & 0o777).toString(8)} — expected 0600; ` +
+                  `run: chmod 600 ${keyFile}\n`,
+              );
+            }
+          } catch {
+            // stat failure is non-fatal
           }
-        } catch {
-          // stat failure is non-fatal
         }
         if (keyFile === DEFAULT_AUDIT_KEY_FILE) {
           _cachedKey = fileKey;
@@ -257,9 +267,14 @@ export function getAuditKey(config?: ConfigPort): string {
   return resolveAuditKey(DEFAULT_AUDIT_KEY_FILE, config);
 }
 
-/** @internal Reset the in-process key cache — for use in tests only. */
+/**
+ * @internal Reset the in-process key cache and warning flag — for use in
+ * tests only. Resets both `_cachedKey` and `_keyModeWarned` so each test
+ * starts with a clean slate.
+ */
 export function _resetAuditKeyCache(): void {
   _cachedKey = undefined;
+  _keyModeWarned = false;
 }
 
 // ── Core primitives ────────────────────────────────────────────────────

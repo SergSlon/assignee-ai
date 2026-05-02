@@ -81,7 +81,7 @@ The primary user-facing application. Contains all business logic.
 
 **Unique to CLI:**
 
-- 13-node LangGraph pipeline (graph.ts + all nodes)
+- 14-node LangGraph pipeline (graph.ts + all nodes)
 - Interactive wizard (option-elicitor with clack prompts)
 - 13 Commander.js commands
 - MCP server process management (spawn/lifecycle)

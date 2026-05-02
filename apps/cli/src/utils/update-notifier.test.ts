@@ -146,6 +146,63 @@ describe("shouldSuppressUpdateCheck", () => {
     expect(result).toBe(false);
   });
 
+  // PR-036 (W24c-S3): suppress on --help / -h / --version / -V / help
+  it("returns true when --help is in argv (PR-036)", () => {
+    const result = shouldSuppressUpdateCheck(
+      ["node", "assignee", "--help"],
+      {},
+      true,
+    );
+    expect(result).toBe(true);
+  });
+
+  it("returns true when -h is in argv (PR-036)", () => {
+    const result = shouldSuppressUpdateCheck(
+      ["node", "assignee", "-h"],
+      {},
+      true,
+    );
+    expect(result).toBe(true);
+  });
+
+  it("returns true when --version is in argv (PR-036)", () => {
+    const result = shouldSuppressUpdateCheck(
+      ["node", "assignee", "--version"],
+      {},
+      true,
+    );
+    expect(result).toBe(true);
+  });
+
+  it("returns true when -V is in argv (PR-036)", () => {
+    const result = shouldSuppressUpdateCheck(
+      ["node", "assignee", "-V"],
+      {},
+      true,
+    );
+    expect(result).toBe(true);
+  });
+
+  it("returns true when 'help' sub-command is in argv (PR-036)", () => {
+    const result = shouldSuppressUpdateCheck(
+      ["node", "assignee", "help"],
+      {},
+      true,
+    );
+    expect(result).toBe(true);
+  });
+
+  it("does NOT suppress for subcommand 'version' without --version flag (version subcommand is fine to notify)", () => {
+    // 'version' (without dashes) is not a help/version fast-path — it is
+    // a regular subcommand that may warrant an upgrade banner.
+    const result = shouldSuppressUpdateCheck(
+      ["node", "assignee", "version"],
+      {},
+      true,
+    );
+    expect(result).toBe(false);
+  });
+
   it("does NOT match `-o yaml` — only `json` values trigger suppression", () => {
     const result = shouldSuppressUpdateCheck(
       ["node", "assignee", "plan", "-o", "yaml"],
@@ -213,6 +270,21 @@ describe("checkForUpdates", () => {
 
   it("skips the check entirely when `-o json` is in argv", () => {
     checkForUpdates(PKG, ["node", "assignee", "plan", "-o", "json"], {}, true);
+
+    expect(updateNotifierMock).not.toHaveBeenCalled();
+    expect(notifyMock).not.toHaveBeenCalled();
+  });
+
+  // PR-036 (W24c-S3): verify the help/version gate fires end-to-end
+  it("skips the check entirely when --help is in argv (PR-036)", () => {
+    checkForUpdates(PKG, ["node", "assignee", "--help"], {}, true);
+
+    expect(updateNotifierMock).not.toHaveBeenCalled();
+    expect(notifyMock).not.toHaveBeenCalled();
+  });
+
+  it("skips the check entirely when --version is in argv (PR-036)", () => {
+    checkForUpdates(PKG, ["node", "assignee", "--version"], {}, true);
 
     expect(updateNotifierMock).not.toHaveBeenCalled();
     expect(notifyMock).not.toHaveBeenCalled();

@@ -99,7 +99,7 @@ INCIDENT_DATE=$(date +%Y%m%d-%H%M%S)
 cp -r ~/.assignee/audit/ /tmp/incident-${INCIDENT_DATE}-audit/
 ```
 
-These JSONL files contain the HMAC-chained record of every CLI operation. Do not modify them. If the chain is broken, the original files are the forensic artefact.
+This JSONL file contains the HMAC-chained record of every CLI operation. Do not modify it. If the chain is broken, the original file is the forensic artefact.
 
 ### 3b — Provision ledger
 
@@ -110,7 +110,7 @@ cp ~/.assignee/memory/provisions.json /tmp/incident-${INCIDENT_DATE}-provisions.
 # If the ledger appears corrupt or empty, restore from the most recent backup:
 ls -lt ~/.assignee/backups/provisions-*.json | head -3
 # Then restore (dry-run first):
-assignee restore-provisions ~/.assignee/backups/provisions-YYYY-MM-DD.json --dry-run
+assignee restore-provisions --from YYYY-MM-DD --dry-run
 ```
 
 The nightly backup primitive (`pnpm backup-provisions`) rotates backups under `~/.assignee/backups/` with 7-day retention. Implemented in Story `100-W4-04-provisions-bcpdr-primitive.md` (Wave W4). See [`scripts/backup-provisions.ts`](../../scripts/backup-provisions.ts).
@@ -183,8 +183,8 @@ ls -lt ~/.assignee/checkpoint-*.json
 assignee apply --dry-run   # or plan and inspect output
 
 # 3. Restore ledger from a known-good backup date:
-assignee restore-provisions ~/.assignee/backups/provisions-YYYY-MM-DD.json --dry-run
-assignee restore-provisions ~/.assignee/backups/provisions-YYYY-MM-DD.json
+assignee restore-provisions --from YYYY-MM-DD --dry-run
+assignee restore-provisions --from YYYY-MM-DD
 
 # 4. Re-plan from scratch once checkpoint is cleared:
 assignee plan "<original intent>"
@@ -392,8 +392,8 @@ See [`docs/mcp-server.md`](../mcp-server.md) § Troubleshooting for per-server c
 #    https://health.aws.amazon.com/  (filter by "Amazon Bedrock" + your region)
 
 # 2. Switch ASSIGNEE_LLM_DEFAULT to Anthropic direct for the outage duration:
-export ASSIGNEE_LLM_DEFAULT="anthropic/claude-opus-4-5@ANTHROPIC_API_KEY"
 export ANTHROPIC_API_KEY="<your-anthropic-api-key>"
+export ASSIGNEE_LLM_DEFAULT="anthropic/claude-opus-4-5"
 
 # 3. Verify the switch took effect:
 assignee doctor
@@ -465,13 +465,13 @@ Reconcile re-applies the checkpointed desired state via CloudControl `UpdateReso
 ls -lt ~/.assignee/backups/provisions-*.json
 
 # Dry-run to preview what would be restored:
-assignee restore-provisions ~/.assignee/backups/provisions-YYYY-MM-DD.json --dry-run
+assignee restore-provisions --from YYYY-MM-DD --dry-run
 
 # Restore from a specific date (merges by run ID, deduplicates):
-assignee restore-provisions ~/.assignee/backups/provisions-YYYY-MM-DD.json
+assignee restore-provisions --from YYYY-MM-DD
 
-# Filter to records on or after a date:
-assignee restore-provisions ~/.assignee/backups/provisions-YYYY-MM-DD.json --from 2026-01-01
+# Restore from the most recent backup (omit --from to use latest):
+assignee restore-provisions
 ```
 
 See [`docs/commands.md`](../commands.md#restore-provisions) and the backup script at [`scripts/backup-provisions.ts`](../../scripts/backup-provisions.ts).

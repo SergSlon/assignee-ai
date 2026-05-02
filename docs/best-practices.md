@@ -11,7 +11,7 @@ assignee.ai evaluates every plan against a library of AWS best practice rules be
 
 ## How It Works
 
-The best practices pipeline runs as three nodes in the 13-node LangGraph graph:
+The best practices pipeline runs as three nodes in the 14-node LangGraph graph:
 
 ```
 plan_generator -> bp_evaluator -> auto_fix_applier -> preflight_guard

@@ -19,7 +19,7 @@
      re-export shim). TTY output wraps the content in a boxen frame; the
      non-TTY form below uses a plain `=== Plan ===` title for readability in
      markdown. Advice and findings lists are truncated with `... N more` —
-     everything shown is verbatim from the real run (run-id fa465600af5a). -->
+     everything shown is verbatim from the real run (run-id REDACTED). -->
 
 ```console
 $ assignee plan "Create an S3 bucket named hero-demo-bucket"
