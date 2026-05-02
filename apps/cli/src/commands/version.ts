@@ -18,6 +18,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { Command } from "commander";
+import { detectAwsConfigDefaultRegion } from "@assignee/core";
 
 /**
  * Resolve the CLI version from `apps/cli/package.json`.
@@ -124,13 +125,21 @@ export const versionCommand = new Command("version")
     if (opts.json) {
       // PR-030 (W24c-S3): emit a compact self-describe blob for bug reports.
       // Fields: cli (semver), node (engine version), platform, arch,
-      // region (AWS_REGION or "unset"), auditKeySource ("env"|"file").
+      // region (AWS_REGION or ~/.aws/config [default] region or "unset"),
+      // auditKeySource ("env"|"file").
+      //
+      // RES-1 (W24d): fall through to detectAwsConfigDefaultRegion() so
+      // SSO operators whose region is set via ~/.aws/config [default] profile
+      // (not AWS_REGION env) see the actual region instead of "unset".
       const blob = {
         cli: version,
         node: process.version,
         platform: process.platform,
         arch: process.arch,
-        region: process.env["AWS_REGION"] ?? "unset",
+        region:
+          process.env["AWS_REGION"] ??
+          detectAwsConfigDefaultRegion() ??
+          "unset",
         auditKeySource: resolveAuditKeySource(),
       };
       process.stdout.write(JSON.stringify(blob) + "\n");

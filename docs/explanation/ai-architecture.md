@@ -162,7 +162,7 @@ Every LLM invocation emits one structured `token_usage` event (`packages/core/sr
 ```json
 {
   "ts": "2026-04-20T15:48:17.965Z",
-  "runId": "fa465600af5a",
+  "runId": "REDACTED",
   "level": "info",
   "action": "token_usage",
   "extras": {
@@ -381,7 +381,7 @@ These extend `ai-architecture.md §6`'s check-type table. Any BP YAML that refer
 
 ## 9. A real end-to-end run
 
-The best way to understand the pipeline is to watch it run. Here's the token-usage summary from an actual `assignee plan "Create an S3 bucket named hero-demo-bucket"` invocation on 2026-04-20 (run-id `fa465600af5a`, the same run captured verbatim in the README hero after Epic 84):
+The best way to understand the pipeline is to watch it run. Here's the token-usage summary from an actual `assignee plan "Create an S3 bucket named hero-demo-bucket"` invocation on 2026-04-20 (run-id `REDACTED`):
 
 ```
 plan_started           → intent="Create an S3 bucket named hero-demo-bucket"

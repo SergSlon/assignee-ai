@@ -173,9 +173,53 @@ export class FileAdvisoryLockAdapter implements AdvisoryLockPort {
    * `fn()` is NEVER called without the lock held (prevents corrupted
    * HMAC-chain writes under concurrent load).
    *
-   * Emits warn-level events to stderr for observability (PR-018):
-   *   - `lock_contention` on every retry attempt (attempt > 0)
-   *   - `lock_acquisition_failed` with holder-stat info on final failure
+   * ## Structured stderr events (PR-018, W24c-S2)
+   *
+   * Two JSON-newline events are emitted to `process.stderr` during lock
+   * contention. Log aggregators (Datadog, CloudWatch Logs Insights, jq)
+   * can parse these directly.
+   *
+   * ### `lock_contention` — emitted on every failed acquisition attempt
+   *
+   * ```json
+   * {
+   *   "event":    "lock_contention",
+   *   "lockName": "/absolute/path/to/counter",
+   *   "attempt":  1,
+   *   "pid":      12345
+   * }
+   * ```
+   *
+   * | Field      | Type   | Description                                          |
+   * |------------|--------|------------------------------------------------------|
+   * | `event`    | string | Always `"lock_contention"`                           |
+   * | `lockName` | string | The `name` argument passed to `withLock`             |
+   * | `attempt`  | number | 1-based retry index (1 = first failed attempt)       |
+   * | `pid`      | number | PID of the process waiting for the lock              |
+   *
+   * ### `lock_acquisition_failed` — emitted on final failure before throw
+   *
+   * ```json
+   * {
+   *   "event":      "lock_acquisition_failed",
+   *   "lockName":   "/absolute/path/to/counter",
+   *   "attempts":   21,
+   *   "pid":        12345,
+   *   "holderStat": { "mtime": "2026-04-29T10:00:00.000Z", "size": 5 }
+   * }
+   * ```
+   *
+   * | Field              | Type           | Description                                               |
+   * |--------------------|----------------|-----------------------------------------------------------|
+   * | `event`            | string         | Always `"lock_acquisition_failed"`                        |
+   * | `lockName`         | string         | The `name` argument passed to `withLock`                  |
+   * | `attempts`         | number         | Total attempts made (`maxRetries + 1`)                    |
+   * | `pid`              | number         | PID of the process that failed to acquire                 |
+   * | `holderStat`       | object \| `{}` | Lock-file stat at final failure; `{}` if stat unavailable |
+   * | `holderStat.mtime` | string         | ISO 8601 last-modified timestamp of the lock file         |
+   * | `holderStat.size`  | number         | Byte size of the lock file (contains the holder's PID)    |
+   *
+   * After emitting `lock_acquisition_failed`, `LockAcquisitionError` is thrown.
    */
   async withLock<T>(name: string, fn: () => Promise<T> | T): Promise<T> {
     let acquired = false;

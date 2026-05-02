@@ -6,9 +6,13 @@
  *   - --json: emits a compact self-describe JSON blob with required fields.
  *   - --json: cli field is a valid semver (x.y.z).
  *   - --json: all required PR-030 fields present (cli, node, platform, arch, region, auditKeySource).
+ *   - RES-1 (W24d): region falls back to ~/.aws/config [default] region when AWS_REGION is absent.
  *   - Without --json: human-readable output is retained (regression guard).
  */
 
+import { writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { versionCommand, readPackageVersion } from "./version.js";
 
@@ -191,18 +195,60 @@ describe("versionCommand — --json output", () => {
     }
   });
 
-  it("region field is 'unset' when AWS_REGION is absent (PR-030)", async () => {
-    const original = process.env["AWS_REGION"];
+  it("region field is 'unset' when AWS_REGION is absent and no ~/.aws/config region (PR-030)", async () => {
+    // Write an empty AWS config file so detectAwsConfigDefaultRegion returns
+    // undefined regardless of the developer's real ~/.aws/config.
+    const dir = mkdtempSync(join(tmpdir(), "assignee-version-test-"));
+    const cfgPath = join(dir, "config");
+    writeFileSync(cfgPath, "# empty — no region\n", "utf8");
+
+    const originalRegion = process.env["AWS_REGION"];
+    const originalCfg = process.env["AWS_CONFIG_FILE"];
     delete process.env["AWS_REGION"];
+    process.env["AWS_CONFIG_FILE"] = cfgPath;
     try {
       await versionCommand.parseAsync(["--json"], { from: "user" });
       const raw = writtenChunks.join("").trim();
       const parsed = JSON.parse(raw) as Record<string, unknown>;
       expect(parsed["region"]).toBe("unset");
     } finally {
-      if (original !== undefined) {
-        process.env["AWS_REGION"] = original;
+      if (originalRegion !== undefined) {
+        process.env["AWS_REGION"] = originalRegion;
       }
+      if (originalCfg !== undefined) {
+        process.env["AWS_CONFIG_FILE"] = originalCfg;
+      } else {
+        delete process.env["AWS_CONFIG_FILE"];
+      }
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("region field reflects ~/.aws/config [default] region when AWS_REGION is absent (RES-1 W24d)", async () => {
+    // Write a temporary AWS config with a [default] region.
+    const dir = mkdtempSync(join(tmpdir(), "assignee-version-test-"));
+    const cfgPath = join(dir, "config");
+    writeFileSync(cfgPath, "[default]\nregion = eu-central-1\n", "utf8");
+
+    const originalRegion = process.env["AWS_REGION"];
+    const originalCfg = process.env["AWS_CONFIG_FILE"];
+    delete process.env["AWS_REGION"];
+    process.env["AWS_CONFIG_FILE"] = cfgPath;
+    try {
+      await versionCommand.parseAsync(["--json"], { from: "user" });
+      const raw = writtenChunks.join("").trim();
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      expect(parsed["region"]).toBe("eu-central-1");
+    } finally {
+      if (originalRegion !== undefined) {
+        process.env["AWS_REGION"] = originalRegion;
+      }
+      if (originalCfg !== undefined) {
+        process.env["AWS_CONFIG_FILE"] = originalCfg;
+      } else {
+        delete process.env["AWS_CONFIG_FILE"];
+      }
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });
