@@ -1,5 +1,6 @@
 /**
  * W3-01 + W3-02 (Epic 100 Round 5) — Tamper-evident audit log.
+ * SEC-A-4 (2026-04-29) — Scoped tamper-evident claim; rollback threat acknowledged.
  *
  * Write path: each appended record is wrapped with `{record, hmac, prevHmac, index}`
  * and serialised as NDJSON (one JSON line per entry). Writes go through the
@@ -7,6 +8,16 @@
  *
  * Read path: `readAuditLog()` returns the entries as an array with full chain
  * metadata so the verifier can walk the chain.
+ *
+ * **Tamper-evidence scope (SEC-002)**: this module is tamper-evident against
+ * attackers who do NOT have read access to the audit key file
+ * (~/.assignee/audit-key, 0o600). A same-uid insider with both write access
+ * to the log file and read access to the key file can truncate to a chosen
+ * entry and resume signing. `guardAuditLogTruncation` protects against
+ * accidental truncation but NOT against adversarial truncation by a
+ * key-knowing insider. An external anchor (S3 Object Lock, remote
+ * append-only sink) is deferred to Epic 101.
+ * @see docs/explanation/audit-threat-model.md for the full threat model.
  *
  * Role field (W3-02): every entry carries a `role` field sourced from
  * `getCurrentRole()`. Today that always returns `"operator"` (hardcoded);
@@ -113,6 +124,27 @@ export async function appendAuditRecord(
     // access, so fs.appendFile with O_APPEND semantics is both correct and
     // atomic for our NDJSON format. No temp file is needed or created.
     await fs.appendFile(logFile, line, { mode: 0o600 });
+
+    // SEC-006: Re-enforce 0o600 on every append. `appendFile { mode }` only
+    // applies at file CREATION; if an operator accidentally `chmod`ed the log
+    // wider (or a pre-existing file already had wider permissions), subsequent
+    // appends silently leave it world-readable.  A best-effort chmod after
+    // every write closes that window.  Failure is non-fatal: we emit a
+    // structured stderr warning and continue so that audit events are never
+    // lost due to a permission-relock failure.
+    try {
+      await fs.chmod(logFile, 0o600);
+    } catch (chmodErr) {
+      process.stderr.write(
+        JSON.stringify({
+          level: "warn",
+          event: "audit-log-chmod-failed",
+          logFile,
+          error:
+            chmodErr instanceof Error ? chmodErr.message : String(chmodErr),
+        }) + "\n",
+      );
+    }
 
     // Optional fsync: flush kernel page-cache to disk so a crash between
     // writes does not lose the just-appended entry. Enabled by default;
@@ -227,6 +259,14 @@ export function isAuditEntryWithinRetentionFloor(
  *
  * The effective floor is MINIMUM_AUDIT_RETENTION_DAYS (90) or higher if
  * ASSIGNEE_AUDIT_RETENTION_DAYS is set to a larger value.
+ *
+ * **Security invariant (SEC-002)**: this function protects against accidental
+ * truncation (e.g. operator `rm` or log-rotation tooling that does not know
+ * about the retention floor). It does NOT protect against adversarial
+ * truncation by a key-knowing insider who can truncate to a chosen entry and
+ * resume signing — the HMAC chain remains internally consistent after such a
+ * truncation. Defending against that requires an external anchor (deferred
+ * to Epic 101).
  */
 export async function guardAuditLogTruncation(
   logFile: string = DEFAULT_AUDIT_LOG_FILE,

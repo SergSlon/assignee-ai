@@ -53,6 +53,20 @@ import {
 } from "../config/config-port.js";
 import { AssigneeError } from "../errors.js";
 
+// ── SEC-037: legacy fallback opt-in env var ────────────────────────────
+/**
+ * Name of the environment variable that explicitly opts in to the legacy
+ * (pre-W7 plain `JSON.stringify`) HMAC path.
+ *
+ * SEC-037: `legacyVerifyChainLink` no longer auto-falls-back silently when
+ * the canonical verifier fails.  Callers that still need legacy behaviour
+ * MUST set `ASSIGNEE_AUDIT_ALLOW_LEGACY=1` (or any truthy value) in the
+ * process environment.  Without this opt-in the function throws
+ * `LEGACY_HMAC_NOT_ALLOWED` so that operators are forced to make a
+ * conscious choice rather than silently accepting a weaker verification.
+ */
+export const LEGACY_HMAC_OPT_IN_ENV = "ASSIGNEE_AUDIT_ALLOW_LEGACY";
+
 // ── Canonical JSON serialisation ───────────────────────────────────────
 
 /**
@@ -112,14 +126,41 @@ export const DEFAULT_AUDIT_KEY_FILE = path.join(
 );
 
 // ── Internal in-process key cache ─────────────────────────────────────
-// Avoids redundant filesystem reads on repeated `getAuditKey()` calls
-// within the same process lifetime (the file never changes per-process).
+// SEC-001: bounded TTL (~5 min) so that long-running MCP servers pick up
+// a rotated key file within a predictable window.  After `_cacheExpiresAt`
+// the next `resolveAuditKey()` call re-reads from disk.
+//
+// The cache is only populated when `keyFile === DEFAULT_AUDIT_KEY_FILE`;
+// test overrides always bypass it.
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 let _cachedKey: string | undefined;
+let _cacheExpiresAt = 0; // epoch ms; 0 means "not set"
 
 // ── Per-process file-mode warning deduplication (PR-019) ──────────────
 // Emit the file-mode warning at most once per process, and never on
 // Windows where NTFS chmod(600) is a no-op and the warning is misleading.
 let _keyModeWarned = false;
+
+// ── SEC-001: SIGHUP handler ────────────────────────────────────────────
+// Registers once; subsequent calls to rotateAuditKey / _resetAuditKeyCache
+// do NOT re-register — the single handler is sufficient.
+let _sighupRegistered = false;
+
+function _registerSighupHandler(): void {
+  if (_sighupRegistered) return;
+  // SIGHUP is not supported on Windows; skip silently.
+  if (process.platform === "win32") return;
+  process.on("SIGHUP", () => {
+    _cachedKey = undefined;
+    _cacheExpiresAt = 0;
+    _keyModeWarned = false;
+  });
+  _sighupRegistered = true;
+}
+
+// Register eagerly so MCP servers receive the signal even before the first
+// key resolution (e.g. operator sends SIGHUP before any audit activity).
+_registerSighupHandler();
 
 /**
  * Resolve the active HMAC audit key with the following priority:
@@ -164,15 +205,56 @@ export function resolveAuditKey(
     return envKey;
   }
 
-  // ── Priority 2: in-process cache (avoids repeated fs reads) ──────
-  // Only valid when keyFile is the default (test overrides must bypass).
-  if (_cachedKey !== undefined && keyFile === DEFAULT_AUDIT_KEY_FILE) {
+  // ── Priority 2: in-process TTL cache (avoids repeated fs reads) ─────
+  // SEC-001: only serve from cache when not expired.  keyFile must be the
+  // default path — test overrides always bypass the cache.
+  if (
+    _cachedKey !== undefined &&
+    keyFile === DEFAULT_AUDIT_KEY_FILE &&
+    Date.now() < _cacheExpiresAt
+  ) {
     return _cachedKey;
   }
 
   // ── Priority 3: read existing key file ────────────────────────────
   try {
     if (fs.existsSync(keyFile)) {
+      // ── SEC-003/004: reject symlinks and hardlinks ─────────────────
+      // Use lstat (does NOT follow symlinks) to detect symlink attacks.
+      // Additionally require nlink === 1 to reject hardlink attacks.
+      if (process.platform !== "win32") {
+        const lstatResult = fs.lstatSync(keyFile);
+        if (lstatResult.isSymbolicLink()) {
+          throw new AssigneeError(
+            `Audit key file ${keyFile} is a symbolic link — refusing to use it. ` +
+              `Remove the symlink and place a plain file at that path.`,
+            "AUDIT_KEY_SYMLINK",
+          );
+        }
+        if (lstatResult.nlink > 1) {
+          throw new AssigneeError(
+            `Audit key file ${keyFile} has ${lstatResult.nlink} hard links — ` +
+              `refusing to use it. Hard-linked key files may be read by other ` +
+              `processes. Create a fresh key file.`,
+            "AUDIT_KEY_HARDLINK",
+          );
+        }
+        // ── SEC-005: validate parent-directory mode ──────────────────
+        const parentDir = path.dirname(keyFile);
+        try {
+          const dirStat = fs.statSync(parentDir);
+          if ((dirStat.mode & 0o777) !== 0o700) {
+            process.stderr.write(
+              `WARNING: audit key directory ${parentDir} has mode ` +
+                `${(dirStat.mode & 0o777).toString(8)} — expected 0700; ` +
+                `run: chmod 700 ${parentDir}\n`,
+            );
+          }
+        } catch {
+          // parent-dir stat failure is non-fatal
+        }
+      }
+
       const fileKey = fs.readFileSync(keyFile, "utf8").trim();
       if (fileKey.length >= AUDIT_KEY_MIN_LENGTH) {
         // Warn if the file is not mode 0o600 (advisory; don't fail).
@@ -195,6 +277,7 @@ export function resolveAuditKey(
         }
         if (keyFile === DEFAULT_AUDIT_KEY_FILE) {
           _cachedKey = fileKey;
+          _cacheExpiresAt = Date.now() + CACHE_TTL_MS;
         }
         return fileKey;
       }
@@ -204,17 +287,43 @@ export function resolveAuditKey(
           `${AUDIT_KEY_MIN_LENGTH} characters — ignoring and regenerating\n`,
       );
     }
-  } catch {
-    // readFileSync failure handled below as a generate path
+  } catch (err) {
+    // Re-throw security-policy errors (symlink / hardlink) — these are not
+    // recoverable via the generate path.
+    if (err instanceof AssigneeError) throw err;
+    // readFileSync / lstatSync failure handled below as a generate path
   }
 
   // ── Priority 4: generate, persist, and return ─────────────────────
   const newKey = randomBytes(32).toString("hex");
   try {
-    fs.mkdirSync(path.dirname(keyFile), { recursive: true });
-    // flag "wx" = exclusive create — if two processes race, only one wins.
-    // The loser gets EEXIST and will read the winner's file on next call.
-    fs.writeFileSync(keyFile, newKey, { mode: 0o600, flag: "wx" });
+    const parentDir = path.dirname(keyFile);
+    // Create the parent directory with mode 0o700 (SEC-005).
+    fs.mkdirSync(parentDir, { recursive: true, mode: 0o700 });
+    // SEC-003: O_WRONLY|O_CREAT|O_EXCL = exclusive create (TOCTOU-safe:
+    // EEXIST if another process wins the race).  On POSIX platforms we
+    // additionally OR-in O_NOFOLLOW to refuse following a symlink that was
+    // injected between mkdirSync and here.
+    // On Windows (no O_NOFOLLOW) we fall back to O_EXCL alone.
+    const O_NOFOLLOW_PLATFORM =
+      process.platform === "linux"
+        ? 0x20000
+        : process.platform === "darwin"
+          ? 0x100
+          : 0; // Windows: no-op
+    const openFlags =
+      fs.constants.O_WRONLY |
+      fs.constants.O_CREAT |
+      fs.constants.O_EXCL |
+      O_NOFOLLOW_PLATFORM;
+    // fs.writeFileSync's `flag` option only accepts strings, so we use
+    // openSync with the numeric flags directly, then writeSync + closeSync.
+    const fd = fs.openSync(keyFile, openFlags, 0o600);
+    try {
+      fs.writeSync(fd, newKey, 0, "utf8");
+    } finally {
+      fs.closeSync(fd);
+    }
   } catch (err) {
     const errCode = (err as NodeJS.ErrnoException).code;
     if (errCode === "EEXIST") {
@@ -224,6 +333,7 @@ export function resolveAuditKey(
         if (raceKey.length >= AUDIT_KEY_MIN_LENGTH) {
           if (keyFile === DEFAULT_AUDIT_KEY_FILE) {
             _cachedKey = raceKey;
+            _cacheExpiresAt = Date.now() + CACHE_TTL_MS;
           }
           return raceKey;
         }
@@ -242,6 +352,7 @@ export function resolveAuditKey(
 
   if (keyFile === DEFAULT_AUDIT_KEY_FILE) {
     _cachedKey = newKey;
+    _cacheExpiresAt = Date.now() + CACHE_TTL_MS;
   }
   return newKey;
 }
@@ -268,13 +379,49 @@ export function getAuditKey(config?: ConfigPort): string {
 }
 
 /**
- * @internal Reset the in-process key cache and warning flag — for use in
- * tests only. Resets both `_cachedKey` and `_keyModeWarned` so each test
- * starts with a clean slate.
+ * @internal Reset the in-process key cache, TTL, and warning flag — for
+ * use in tests only.  Also resets the SIGHUP registration guard so that
+ * tests which simulate process-level isolation start with a clean slate.
+ *
+ * SEC-001: resets `_cacheExpiresAt` so the next `resolveAuditKey()` call
+ * unconditionally re-reads from disk (as if the TTL had elapsed).
  */
 export function _resetAuditKeyCache(): void {
   _cachedKey = undefined;
+  _cacheExpiresAt = 0;
   _keyModeWarned = false;
+  // Do NOT reset _sighupRegistered — repeated registrations are harmless
+  // but wasteful.  The handler itself clears the cache state variables above.
+}
+
+/**
+ * Immediately expire the in-process audit-key cache and re-read the key
+ * from disk (or the env var) on the next call.
+ *
+ * SEC-001: Use this when an operator rotates the key file so that
+ * long-running MCP servers pick up the new key without a full restart.
+ * Prefer sending SIGHUP to the process, which triggers the same reset
+ * automatically; call this API when SIGHUP delivery is not possible
+ * (e.g. within the same process / during testing).
+ *
+ * @param keyFile - Optionally re-resolve using a specific key file path
+ *   and return the refreshed key.  When omitted the caller is responsible
+ *   for calling `resolveAuditKey()` / `getAuditKey()` afterwards.
+ * @param config  - Optional `ConfigPort` for reading env vars.
+ * @returns       - The freshly resolved key when `keyFile` is provided;
+ *                  `undefined` otherwise.
+ */
+export function rotateAuditKey(
+  keyFile?: string,
+  config?: ConfigPort,
+): string | undefined {
+  _cachedKey = undefined;
+  _cacheExpiresAt = 0;
+  _keyModeWarned = false;
+  if (keyFile !== undefined) {
+    return resolveAuditKey(keyFile, config);
+  }
+  return undefined;
 }
 
 // ── Core primitives ────────────────────────────────────────────────────
@@ -367,18 +514,49 @@ export function legacyComputeChainLink(
  * `timingSafeEqual` to prevent timing-oracle attacks, identical to the
  * canonical verifier.
  *
+ * **SEC-037 — explicit opt-in required.**  Callers MUST set the environment
+ * variable `ASSIGNEE_AUDIT_ALLOW_LEGACY=1` (or any truthy value) before
+ * calling this function.  Without the opt-in it throws
+ * `LEGACY_HMAC_NOT_ALLOWED` so that operators are forced to make a
+ * conscious choice rather than silently falling back to a weaker verifier.
+ *
+ * To opt in:
+ * ```
+ * ASSIGNEE_AUDIT_ALLOW_LEGACY=1 assignee audit verify-legacy …
+ * ```
+ * Or programmatically (tests / migration scripts only):
+ * ```ts
+ * process.env[LEGACY_HMAC_OPT_IN_ENV] = "1";
+ * ```
+ *
  * @param record     - The record object stored in the entry.
  * @param prevHmac   - The `prevHmac` stored in the same entry.
  * @param storedHmac - The `hmac` field stored in the entry.
  * @param key        - HMAC key (hex string). Defaults to `getAuditKey()`.
+ * @param config     - Optional `ConfigPort` for reading env vars (defaults
+ *                     to `ProcessEnvConfigAdapter`).
  * @returns          - `true` when the legacy link is valid.
+ * @throws           - `AssigneeError(LEGACY_HMAC_NOT_ALLOWED)` when the opt-in
+ *                     env var is absent.
  */
 export function legacyVerifyChainLink(
   record: unknown,
   prevHmac: string,
   storedHmac: string,
   key: string = getAuditKey(),
+  config?: ConfigPort,
 ): boolean {
+  // SEC-037: require explicit opt-in to the legacy path.
+  const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
+  const optIn = effectiveConfig.get(LEGACY_HMAC_OPT_IN_ENV);
+  if (!optIn || optIn === "0" || optIn.toLowerCase() === "false") {
+    throw new AssigneeError(
+      `legacyVerifyChainLink requires an explicit opt-in. ` +
+        `Set ${LEGACY_HMAC_OPT_IN_ENV}=1 to enable legacy HMAC verification.`,
+      "LEGACY_HMAC_NOT_ALLOWED",
+    );
+  }
+
   const expected = legacyComputeChainLink(prevHmac, record, key);
   const expectedBuf = Buffer.from(expected, "utf8");
   const storedBuf = Buffer.from(storedHmac, "utf8");
