@@ -16,6 +16,7 @@
  * @see docs/nfr-assessment-2026-04-08.md — Q-7.2 option ranking
  */
 import { Command } from "commander";
+import { DEFAULT_AWS_REGION } from "@assignee/core";
 import { runCommand } from "../utils/command-runner.js";
 import { LOG_ACTIONS } from "../utils/logger.js";
 import { runOptimize } from "./optimize/orchestrator.js";
@@ -44,7 +45,7 @@ export const optimizeCommand = new Command("optimize")
 Examples:
   $ assignee optimize
         Scan all managed resources for rightsizing opportunities
-  $ assignee optimize --region us-east-1 --min-savings 10
+  $ assignee optimize --region ${DEFAULT_AWS_REGION} --min-savings 10
         Only show recommendations projecting ≥$10/mo savings
   $ assignee optimize <arn> --json
         Machine-readable output for a single resource

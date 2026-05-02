@@ -19,7 +19,11 @@ export {
 } from "./model-parser.js";
 export {
   detectBedrockRegionError,
+  detectBedrockModelLifecycle,
   KNOWN_BEDROCK_REGIONS,
+  type BedrockLifecycleClient,
+  type BedrockModelLifecycleResult,
+  type GetFoundationModelCommandFactory,
 } from "./bedrock-region.js";
 export {
   LlmProvider,

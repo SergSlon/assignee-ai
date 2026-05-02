@@ -12,6 +12,8 @@ import { registerTools } from "./tools/index.js";
 import { createGraphContext } from "./services/graph-init.js";
 import { clearAllApplies } from "./tools/apply-plan/active-applies.js";
 import { connectTransport } from "./utils/connect-transport.js";
+// W24b-S4: read version from package.json at module load; no more literal drift.
+import { MCP_SERVER_VERSION } from "./utils/package-version.js";
 
 // Story 50-2: graceful-shutdown parity with the CLI host. The stdio
 // transport normally exits on stream close, but cloud hosts (tmux, ECS,
@@ -91,7 +93,7 @@ if (process.platform === "win32") {
 async function main() {
   const server = new McpServer({
     name: "assignee-ai",
-    version: "0.1.0",
+    version: MCP_SERVER_VERSION,
   });
 
   // Expose the server instance to signal handlers so they can call

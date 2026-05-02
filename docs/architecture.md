@@ -43,7 +43,7 @@ packages/best-practices
 
 ## LangGraph Agent Graph
 
-The core computation is a **StateGraph** from `@langchain/langgraph` with 14 nodes.
+The core computation is a **StateGraph** from `@langchain/langgraph` with 14 nodes. <!-- doc-lint: node-count -->
 
 ### State (AgentState)
 

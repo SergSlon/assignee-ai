@@ -23,3 +23,9 @@ export {
   type GlobalConfigSources,
   type ResolvedGlobalConfig,
 } from "./resolve-global-config.js";
+
+// PR-016 (W24b-S3) — AWS config default-region detection.
+export {
+  detectAwsConfigDefaultRegion,
+  parseDefaultRegionFromConfig,
+} from "./detect-aws-region.js";

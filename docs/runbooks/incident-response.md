@@ -324,6 +324,103 @@ See [`apps/cli/src/utils/safe-output-path.ts`](../../apps/cli/src/utils/safe-out
 
 ---
 
+### 4h — Partial MCP credential failure
+
+**Symptom:** `assignee plan` returns no cost estimates or cost fields show `n/a`; `assignee doctor` reports MCP servers started but Pricing-MCP tools fail at runtime with credential or 403 errors. Four of five MCP servers appear healthy; only the Pricing MCP is silently degraded.
+
+**Background:** `feedback_lazy_credential_resolution_in_mcp` — MCP credential builders resolve credentials lazily per-server with `try/catch`. A missing or expired `ASSIGNEE_PRICING_*` credential does not prevent the other MCP servers from starting; it surfaces only when the Pricing tool is first invoked. `assignee doctor` shows MCP _startup_ status; a credential-only-partial failure may appear downstream as "no pricing data" rather than an explicit MCP error.
+
+**Diagnosis:**
+
+```bash
+# Surface any MCP sub-check that is not OK:
+assignee doctor --json | jq '.checks[].subs[] | select((.label | contains("MCP")) and .status != "ok")'
+
+# Check logs for credential errors from the Pricing MCP:
+grep -i "pricing\|credential\|forbidden\|403" ~/.assignee/logs/cli-$(date +%Y-%m-%d).jsonl | tail -30
+```
+
+**Recovery (per failing MCP server):**
+
+MCP credentials are injected via the `env` block of the host IDE's MCP config file — there is no `assignee init --mcp` flag. Update the config for your client:
+
+- **Cursor / Windsurf:** `~/.cursor/mcp.json` / `~/.windsurf/mcp.json`
+- **Claude Code:** `.claude/mcp_config.json`
+- **Claude Desktop (macOS):** `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+Preferred: set `AWS_PROFILE` to a profile whose credentials cover the failing server. Static-key fallback: set `ASSIGNEE_OPERATOR_ACCESS_KEY_ID` and `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` (plus `ASSIGNEE_OPERATOR_SESSION_TOKEN` for short-lived credentials).
+
+```jsonc
+// Example — add or correct the env block for the "assignee" server entry:
+{
+  "mcpServers": {
+    "assignee": {
+      "command": "node",
+      "args": ["/absolute/path/to/assignee-ai/apps/mcp-server/dist/index.js"],
+      "env": {
+        "AWS_PROFILE": "your-aws-profile",
+        "AWS_REGION": "us-east-1",
+      },
+    },
+  },
+}
+```
+
+After saving, **restart the IDE** (or reload the MCP config) so the updated env is applied to the server process.
+
+```bash
+# Verify recovery:
+assignee doctor
+```
+
+**Verification:** `assignee doctor` exits 0 and `assignee plan "<any intent>"` returns cost estimates.
+
+See [`docs/mcp-server.md`](../mcp-server.md) § Troubleshooting for per-server credential requirements and the expected `assignee doctor` output shape.
+
+---
+
+### 4i — Regional LLM outage
+
+**Symptom:** `assignee plan` (and all other LLM-backed commands) fail with Bedrock 503, `EndpointResolutionError`, or `Service Unavailable` for all calls; retries do not recover; the [AWS Service Health Dashboard](https://health.aws.amazon.com/) confirms `bedrock.<region>.amazonaws.com` is degraded or offline.
+
+**This is distinct from a per-call transient 503** (those resolve within minutes via the built-in exponential backoff in `status-poller.ts`). A regional outage means every call fails over an extended window.
+
+**Recovery:**
+
+```bash
+# 1. Confirm outage scope — check AWS Health:
+#    https://health.aws.amazon.com/  (filter by "Amazon Bedrock" + your region)
+
+# 2. Switch ASSIGNEE_LLM_DEFAULT to Anthropic direct for the outage duration:
+export ASSIGNEE_LLM_DEFAULT="anthropic/claude-opus-4-5@ANTHROPIC_API_KEY"
+export ANTHROPIC_API_KEY="<your-anthropic-api-key>"
+
+# 3. Verify the switch took effect:
+assignee doctor
+# Expect: Bedrock section shows warning or skip; LLM section shows "Anthropic direct"
+
+# 4. Run the blocked command:
+assignee plan "<intent>"
+```
+
+**Revert when Bedrock recovers:**
+
+```bash
+# Unset the override — assignee will revert to the configured Bedrock model:
+unset ASSIGNEE_LLM_DEFAULT
+unset ANTHROPIC_API_KEY
+assignee doctor  # confirm Bedrock green
+```
+
+> **Note on `ASSIGNEE_AUDIT_KEY` and chain re-anchor:** If this outage coincided with a container restart or machine wipe that deleted `~/.assignee/audit-key`, `assignee audit-verify` will report "chain broken" because a _new_ key was auto-generated — not because of tampering. To distinguish key-loss from tampering: look for `WARNING: cannot persist audit key` in recent log output. If key-loss is confirmed, archive `~/.assignee/audit/`, delete it, and re-run `assignee audit-verify` to establish a new genesis record. Set `ASSIGNEE_AUDIT_KEY=<secret>` persistently in your environment as the durable production pattern to survive restarts.
+
+**Reference links:**
+
+- [AWS Service Health Dashboard](https://health.aws.amazon.com/)
+- [`docs/troubleshooting.md`](../troubleshooting.md) § Bedrock / LLM error classes
+
+---
+
 ## 5. Rollback Procedures
 
 ### 5a — Destroy a single resource (rollback by deletion)
@@ -553,3 +650,6 @@ If you have questions, reply to this message or contact <support channel>.
 | Path-traversal guard                 | [`apps/cli/src/utils/safe-output-path.ts`](../../apps/cli/src/utils/safe-output-path.ts)                       |
 | MCP server drift-poisoning sanitizer | [`packages/core/src/graph/nodes/advice-generator.ts`](../../packages/core/src/graph/nodes/advice-generator.ts) |
 | Throttling backoff constants         | [`packages/core/src/graph/nodes/status-poller.ts`](../../packages/core/src/graph/nodes/status-poller.ts)       |
+| MCP server credential setup          | [`docs/mcp-server.md`](../mcp-server.md)                                                                       |
+| Bedrock / LLM error classes          | [`docs/troubleshooting.md`](../troubleshooting.md#bedrock--llm-error-classes)                                  |
+| AWS Service Health Dashboard         | https://health.aws.amazon.com/                                                                                 |

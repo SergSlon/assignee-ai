@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+// W24b-S4: import readMcpServerVersion to verify it matches package.json.
+import { readMcpServerVersion } from "./utils/package-version.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -102,5 +104,14 @@ describe("Distribution package configuration", () => {
       expect(content).toContain("Windsurf");
       expect(content).toContain("npx @assignee/mcp-server");
     }
+  });
+
+  // W24b-S4: version parity — the runtime version must equal package.json.
+  // This guards against re-introducing a hardcoded literal in index.ts.
+  it("McpServer runtime version matches package.json (W24b-S4)", () => {
+    const runtimeVersion = readMcpServerVersion();
+    expect(runtimeVersion).toBe(pkg.version);
+    // Also validate it is a non-empty semver-shaped string.
+    expect(runtimeVersion).toMatch(/^\d+\.\d+\.\d+/);
   });
 });
