@@ -75,6 +75,8 @@ export {
   DEFAULT_AWS_REGION,
   AutoFixMode,
   resolveGlobalConfig,
+  detectAwsConfigDefaultRegion,
+  parseDefaultRegionFromConfig,
   type GlobalConfigSources,
   type ResolvedGlobalConfig,
 } from "../../config/index.js";
