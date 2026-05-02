@@ -13,7 +13,11 @@
 
 import { Command } from "commander";
 import { CommandName, CommandDescription } from "../constants/commands.js";
-import { AssigneeError, serializeErrorEnvelope } from "@assignee/core";
+import {
+  AssigneeError,
+  serializeErrorEnvelope,
+  DEFAULT_AWS_REGION,
+} from "@assignee/core";
 import { AwsErrorName } from "../constants/aws-errors.js";
 import { AWS_REGION } from "../config/constants.js";
 import {
@@ -100,8 +104,8 @@ export const listCommand = new Command(CommandName.LIST)
 Examples:
   $ assignee list
         Table of every assignee-managed resource in the default region
-  $ assignee list --region us-east-1
-        Only resources in us-east-1
+  $ assignee list --region ${DEFAULT_AWS_REGION}
+        Only resources in ${DEFAULT_AWS_REGION}
   $ assignee list --resource-type S3
         Only S3 buckets (shorthand accepted; full CFN form also works)
   $ assignee list --resource-type AWS::Lambda::Function

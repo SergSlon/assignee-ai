@@ -8,6 +8,7 @@
  */
 
 import { ConfigurationError } from "../errors.js";
+import { detectAwsConfigDefaultRegion } from "./detect-aws-region.js";
 
 // ── TypeScript Interfaces ────────────────────────────────────────────────
 
@@ -70,19 +71,26 @@ export type AutoFixModeType = (typeof AutoFixMode)[keyof typeof AutoFixMode];
 // ── Default Values ───────────────────────────────────────────────────────
 
 /**
- * Default AWS region — derived from the `AWS_REGION` env var when set,
- * otherwise falls back to `"us-east-1"` for US-first operators.
+ * Default AWS region — resolution chain (first non-empty value wins):
+ *   1. `AWS_REGION` environment variable (explicit override, highest priority)
+ *   2. `~/.aws/config` [default] profile `region` setting (PR-016 / W24b-S3)
+ *   3. Hard-coded `"us-east-1"` (last-resort commercial fallback)
  *
  * W5-01 (P007-tech → L1-F05): using env-derived value stops EU operators
  * from silently hitting a US-East default when they have AWS_REGION
  * configured in their shell / process environment.
+ *
+ * PR-016 (W24b-S3): step 2 prevents GovCloud / China operators whose ONLY
+ * enabled region is `us-gov-west-1` / `cn-north-1` from inheriting the
+ * commercial `us-east-1` fallback, which would cause immediate CCAPI 403 /
+ * Bedrock UnknownEndpointError before any useful hint is surfaced.
  *
  * MIGRATION-NOTE(M-009): process-lifetime config; multi-tenant SaaS will
  * need request-scoped lookup via `ConfigPort.get("AWS_REGION", "us-east-1")`.
  * Single-tenant CLI captures the value at module load — fine today.
  */
 export const DEFAULT_AWS_REGION: string =
-  process.env["AWS_REGION"] ?? "us-east-1";
+  process.env["AWS_REGION"] ?? detectAwsConfigDefaultRegion() ?? "us-east-1";
 
 /** Default values for all preference fields. */
 export const CONFIG_DEFAULTS: Required<ConfigPreferences> = {

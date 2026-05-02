@@ -10,7 +10,14 @@
 import { tryAssigneeCredentials } from "@assignee/core";
 import { EnvVar } from "../../../constants/env-vars.js";
 import { AWS_REGION } from "../../../config/constants.js";
-import { LlmAdapter, DEFAULT_MODEL } from "@assignee/core/llm";
+import {
+  LlmAdapter,
+  DEFAULT_MODEL,
+  parseModelString,
+  detectBedrockModelLifecycle,
+  type BedrockLifecycleClient,
+  type GetFoundationModelCommandFactory,
+} from "@assignee/core/llm";
 import { DEFAULT_CHECK_TIMEOUT_MS } from "../types.js";
 import type { DoctorSection, DoctorSubCheck } from "../types.js";
 import { rollup, withTimeout } from "../util.js";
@@ -23,6 +30,11 @@ export interface BedrockCheckDeps {
       options?: { maxTokens?: number },
     ) => Promise<readonly [Error | null, string | null]>;
   };
+  /**
+   * Override the BedrockClient used for lifecycle pre-flight (test injection).
+   * Pass null to explicitly skip the lifecycle check.
+   */
+  lifecycleClient?: BedrockLifecycleClient | null;
   timeoutMs?: number;
 }
 
@@ -154,6 +166,88 @@ export async function checkBedrock(
         detail:
           "not configured — BEDROCK_GUARDRAIL_DISABLE=1 set (operator accepted risk)",
       });
+    }
+  }
+
+  // PR-007 / W24b-S2: Bedrock model lifecycle pre-flight.
+  // Only runs when:
+  //   (a) the configured provider is bedrock/, AND
+  //   (b) lifecycleClient is not explicitly null (null = caller opts out).
+  // For real runs the BedrockClient + GetFoundationModelCommand are built
+  // lazily here from @aws-sdk/client-bedrock (CLI dep). A commandFactory
+  // is extracted so the same factory is passed to the core helper, keeping
+  // core free of the AWS SDK dependency.
+  if (wantsBedrock && deps.lifecycleClient !== null) {
+    let lifecycleClient: BedrockLifecycleClient | null = null;
+    let commandFactory: GetFoundationModelCommandFactory | null = null;
+
+    if (deps.lifecycleClient !== undefined) {
+      // Test injection path: caller provides both client and a command factory
+      // that returns a plain object matching the send() contract.
+      lifecycleClient = deps.lifecycleClient;
+      // For tests: the mock client.send() ignores the command value entirely,
+      // so a trivial factory suffices.
+      commandFactory = (modelId: string) => ({ modelIdentifier: modelId });
+    } else {
+      // Production path: build a real BedrockClient + GetFoundationModelCommand.
+      try {
+        const { BedrockClient, GetFoundationModelCommand } =
+          await import("@aws-sdk/client-bedrock");
+        lifecycleClient = new BedrockClient({ region: AWS_REGION });
+        commandFactory = (modelId: string) =>
+          new GetFoundationModelCommand({ modelIdentifier: modelId });
+      } catch {
+        // @aws-sdk/client-bedrock not available — skip silently.
+      }
+    }
+
+    if (lifecycleClient && commandFactory) {
+      let parsed: ReturnType<typeof parseModelString> | undefined;
+      try {
+        parsed = parseModelString(modelString);
+      } catch {
+        // parseModelString already threw on bad format; LLM check above will
+        // surface the actual error — no need to duplicate it here.
+      }
+
+      if (parsed) {
+        const lifecycle = await withTimeout(
+          detectBedrockModelLifecycle(
+            parsed.modelId,
+            lifecycleClient,
+            commandFactory,
+          ),
+          timeoutMs,
+          "Bedrock lifecycle check",
+        ).catch(() => null);
+
+        if (lifecycle !== null) {
+          if (lifecycle.status === "LEGACY") {
+            const eolPart = lifecycle.endOfLifeDate
+              ? ` End-of-life date: ${lifecycle.endOfLifeDate}.`
+              : "";
+            const legacyPart = lifecycle.legacyDate
+              ? ` Legacy since: ${lifecycle.legacyDate}.`
+              : "";
+            subs.push({
+              label: "Model lifecycle [!]",
+              status: "warn",
+              detail:
+                `Model \`${parsed.modelId}\` is in LEGACY lifecycle status.${legacyPart}${eolPart} ` +
+                `Set ASSIGNEE_LLM_DEFAULT to an active successor model to avoid ` +
+                `a hard failure after end-of-life. ` +
+                `See docs/troubleshooting.md § "Bedrock model end-of-life".`,
+            });
+          } else {
+            subs.push({
+              label: "Model lifecycle",
+              status: "ok",
+              detail: `\`${parsed.modelId}\` is ACTIVE`,
+            });
+          }
+        }
+        // lifecycle === null → SDK threw (unknown model, no permission, etc.) → skip silently.
+      }
     }
   }
 

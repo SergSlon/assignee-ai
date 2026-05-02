@@ -46,8 +46,7 @@ Edit `~/.cursor/mcp.json`:
       "command": "node",
       "args": ["/absolute/path/to/assignee-ai/apps/mcp-server/dist/index.js"],
       "env": {
-        "ASSIGNEE_OPERATOR_ACCESS_KEY_ID": "<your-access-key>",
-        "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY": "<your-secret-key>",
+        "AWS_PROFILE": "your-aws-profile",
         "AWS_REGION": "us-east-1"
       }
     }
@@ -55,9 +54,17 @@ Edit `~/.cursor/mcp.json`:
 }
 ```
 
-### Claude Code
+> **Static-key fallback:** If you cannot use `AWS_PROFILE` (e.g., static-key-only environments), set `ASSIGNEE_OPERATOR_ACCESS_KEY_ID` and `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` in the `env` block instead. Using a named profile keeps credentials out of the MCP config file and out of process tables visible to other local users.
 
-Edit `~/.claude/claude_desktop_config.json`:
+### Claude Code CLI
+
+Add the server using the Claude Code CLI:
+
+```bash
+claude mcp add assignee -- node /absolute/path/to/assignee-ai/apps/mcp-server/dist/index.js
+```
+
+Or edit `.claude/mcp_config.json` directly:
 
 ```json
 {
@@ -66,14 +73,42 @@ Edit `~/.claude/claude_desktop_config.json`:
       "command": "node",
       "args": ["/absolute/path/to/assignee-ai/apps/mcp-server/dist/index.js"],
       "env": {
-        "ASSIGNEE_OPERATOR_ACCESS_KEY_ID": "<your-access-key>",
-        "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY": "<your-secret-key>",
+        "AWS_PROFILE": "your-aws-profile",
         "AWS_REGION": "us-east-1"
       }
     }
   }
 }
 ```
+
+> **Static-key fallback:** Same as Cursor — set `ASSIGNEE_OPERATOR_ACCESS_KEY_ID` / `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` only when `AWS_PROFILE` is not available.
+
+### Claude Desktop
+
+Claude Desktop stores its MCP configuration in a platform-specific location:
+
+- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+- **Linux:** `~/.config/Claude/claude_desktop_config.json`
+
+Edit the file for your platform:
+
+```json
+{
+  "mcpServers": {
+    "assignee": {
+      "command": "node",
+      "args": ["/absolute/path/to/assignee-ai/apps/mcp-server/dist/index.js"],
+      "env": {
+        "AWS_PROFILE": "your-aws-profile",
+        "AWS_REGION": "us-east-1"
+      }
+    }
+  }
+}
+```
+
+> **Static-key fallback:** Set `ASSIGNEE_OPERATOR_ACCESS_KEY_ID` / `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` in the `env` block only when a named profile is not available. Embedding raw keys in the config file exposes them in the host process's environment and in `ps eww` output.
 
 ### Windsurf
 
@@ -86,14 +121,15 @@ Edit `~/.windsurf/mcp.json`:
       "command": "node",
       "args": ["/absolute/path/to/assignee-ai/apps/mcp-server/dist/index.js"],
       "env": {
-        "ASSIGNEE_OPERATOR_ACCESS_KEY_ID": "<your-access-key>",
-        "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY": "<your-secret-key>",
+        "AWS_PROFILE": "your-aws-profile",
         "AWS_REGION": "us-east-1"
       }
     }
   }
 }
 ```
+
+> **Static-key fallback:** Set `ASSIGNEE_OPERATOR_ACCESS_KEY_ID` / `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` in the `env` block only when a named profile is not available.
 
 After saving the configuration, restart your IDE. The server starts automatically when the first tool is called.
 
@@ -290,16 +326,22 @@ Ensure the repo is built (`pnpm build`) and the path in your MCP config points t
 node /absolute/path/to/assignee-ai/apps/mcp-server/dist/index.js
 ```
 
+**Reconnect loops:** If the MCP host (Cursor/Claude Desktop/Windsurf) restarts, the assignee process will exit and be respawned by the host — this is the expected MCP stdio lifecycle. If you see repeated reconnect attempts, check `~/.assignee/logs/cli-…jsonl` for the actual error that is causing the respawn cycle.
+
 ### "No credentials" or "Access Denied" errors
 
-The server uses the same credential chain as the CLI. Verify credentials are set:
+The server uses the same credential chain as the CLI. The recommended approach is to use a named AWS profile:
 
 ```bash
-# Check that the env vars are configured in your MCP config
-echo $ASSIGNEE_OPERATOR_ACCESS_KEY_ID
+# Verify the profile resolves credentials correctly
+AWS_PROFILE=your-aws-profile aws sts get-caller-identity
 ```
 
-The MCP config `env` block must include either `ASSIGNEE_OPERATOR_ACCESS_KEY_ID` / `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` or standard AWS credential environment variables. Because the MCP server runs as a long-lived background process, SSO token refresh is not automatic — if you use short-lived credentials, set `ASSIGNEE_OPERATOR_SESSION_TOKEN` alongside the key pair, or rotate the credentials in the MCP config before the session expires.
+Set `AWS_PROFILE` (and optionally `AWS_SHARED_CREDENTIALS_FILE` if your credentials file is in a non-default location) in the MCP config `env` block.
+
+**Static-key fallback:** If a named profile is not available, you can set `ASSIGNEE_OPERATOR_ACCESS_KEY_ID` and `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` directly in the `env` block. Be aware that raw keys placed in the MCP config file are visible in the host process's environment and in `ps eww` output for any local user with the same UID. Prefer profile-based auth whenever possible.
+
+Because the MCP server runs as a long-lived background process, SSO token refresh is not automatic — if you use short-lived credentials, set `ASSIGNEE_OPERATOR_SESSION_TOKEN` alongside the key pair, or rotate the credentials in the MCP config before the session expires.
 
 **Lazy credential resolution:** Each MCP sub-server (Pricing, Documentation, IAM, WA Security, Billing) resolves credentials independently with its own try/catch. A missing or invalid credential set for one server does not crash the others — the affected server reports a startup failure and the remaining servers continue normally.
 
@@ -315,7 +357,7 @@ Check the server logs in your IDE's MCP output panel.
 
 ### "Unsupported resource type" from `plan_resource`
 
-Not all CloudFormation types are supported yet. The 38 user-addressable types include S3, SSM Parameter, IAM Role, EC2, RDS, Lambda, VPC, Subnet, Security Group, DynamoDB, SQS, SNS, SNS Subscription, ELBv2 (ALB/NLB), ECS Cluster, ECR Repository, CloudWatch Logs, Internet Gateway, Route Table, Route, NAT Gateway, API Gateway V2, CloudWatch Alarm, Secrets Manager, EFS FileSystem, EFS MountTarget, EventBridge Rule, EventBridge EventBus, EventBridge Connection, EventBridge ApiDestination, KMS Key, CloudFront Distribution, CloudFront OAC, S3 BucketPolicy, Elastic IP (EIP), plus 2 compound-only types (`AWS::EC2::VPCGatewayAttachment`, `AWS::EC2::SubnetRouteTableAssociation`) that fall through to the generic plugin. See [resource-types.md](./resource-types.md) for the full list.
+Not all CloudFormation types are supported yet. See [resource-types.md](./resource-types.md) for the authoritative and up-to-date list of supported types — the registry is the single source of truth and is always in sync with the running code.
 
 ### Audit log append failures
 

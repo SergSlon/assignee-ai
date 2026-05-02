@@ -23,7 +23,7 @@
 
 import { Command, InvalidArgumentError } from "commander";
 import * as clack from "@clack/prompts";
-import { AutoFixMode, AssigneeError } from "@assignee/core";
+import { AutoFixMode, AssigneeError, DEFAULT_AWS_REGION } from "@assignee/core";
 import type { AutoFixModeType } from "@assignee/core";
 import { CommandName, CommandDescription } from "../constants/commands.js";
 import { ErrorCode, ProcessExitCode } from "../constants/errors.js";
@@ -154,7 +154,7 @@ Examples:
         Same as above — explicit opt-in to the interactive wizard
   $ assignee init --global
         Create/update ~/.config/assignee/config.yaml for the current user
-  $ assignee init --yes --region us-east-1 --auto-fix ask
+  $ assignee init --yes --region ${DEFAULT_AWS_REGION} --auto-fix ask
         Non-interactive, CI-friendly: skip all prompts, use supplied values
   $ assignee init --profile enterprise-sso
         Resolve credentials via the "enterprise-sso" AWS profile (SSO-friendly)

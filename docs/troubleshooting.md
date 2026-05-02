@@ -262,6 +262,32 @@ EU operators: `eu-west-2` (London) and `eu-north-1` (Stockholm) were
 added to the supported list — verify your region is in
 `KNOWN_BEDROCK_REGIONS` if the hint does not name it.
 
+### Bedrock model end-of-life
+
+**Symptom.** `assignee doctor` Bedrock section shows:
+`[!] Model <id> is in LEGACY lifecycle status` with an optional
+end-of-life date.
+
+**Cause.** The configured Bedrock model (`ASSIGNEE_LLM_DEFAULT`) has
+entered AWS `LEGACY` lifecycle status. Models in LEGACY status continue
+to work until the end-of-life date, but AWS recommends migrating before
+that deadline to avoid a hard failure on EOL day.
+
+**Fix.** Update `ASSIGNEE_LLM_DEFAULT` to an active successor model:
+
+```
+export ASSIGNEE_LLM_DEFAULT=bedrock/amazon.nova-lite-v1:0
+```
+
+Confirm the new model is ACTIVE by re-running `assignee doctor` — the
+`Model lifecycle` sub-check should show `ok (ACTIVE)`.
+
+**Detection.** `assignee doctor` calls `bedrock:GetFoundationModel` on
+startup and surfaces the lifecycle warning proactively, before the model
+actually stops responding. If the SDK call fails (permissions, region,
+etc.) the sub-check is silently skipped — it will not surface a false
+failure.
+
 ### LLM returned invalid JSON
 
 **Symptom.** `Plan generator returned invalid JSON` once, disappears

@@ -35,14 +35,15 @@ Or add to `.claude/mcp_config.json`:
       "command": "node",
       "args": ["/absolute/path/to/assignee.ai/apps/mcp-server/dist/index.js"],
       "env": {
-        "AWS_REGION": "us-east-1",
-        "ASSIGNEE_OPERATOR_ACCESS_KEY_ID": "your-key",
-        "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY": "your-secret"
+        "AWS_PROFILE": "your-aws-profile",
+        "AWS_REGION": "us-east-1"
       }
     }
   }
 }
 ```
+
+> **Static-key fallback:** If a named profile is not available, set `ASSIGNEE_OPERATOR_ACCESS_KEY_ID` and `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` in the `env` block. Using `AWS_PROFILE` is preferred — it keeps credentials out of the config file and out of process tables.
 
 ### Cursor
 
@@ -55,14 +56,15 @@ Add to `.cursor/mcp.json` in your project root:
       "command": "node",
       "args": ["/absolute/path/to/assignee.ai/apps/mcp-server/dist/index.js"],
       "env": {
-        "AWS_REGION": "us-east-1",
-        "ASSIGNEE_OPERATOR_ACCESS_KEY_ID": "your-key",
-        "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY": "your-secret"
+        "AWS_PROFILE": "your-aws-profile",
+        "AWS_REGION": "us-east-1"
       }
     }
   }
 }
 ```
+
+> **Static-key fallback:** Set `ASSIGNEE_OPERATOR_ACCESS_KEY_ID` / `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` only when a named profile is not available.
 
 ### Windsurf
 
@@ -75,14 +77,15 @@ Add to your Windsurf MCP configuration:
       "command": "node",
       "args": ["/absolute/path/to/assignee.ai/apps/mcp-server/dist/index.js"],
       "env": {
-        "AWS_REGION": "us-east-1",
-        "ASSIGNEE_OPERATOR_ACCESS_KEY_ID": "your-key",
-        "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY": "your-secret"
+        "AWS_PROFILE": "your-aws-profile",
+        "AWS_REGION": "us-east-1"
       }
     }
   }
 }
 ```
+
+> **Static-key fallback:** Set `ASSIGNEE_OPERATOR_ACCESS_KEY_ID` / `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` only when a named profile is not available.
 
 > Replace `/absolute/path/to/assignee.ai` with the actual path to your local clone of the repository.
 
@@ -100,14 +103,16 @@ Add to your Windsurf MCP configuration:
 
 ## Environment Variables
 
-| Variable                              | Required | Description                                                        |
-| :------------------------------------ | :------- | :----------------------------------------------------------------- |
-| `AWS_REGION`                          | Yes      | Default AWS region for provisioning                                |
-| `ASSIGNEE_OPERATOR_ACCESS_KEY_ID`     | Yes      | AWS access key for the operator                                    |
-| `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` | Yes      | AWS secret key for the operator                                    |
-| `ASSIGNEE_LLM_DEFAULT`                | No       | LLM model string (default: `us.amazon.nova-lite-v1:0` via Bedrock) |
+| Variable                              | Required    | Description                                                                                     |
+| :------------------------------------ | :---------- | :---------------------------------------------------------------------------------------------- |
+| `AWS_REGION`                          | Yes         | Default AWS region for provisioning                                                             |
+| `AWS_PROFILE`                         | Recommended | Named AWS credentials profile. Preferred over raw key vars — keeps secrets out of config files. |
+| `AWS_SHARED_CREDENTIALS_FILE`         | No          | Path to credentials file if not at the default `~/.aws/credentials` location.                   |
+| `ASSIGNEE_OPERATOR_ACCESS_KEY_ID`     | No          | AWS access key (static-key fallback only — prefer `AWS_PROFILE`)                                |
+| `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` | No          | AWS secret key (static-key fallback only — prefer `AWS_PROFILE`)                                |
+| `ASSIGNEE_LLM_DEFAULT`                | No          | LLM model string (default: `us.amazon.nova-lite-v1:0` via Bedrock)                              |
 
-> **Security Note:** Never commit AWS credentials to version control. Use environment variables or AWS credential profiles. For shared team setups, consider using `aws-vault` or similar credential management tools.
+> **Security Note:** Prefer `AWS_PROFILE` over embedding raw access keys in the MCP config. Raw keys in the `env` block are visible in the host process environment and in `ps eww` output for any local user with the same UID. Never commit AWS credentials to version control. For shared team setups, consider using `aws-vault` or similar credential management tools.
 
 ## Troubleshooting
 
@@ -139,9 +144,8 @@ Once `@assignee/mcp-server` is published to npm, the local-path `args` shown abo
       "command": "npx",
       "args": ["-y", "@assignee/mcp-server"],
       "env": {
-        "AWS_REGION": "us-east-1",
-        "ASSIGNEE_OPERATOR_ACCESS_KEY_ID": "your-key",
-        "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY": "your-secret"
+        "AWS_PROFILE": "your-aws-profile",
+        "AWS_REGION": "us-east-1"
       }
     }
   }
