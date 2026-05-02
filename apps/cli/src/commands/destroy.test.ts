@@ -190,6 +190,10 @@ vi.mock("../services/resource-resolver.js", () => ({
 }));
 
 vi.mock("../services/cloudcontrol-client.js", () => ({
+  // Intentional mock: this targets the I/O service shim (cloudcontrol-client.js),
+  // NOT the engine graph path (createGraph / create-graph.ts) that W1-C4 fixed.
+  // The shim mock controls outbound CloudControl API calls; the engine mock path
+  // is separately handled via vi.mock("../graph/create-graph.js") higher in the file.
   createCloudControlClient: vi.fn().mockReturnValue({ send: mockCCSend }),
   // W6-S2: the three destroy-special-path handlers now use factories from
   // cloudcontrol-client.js instead of constructing clients inline.  The
