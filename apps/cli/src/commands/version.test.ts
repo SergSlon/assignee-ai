@@ -8,7 +8,7 @@
  *   - Without --json: human-readable output is retained (regression guard).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { versionCommand, readPackageVersion } from "./version.js";
 
 // ── Command shape tests ───────────────────────────────────────────────────
