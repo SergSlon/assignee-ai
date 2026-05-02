@@ -47,12 +47,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/assignee-ai/assignee.git",
+    "url": "https://github.com/SergSlon/assignee-ai.git",
     "directory": "packages/core"
   },
-  "homepage": "https://github.com/assignee-ai/assignee#readme",
+  "homepage": "https://github.com/SergSlon/assignee-ai#readme",
   "bugs": {
-    "url": "https://github.com/assignee-ai/assignee/issues"
+    "url": "https://github.com/SergSlon/assignee-ai/issues"
   },
   "keywords": [
     "assignee",

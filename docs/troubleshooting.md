@@ -447,5 +447,5 @@ consistent with live state.
   mutation.
 
 If the failure is not covered above, file an issue at
-https://github.com/assignee-ai/assignee.ai/issues with the relevant
+https://github.com/SergSlon/assignee-ai/issues with the relevant
 `~/.assignee/logs/…jsonl` excerpt redacted of account IDs.

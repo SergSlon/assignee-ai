@@ -18,6 +18,7 @@
     "lint:ci-multiplier": "node apps/cli/scripts/lint-ci-multiplier.mjs",
     "lint:tracker-leak": "node apps/cli/scripts/tracker-leak-lint.mjs",
     "backup-provisions": "npx tsx scripts/backup-provisions.ts",
+    "audit-github-org": "npx tsx scripts/audit-github-org.ts",
     "prepare": "husky"
   },
   "devDependencies": {

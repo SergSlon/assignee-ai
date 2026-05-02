@@ -15,16 +15,36 @@
 
 set -e
 
-REPO="assignee-ai/assignee"
+REPO="SergSlon/assignee-ai"
 INSTALL_DIR="${ASSIGNEE_INSTALL_DIR:-$HOME/.local/bin}"
-MANIFEST_URL="https://raw.githubusercontent.com/${REPO}/main/scripts/release-manifest.signed.json"
+# Manifest is fetched from the release asset (not raw.githubusercontent.com) so
+# it reflects the exact signed manifest that shipped with the version being installed.
+# install.sh sets MANIFEST_URL after VERSION is resolved (see resolve_version).
+MANIFEST_URL=""
+
+# ---------------------------------------------------------------------------
+# Unified cleanup — a single EXIT trap so both temporaries are always removed.
+# We track each temp path in a variable and clean up both in one handler.
+# This avoids the POSIX sh limitation where the second `trap … EXIT` silently
+# replaces the first, leaking the manifest temp file on err() paths.
+# ---------------------------------------------------------------------------
+
+MANIFEST_FILE=""
+TMPDIR=""
+
+cleanup() {
+  [ -n "$MANIFEST_FILE" ] && rm -f "$MANIFEST_FILE"
+  [ -n "$TMPDIR" ]        && rm -rf "$TMPDIR"
+}
+trap cleanup EXIT
 
 # ---------------------------------------------------------------------------
 # Helpers
+# All installer output goes to stderr; stdout is reserved for data.
 # ---------------------------------------------------------------------------
 
-info()  { printf '  \033[1;34m>\033[0m %s\n' "$1"; }
-ok()    { printf '  \033[1;32m✓\033[0m %s\n' "$1"; }
+info()  { printf '  \033[1;34m>\033[0m %s\n' "$1" >&2; }
+ok()    { printf '  \033[1;32m✓\033[0m %s\n' "$1" >&2; }
 warn()  { printf '  \033[1;33m!\033[0m %s\n' "$1" >&2; }
 err()   { printf '  \033[1;31m✗\033[0m %s\n' "$1" >&2; exit 1; }
 
@@ -154,8 +174,8 @@ fetch_manifest() {
   need_cmd curl
 
   info "Fetching release manifest..."
+  # MANIFEST_FILE is declared at script top; global cleanup() trap handles removal.
   MANIFEST_FILE="$(mktemp)"
-  trap 'rm -f "$MANIFEST_FILE"' EXIT
 
   if ! curl -sSL -o "$MANIFEST_FILE" "$MANIFEST_URL" 2>/dev/null; then
     warn "Could not fetch release manifest from ${MANIFEST_URL}"
@@ -209,6 +229,36 @@ lookup_sha256() {
 # Version allowlist check
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# semver_lt A B  — returns 0 (true) if semver A < semver B, using only POSIX sh.
+# Compares major.minor.patch numerically; strips leading 'v' from both args.
+# Pre-release suffixes (e.g. -rc.1) are ignored — only the numeric release
+# portion is compared (conservative: a pre-release is treated as its base version).
+# ---------------------------------------------------------------------------
+
+semver_lt() {
+  # Strip leading 'v' and pre-release suffix, then extract numeric components.
+  _a=$(printf '%s' "$1" | sed 's/^v//;s/-.*//')
+  _b=$(printf '%s' "$2" | sed 's/^v//;s/-.*//')
+
+  _a_maj=$(printf '%s' "$_a" | cut -d. -f1); _a_maj="${_a_maj:-0}"
+  _a_min=$(printf '%s' "$_a" | cut -d. -f2); _a_min="${_a_min:-0}"
+  _a_pat=$(printf '%s' "$_a" | cut -d. -f3); _a_pat="${_a_pat:-0}"
+
+  _b_maj=$(printf '%s' "$_b" | cut -d. -f1); _b_maj="${_b_maj:-0}"
+  _b_min=$(printf '%s' "$_b" | cut -d. -f2); _b_min="${_b_min:-0}"
+  _b_pat=$(printf '%s' "$_b" | cut -d. -f3); _b_pat="${_b_pat:-0}"
+
+  if [ "$_a_maj" -lt "$_b_maj" ] 2>/dev/null; then return 0; fi
+  if [ "$_a_maj" -gt "$_b_maj" ] 2>/dev/null; then return 1; fi
+  # majors equal — compare minor
+  if [ "$_a_min" -lt "$_b_min" ] 2>/dev/null; then return 0; fi
+  if [ "$_a_min" -gt "$_b_min" ] 2>/dev/null; then return 1; fi
+  # minors equal — compare patch
+  if [ "$_a_pat" -lt "$_b_pat" ] 2>/dev/null; then return 0; fi
+  return 1
+}
+
 check_version_allowlist() {
   if [ -z "$MANIFEST_FILE" ]; then
     return
@@ -228,6 +278,22 @@ check_version_allowlist() {
 
   if [ -z "$MINIMUM_VERSION" ]; then
     return
+  fi
+
+  # ── PR-001: enforce the minimum-version floor ────────────────────────────
+  # Compare VERSION against MINIMUM_VERSION using POSIX sh (no node/bc).
+  # Strip the leading 'v' from VERSION for comparison (manifest stores bare semver).
+  VERSION_BARE=$(printf '%s' "${VERSION}" | sed 's/^v//')
+  if semver_lt "$VERSION_BARE" "$MINIMUM_VERSION"; then
+    if [ "${ASSIGNEE_DOWNGRADE_ACK:-}" = "1" ]; then
+      warn "ASSIGNEE_DOWNGRADE_ACK=1 set — installing version ${VERSION} below minimum ${MINIMUM_VERSION}."
+      warn "This bypasses the version floor. Proceed with caution."
+    else
+      err "Version ${VERSION} is below the minimum allowed version ${MINIMUM_VERSION}.
+  This version has been removed from the release allowlist (e.g. critical security fix).
+  Install the latest version instead, or set ASSIGNEE_DOWNGRADE_ACK=1 if you understand the risk:
+    ASSIGNEE_DOWNGRADE_ACK=1 ASSIGNEE_VERSION=${VERSION} sh install.sh"
+    fi
   fi
 
   # Check if the requested version is in the manifest's entries
@@ -287,6 +353,12 @@ resolve_version() {
   fi
 
   info "Version: ${VERSION}"
+
+  # ── S1/PR-010: Manifest is fetched from the release asset, not from
+  # raw.githubusercontent.com/…/main/…, so install.sh always reads the
+  # signed manifest that was published alongside the tarball — not a
+  # potentially stale placeholder in the main branch.
+  MANIFEST_URL="https://github.com/${REPO}/releases/download/${VERSION}/release-manifest.signed.json"
 }
 
 # ---------------------------------------------------------------------------
@@ -296,10 +368,12 @@ resolve_version() {
 download_and_install() {
   TARBALL="assignee-${VERSION}-${PLATFORM}.tar.gz"
   URL="https://github.com/${REPO}/releases/download/${VERSION}/${TARBALL}"
+  # Redact any query-string from the URL before using it in user-visible messages
+  # (credentials/tokens embedded as query params must never appear in error output).
+  SAFE_URL=$(printf '%s' "${URL}" | sed 's/\?.*//')
 
+  # TMPDIR is declared at script top; global cleanup() trap handles removal.
   TMPDIR="$(mktemp -d)"
-  # Note: the manifest cleanup trap is set above; this extends it
-  trap "rm -rf \"$TMPDIR\"" EXIT
 
   # ASSIGNEE_LOCAL_TARBALL allows CI / test environments to supply an already-
   # downloaded tarball and skip the network download entirely.
@@ -311,9 +385,9 @@ download_and_install() {
     cp "$ASSIGNEE_LOCAL_TARBALL" "${TMPDIR}/${TARBALL}"
   else
     need_cmd curl
-    info "Downloading ${URL}..."
+    info "Downloading ${SAFE_URL}..."
     if ! curl -sSL -o "${TMPDIR}/${TARBALL}" "$URL"; then
-      err "Download failed — check that ${URL} exists and you have network connectivity."
+      err "Download failed — check that ${SAFE_URL} exists and you have network connectivity."
     fi
   fi
 
@@ -332,7 +406,8 @@ download_and_install() {
   during a release update. Do NOT install this artefact.
 
   Please retry the download. If the mismatch persists, open an issue at
-  https://github.com/${REPO}/issues"
+  https://github.com/${REPO}/issues
+  (download URL: ${SAFE_URL})"
     fi
     ok "SHA256 verified: ${ACTUAL_SHA256}"
   else
@@ -365,6 +440,9 @@ download_and_install() {
     LIBEXEC_DIR="${HOME}/.assignee/libexec/${VERSION}"
     mkdir -p "$LIBEXEC_DIR"
     cp -r "${TMPDIR}/." "$LIBEXEC_DIR/"
+    # Restrict libexec directory to owner-only — node_modules may contain files
+    # with elevated permissions from the tarball; deny group/other read+write+exec.
+    chmod -R go-rwx "$LIBEXEC_DIR"
     cat > "${INSTALL_DIR}/assignee" <<WRAPPER
 #!/bin/sh
 exec node "${LIBEXEC_DIR}/dist/index.js" "\$@"

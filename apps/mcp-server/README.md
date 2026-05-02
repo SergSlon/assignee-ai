@@ -159,5 +159,5 @@ The package stays `private` until the CLI is approved for release — see the pr
 ## Links
 
 - [assignee.ai](https://assignee.ai) -- Project homepage (coming soon)
-- [GitHub](https://github.com/assignee-ai/assignee) -- Source code (coming soon)
+- [GitHub](https://github.com/SergSlon/assignee-ai) -- Source code (coming soon)
 - [npm package](https://www.npmjs.com/package/@assignee/mcp-server) -- npm registry (coming soon, package is currently private)

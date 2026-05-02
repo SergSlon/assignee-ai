@@ -496,8 +496,8 @@ jobs:
       - name: Smoke-test install.sh against downloaded tarball
         # M-γ-21a: Exercise the install script end-to-end so any regression in
         # install.sh is caught before users run `curl | sh`.
-        # We point ASSIGNEE_VERSION at the release tag and ASSIGNEE_TARBALL_DIR
-        # at the already-downloaded tarball directory so the script skips the
+        # We point ASSIGNEE_VERSION at the release tag and ASSIGNEE_LOCAL_TARBALL
+        # at the already-downloaded tarball path so the script skips the
         # network download and uses the artefact from the previous step.
         # ASSIGNEE_INSTALL_DIR is set to a temp dir to avoid colliding with any
         # system-level installation.
@@ -670,7 +670,7 @@ jobs:
   #   cosign verify-blob \
   #     --certificate <tarball>.pem \
   #     --signature  <tarball>.sig \
-  #     --certificate-identity https://github.com/assignee-ai/assignee/.github/workflows/release.yml@refs/heads/main \
+  #     --certificate-identity https://github.com/SergSlon/assignee-ai/.github/workflows/release.yml@refs/heads/main \
   #     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   #     <tarball>
   # See docs/explanation/supply-chain-provenance.md for full verification guide.
@@ -746,9 +746,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update release manifest
-        # W7-08: Write the signed release manifest placeholder. At release time
-        # this manifest is generated from the real SHA256 hashes of the signed
-        # tarballs and used by install.sh + Homebrew formula for allowlist checks.
+        # W7-08 / PR-010: Write the signed release manifest from the real SHA256
+        # hashes of the signed tarballs. This manifest is consumed by install.sh
+        # (version-floor + allowlist checks) and by the Homebrew formula.
         run: |
           set -euo pipefail
           VERSION="${{ inputs.tag }}"
@@ -772,6 +772,32 @@ jobs:
             fs.writeFileSync('scripts/release-manifest.signed.json', JSON.stringify(manifest, null, 2) + '\n');
             console.log('Release manifest written with', entries.length, 'entries.');
           "
+
+      - name: Upload release manifest as release asset
+        # PR-010: install.sh fetches the manifest from the release asset URL
+        # (github.com/.../releases/download/${VERSION}/release-manifest.signed.json)
+        # so it always reads the signed manifest that shipped with the tarball,
+        # not a potentially stale placeholder in the main branch.
+        # This step uploads the freshly generated manifest to the GitHub Release.
+        # Bug 2 fix: gate on ASSIGNEE_RELEASE_PUBLISH so dry-run releases skip
+        # this step (the job checks out at the tag SHA, not main, so uploading
+        # during a dry-run would still be a no-op for install.sh — but the gate
+        # is the correct defence-in-depth).
+        if: env.ASSIGNEE_RELEASE_PUBLISH == '1'
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
+        with:
+          tag_name: ${{ inputs.tag }}
+          files: scripts/release-manifest.signed.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Bug 1 fix (Option B): commit-back step dropped entirely.
+      # Rationale: the job checks out at `ref: ${{ inputs.tag }}` (a tag SHA, not
+      # main).  `git push origin HEAD:main` from a tag SHA is either a
+      # non-fast-forward failure (normal case) or a destructive fast-forward that
+      # resets main to the tag SHA.  The release asset uploaded above is the
+      # authoritative copy that install.sh reads; the in-repo manifest is
+      # informational only.  Keeping the step introduced more risk than value.
 
   # --------------------------------------------------------------------------
   # Update Homebrew formula — computes sha256 per arch and patches the tap.

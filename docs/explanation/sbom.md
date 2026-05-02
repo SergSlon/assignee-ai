@@ -42,7 +42,7 @@ signatures.
 1. Download the SBOM from the GitHub release page:
 
    ```sh
-   curl -LO https://github.com/assignee-ai/assignee/releases/download/v<VERSION>/assignee-v<VERSION>-sbom.spdx.json
+   curl -LO https://github.com/SergSlon/assignee-ai/releases/download/v<VERSION>/assignee-v<VERSION>-sbom.spdx.json
    ```
 
 2. Install spdx-tools:
