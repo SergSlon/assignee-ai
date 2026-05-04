@@ -27,9 +27,13 @@ vi.mock("@aws-sdk/client-iam", () => ({
 
 // Mock fs for provision log reading. Default impl is re-installed in
 // beforeEach because mockReset wipes it.
-vi.mock("node:fs", () => ({
-  readFileSync: vi.fn(),
-}));
+vi.mock("node:fs", async () => {
+  const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
+  return {
+    ...actual,
+    readFileSync: vi.fn(),
+  };
+});
 
 // e98.W1.B1: `fetchManagedResources` now reads the provision log for
 // non-taggable constructs (Route/SRTA/VPCGatewayAttachment) via the
