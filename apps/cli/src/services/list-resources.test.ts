@@ -15,10 +15,16 @@ vi.mock("@aws-sdk/client-resource-groups-tagging-api", () => ({
   GetResourcesCommand: vi.fn(),
 }));
 
-// Mock node:fs for provision log reads
-vi.mock("node:fs", () => ({
-  readFileSync: vi.fn(),
-}));
+// Mock node:fs for provision log reads. Use importOriginal so the real
+// `constants` (and other) exports remain available — F018's O_NOFOLLOW
+// import would otherwise crash with "No 'constants' export defined".
+vi.mock("node:fs", async () => {
+  const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
+  return {
+    ...actual,
+    readFileSync: vi.fn(),
+  };
+});
 
 // e98.W1.B1: core's list path now reads the provision log via the
 // async MemoryService.readProvisions. Stub node:fs/promises.readFile

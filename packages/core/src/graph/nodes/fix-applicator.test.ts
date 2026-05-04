@@ -8,10 +8,15 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { AgentState } from "../graph-state.js";
 import type { BPFinding } from "@assignee/best-practices";
 
-// Mock fs — controls config file reading
-vi.mock("node:fs", () => ({
-  readFileSync: vi.fn(),
-}));
+// Mock fs — controls config file reading. importOriginal preserves
+// `constants` export (F018 O_NOFOLLOW import would otherwise crash).
+vi.mock("node:fs", async () => {
+  const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
+  return {
+    ...actual,
+    readFileSync: vi.fn(),
+  };
+});
 
 // Mock yaml
 vi.mock("yaml", () => ({
