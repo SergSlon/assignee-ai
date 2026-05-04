@@ -773,21 +773,54 @@ describe("MemoryService — corrupt file backup (EC-29)", () => {
     expect(backupFiles).toHaveLength(0);
   });
 
-  it("backs up file with valid JSON but invalid schema", async () => {
+  it("drops schema-failing records, preserves valid ones, no backup-and-zero", async () => {
+    // One stray test fixture (`runId='test-fixture-001'` fails uuid validation)
+    // used to nuke the entire array via safeParse rejection. Per-record
+    // validation now drops the bad row and keeps the valid one.
+    const goodRunId = "9baab789-7ffd-48a0-a6f9-77139a3c18a0";
     await fs.writeFile(
       path.join(tmpDir, "provisions.json"),
-      JSON.stringify([{ bad: "data" }]),
+      JSON.stringify([
+        { bad: "data" },
+        {
+          runId: goodRunId,
+          resourceType: "AWS::S3::Bucket",
+          resourceArn: "arn:aws:s3:::test-bucket",
+          region: "us-east-1",
+          desiredStateHash: "abc123",
+          estimatedMonthlyCost: "0.0230",
+          timestamp: "2026-05-04T00:00:00.000Z",
+        },
+      ]),
       "utf-8",
     );
 
     const records = await service.readProvisions();
-    expect(records).toEqual([]);
+    // 1 valid record preserved, the 1 bad row silently dropped
+    expect(records).toHaveLength(1);
+    expect(records[0]!.runId).toBe(goodRunId);
 
+    // No backup — the JSON parsed fine, only one row failed schema. The
+    // old behaviour of backup-and-zero on any-schema-failure caused real
+    // user data loss (bug #10) and is gone.
     const files = await fs.readdir(tmpDir);
-    const backupFile = files.find((f) =>
-      f.startsWith("provisions.json.corrupt."),
+    expect(
+      files.find((f) => f.startsWith("provisions.json.corrupt.")),
+    ).toBeUndefined();
+  });
+
+  it("still backs up + returns [] when the file is unparseable JSON", async () => {
+    await fs.writeFile(
+      path.join(tmpDir, "provisions.json"),
+      "{not-json{",
+      "utf-8",
     );
-    expect(backupFile).toBeTruthy();
+    const records = await service.readProvisions();
+    expect(records).toEqual([]);
+    const files = await fs.readdir(tmpDir);
+    expect(files.some((f) => f.startsWith("provisions.json.corrupt."))).toBe(
+      true,
+    );
   });
 
   it("subsequent append after corruption writes only the new record (not lost data)", async () => {
