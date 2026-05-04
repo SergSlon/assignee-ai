@@ -367,13 +367,16 @@ describe("IAM Policy Generators", () => {
         const stmt = policy.Statement.find(
           (s) => s.Sid === "IamRoleManagementAssigneeScoped",
         )!;
-        // Policy variables ${aws:PartitionId} + ${aws:AccountId} are
-        // evaluated at authorization time — the literal ARN in the
-        // JSON contains the unevaluated variables.
-        // feedback_partition_aware_arn_matching: ensure we use the
-        // partition variable, never the literal "aws:" string.
+        // `*` is the IAM-spec partition wildcard. Access Analyzer
+        // rejects `aws*` (only `*`/`aws`/`aws-cn`/`aws-us-gov` are
+        // accepted partition values for Resource ARNs). `${aws:AccountId}` IS a valid policy
+        // variable in the account slot and is expanded at authorization
+        // time. `${aws:PartitionId}` is REJECTED in the partition slot
+        // by IAM (only valid as a Condition key, not in Resource ARNs).
+        // feedback_partition_aware_arn_matching: ensure we never use
+        // the literal "aws:" string (that would not match GovCloud/China).
         expect(stmt.Resource).toBe(
-          "arn:${aws:PartitionId}:iam::${aws:AccountId}:role/assignee-*",
+          "arn:*:iam::${aws:AccountId}:role/assignee-*",
         );
         expect(stmt.Resource).not.toBe("*");
         expect(stmt.Resource).not.toContain("arn:aws:iam");
@@ -477,7 +480,7 @@ describe("IAM Policy Generators", () => {
           (s) => s.Sid === "IamRoleDestructiveAssigneeScoped",
         )!;
         expect(stmt.Resource).toBe(
-          "arn:${aws:PartitionId}:iam::${aws:AccountId}:role/assignee-*",
+          "arn:*:iam::${aws:AccountId}:role/assignee-*",
         );
         expect(stmt.Resource).not.toBe("*");
         expect(stmt.Resource).not.toContain("arn:aws:iam");
