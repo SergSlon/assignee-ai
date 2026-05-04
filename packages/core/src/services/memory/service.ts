@@ -19,10 +19,39 @@ import {
   ProvisionLogSchema,
   FailureLogSchema,
   PatternLogSchema,
+  ProvisionRecordSchema,
+  FailureRecordSchema,
+  PatternRecordSchema,
   type ProvisionRecord,
   type FailureRecord,
   type PatternRecord,
 } from "../../schema/memory.js";
+import type { ZodTypeAny } from "zod";
+
+/**
+ * Drop schema-failing records instead of nuking the whole array.
+ * Returns the surviving records + count dropped (for telemetry).
+ *
+ * Bug history: a SINGLE bad record (e.g. a stray test fixture with
+ * `runId='test-run-failure-001'` that fails uuid validation) used to
+ * fail safeParse on the entire array, triggering backupCorruptFile and
+ * returning [] — losing all valid records. Per-record validation
+ * preserves valid data and only quarantines the bad rows.
+ */
+function filterValidRecords<T>(
+  raw: unknown,
+  recordSchema: ZodTypeAny,
+): { valid: T[]; dropped: number } {
+  if (!Array.isArray(raw)) return { valid: [], dropped: 0 };
+  const valid: T[] = [];
+  let dropped = 0;
+  for (const r of raw) {
+    const parsed = recordSchema.safeParse(r);
+    if (parsed.success) valid.push(parsed.data as T);
+    else dropped++;
+  }
+  return { valid, dropped };
+}
 import { safeTry } from "../../types/result.js";
 import { FileStore } from "./file-store.js";
 import { rotateRecords, type RotationPreserveFilter } from "./rotation.js";
@@ -42,10 +71,19 @@ export class MemoryService extends FileStore {
     );
     if (err) return [];
     try {
-      const parsed = ProvisionLogSchema.safeParse(JSON.parse(raw));
-      if (parsed.success) return parsed.data;
-      await this.backupCorruptFile(FileName.PROVISIONS);
-      return [];
+      const json = JSON.parse(raw);
+      const fast = ProvisionLogSchema.safeParse(json);
+      if (fast.success) return fast.data;
+      const { valid, dropped } = filterValidRecords<ProvisionRecord>(
+        json,
+        ProvisionRecordSchema,
+      );
+      if (dropped > 0) {
+        process.stderr.write(
+          `WARNING: ${FileName.PROVISIONS}: dropped ${dropped} schema-failing record(s); ${valid.length} valid record(s) preserved.\n`,
+        );
+      }
+      return valid;
     } catch {
       await this.backupCorruptFile(FileName.PROVISIONS);
       return [];
@@ -79,10 +117,19 @@ export class MemoryService extends FileStore {
     );
     if (err) return [];
     try {
-      const parsed = FailureLogSchema.safeParse(JSON.parse(raw));
-      if (parsed.success) return parsed.data;
-      await this.backupCorruptFile(FileName.FAILURES);
-      return [];
+      const json = JSON.parse(raw);
+      const fast = FailureLogSchema.safeParse(json);
+      if (fast.success) return fast.data;
+      const { valid, dropped } = filterValidRecords<FailureRecord>(
+        json,
+        FailureRecordSchema,
+      );
+      if (dropped > 0) {
+        process.stderr.write(
+          `WARNING: ${FileName.FAILURES}: dropped ${dropped} schema-failing record(s); ${valid.length} valid record(s) preserved.\n`,
+        );
+      }
+      return valid;
     } catch {
       await this.backupCorruptFile(FileName.FAILURES);
       return [];
@@ -140,10 +187,19 @@ export class MemoryService extends FileStore {
     );
     if (err) return [];
     try {
-      const parsed = PatternLogSchema.safeParse(JSON.parse(raw));
-      if (parsed.success) return parsed.data;
-      await this.backupCorruptFile(FileName.PATTERNS);
-      return [];
+      const json = JSON.parse(raw);
+      const fast = PatternLogSchema.safeParse(json);
+      if (fast.success) return fast.data;
+      const { valid, dropped } = filterValidRecords<PatternRecord>(
+        json,
+        PatternRecordSchema,
+      );
+      if (dropped > 0) {
+        process.stderr.write(
+          `WARNING: ${FileName.PATTERNS}: dropped ${dropped} schema-failing record(s); ${valid.length} valid record(s) preserved.\n`,
+        );
+      }
+      return valid;
     } catch {
       await this.backupCorruptFile(FileName.PATTERNS);
       return [];
