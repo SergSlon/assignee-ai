@@ -148,14 +148,39 @@ export function resolveHmacSecret(
  * Per-process HMAC secret. 32 bytes / 256-bit strength, matching
  * SHA-256's security margin.
  *
- * SEC-019: loaded from (or written to) disk at module load so that
+ * SEC-019: resolved from (or written to) disk on first use so that
  * MCP server restarts use the same secret and can verify checkpoints
  * written before the restart.
+ *
+ * Lazily initialised (F011): importing this module no longer triggers
+ * a disk read/write to ~/.assignee/. Tests that need a clean state can
+ * call `_resetSignaturesForTests()` (which also nulls the cached secret)
+ * and then inject a temp path via `_setHmacKeyFileForTest()` before the
+ * first call that would resolve the secret.
  *
  * NEVER serialized beyond the key file, NEVER exported — callers go
  * through the signed API.
  */
-const SECRET: Buffer = resolveHmacSecret();
+let _secret: Buffer | null = null;
+let _hmacKeyFile: string = DEFAULT_HMAC_KEY_FILE;
+
+/** Returns the cached HMAC secret, resolving it on first use. */
+function getSecret(): Buffer {
+  if (_secret === null) {
+    _secret = resolveHmacSecret(_hmacKeyFile);
+  }
+  return _secret;
+}
+
+/**
+ * @internal Test-only. Override the key-file path used when the secret is
+ * next resolved. Must be called BEFORE any code path that invokes getSecret()
+ * (i.e. before saveCheckpoint / signCheckpoint / verifyCheckpoint).
+ * Mirrors the `_setHmacKeyFileForTest` name implied by the F011 fix spec.
+ */
+export function _setHmacKeyFileForTest(keyFile: string): void {
+  _hmacKeyFile = keyFile;
+}
 
 /**
  * In-memory signature store. Key = canonical absolute path of the
@@ -248,7 +273,7 @@ export function signCheckpoint(
   canonicalPath: string,
   desiredStateHash: string,
 ): void {
-  const signature = createHmac("sha256", SECRET)
+  const signature = createHmac("sha256", getSecret())
     .update(canonicalPath)
     .update("|")
     .update(desiredStateHash)
@@ -304,7 +329,7 @@ export function verifyCheckpoint(
 ): CheckpointVerifyResult {
   const stored = SIGNATURES.get(canonicalPath);
   if (!stored) return { ok: false, reason: "not-registered" };
-  const expected = createHmac("sha256", SECRET)
+  const expected = createHmac("sha256", getSecret())
     .update(canonicalPath)
     .update("|")
     .update(desiredStateHash)
@@ -333,13 +358,15 @@ export function verifyCheckpoint(
 export const verifyHmac = verifyCheckpoint;
 
 /**
- * @internal Test-only. Resets the in-memory signature map so unit tests
- * can exercise the post-restart-resume-refused path without spawning
- * a new process. Does NOT regenerate the secret — that would require
- * reloading the module, which is expensive under vitest's module-cache.
+ * @internal Test-only. Resets the in-memory signature map AND nulls the
+ * cached secret so tests that rotate the key file get full isolation.
+ * The next call to signCheckpoint / verifyCheckpoint will re-resolve the
+ * secret from `_hmacKeyFile` (override via `_setHmacKeyFileForTest` first).
  */
 export function _resetSignaturesForTests(): void {
   SIGNATURES.clear();
+  _secret = null;
+  _hmacKeyFile = DEFAULT_HMAC_KEY_FILE;
 }
 
 /**

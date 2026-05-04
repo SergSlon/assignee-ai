@@ -880,8 +880,8 @@ const ec2Rules: RuleSpec[] = [
   },
   {
     id: "BP-EC2-022",
-    resourceType: "AWS::EC2::Instance",
-    propertyPath: "ElasticIpAssociation",
+    resourceType: "AWS::EC2::EIP",
+    propertyPath: "InstanceId",
     checkType: "awareness",
     expectedValue: true,
   },

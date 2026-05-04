@@ -42,13 +42,18 @@ import * as fs from "node:fs/promises";
 import * as fsSync from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { computeChainLink, GENESIS_HMAC } from "./hmac-chain.js";
+import { computeChainLink, GENESIS_HMAC, getAuditKey } from "./hmac-chain.js";
 import { getCurrentRole } from "../rbac/role-context.js";
 import { defaultFileAdvisoryLock } from "../locks/file-advisory-lock.js";
 import {
   MINIMUM_AUDIT_RETENTION_DAYS,
   resolveAuditRetentionDays,
 } from "../utils/logger/retention.js";
+import {
+  ProcessEnvConfigAdapter,
+  type ConfigPort,
+} from "../config/config-port.js";
+import { EnvVar } from "../constants/env-vars.js";
 
 // ── SEC-043: one-time warning for ASSIGNEE_AUDIT_FSYNC=0 ──────────────
 // Emitted at first audit append, not at module load, so that test code
@@ -86,7 +91,19 @@ export interface LegacyAuditEntry {
   raw: string;
 }
 
-export type AuditLogLine = AuditEntry | LegacyAuditEntry;
+/**
+ * A line that carries HMAC-chain fields (hmac, prevHmac, or index) but is
+ * missing the `record` field (or other required AuditEntry fields).
+ * These are NOT treated as legacy — they look like tampered or forged entries
+ * and must cause verification to FAIL.
+ */
+export interface MalformedAuditEntry {
+  malformed: true;
+  raw: string;
+  reason: string;
+}
+
+export type AuditLogLine = AuditEntry | LegacyAuditEntry | MalformedAuditEntry;
 
 // ── Write path ─────────────────────────────────────────────────────────
 
@@ -95,11 +112,19 @@ export type AuditLogLine = AuditEntry | LegacyAuditEntry;
  *
  * Acquires the W4-03 advisory lock before reading the tail to determine
  * the correct `(index, prevHmac)` for the new entry.
+ *
+ * MASTER-009: accepts an optional `ConfigPort` so SaaS callers can supply a
+ * tenant-scoped key source instead of the process-global `process.env`. When
+ * omitted, falls back to `ProcessEnvConfigAdapter` (legacy single-tenant CLI
+ * behaviour). The config is forwarded to `computeChainLink` and to the fsync
+ * gate read so both paths use the same scoped config.
  */
 export async function appendAuditRecord(
   record: unknown,
   logFile: string = DEFAULT_AUDIT_LOG_FILE,
+  config?: ConfigPort,
 ): Promise<AuditEntry> {
+  const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
   return defaultFileAdvisoryLock.withLock(logFile, async () => {
     // Ensure the directory exists (0o700).
     const dir = path.dirname(logFile);
@@ -110,7 +135,7 @@ export async function appendAuditRecord(
     const lastEntry = existing
       .slice()
       .reverse()
-      .find((e): e is AuditEntry => !("preLegacy" in e));
+      .find((e): e is AuditEntry => !("preLegacy" in e) && !("malformed" in e));
 
     const index = lastEntry ? lastEntry.index + 1 : 0;
     const prevHmac = lastEntry ? lastEntry.hmac : GENESIS_HMAC;
@@ -121,24 +146,22 @@ export async function appendAuditRecord(
       role: getCurrentRole(),
       record,
       prevHmac,
-      hmac: computeChainLink(prevHmac, record),
+      hmac: computeChainLink(prevHmac, record, getAuditKey(effectiveConfig)),
     };
 
     const line = JSON.stringify(entry) + "\n";
 
-    // Single-call append: the advisory lock held above guarantees exclusive
-    // access, so fs.appendFile with O_APPEND semantics is both correct and
-    // atomic for our NDJSON format. No temp file is needed or created.
-    await fs.appendFile(logFile, line, { mode: 0o600 });
-
-    // SEC-006: Re-enforce 0o600 on every append. `appendFile { mode }` only
-    // applies at file CREATION; if an operator accidentally `chmod`ed the log
-    // wider (or a pre-existing file already had wider permissions), subsequent
-    // appends silently leave it world-readable.  A best-effort chmod after
-    // every write closes that window.  Failure is non-fatal: we emit a
-    // structured stderr warning and continue so that audit events are never
-    // lost due to a permission-relock failure.
+    // SEC-006 + F028: chmod BEFORE appendFile so the permission window is
+    // eliminated for pre-existing files. `appendFile { mode }` already sets
+    // 0o600 at CREATE time, so for new files this chmod is a no-op. For
+    // existing files it ensures any wider mode is locked down before the new
+    // data lands on disk.  Failure is non-fatal: we emit a structured stderr
+    // warning and continue so that audit events are never lost due to a
+    // permission-relock failure.
     try {
+      // Ensure the file exists before chmod (no-op append creates it first
+      // only when absent; use appendFile with empty string to pre-create).
+      await fs.appendFile(logFile, "", { mode: 0o600 });
       await fs.chmod(logFile, 0o600);
     } catch (chmodErr) {
       process.stderr.write(
@@ -151,6 +174,11 @@ export async function appendAuditRecord(
         }) + "\n",
       );
     }
+
+    // Single-call append: the advisory lock held above guarantees exclusive
+    // access, so fs.appendFile with O_APPEND semantics is both correct and
+    // atomic for our NDJSON format. No temp file is needed or created.
+    await fs.appendFile(logFile, line, { mode: 0o600 });
 
     // Optional fsync: flush kernel page-cache to disk so a crash between
     // writes does not lose the just-appended entry. Enabled by default;
@@ -165,7 +193,7 @@ export async function appendAuditRecord(
     //      but invisible to subsequent reads (directory entry not committed).
     // SEC-043: warn once when fsync is disabled so operators don't
     // silently lose audit entries on crash.
-    if (process.env["ASSIGNEE_AUDIT_FSYNC"] === "0") {
+    if (effectiveConfig.get(EnvVar.ASSIGNEE_AUDIT_FSYNC) === "0") {
       if (!_fsyncDisabledWarned) {
         _fsyncDisabledWarned = true;
         process.stderr.write(
@@ -175,7 +203,7 @@ export async function appendAuditRecord(
         );
       }
     } else {
-      // 1. File fsync.
+      // 1. File fsync — flush the appended bytes.
       const fileFd = await fs.open(logFile, "r");
       try {
         await fileFd.sync();
@@ -183,7 +211,7 @@ export async function appendAuditRecord(
         await fileFd.close();
       }
 
-      // 2. Directory fsync.
+      // 2. Directory fsync — flush the updated directory entry (inode).
       const dirFd = await fs.open(dir, "r");
       try {
         await dirFd.sync();
@@ -214,14 +242,28 @@ async function readAuditLogRaw(logFile: string): Promise<Array<AuditLogLine>> {
   return lines.map((line): AuditLogLine => {
     try {
       const parsed: unknown = JSON.parse(line);
-      if (
-        parsed !== null &&
-        typeof parsed === "object" &&
-        "hmac" in parsed &&
-        "prevHmac" in parsed &&
-        "index" in parsed
-      ) {
-        return parsed as AuditEntry;
+      if (parsed !== null && typeof parsed === "object") {
+        const hasHmac = "hmac" in parsed;
+        const hasPrevHmac = "prevHmac" in parsed;
+        const hasIndex = "index" in parsed;
+        const hasRecord = "record" in parsed;
+
+        if (hasHmac && hasPrevHmac && hasIndex && hasRecord) {
+          // All required HMAC-chain fields present — treat as a full AuditEntry.
+          return parsed as AuditEntry;
+        }
+
+        if (hasHmac || hasPrevHmac || hasIndex) {
+          // Has HMAC-chain shape fields but is missing `record` (or other
+          // required fields). This is NOT a pre-W3 legacy entry — it looks
+          // like a forged or structurally corrupt HMAC-bearing line and must
+          // fail chain verification, not be silently skipped.
+          return {
+            malformed: true,
+            raw: line,
+            reason: "hmac-shape-without-record",
+          };
+        }
       }
       return { preLegacy: true, raw: line };
     } catch {
@@ -294,7 +336,7 @@ export async function guardAuditLogTruncation(
   const retained: AuditEntry[] = [];
 
   for (const line of entries) {
-    if ("preLegacy" in line) continue;
+    if ("preLegacy" in line || "malformed" in line) continue;
     if (isAuditEntryWithinRetentionFloor(line, now)) {
       retained.push(line);
     }

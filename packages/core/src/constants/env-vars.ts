@@ -102,6 +102,51 @@ export const EnvVar = {
    */
   ASSIGNEE_AUDIT_RETENTION_DAYS: "ASSIGNEE_AUDIT_RETENTION_DAYS",
 
+  // ── Audit log ─────────────────────────────────────────────────
+  /**
+   * When set to the string "1", the audit-log HMAC key is sourced from this
+   * env var instead of the key file on disk. Intended for SaaS / CI callers
+   * that inject a per-tenant secret without touching the filesystem.
+   */
+  ASSIGNEE_AUDIT_KEY: "ASSIGNEE_AUDIT_KEY",
+  /**
+   * When set to "0", the post-append fsync calls are skipped for audit-log
+   * writes. Improves throughput in test / high-write environments at the cost
+   * of kernel-crash durability. NEVER set in production.
+   * SEC-043.
+   */
+  ASSIGNEE_AUDIT_FSYNC: "ASSIGNEE_AUDIT_FSYNC",
+
+  // ── LLM retry ────────────────────────────────────────────────
+  /**
+   * Maximum number of per-call retry attempts for transient Bedrock
+   * throttling errors (ThrottlingException / ServiceUnavailableException /
+   * TooManyRequestsException). Integer in [0, 10]. Default: 3.
+   * W11-S4.
+   */
+  ASSIGNEE_LLM_MAX_RETRIES: "ASSIGNEE_LLM_MAX_RETRIES",
+  /**
+   * Base delay in milliseconds for exponential-backoff retry.
+   * Integer in [100, 30000]. Default: 1000.
+   * W11-S4.
+   */
+  ASSIGNEE_LLM_RETRY_BASE_MS: "ASSIGNEE_LLM_RETRY_BASE_MS",
+  /**
+   * Maximum cumulative ThrottlingException retries (across all concurrent
+   * calls) within a 60-second sliding window before fast-failing.
+   * Integer in [1, 100]. Default: 20.
+   * SEC-028.
+   */
+  ASSIGNEE_LLM_MAX_GLOBAL_RETRIES: "ASSIGNEE_LLM_MAX_GLOBAL_RETRIES",
+
+  // ── Demo / redaction ──────────────────────────────────────────
+  /**
+   * When set to "1", AWS account IDs are redacted in CLI output for demo
+   * and screen-share scenarios. Does not affect the audit log or LLM prompts
+   * (those use the structural redact module independently).
+   */
+  ASSIGNEE_DEMO_REDACT_ACCOUNT: "ASSIGNEE_DEMO_REDACT_ACCOUNT",
+
   // ── Distributed tracing / OTLP exporter ──────────────────────
   /**
    * When set, every structured log event is also emitted to the
@@ -116,6 +161,12 @@ export const EnvVar = {
    * record. Defaults to "assignee-cli" when unset.
    */
   ASSIGNEE_OTEL_SERVICE_NAME: "ASSIGNEE_OTEL_SERVICE_NAME",
+  /**
+   * When set to "1", the OTEL exporter allows any HTTPS hostname as an
+   * endpoint without consulting the built-in or operator-supplied allowlist.
+   * Intended for development / custom collector setups only. F026 / SEC-023.
+   */
+  ASSIGNEE_OTEL_ALLOW_ANY_HOSTNAME: "ASSIGNEE_OTEL_ALLOW_ANY_HOSTNAME",
 
   // ── Preflight escalation flags (Story 48.3) ──────────────────
   /**
@@ -168,6 +219,50 @@ export const EnvVar = {
    * Example: `ASSIGNEE_OTEL_ENDPOINT_ALLOWLIST=collector.example.com,otel.internal`
    */
   ASSIGNEE_OTEL_ENDPOINT_ALLOWLIST: "ASSIGNEE_OTEL_ENDPOINT_ALLOWLIST",
+
+  // ── RBAC / identity ───────────────────────────────────────────
+  /**
+   * Override the active RBAC role for the current CLI invocation.
+   * Accepted values: "operator" | "reader" | "auditor". Used in tests
+   * and SaaS multi-tenant flows to avoid re-reading the OIDC token on
+   * every call. @see rbac/role-context.ts
+   */
+  ASSIGNEE_ROLE: "ASSIGNEE_ROLE",
+  /**
+   * When set, the CLI skips the built-in OIDC-provider selection dialog
+   * in `assignee init` and uses the specified adapter name directly.
+   * Intended for CI / automated provisioning flows.
+   */
+  ASSIGNEE_OIDC_ADAPTER: "ASSIGNEE_OIDC_ADAPTER",
+
+  // ── Clarifier ─────────────────────────────────────────────────
+  /**
+   * When set to "1", the pre-plan clarifying-question step is bypassed.
+   * Useful in non-interactive / scripted invocations where an upstream
+   * system already ensures the intent is unambiguous.
+   * Story 56-it2-04.
+   */
+  ASSIGNEE_NO_CLARIFIER: "ASSIGNEE_NO_CLARIFIER",
+
+  // ── MCP server ───────────────────────────────────────────────
+  /**
+   * Maximum number of concurrently running apply operations in the MCP
+   * server. Integer. Default behaviour is defined in active-applies.ts.
+   */
+  ASSIGNEE_MCP_MAX_ACTIVE_APPLIES: "ASSIGNEE_MCP_MAX_ACTIVE_APPLIES",
+  /**
+   * Override the directory where the MCP server writes its per-session
+   * audit log. Defaults to the standard audit-log directory. Used in
+   * tests to redirect writes to a temp directory.
+   */
+  ASSIGNEE_MCP_AUDIT_DIR: "ASSIGNEE_MCP_AUDIT_DIR",
+
+  // ── Deprecated aliases ────────────────────────────────────────
+  /**
+   * @deprecated Alias for ASSIGNEE_LLM_DEFAULT — accepted for backward
+   * compatibility. Prefer ASSIGNEE_LLM_DEFAULT for new configurations.
+   */
+  ASSIGNEE_MODEL: "ASSIGNEE_MODEL",
 
   // `ASSIGNEE_ENABLE_REMOTE_MCP` was previously defined here to gate the
   // opt-in remote knowledge MCP server. REMOVED per acquisition-DD L4-S01

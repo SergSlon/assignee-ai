@@ -15,10 +15,11 @@
  * (Epic 58-it1-03, closes `it57-1-L3-L1`).
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { Command } from "commander";
 import { detectAwsConfigDefaultRegion } from "@assignee/core";
+import { DEFAULT_AUDIT_KEY_FILE } from "@assignee/core/audit";
 
 /**
  * Resolve the CLI version from `apps/cli/package.json`.
@@ -112,6 +113,24 @@ function resolveAuditKeySource(): "env" | "file" {
   return envKey && envKey.length > 0 ? "env" : "file";
 }
 
+/**
+ * Return the stat mode of the audit-key file as an octal number (e.g. 0o600),
+ * or `undefined` if the file does not exist or cannot be stat'd.
+ *
+ * F037 (full-audit-2026-05-02): ops triage needs the file mode to confirm the
+ * key file has the expected 0o600 permissions — included in `--json` output
+ * only when the file is accessible; omitted entirely (not null) on failure so
+ * the field is absent rather than misleading in degraded installs.
+ */
+function resolveAuditKeyFileMode(): number | undefined {
+  try {
+    const s = statSync(DEFAULT_AUDIT_KEY_FILE);
+    return s.mode & 0o777;
+  } catch {
+    return undefined;
+  }
+}
+
 export const versionCommand = new Command("version")
   .description("Show version and environment info")
   .option(
@@ -131,7 +150,8 @@ export const versionCommand = new Command("version")
       // RES-1 (W24d): fall through to detectAwsConfigDefaultRegion() so
       // SSO operators whose region is set via ~/.aws/config [default] profile
       // (not AWS_REGION env) see the actual region instead of "unset".
-      const blob = {
+      const auditKeyFileMode = resolveAuditKeyFileMode();
+      const blob: Record<string, unknown> = {
         cli: version,
         node: process.version,
         platform: process.platform,
@@ -142,6 +162,10 @@ export const versionCommand = new Command("version")
           "unset",
         auditKeySource: resolveAuditKeySource(),
       };
+      // F037: include file mode only when the key file exists and is readable.
+      if (auditKeyFileMode !== undefined) {
+        blob["auditKeyFileMode"] = auditKeyFileMode;
+      }
       process.stdout.write(JSON.stringify(blob) + "\n");
       return;
     }

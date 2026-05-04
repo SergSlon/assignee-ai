@@ -376,6 +376,27 @@ resolve_version() {
     err "Could not determine latest version"
   fi
 
+  # F007: defends against injection — VERSION interpolated into node -e JS strings below.
+  # Allowlist: bare semver optionally prefixed with 'v', optional pre-release label.
+  case "$VERSION" in
+    v[0-9]*.[0-9]*.[0-9]*|[0-9]*.[0-9]*.[0-9]*)
+      # Strip any trailing chars not matching semver+pre-release to verify full match
+      _ver_clean=$(printf '%s' "$VERSION" | sed 's/^v//')
+      case "$_ver_clean" in
+        *[!0-9A-Za-z.-]*)
+          err "ASSIGNEE_VERSION contains invalid characters: '${VERSION}'.
+  Allowed format: [v]MAJOR.MINOR.PATCH[-PRERELEASE] where PRERELEASE is alphanumeric with dots/hyphens.
+  Example: 1.2.3 or v1.2.3-rc.1"
+          ;;
+      esac
+      ;;
+    *)
+      err "ASSIGNEE_VERSION does not match required format: '${VERSION}'.
+  Allowed format: [v]MAJOR.MINOR.PATCH[-PRERELEASE] (e.g. 1.2.3 or v1.2.3-rc.1).
+  This check defends against code injection via node -e string interpolation."
+      ;;
+  esac
+
   info "Version: ${VERSION}"
 
   # ── S1/PR-010: Manifest is fetched from the release asset, not from
@@ -496,6 +517,7 @@ download_and_install() {
 #!/bin/sh
 exec node "${LIBEXEC_DIR}/dist/index.js" "\$@"
 WRAPPER
+    chmod 600 "$WRAPPER_TMP"
     chmod +x "$WRAPPER_TMP"
     mv "$WRAPPER_TMP" "${INSTALL_DIR}/assignee"
   else

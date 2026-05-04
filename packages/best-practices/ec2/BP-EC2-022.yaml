@@ -1,8 +1,8 @@
 id: BP-EC2-022
 title: "Elastic IP should be associated with a running instance"
 severity: MEDIUM
-resource_type: "AWS::EC2::Instance"
-property_path: "ElasticIpAssociation"
+resource_type: "AWS::EC2::EIP"
+property_path: "InstanceId"
 check_type: "awareness"
 expected_value: true
 source: "TrustedAdvisor"

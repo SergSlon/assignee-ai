@@ -125,7 +125,7 @@ export async function restoreProvisions(
   // Resolve the source backup file.
   let sourcePath: string | null = null;
   if (options.from) {
-    // Validate date format.
+    // Validate date format and calendar existence (e.g. reject "2026-02-31").
     if (!/^\d{4}-\d{2}-\d{2}$/.test(options.from)) {
       return {
         restored: false,
@@ -133,6 +133,19 @@ export async function restoreProvisions(
         targetPath,
         safetyBackupPath: null,
         message: `Invalid date format: "${options.from}". Expected YYYY-MM-DD.`,
+      };
+    }
+    const parsedDate = new Date(`${options.from}T00:00:00Z`);
+    if (
+      isNaN(parsedDate.getTime()) ||
+      parsedDate.toISOString().slice(0, 10) !== options.from
+    ) {
+      return {
+        restored: false,
+        sourcePath: null,
+        targetPath,
+        safetyBackupPath: null,
+        message: `Invalid date: "${options.from}" does not exist. Check day/month combination.`,
       };
     }
     const candidate = path.join(

@@ -41,14 +41,17 @@ const PLACEHOLDER_WALK_MAX_DEPTH = 32;
  *
  * W13-S1 (M-α-22): tightened the region segment from `[^:]*` (accepts
  * any non-colon string, including garbage like `invalid..region` or
- * uppercase `US-EAST-1`) to `(?:[a-z]{2}-(?:[a-z]+-)+\d+|)`, which
- * accepts a valid AWS region name (e.g. `us-east-1`, `eu-west-2`,
- * `us-gov-east-1`, `cn-north-1`, `eu-isoe-west-1`) or an empty string
- * (global services such as IAM, S3 use an empty region segment in ARNs
- * like `arn:aws:iam::123456789012:role/foo`).
+ * uppercase `US-EAST-1`) to `(?:[a-z]{2}-(?:[a-z0-9]+-)+[a-z0-9]+|)`,
+ * which accepts standard AWS region names (e.g. `us-east-1`, `eu-west-2`,
+ * `us-gov-east-1`, `cn-north-1`, `eu-isoe-west-1`, `ap-southeast-3`,
+ * `us-east-1-zone-a`) or an empty string (global services such as IAM,
+ * S3 use an empty region segment in ARNs like
+ * `arn:aws:iam::123456789012:role/foo`). Allowing `[a-z0-9]` in each
+ * hyphen-separated segment future-proofs the pattern against local-zone
+ * suffixes (F031).
  */
 const ARN_ANGLE_BRACKET_PLACEHOLDER_REGEX =
-  /arn:aws[\w-]*:[\w-]+:(?:[a-z]{2}-(?:[a-z]+-)+\d+|):<[^>]+>:/;
+  /arn:aws[\w-]*:[\w-]+:(?:[a-z]{2}-(?:[a-z0-9]+-)+[a-z0-9]+|):<[^>]+>:/;
 
 export function detectPlaceholderArn(
   desiredState: Record<string, unknown>,

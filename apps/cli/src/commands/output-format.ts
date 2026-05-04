@@ -17,6 +17,8 @@
  * agree with the return value.
  */
 
+import { EnvVar } from "../constants/env-vars.js";
+
 /** Narrow shape every command's options object satisfies. */
 export interface JsonFlagOptions {
   json?: boolean;
@@ -29,7 +31,7 @@ export interface JsonFlagOptions {
  * Only affects CLI display output — state files and provision logs keep real ARNs.
  */
 export function redactAccountIdIfDemoMode(text: string): string {
-  if (process.env["ASSIGNEE_DEMO_REDACT_ACCOUNT"] !== "1") return text;
+  if (process.env[EnvVar.ASSIGNEE_DEMO_REDACT_ACCOUNT] !== "1") return text;
   return text.replace(/\d{12}(?=:)/g, "************");
 }
 

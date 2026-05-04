@@ -94,6 +94,7 @@ import { redactAccountIdIfDemoMode } from "./output-format.js";
 import { redactSensitive } from "../utils/error-messages.js";
 import { validateAccountId } from "../utils/account-id-validator.js";
 import { ProcessExitCode } from "../constants/errors.js";
+import { EnvVar } from "../constants/env-vars.js";
 
 // ── Re-exports for back-compat (tests + external callers) ─────────────
 export { resourceConfirmationToken } from "./destroy/typed-confirm.js";
@@ -249,6 +250,24 @@ export async function destroyAction(
     resolved.resourceType === "AWS::SecretsManager::Secret" ||
     SECRETS_ARN_RE.test(resolved.arn);
   const isEventBus = EVENTBUS_ARN_RE.test(resolved.arn);
+
+  // Emit default-window notices BEFORE the confirmation box so the user
+  // can make an informed choice. --yes skips the prompt but the notice
+  // still prints so CI logs capture the effective window.
+  if (isKms && pendingWindow === undefined) {
+    process.stderr.write(
+      `[destroy] KMS key will be scheduled for deletion in ${DEFAULT_WINDOW_DAYS} days (default; pass --pending-window-in-days <7-30> to override).\n`,
+    );
+  }
+  if (
+    isSecret &&
+    !opts.forceDeleteWithoutRecovery &&
+    recoveryWindow === undefined
+  ) {
+    process.stderr.write(
+      `[destroy] Secret will be scheduled for deletion in ${DEFAULT_WINDOW_DAYS} days (default; pass --recovery-window-in-days <7-30> to override, or --force-delete-without-recovery to skip the window).\n`,
+    );
+  }
 
   // Cost estimate + confirmation box are the same for every path.
   const billingTools = await getBillingMcpToolsAsync();
@@ -541,6 +560,7 @@ interface DestroySuccessEnvelope {
   operation: string;
   runId?: string;
   arn?: string;
+  identifier?: string;
   cost?: string;
 }
 
@@ -607,7 +627,7 @@ function installJsonStdoutSuppressor(enabled: boolean): {
  * block. When demo mode is inactive the function is a no-op.
  */
 function installDemoModeStderrRedactor(): { restore: () => void } {
-  if (process.env["ASSIGNEE_DEMO_REDACT_ACCOUNT"] !== "1") {
+  if (process.env[EnvVar.ASSIGNEE_DEMO_REDACT_ACCOUNT] !== "1") {
     return { restore: () => {} };
   }
   const originalWrite = process.stderr.write;
@@ -685,10 +705,10 @@ Examples:
         Destroy a single resource (typed-name confirmation required)
   $ assignee destroy my-bucket --yes
         Non-interactive destroy for CI/CD (skips typed confirmation)
-  $ assignee destroy arn:aws:kms:us-east-1:210987654321:key/<uuid> \\
+  $ assignee destroy arn:aws:kms:us-east-1:112233445566:key/<uuid> \\
         --pending-window-in-days 7 --yes
         KMS key: schedules deletion with a 7-day window
-  $ assignee destroy arn:aws:secretsmanager:us-east-1:210987654321:secret:my-secret \\
+  $ assignee destroy arn:aws:secretsmanager:us-east-1:112233445566:secret:my-secret \\
         --force-delete-without-recovery --yes
         SecretsManager: immediate delete, no recovery window
   $ assignee destroy my-bucket --yes --json
@@ -775,12 +795,18 @@ the resource is still billing and recoverable during the window.
             // populated when we have them; `destroyAction` does not
             // currently surface either, so we omit rather than emit
             // fake values.
+            // F029: when the user passed a name (not an ARN) the heuristic
+            // cannot populate `arn`; emit `identifier` instead so CI
+            // scripts always have a correlation handle (avoids an empty
+            // envelope for the name-based-destroy path).
             const envelope: DestroySuccessEnvelope = {
               ok: true,
               operation: "destroy",
             };
             if (resource && /^arn:aws[\w-]*:/.test(resource)) {
               envelope.arn = resource;
+            } else if (resource) {
+              envelope.identifier = resource;
             }
             suppressor.flushSuccess(envelope);
           }

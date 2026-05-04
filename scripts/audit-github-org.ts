@@ -16,7 +16,7 @@
  */
 
 import { readFileSync, readdirSync, statSync } from "fs";
-import { join, relative, extname } from "path";
+import { join, relative, extname, resolve } from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
 
@@ -137,7 +137,7 @@ function auditFile(filePath: string): Finding[] {
   return findings;
 }
 
-function main(): void {
+export function main(): void {
   const allFiles = collectFiles(ROOT);
   const allFindings: Finding[] = [];
 
@@ -170,4 +170,13 @@ function main(): void {
   process.exit(1);
 }
 
-main();
+// Only run when executed directly (not when imported by tests).
+// F013: import-safe guard — mirrors audit-version-parity.ts pattern.
+const isMain =
+  typeof process !== "undefined" &&
+  process.argv[1] !== undefined &&
+  resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+
+if (isMain) {
+  main();
+}

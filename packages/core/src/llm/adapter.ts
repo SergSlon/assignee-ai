@@ -24,7 +24,10 @@ import type { LlmPort, LlmCallOptions } from "../ports/llm-port.js";
 import { AWS_REGION } from "../config/constants/aws.js";
 import { LlmProvider } from "../constants/llm-providers.js";
 import { EnvVar } from "../constants/env-vars.js";
-import { type ConfigPort } from "../config/config-port.js";
+import {
+  type ConfigPort,
+  ProcessEnvConfigAdapter,
+} from "../config/config-port.js";
 import { recordTokenUsage, type RawLlmUsage } from "../utils/token-usage.js";
 import { redactAccountIdsInPrompt } from "../utils/redact.js";
 import {
@@ -55,8 +58,11 @@ const DEFAULT_MAX_RETRIES = 3;
 /** Base delay for exponential backoff in milliseconds. */
 const DEFAULT_RETRY_BASE_MS = 1_000;
 
-/** Hard ceiling on any single sleep to avoid runaway waits (~30s total). */
-const MAX_JITTER_WINDOW_MS = 1_000;
+/** Hard upper bound on ASSIGNEE_LLM_RETRY_BASE_MS to prevent runaway sleeps. */
+const MAX_RETRY_BASE_MS = 30_000;
+
+/** Hard upper bound on ASSIGNEE_LLM_MAX_GLOBAL_RETRIES. */
+const MAX_GLOBAL_RETRIES = 100;
 
 // ── SEC-028: Global retry circuit-breaker ────────────────────────────────────
 
@@ -77,13 +83,14 @@ const _retryBudget = {
 };
 
 /**
- * Reads the global-retry budget limit from the environment.
+ * Reads the global-retry budget limit via ConfigPort.
  * Falls back to DEFAULT_BEDROCK_MAX_GLOBAL_RETRIES.
+ * Clamps to [1, MAX_GLOBAL_RETRIES] to defang DoS amplification.
  */
-function readGlobalRetryLimit(): number {
-  const raw = process.env["ASSIGNEE_LLM_MAX_GLOBAL_RETRIES"];
-  if (raw !== undefined && /^\d+$/.test(raw)) {
-    return Math.max(parseInt(raw, 10), 1);
+function readGlobalRetryLimit(config: ConfigPort): number {
+  const raw = config.getInt(EnvVar.ASSIGNEE_LLM_MAX_GLOBAL_RETRIES);
+  if (raw !== undefined) {
+    return Math.min(Math.max(raw, 1), MAX_GLOBAL_RETRIES);
   }
   return DEFAULT_BEDROCK_MAX_GLOBAL_RETRIES;
 }
@@ -96,7 +103,8 @@ function readGlobalRetryLimit(): number {
  * number of ThrottlingException retries across all concurrent calls within
  * a 60s sliding window.
  */
-export function recordThrottleRetry(): boolean {
+export function recordThrottleRetry(config?: ConfigPort): boolean {
+  const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
   const now = Date.now();
   if (now - _retryBudget.windowStart > RETRY_BUDGET_WINDOW_MS) {
     // Reset the window.
@@ -104,7 +112,7 @@ export function recordThrottleRetry(): boolean {
     _retryBudget.windowStart = now;
   }
   _retryBudget.count += 1;
-  return _retryBudget.count > readGlobalRetryLimit();
+  return _retryBudget.count > readGlobalRetryLimit(effectiveConfig);
 }
 
 /**
@@ -139,32 +147,38 @@ function isThrottlingError(err: unknown): boolean {
 
 /**
  * Compute exponential-backoff delay with full jitter.
- * Formula: random(0, min(cap, base * 2^attempt))
+ * Formula: random(0, min(base * 2^attempt, base * 16))
+ * Ceiling: 16× baseMs (16s with default 1s base).
  * @param attempt   zero-based attempt index (0 = first retry)
  * @param baseMs    base delay in milliseconds
  */
 export function backoffDelayMs(attempt: number, baseMs: number): number {
   const exponential = baseMs * Math.pow(2, attempt);
   const cap = Math.min(exponential, baseMs * 16); // ceiling: 16× base
-  return Math.floor(Math.random() * Math.min(cap, cap + MAX_JITTER_WINDOW_MS));
+  return Math.floor(Math.random() * cap);
 }
 
 /**
- * Reads the retry configuration from environment variables.
+ * Reads the retry configuration via ConfigPort.
  * Falls back to sensible defaults if the vars are absent or invalid.
+ * Clamps to safe ranges to defang DoS amplification (maxRetries ≤ 10,
+ * baseMs in [100, MAX_RETRY_BASE_MS]).
  */
-function readRetryConfig(): { maxRetries: number; baseMs: number } {
-  const rawMax = process.env["ASSIGNEE_LLM_MAX_RETRIES"];
-  const rawBase = process.env["ASSIGNEE_LLM_RETRY_BASE_MS"];
+function readRetryConfig(config: ConfigPort): {
+  maxRetries: number;
+  baseMs: number;
+} {
+  const rawMax = config.getInt(EnvVar.ASSIGNEE_LLM_MAX_RETRIES);
+  const rawBase = config.getInt(EnvVar.ASSIGNEE_LLM_RETRY_BASE_MS);
 
   const maxRetries =
-    rawMax !== undefined && /^\d+$/.test(rawMax)
-      ? Math.min(parseInt(rawMax, 10), 10) // hard cap at 10 to avoid abuse
+    rawMax !== undefined
+      ? Math.min(Math.max(rawMax, 0), 10) // hard cap at 10 to avoid abuse
       : DEFAULT_MAX_RETRIES;
 
   const baseMs =
-    rawBase !== undefined && /^\d+$/.test(rawBase)
-      ? Math.max(parseInt(rawBase, 10), 100) // floor at 100ms
+    rawBase !== undefined
+      ? Math.min(Math.max(rawBase, 100), MAX_RETRY_BASE_MS) // floor 100ms, ceiling 30s
       : DEFAULT_RETRY_BASE_MS;
 
   return { maxRetries, baseMs };
@@ -179,8 +193,11 @@ function readRetryConfig(): { maxRetries: number; baseMs: number } {
  * subsequent ThrottlingExceptions fast-fail without retrying and emit a
  * structured `retryBudgetExhausted` log event to stderr.
  */
-async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
-  const { maxRetries, baseMs } = readRetryConfig();
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  config: ConfigPort,
+): Promise<T> {
+  const { maxRetries, baseMs } = readRetryConfig(config);
   let lastErr: unknown;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -193,7 +210,7 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
       }
       // SEC-028: count ThrottlingException retries against the global budget.
       if (isThrottlingError(err)) {
-        const budgetExhausted = recordThrottleRetry();
+        const budgetExhausted = recordThrottleRetry(config);
         if (budgetExhausted) {
           process.stderr.write(
             JSON.stringify({
@@ -240,17 +257,24 @@ export interface LlmAdapterConfig {
   guardrailId?: string;
   /** Optional Bedrock guardrail version. Defaults to "1". */
   guardrailVersion?: string;
+  /**
+   * MASTER-009: optional tenant-scoped config source. When omitted a fresh
+   * ProcessEnvConfigAdapter is used (preserves single-tenant CLI behaviour).
+   */
+  configPort?: ConfigPort;
 }
 
-/** Set of non-Bedrock providers that have already emitted the no-guardrail warning (per-adapter). */
-const _nonBedrockWarned = new WeakSet<LlmAdapter>();
+/** Provider names that have already emitted the no-guardrail warning in this process. */
+const _nonBedrockProvidersWarned = new Set<string>();
 
 export class LlmAdapter implements LlmPort {
   private readonly parsed: ParsedModel;
   private readonly guardrailOpts: Record<string, string>;
+  private readonly configPort: ConfigPort;
   private languageModel: LanguageModel | null = null;
 
   constructor(private readonly config: LlmAdapterConfig = {}) {
+    this.configPort = config.configPort ?? new ProcessEnvConfigAdapter();
     const modelString = config.modelString ?? DEFAULT_MODEL;
     this.parsed = parseModelString(modelString);
 
@@ -268,8 +292,8 @@ export class LlmAdapter implements LlmPort {
     // ASSIGNEE_ALLOW_NO_GUARDRAIL=1 still get a warning here.
     if (this.parsed.provider === LlmProvider.BEDROCK && !config.guardrailId) {
       if (
-        !LlmAdapter.isGuardrailDisabled() &&
-        !LlmAdapter.isAllowNoGuardrail()
+        !LlmAdapter.isGuardrailDisabled(this.configPort) &&
+        !LlmAdapter.isAllowNoGuardrail(this.configPort)
       ) {
         process.stderr.write(
           "WARNING: Bedrock invocations are running WITHOUT a Guardrail. LLM-generated\n" +
@@ -282,14 +306,14 @@ export class LlmAdapter implements LlmPort {
     }
 
     // SEC-042: Non-Bedrock providers have no guardrail coverage at all.
-    // Emit a one-time per-adapter warning unless the operator has explicitly
-    // set ASSIGNEE_ALLOW_NO_GUARDRAIL=1.
+    // Emit a one-time per-provider warning in this process unless the operator
+    // has explicitly set ASSIGNEE_ALLOW_NO_GUARDRAIL=1.
     if (
       this.parsed.provider !== LlmProvider.BEDROCK &&
-      !LlmAdapter.isAllowNoGuardrail() &&
-      !_nonBedrockWarned.has(this)
+      !LlmAdapter.isAllowNoGuardrail(this.configPort) &&
+      !_nonBedrockProvidersWarned.has(this.parsed.provider)
     ) {
-      _nonBedrockWarned.add(this);
+      _nonBedrockProvidersWarned.add(this.parsed.provider);
       process.stderr.write(
         `WARNING: Provider ${this.parsed.provider} has no guardrail coverage. ` +
           "Set ASSIGNEE_ALLOW_NO_GUARDRAIL=1 to suppress.\n",
@@ -351,8 +375,8 @@ export class LlmAdapter implements LlmPort {
     if (
       this.parsed.provider === LlmProvider.BEDROCK &&
       !this.config.guardrailId &&
-      !LlmAdapter.isAllowNoGuardrail() &&
-      !LlmAdapter.isGuardrailDisabled()
+      !LlmAdapter.isAllowNoGuardrail(this.configPort) &&
+      !LlmAdapter.isGuardrailDisabled(this.configPort)
     ) {
       return [new GuardrailRequiredError(), null] as const;
     }
@@ -399,14 +423,16 @@ export class LlmAdapter implements LlmPort {
     // TooManyRequestsException) are retried up to DEFAULT_MAX_RETRIES times
     // with exponential backoff + jitter before surfacing an error.
     const [callErr, result] = await safeTry(
-      withRetry(() =>
-        generateText({
-          model,
-          output: Output.object({ schema }),
-          maxOutputTokens: options?.maxTokens ?? DEFAULT_MAX_TOKENS,
-          ...this.guardrailOpts,
-          messages: [{ role: "user", content: redactedPrompt }],
-        }),
+      withRetry(
+        () =>
+          generateText({
+            model,
+            output: Output.object({ schema }),
+            maxOutputTokens: options?.maxTokens ?? DEFAULT_MAX_TOKENS,
+            ...this.guardrailOpts,
+            messages: [{ role: "user", content: redactedPrompt }],
+          }),
+        this.configPort,
       ),
     );
 
@@ -446,8 +472,8 @@ export class LlmAdapter implements LlmPort {
     if (
       this.parsed.provider === LlmProvider.BEDROCK &&
       !this.config.guardrailId &&
-      !LlmAdapter.isAllowNoGuardrail() &&
-      !LlmAdapter.isGuardrailDisabled()
+      !LlmAdapter.isAllowNoGuardrail(this.configPort) &&
+      !LlmAdapter.isGuardrailDisabled(this.configPort)
     ) {
       return [new GuardrailRequiredError(), null] as const;
     }
@@ -482,13 +508,15 @@ export class LlmAdapter implements LlmPort {
     // generateStructured above (ThrottlingException / ServiceUnavailable /
     // TooManyRequests retried with exponential backoff + jitter).
     const [callErr, result] = await safeTry(
-      withRetry(() =>
-        generateText({
-          model,
-          maxOutputTokens: options?.maxTokens ?? DEFAULT_MAX_TOKENS,
-          ...this.guardrailOpts,
-          messages: [{ role: "user", content: redactedPrompt }],
-        }),
+      withRetry(
+        () =>
+          generateText({
+            model,
+            maxOutputTokens: options?.maxTokens ?? DEFAULT_MAX_TOKENS,
+            ...this.guardrailOpts,
+            messages: [{ role: "user", content: redactedPrompt }],
+          }),
+        this.configPort,
       ),
     );
 
