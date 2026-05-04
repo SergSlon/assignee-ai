@@ -127,14 +127,21 @@ describe("checkBedrock — P018 guardrail-missing finding", () => {
     expect(guardrailSub!.detail).toContain("operator accepted risk");
   });
 
-  it("does NOT add guardrail-missing sub-check when BEDROCK_GUARDRAIL_DISABLE=true", async () => {
+  it('F005: BEDROCK_GUARDRAIL_DISABLE="true" is REJECTED by the strict parser (parity with LlmAdapter)', async () => {
+    // Wave A F005 — pre-fix: doctor accepted "true" as truthy and showed
+    // green "operator accepted risk" while LlmAdapter (post-SEC-036)
+    // accepted ONLY "1". Operator thought setup was correct, then every
+    // plan/apply threw GuardrailRequiredError. parseBoolEnv now matches
+    // the adapter; "true" produces the warn surface.
     process.env["BEDROCK_GUARDRAIL_DISABLE"] = "true";
 
     const result = await checkBedrock({ llmFactory: makeMockLlmFactory() });
 
     const guardrailSub = result.subs.find((s) => s.label.includes("Guardrail"));
-    expect(guardrailSub!.status).toBe("ok");
-    expect(guardrailSub!.detail).toContain("operator accepted risk");
+    expect(guardrailSub).toBeDefined();
+    // Doctor + adapter agree: "true" is NOT a valid disable token.
+    expect(guardrailSub!.status).not.toBe("ok");
+    expect(guardrailSub!.detail).not.toContain("operator accepted risk");
   });
 
   it("does NOT add guardrail-missing sub-check for non-bedrock provider", async () => {

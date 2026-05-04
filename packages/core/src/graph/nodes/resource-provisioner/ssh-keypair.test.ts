@@ -30,11 +30,16 @@ const { mockMkdirSync, mockWriteFileSync, mockChmodSync } = vi.hoisted(() => ({
   mockChmodSync: vi.fn(),
 }));
 
-vi.mock("node:fs", () => ({
-  mkdirSync: mockMkdirSync,
-  writeFileSync: mockWriteFileSync,
-  chmodSync: mockChmodSync,
-}));
+// importOriginal preserves `constants` (F018 O_NOFOLLOW import dependency).
+vi.mock("node:fs", async () => {
+  const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
+  return {
+    ...actual,
+    mkdirSync: mockMkdirSync,
+    writeFileSync: mockWriteFileSync,
+    chmodSync: mockChmodSync,
+  };
+});
 
 vi.mock("node:os", () => ({ homedir: () => "/home/testuser" }));
 
