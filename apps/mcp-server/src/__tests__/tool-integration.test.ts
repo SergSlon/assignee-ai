@@ -31,9 +31,13 @@ vi.mock("@aws-sdk/client-resource-groups-tagging-api", () => {
   };
 });
 
-vi.mock("node:fs", () => ({
-  readFileSync: vi.fn(),
-}));
+vi.mock("node:fs", async () => {
+  const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
+  return {
+    ...actual,
+    readFileSync: vi.fn(),
+  };
+});
 
 // e98.W1.B1: core's list path now reads the provision log via the
 // async MemoryService.readProvisions. Stub to ENOENT so we keep the
