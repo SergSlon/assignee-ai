@@ -1,3 +1,8 @@
+# RUNTIME-ONLY RULE — unreachable from CLI plan-time evaluation.
+# This rule requires CloudWatch utilization metrics (14-day average CPU < 10%)
+# that are unavailable at plan time. It is informational only and will never
+# fire during `assignee plan`. Kept in the registry as documentation; excluded
+# from the plan-time reachable count. (F021, full-audit-2026-05-02)
 id: BP-EC2-018
 title: "EC2 instance should not be idle (low CPU utilization)"
 severity: INFO

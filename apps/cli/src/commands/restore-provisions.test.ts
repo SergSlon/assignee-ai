@@ -147,6 +147,26 @@ describe("restoreProvisions", () => {
     expect(result.message).toContain("Invalid date format");
   });
 
+  it("returns error on calendar-impossible date (F025: e.g. Feb 31)", async () => {
+    const result = await restoreProvisions({
+      from: "2026-02-31",
+      memoryDir,
+      backupDir,
+    });
+    expect(result.restored).toBe(false);
+    expect(result.message).toContain("does not exist");
+  });
+
+  it("returns error on calendar-impossible date (F025: e.g. Apr 31)", async () => {
+    const result = await restoreProvisions({
+      from: "2026-04-31",
+      memoryDir,
+      backupDir,
+    });
+    expect(result.restored).toBe(false);
+    expect(result.message).toContain("does not exist");
+  });
+
   it("returns error when --from backup does not exist", async () => {
     const result = await restoreProvisions({
       from: "2025-01-01",

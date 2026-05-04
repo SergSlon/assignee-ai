@@ -92,7 +92,12 @@ export function parseDefaultRegionFromConfig(
     const value = line.slice(eqIdx + 1).trim();
     if (value.length === 0) return undefined;
 
-    return value;
+    // Strip inline comments (everything from the first # or ; onward),
+    // matching AWS CLI ini-parser behaviour. F012.
+    const cleaned = value.replace(/[#;].*$/, "").trim();
+    if (cleaned.length === 0) return undefined;
+
+    return cleaned;
   }
 
   return undefined;

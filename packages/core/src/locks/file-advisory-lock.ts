@@ -39,6 +39,21 @@ import type { StoragePort } from "../ports/storage-port.js";
 const LOCK_ALARM_THRESHOLD = 3;
 const LOCK_ALARM_WINDOW_MS = 60_000;
 
+// F008: cap both counter Maps at 1000 entries (FIFO eviction on insertion).
+// A long-running MCP server can touch thousands of unique lock paths; without
+// a cap each path accumulates an entry forever. 1000 covers any realistic
+// burst while keeping the Maps below ~200 KB of metadata.
+const COUNTER_MAP_MAX_SIZE = 1_000;
+
+function evictIfFull<V>(map: Map<string, V>): void {
+  if (map.size >= COUNTER_MAP_MAX_SIZE) {
+    // Delete the oldest (first-inserted) key — Map iteration order is
+    // insertion order in V8/Node.js, so the first key is the oldest.
+    const firstKey = map.keys().next().value;
+    if (firstKey !== undefined) map.delete(firstKey);
+  }
+}
+
 interface LockFailureRecord {
   count: number;
   windowStart: number; // epoch ms of first failure in this window
@@ -50,6 +65,7 @@ function recordLockFailure(lockName: string): void {
   const now = Date.now();
   let rec = _lockFailures.get(lockName);
   if (!rec || now - rec.windowStart > LOCK_ALARM_WINDOW_MS) {
+    if (!rec) evictIfFull(_lockFailures);
     rec = { count: 0, windowStart: now, alarmed: false };
     _lockFailures.set(lockName, rec);
   }
@@ -88,6 +104,7 @@ function recordStaleReclaim(lockName: string): void {
   const now = Date.now();
   let rec = _staleReclaimCounts.get(lockName);
   if (!rec || now - rec.windowStart > STALE_RECLAIM_WINDOW_MS) {
+    if (!rec) evictIfFull(_staleReclaimCounts);
     rec = { count: 0, windowStart: now, alarmed: false };
     _staleReclaimCounts.set(lockName, rec);
   }

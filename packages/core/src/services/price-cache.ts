@@ -70,11 +70,10 @@ function readCacheTtlMinutes(category: string, projectDir?: string): number {
  */
 function computeHash(serviceCode: string, filters: unknown[]): string {
   const key = JSON.stringify({ serviceCode, filters });
-  // SHA-256 — collision-resistance is not strictly required for a cache key,
-  // but compliance scanners (and our own audits) flag MD5 unconditionally.
-  // We slice to 12 hex chars to keep filenames short while preserving
-  // ~48 bits of entropy, which is more than sufficient for cache de-duplication.
-  return crypto.createHash("sha256").update(key).digest("hex").slice(0, 12);
+  // SHA-256 — compliance scanners flag MD5 unconditionally.
+  // Full 32 hex chars (128 bits) to eliminate birthday-attack collision risk
+  // at any realistic cache size; filenames remain well under filesystem limits.
+  return crypto.createHash("sha256").update(key).digest("hex").slice(0, 32);
 }
 
 /**
@@ -122,6 +121,15 @@ export function getCachedPrice(
       } catch {
         // Ignore deletion errors
       }
+      return null;
+    }
+
+    // Shape check: corrupt/foreign cache files are treated as a miss, not a throw.
+    if (
+      typeof entry.data === "undefined" ||
+      typeof entry.serviceCode !== "string" ||
+      typeof entry.filtersHash !== "string"
+    ) {
       return null;
     }
 

@@ -21,6 +21,18 @@ import type { StoragePort } from "../../ports/storage-port.js";
 const FILE_MODE = 0o600;
 const DIR_MODE = 0o700;
 
+// F017: orphaned .tmp files older than this threshold are deleted on adapter
+// construction. A crash between writeFile and rename leaves a .tmp behind;
+// 24 h is conservative enough that no in-flight write can still be alive.
+const ORPHANED_TMP_MAX_AGE_MS = 24 * 60 * 60 * 1_000;
+
+// F018: O_NOFOLLOW prevents following a symlink planted at the lock-file path
+// before our O_CREAT|O_EXCL open. On Windows O_NOFOLLOW is undefined — the
+// open succeeds without the symlink guard (acceptable; Windows NTFS symlink
+// creation requires elevated privileges, so the threat surface is much smaller).
+const O_NOFOLLOW_PLATFORM: number =
+  (fsConstants as Record<string, number>)["O_NOFOLLOW"] ?? 0;
+
 export interface LocalFsStorageAdapterOptions {
   /**
    * Root directory under which every key maps. Required (no default —
@@ -35,6 +47,32 @@ export class LocalFsStorageAdapter implements StoragePort {
 
   constructor(options: LocalFsStorageAdapterOptions) {
     this.rootDir = options.rootDir;
+    // F017: sweep orphaned .tmp files left by crashed writes. Fire-and-forget;
+    // errors are swallowed so construction never fails due to a stale sweep.
+    this.sweepOrphanedTempFiles().catch(() => undefined);
+  }
+
+  /** Remove .tmp files older than ORPHANED_TMP_MAX_AGE_MS from rootDir. */
+  private async sweepOrphanedTempFiles(): Promise<void> {
+    let entries: import("node:fs").Dirent[];
+    try {
+      entries = await fs.readdir(this.rootDir, { withFileTypes: true });
+    } catch {
+      return; // rootDir may not exist yet — nothing to sweep
+    }
+    const cutoff = Date.now() - ORPHANED_TMP_MAX_AGE_MS;
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith(".tmp")) continue;
+      const absPath = join(this.rootDir, entry.name);
+      try {
+        const st = await fs.stat(absPath);
+        if (st.mtimeMs < cutoff) {
+          await fs.unlink(absPath).catch(() => undefined);
+        }
+      } catch {
+        // stat failure is non-fatal
+      }
+    }
   }
 
   async has(key: string): Promise<boolean> {
@@ -135,7 +173,12 @@ export class LocalFsStorageAdapter implements StoragePort {
     try {
       fh = await fs.open(
         path,
-        fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY,
+        // O_NOFOLLOW_PLATFORM: reject a pre-planted symlink at the lock path
+        // rather than following it (defense-in-depth; mirrors hmac-chain.ts).
+        fsConstants.O_CREAT |
+          fsConstants.O_EXCL |
+          fsConstants.O_WRONLY |
+          O_NOFOLLOW_PLATFORM,
         FILE_MODE,
       );
     } catch (err) {

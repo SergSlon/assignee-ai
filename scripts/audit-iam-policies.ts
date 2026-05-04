@@ -137,6 +137,61 @@ export function buildMustBeScopedSet(): Set<string> {
   ]);
 }
 
+/**
+ * F024: Actions that must NEVER appear in the operator policy at all.
+ * These are privilege-escalation or account-management actions that the
+ * operator role has no legitimate need for.  If a policy generator
+ * accidentally adds one, the audit fails.
+ *
+ * NOTE: This is intentionally conservative.  Add entries here only for
+ * actions that are universally unsafe in an operator context, not for
+ * actions that are scoped via conditions (those go into buildMustBeScopedSet).
+ */
+export const BANNED_OPERATOR_ACTIONS: readonly string[] = [
+  "iam:CreateUser",
+  "iam:DeleteUser",
+  "iam:CreateAccessKey",
+  "iam:DeleteAccessKey",
+  "iam:UpdateAccessKey",
+  "iam:CreateLoginProfile",
+  "iam:DeleteLoginProfile",
+  "iam:UpdateLoginProfile",
+  "iam:AddUserToGroup",
+  "iam:RemoveUserFromGroup",
+  "iam:CreateGroup",
+  "iam:DeleteGroup",
+  "iam:CreateAccountAlias",
+  "iam:DeleteAccountAlias",
+  "account:CloseAccount",
+  "organizations:LeaveOrganization",
+] as const;
+
+/**
+ * F024: Check that none of the banned operator actions appear in any statement
+ * of the provided policy documents.  Returns an array of violation strings.
+ *
+ * Unlike `findScopingViolations` (positive check: must NOT be unscoped),
+ * this is a negative check: must NOT be present at all.
+ */
+export function findBannedActions(
+  statements: PolicyStatement[],
+  banned: readonly string[],
+): string[] {
+  const bannedSet = new Set(banned);
+  const violations: string[] = [];
+  for (const stmt of statements) {
+    const actions = Array.isArray(stmt.Action) ? stmt.Action : [stmt.Action];
+    for (const action of actions) {
+      if (bannedSet.has(action)) {
+        violations.push(
+          `${action} in Sid:${stmt.Sid ?? "<no-sid>"} — banned action must not appear in operator policy`,
+        );
+      }
+    }
+  }
+  return violations;
+}
+
 // ── Main audit (only runs when executed directly, not when imported) ───────────
 //
 // Guarding with `isMainModule` prevents process.exit(1) from firing when
@@ -325,44 +380,73 @@ if (isMainModule) {
   }
   console.log("");
 
+  // F024: Banned-action check — ensure no operator policy statement contains
+  // actions that the operator role must never have under any circumstance.
+  console.log(
+    "--- Banned-action check (operator must never have user/account management actions) ---",
+  );
+  const bannedViolations = findBannedActions(
+    allStatements,
+    BANNED_OPERATOR_ACTIONS,
+  );
+  const bannedViolationCount = bannedViolations.length;
+  for (const v of bannedViolations) {
+    console.log(`  ❌ ${v}`);
+  }
+  if (bannedViolationCount === 0) {
+    console.log(
+      `  ✓ All ${BANNED_OPERATOR_ACTIONS.length} banned actions are absent from the operator policy`,
+    );
+  }
+  console.log("");
+
   // Cross-contamination check: auditor and reader should NOT have write actions
   console.log("--- Least privilege: no write actions in reader/auditor ---");
-  const writeVerbs = [
-    "Create",
-    "Delete",
-    "Put",
-    "Update",
-    "Attach",
-    "Detach",
-    "Authorize",
-    "Revoke",
-    "Modify",
-    "Associate",
-    "Disassociate",
-    "Terminate",
-    "Run",
-    "Start",
-    "Stop",
-    "Reboot",
-    "Reset",
-    "Enable",
-    "Disable",
-    "Tag",
-    "Untag",
+  // F027: Replace the old write-verb prefix approach (which misses iam:PassRole,
+  // kms:Encrypt, sts:AssumeRole, etc.) with an inverted read-verb allowlist.
+  // Any action whose verb does NOT start with a known read verb is flagged.
+  // This is conservative-by-default: borderline verbs (Simulate, BatchGet…)
+  // are explicitly included in READ_VERBS so they don't trigger false positives.
+  // Actions are split on ":" to extract the verb; the service prefix is discarded.
+  const READ_VERBS = [
+    "Get",
+    "List",
+    "Describe",
+    "Search",
+    "Query",
+    "Select",
+    "Batch",
+    "Read",
+    "View",
+    "Lookup",
+    "Discover",
+    "Test",
+    "Validate",
+    "Simulate",
+    "Check",
+    "Preview",
+    "Scan",
+    "Head",
+    "Download",
+    "Export",
+    "Generate",
   ];
   function findWriteActions(actions: Set<string>, label: string): void {
     const writes: string[] = [];
     for (const act of actions) {
-      const verb = act.split(":")[1] ?? "";
-      if (writeVerbs.some((w) => verb.startsWith(w))) {
+      // Split on the first ":" to isolate the verb portion.
+      const colonIdx = act.indexOf(":");
+      const verb = colonIdx !== -1 ? act.slice(colonIdx + 1) : act;
+      const isRead = READ_VERBS.some((rv) => verb.startsWith(rv));
+      if (!isRead) {
         writes.push(act);
       }
     }
     if (writes.length > 0) {
-      console.log(`  ❌ ${label}: ${writes.length} write actions found!`);
+      console.log(`  ❌ ${label}: ${writes.length} non-read actions found!`);
       for (const w of writes) console.log(`      - ${w}`);
     } else {
-      console.log(`  ✓ ${label}: zero write actions (read-only verified)`);
+      console.log(`  ✓ ${label}: zero non-read actions (read-only verified)`);
     }
   }
   findWriteActions(rdActions, "reader");
@@ -380,7 +464,8 @@ if (isMainModule) {
   console.log("");
 
   console.log("=".repeat(60));
-  const totalFailures = missingTotal + criticalMissing + scopingViolations;
+  const totalFailures =
+    missingTotal + criticalMissing + scopingViolations + bannedViolationCount;
   if (totalFailures === 0) {
     console.log(
       "✅ AUDIT PASSED — all required actions are covered and scoped correctly",
@@ -397,6 +482,10 @@ if (isMainModule) {
     if (scopingViolations > 0)
       console.log(
         `❌ AUDIT FAILED — ${scopingViolations} destructive/sensitive actions granted with Resource:* and no Condition`,
+      );
+    if (bannedViolationCount > 0)
+      console.log(
+        `❌ AUDIT FAILED — ${bannedViolationCount} banned actions found in the operator policy`,
       );
     process.exit(1);
   }

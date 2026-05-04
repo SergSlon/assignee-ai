@@ -113,11 +113,21 @@ const ROLE_PREFIX_PATTERN = /(^|\n)\s*(System|Assistant|Human|User):/gi;
  */
 export function stripPromptBoundaryTags(raw: string): string {
   if (!raw) return raw;
-  return raw
-    .replace(BOUNDARY_TAG_PATTERN, "")
-    .replace(INST_TAG_PATTERN, "")
-    .replace(ROLE_PREFIX_PATTERN, "$1")
-    .replace(TRIPLE_BACKTICK_PATTERN, "");
+  // Loop until stable: a single pass can leave residual boundary tags when
+  // stripping one tag reveals another (e.g. <system><user_intent>text</user_intent></system>
+  // — first pass removes inner tags, exposing bare <system>…</system>). The
+  // loop terminates because each iteration can only shrink the string.
+  let current = raw;
+  for (;;) {
+    const next = current
+      .replace(BOUNDARY_TAG_PATTERN, "")
+      .replace(INST_TAG_PATTERN, "")
+      .replace(ROLE_PREFIX_PATTERN, "$1")
+      .replace(TRIPLE_BACKTICK_PATTERN, "");
+    if (next === current) break;
+    current = next;
+  }
+  return current;
 }
 
 /**

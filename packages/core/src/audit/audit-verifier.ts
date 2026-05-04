@@ -50,7 +50,11 @@ import {
   LEGACY_HMAC_OPT_IN_ENV,
   getAuditKey,
 } from "./hmac-chain.js";
-import { readAuditLog, type AuditEntry } from "./audit-log.js";
+import {
+  readAuditLog,
+  type AuditEntry,
+  type MalformedAuditEntry,
+} from "./audit-log.js";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -95,42 +99,81 @@ export type VerifyResult =
  * entry and resume signing.  An external anchor is deferred to Epic 101.
  *
  * @param logFile - Path to the audit-log NDJSON file.
- * @param key     - HMAC key; defaults to the active audit key.
+ * @param requestedKey - HMAC key to verify with; when omitted the active
+ *   audit key is resolved once inside the body so the SEC-041 hint and the
+ *   verification itself see the same resolved value.
  */
 export async function verifyAuditLog(
   logFile?: string,
-  key: string = getAuditKey(),
+  requestedKey?: string,
 ): Promise<VerifyResult> {
+  // Resolve the active key once so that the SEC-041 comparison and the
+  // verification loop use the same snapshot. Resolving at the call-site
+  // default-parameter position (old pattern) meant the default was bound
+  // before the body ran, making the subsequent getAuditKey() call inside the
+  // body compare two snapshots of the same cached value — always equal,
+  // rendering the hint decorative (F009).
+  let activeKey: string | undefined;
+  try {
+    activeKey = getAuditKey();
+  } catch {
+    // Key file corrupt or unreadable; proceed with caller-supplied key if any.
+  }
+
+  // If the caller supplied an explicit key, use it; otherwise fall back to the
+  // resolved active key. If neither is available, getAuditKey() would have
+  // thrown above — that's propagated to the caller as-is.
+  const key: string = requestedKey ?? activeKey ?? getAuditKey();
+
   // SEC-041: if the caller explicitly passed a key that differs from the
-  // cached active key, emit a stderr hint so operators debugging key-rotation
+  // current active key, emit a stderr hint so operators debugging key-rotation
   // issues know they are verifying with a non-current key. The hint is
   // informational only — the verification proceeds with whatever key was
   // passed, which is the correct behaviour for migration flows.
-  try {
-    const activeKey = getAuditKey();
-    if (key !== activeKey) {
-      process.stderr.write(
-        `[audit-verifier] HINT: the supplied key differs from the current active key ` +
-          `(~/.assignee/audit-key or ASSIGNEE_AUDIT_KEY). ` +
-          `If you are verifying an old chain segment, this is expected. ` +
-          `If you see unexpected hmac-mismatch failures, verify with the active key.\n`,
-      );
-    }
-  } catch {
-    // getAuditKey() can throw if the key file is corrupt; ignore here —
-    // the verification will proceed with the caller-supplied key.
+  if (
+    requestedKey !== undefined &&
+    activeKey !== undefined &&
+    requestedKey !== activeKey
+  ) {
+    process.stderr.write(
+      `[audit-verifier] HINT: the supplied key differs from the current active key ` +
+        `(~/.assignee/audit-key or ASSIGNEE_AUDIT_KEY). ` +
+        `If you are verifying an old chain segment, this is expected. ` +
+        `If you see unexpected hmac-mismatch failures, verify with the active key.\n`,
+    );
   }
+
   const lines = await readAuditLog(logFile);
 
   let legacyCount = 0;
   const entries: AuditEntry[] = [];
+  // Collect malformed entries so we can fail fast after the pre-scan.
+  const malformedLines: MalformedAuditEntry[] = [];
 
   for (const line of lines) {
     if ("preLegacy" in line) {
       legacyCount++;
+    } else if ("malformed" in line) {
+      // hmac-shaped fields present but `record` missing — forged / structurally
+      // corrupt entry.  Do NOT count as legacyCount; collect for fast-fail below.
+      malformedLines.push(line as MalformedAuditEntry);
     } else {
       entries.push(line);
     }
+  }
+
+  // Fail immediately on any malformed (hmac-shaped-but-incomplete) entry.
+  // brokenAt is reported as -1 because the entry has no valid index field to
+  // cite; the caller should treat -1 as "unknown position".
+  if (malformedLines.length > 0) {
+    return {
+      ok: false,
+      brokenAt: -1,
+      reason: "hmac-malformed",
+      total: entries.length,
+      legacyCount,
+      chainMode: "failed",
+    };
   }
 
   if (legacyCount > 0) {

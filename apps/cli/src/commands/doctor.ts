@@ -231,7 +231,7 @@ export async function runShortDoctor(
   //     we substitute directly rather than relying on the regex.
   //   - User ARN: line — goes through the standard ARN-pattern redactor
   //     which matches \d{12}(?=:) inside the ARN.
-  const isDemoRedact = process.env["ASSIGNEE_DEMO_REDACT_ACCOUNT"] === "1";
+  const isDemoRedact = process.env[EnvVar.ASSIGNEE_DEMO_REDACT_ACCOUNT] === "1";
   const redactLine = isDemoRedact
     ? `ASSIGNEE_DEMO_REDACT_ACCOUNT=1  (demo redaction ACTIVE)`
     : `ASSIGNEE_DEMO_REDACT_ACCOUNT=<unset>  (demo redaction OFF — real account IDs will appear in output)`;

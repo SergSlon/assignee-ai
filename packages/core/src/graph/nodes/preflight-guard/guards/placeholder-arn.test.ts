@@ -359,4 +359,16 @@ describe("placeholder-arn — W13-S1 region segment tightening (M-α-22)", () =>
     });
     expect(result).toBeUndefined();
   });
+
+  it("rejects angle-bracketed ARN with local-zone suffix (F031: e.g. us-east-1-bos-1a)", async () => {
+    // F031: old pattern `[a-z]{2}-(?:[a-z]+-)+\d+` would NOT match `us-east-1-bos-1a`
+    // because after `\d+` (matching "1") the `-bos-1a` tail was unexpected.
+    // New pattern `[a-z]{2}-(?:[a-z0-9]+-)+[a-z0-9]+` matches the full token.
+    const result = await placeholderArnGuard.run(
+      ctx({
+        Subnet: "arn:aws:ec2:us-east-1-bos-1a:<account-id>:subnet/subnet-abc",
+      }),
+    );
+    expect(result.kind).toBe("fail");
+  });
 });

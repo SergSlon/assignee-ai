@@ -181,7 +181,7 @@ export async function queryLineItemPrices(
           }
 
           let monthlyCost: number | null = null;
-          const rawPrice = parseFloat(priceStr.replace(/^\$/, ""));
+          const rawPrice = parseFloat(priceStr.replace(/[$,]/g, ""));
 
           if (item.kind === "fixed" && !isNaN(rawPrice)) {
             if (item.priceUnit === "/hr") {

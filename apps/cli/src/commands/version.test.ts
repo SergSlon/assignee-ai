@@ -121,19 +121,39 @@ describe("versionCommand — --json output", () => {
     expect(keys).toContain("auditKeySource");
   });
 
-  it("JSON output has exactly the PR-030 required fields (no undocumented extras)", async () => {
+  it("JSON output has exactly the required fields (no undocumented extras)", async () => {
     await versionCommand.parseAsync(["--json"], { from: "user" });
 
     const raw = writtenChunks.join("").trim();
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    expect(Object.keys(parsed).sort()).toStrictEqual([
+    const keys = Object.keys(parsed).sort();
+
+    // Core PR-030 required fields are always present.
+    const requiredKeys = [
       "arch",
       "auditKeySource",
       "cli",
       "node",
       "platform",
       "region",
-    ]);
+    ];
+    for (const k of requiredKeys) {
+      expect(keys).toContain(k);
+    }
+
+    // F037: auditKeyFileMode is conditionally present (only when the audit-key
+    // file exists and is readable). Every key in the output must be in the
+    // allowed set — this guards against truly undocumented extras.
+    const allowedKeys = new Set([...requiredKeys, "auditKeyFileMode"]);
+    for (const k of keys) {
+      expect(allowedKeys).toContain(k);
+    }
+
+    // If present, auditKeyFileMode must be a positive integer (stat mode masked to 0o777).
+    if ("auditKeyFileMode" in parsed) {
+      expect(typeof parsed["auditKeyFileMode"]).toBe("number");
+      expect(parsed["auditKeyFileMode"] as number).toBeGreaterThan(0);
+    }
   });
 
   it("--json output is a single JSON object (not array, not primitive)", async () => {

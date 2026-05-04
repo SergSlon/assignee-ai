@@ -35,8 +35,19 @@ import { stopSpinner } from "./display.js";
 let shuttingDown = false;
 type ShutdownSignal = "SIGINT" | "SIGTERM" | "SIGHUP" | "SIGBREAK";
 
+/** Tracks bound handlers so the same function is never registered twice. */
+const _installedHandlers = new Map<ShutdownSignal, () => Promise<void>>();
+
 function installSignalHandler(signal: ShutdownSignal, code: number) {
-  process.on(signal, async () => {
+  // Remove any previously installed handler for this signal so repeated
+  // calls to installSignalHandlers() (e.g. across vitest tests) don't
+  // accumulate listeners and trigger MaxListenersExceededWarning. (F001)
+  const existing = _installedHandlers.get(signal);
+  if (existing) {
+    process.removeListener(signal, existing);
+  }
+
+  const handler = async () => {
     if (shuttingDown) {
       // Second signal during teardown — abandon cleanup.
       //
@@ -81,7 +92,10 @@ function installSignalHandler(signal: ShutdownSignal, code: number) {
       }
     });
     process.exit(code);
-  });
+  };
+
+  _installedHandlers.set(signal, handler);
+  process.on(signal, handler);
 }
 
 /**

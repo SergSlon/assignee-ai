@@ -14,6 +14,7 @@ import {
   LlmAdapter,
   DEFAULT_MODEL,
   parseModelString,
+  parseBoolEnv,
   detectBedrockModelLifecycle,
   type BedrockLifecycleClient,
   type GetFoundationModelCommandFactory,
@@ -138,9 +139,8 @@ export async function checkBedrock(
     // Bedrock is active and no Guardrail is configured.
     // Skip this finding if the operator has explicitly opted out with
     // BEDROCK_GUARDRAIL_DISABLE=1 — treat as informed acceptance.
-    const guardrailDisabled = process.env[EnvVar.BEDROCK_GUARDRAIL_DISABLE];
-    const isDisabled =
-      guardrailDisabled === "1" || guardrailDisabled === "true";
+    // Must match adapter.ts strict parser (SEC-036): only "1" is accepted.
+    const isDisabled = parseBoolEnv(EnvVar.BEDROCK_GUARDRAIL_DISABLE);
     if (!isDisabled) {
       subs.push({
         label: "Guardrail [HIGH]",

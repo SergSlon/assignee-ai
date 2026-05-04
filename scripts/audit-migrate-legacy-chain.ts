@@ -85,10 +85,14 @@ export interface ParsedArgs {
  * arguments are invalid.  The caller maps thrown errors to exit code 73.
  */
 export function parseArgs(argv: readonly string[]): ParsedArgs {
-  // Strip the first two entries (node + script path) when present.
-  const args = argv.slice(
-    argv[0]?.endsWith("node") || argv[0]?.endsWith("tsx") ? 2 : 0,
-  );
+  // F014: Use process.argv.slice(2) bare-script assumption rather than a
+  // heuristic that inspects argv[0] for "node"/"tsx" suffixes — those checks
+  // break under bun, shebang invocation, or custom test-runner wrappers.
+  // Callers pass the raw process.argv; we unconditionally drop the first two
+  // entries (runtime binary + script path) which is always correct for
+  // Node-family launchers.  Tests that construct their own argv arrays should
+  // pass only the flag tokens (no runtime/script prefix).
+  const args = argv.slice(2);
 
   let inputPath: string | null = null;
   let outputPath: string | null = null;
@@ -383,7 +387,24 @@ export async function writeOutput(
       encoding: "utf-8",
       mode: 0o600,
     });
-    await fsPromises.rename(tmpPath, outputPath);
+    // F035: Fall back to copyFile + unlink when rename fails with EXDEV
+    // (cross-device/cross-filesystem move).  tmpPath is always in the same
+    // directory as inputPath so EXDEV is unlikely in practice, but a defensive
+    // fallback costs nothing and keeps the script correct on network-mount
+    // setups where the OS might disagree about device IDs.
+    try {
+      await fsPromises.rename(tmpPath, outputPath);
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        (err as NodeJS.ErrnoException).code === "EXDEV"
+      ) {
+        await fsPromises.copyFile(tmpPath, outputPath);
+        await fsPromises.unlink(tmpPath);
+      } else {
+        throw err;
+      }
+    }
   } else {
     await fsPromises.writeFile(outputPath, content, {
       encoding: "utf-8",

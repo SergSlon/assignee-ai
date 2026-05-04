@@ -28,6 +28,7 @@
  * full OTEL SDK whether or not the user enables it.
  */
 
+import { parseBoolEnv } from "../llm/adapter.js";
 import { EnvVar } from "../constants/env-vars.js";
 import type { LogEvent, LogLevelType } from "../utils/logger/actions.js";
 import {
@@ -35,35 +36,73 @@ import {
   type ConfigPort,
 } from "../config/config-port.js";
 
-// ── SEC-023: hostname allowlist ────────────────────────────────────────
+// ── F026 / SEC-023: hostname allowlist ────────────────────────────────
+//
+// Default-deny: only loopback / LAN-local hostnames are permitted unless
+// the operator explicitly extends the list via ASSIGNEE_OTEL_ENDPOINT_ALLOWLIST
+// (comma-separated; already in EnvVar enum) or opts out entirely via
+// ASSIGNEE_OTEL_ALLOW_ANY_HOSTNAME=1.
+//
+// Pattern matching: a leading "*." is a suffix wildcard — "*.local" matches
+// "myhost.local" but NOT "notlocal". All comparisons are case-insensitive.
+
+/** Built-in safe-core allowlist — loopback and LAN-local only. */
+const DEFAULT_OTEL_ALLOWED_HOSTS: readonly string[] = [
+  "localhost",
+  "127.0.0.1",
+  "::1",
+  "*.local",
+];
+
+/** Returns true when `hostname` matches a pattern from the combined allowlist. */
+function matchesAllowlist(
+  hostname: string,
+  patterns: readonly string[],
+): boolean {
+  const h = hostname.toLowerCase();
+  for (const pattern of patterns) {
+    const p = pattern.toLowerCase();
+    if (p.startsWith("*.")) {
+      if (h.endsWith(p.slice(1))) return true;
+    } else if (h === p) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
- * If `ASSIGNEE_OTEL_ENDPOINT_ALLOWLIST` is set (comma-separated hostnames),
- * only endpoints whose hostname matches the list are accepted. Default is
- * no allowlist (current behaviour preserved for backward compat).
+ * Returns true when the endpoint's hostname is permitted.
  *
- * Example: `ASSIGNEE_OTEL_ENDPOINT_ALLOWLIST=collector.example.com,otel.internal`
+ * Decision order:
+ * 1. `ASSIGNEE_OTEL_ALLOW_ANY_HOSTNAME=1` → allow all (operator opt-out).
+ * 2. `ASSIGNEE_OTEL_ENDPOINT_ALLOWLIST` set → check against that list only
+ *    (operator-supplied list replaces the built-in defaults).
+ * 3. Otherwise → check against DEFAULT_OTEL_ALLOWED_HOSTS (loopback + *.local).
  */
 export function isEndpointHostnameAllowed(
   endpoint: string,
   config: ConfigPort,
 ): boolean {
-  const raw = config.get(EnvVar.ASSIGNEE_OTEL_ENDPOINT_ALLOWLIST);
-  if (raw === undefined || raw.trim().length === 0) {
-    // No allowlist configured — all hostnames allowed (default behaviour).
-    return true;
-  }
-  const allowed = raw
-    .split(",")
-    .map((h) => h.trim().toLowerCase())
-    .filter((h) => h.length > 0);
-  if (allowed.length === 0) return true;
+  if (parseBoolEnv(EnvVar.ASSIGNEE_OTEL_ALLOW_ANY_HOSTNAME)) return true;
+
+  let hostname: string;
   try {
-    const url = new URL(endpoint);
-    return allowed.includes(url.hostname.toLowerCase());
+    hostname = new URL(endpoint).hostname;
   } catch {
-    // Unparseable endpoint — reject as a security-safe default.
     return false;
   }
+
+  const raw = config.get(EnvVar.ASSIGNEE_OTEL_ENDPOINT_ALLOWLIST);
+  if (raw !== undefined && raw.trim().length > 0) {
+    const operatorList = raw
+      .split(",")
+      .map((h) => h.trim())
+      .filter((h) => h.length > 0);
+    return matchesAllowlist(hostname, operatorList);
+  }
+
+  return matchesAllowlist(hostname, DEFAULT_OTEL_ALLOWED_HOSTS);
 }
 
 /* ------------------------------------------------------------------ */
@@ -339,13 +378,15 @@ export async function exportLogEvent(
     return;
   }
 
-  // SEC-023: hostname allowlist guard. If ASSIGNEE_OTEL_ENDPOINT_ALLOWLIST
-  // is set, reject endpoints whose hostname is not in the list to prevent
-  // accidental telemetry exfiltration to a rogue collector.
+  // F026 / SEC-023: hostname allowlist guard (default-deny).
+  // Loopback/LAN-local hosts pass by default. External hosts require
+  // ASSIGNEE_OTEL_ENDPOINT_ALLOWLIST (comma-separated patterns) or the
+  // full opt-out flag ASSIGNEE_OTEL_ALLOW_ANY_HOSTNAME=1.
   if (!isEndpointHostnameAllowed(endpoint, effectiveConfig)) {
     process.stderr.write(
-      `[assignee/otel] Endpoint rejected: hostname of "${endpoint}" is not in ` +
-        `ASSIGNEE_OTEL_ENDPOINT_ALLOWLIST. Add it to the allowlist to export telemetry.\n`,
+      `[assignee/otel] Endpoint rejected: hostname of "${endpoint}" is not in the ` +
+        `allowlist. Set ASSIGNEE_OTEL_ENDPOINT_ALLOWLIST=<host,...> or ` +
+        `ASSIGNEE_OTEL_ALLOW_ANY_HOSTNAME=1 to permit it.\n`,
     );
     return;
   }
