@@ -196,12 +196,12 @@ describe("price-cache hash function (L-A3)", () => {
       .createHash("sha256")
       .update(key)
       .digest("hex")
-      .slice(0, 12);
+      .slice(0, 32); // F016: hash widened 12→32 hex (Wave B2 audit fix)
     const md5Prefix = crypto
       .createHash("md5")
       .update(key)
       .digest("hex")
-      .slice(0, 12);
+      .slice(0, 32); // F016: hash widened 12→32 hex (Wave B2 audit fix)
 
     expect(fileName).toBe(`${serviceCode}-${sha256Prefix}.json`);
     expect(fileName).not.toBe(`${serviceCode}-${md5Prefix}.json`);
@@ -364,7 +364,7 @@ describe("price-cache Windows HOME resolution", () => {
     const files = fs.readdirSync(cacheDir);
     expect(files).toHaveLength(1);
     expect(files[0]).toMatch(
-      new RegExp(`^${serviceCode}-[0-9a-f]{12}\\.json$`),
+      new RegExp(`^${serviceCode}-[0-9a-f]{32}\\.json$`), // F016: 12→32 hex
     );
 
     vi.doUnmock("node:os");
