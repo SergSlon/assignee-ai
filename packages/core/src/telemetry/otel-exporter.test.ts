@@ -511,6 +511,9 @@ describe("exportLogEvent ConfigPort threading", () => {
       get(key: string) {
         if (key === "ASSIGNEE_OTEL_ENDPOINT") return "https://tenant.otel:4318";
         if (key === "ASSIGNEE_OTEL_SERVICE_NAME") return "tenant-service";
+        // F026 default-deny: tenant must explicitly allow non-localhost
+        // hostnames. Tenant supplies its own allowlist via ConfigPort.
+        if (key === "ASSIGNEE_OTEL_ENDPOINT_ALLOWLIST") return "tenant.otel";
         return undefined;
       },
     } as unknown as ConfigPort;
@@ -554,6 +557,8 @@ describe("exportLogEvent ConfigPort threading", () => {
         if (key === "ASSIGNEE_OTEL_ENDPOINT")
           return "http://internal.otel:4318";
         if (key === "ASSIGNEE_OTEL_ALLOW_HTTP") return "1";
+        // F026 default-deny: tenant must explicitly allow non-localhost.
+        if (key === "ASSIGNEE_OTEL_ENDPOINT_ALLOWLIST") return "internal.otel";
         return undefined;
       },
     } as unknown as ConfigPort;
