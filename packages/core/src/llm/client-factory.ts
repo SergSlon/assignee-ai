@@ -60,10 +60,17 @@ export async function createLanguageModel(
 
     case LlmProvider.BEDROCK: {
       const { createAmazonBedrock } = await import("@ai-sdk/amazon-bedrock");
+      // STS / SSO / federated credentials (ASIA-prefixed) require the
+      // session token to be sent with every signed request — without it
+      // AWS rejects the call with "security token included in the
+      // request is invalid". Long-lived IAM-user keys (AKIA-prefixed)
+      // leave the field undefined.
+      const sessionToken = effectiveConfig.get(EnvVar.OPERATOR_SESSION_TOKEN);
       const bedrock = createAmazonBedrock({
         region: AWS_REGION,
         accessKeyId: effectiveConfig.get(EnvVar.OPERATOR_ACCESS_KEY),
         secretAccessKey: effectiveConfig.get(EnvVar.OPERATOR_SECRET_KEY),
+        ...(sessionToken ? { sessionToken } : {}),
       });
       return bedrock(parsed.modelId);
     }

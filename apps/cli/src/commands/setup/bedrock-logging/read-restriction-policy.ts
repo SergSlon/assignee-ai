@@ -61,7 +61,11 @@ export function buildBedrockLogReadRestriction(opts: {
       {
         Sid: "DenyBedrockLogReadExceptOperatorAndRoot",
         Effect: IamEffect.DENY,
-        Principal: "*",
+        // CloudWatch Logs PutResourcePolicy rejects bare `Principal: "*"`
+        // for log-read actions. The explicit `{AWS: "*"}` form is the
+        // only accepted "everyone" wildcard for these IAM-principal
+        // actions.
+        Principal: { AWS: "*" },
         Action: [
           "logs:GetLogEvents",
           "logs:FilterLogEvents",

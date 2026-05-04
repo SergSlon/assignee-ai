@@ -101,8 +101,12 @@ vi.mock("@aws-sdk/client-bedrock", () => {
   };
 });
 
-// Mock @aws-sdk/credential-providers — capture which profile fromIni() was
-// called with so the AWS_PROFILE-honoring regression test (L1) can assert it.
+// Mock @aws-sdk/credential-providers — capture which profile
+// fromNodeProviderChain() was called with so the AWS_PROFILE-honoring
+// regression test (L1) can assert it. Switched from fromIni to
+// fromNodeProviderChain so SSO / AWS Identity Center / login_session profiles
+// resolve cleanly (fromIni misses those formats and triggers a downstream
+// EntityReplacer XML-parse failure when STS rejects the empty creds).
 const mockFromIni = vi.fn((opts: { profile: string }) => {
   // Return a real-shaped credentials provider function that resolves to a
   // synthetic credential set. STS calls are intercepted at the SDK layer so
@@ -113,7 +117,7 @@ const mockFromIni = vi.fn((opts: { profile: string }) => {
   });
 });
 vi.mock("@aws-sdk/credential-providers", () => ({
-  fromIni: (opts: { profile: string }) => mockFromIni(opts),
+  fromNodeProviderChain: (opts: { profile: string }) => mockFromIni(opts),
 }));
 
 // Mock @aws-sdk/client-sts
@@ -574,8 +578,8 @@ describe("setup command", () => {
       const { setupCommand } = await import("./setup.js");
       await setupCommand.parseAsync(["node", "setup"]);
 
-      // fromIni() must have been called at least once with the AWS_PROFILE
-      // value, NOT silently with "default".
+      // fromNodeProviderChain() must have been called at least once with the
+      // AWS_PROFILE value, NOT silently with "default".
       expect(mockFromIni).toHaveBeenCalled();
       const profilesUsed = mockFromIni.mock.calls.map(
         (c) => (c[0] as { profile: string }).profile,

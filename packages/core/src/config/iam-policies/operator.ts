@@ -255,7 +255,10 @@ export function operatorPolicy(
         // Story 50-5 B-3: priv-esc prevention for role lifecycle
         // management. Resource scoped to the `assignee-*` role name
         // prefix under the caller's partition + account (IAM policy
-        // variable `${aws:PartitionId}` + `${aws:AccountId}` are
+        // `*` is the IAM-spec partition wildcard (Access Analyzer rejects
+        // `aws*` for IAM Resource ARNs; the only accepted partition
+        // wildcards are `*`, `aws`, `aws-cn`, `aws-us-gov`).
+        // `${aws:AccountId}` IS
         // evaluated at policy-evaluation time). `iam:PassedToService`
         // restricts PassRole to the services Assignee actually
         // provisions roles for.
@@ -269,8 +272,7 @@ export function operatorPolicy(
         Sid: "IamRoleManagementAssigneeScoped",
         Effect: IamEffect.ALLOW,
         Action: [...IAM_ROLE_MANAGEMENT_ACTIONS].sort(),
-        Resource:
-          "arn:${aws:PartitionId}:iam::${aws:AccountId}:role/assignee-*",
+        Resource: "arn:*:iam::${aws:AccountId}:role/assignee-*",
         Condition: {
           StringEquals: {
             "iam:PassedToService": [...ASSIGNEE_PASS_ROLE_SERVICES],
@@ -302,8 +304,7 @@ export function operatorPolicy(
         Sid: "IamRoleDestructiveAssigneeScoped",
         Effect: IamEffect.ALLOW,
         Action: [...IAM_ROLE_DESTRUCTIVE_ACTIONS].sort(),
-        Resource:
-          "arn:${aws:PartitionId}:iam::${aws:AccountId}:role/assignee-*",
+        Resource: "arn:*:iam::${aws:AccountId}:role/assignee-*",
         Condition: {
           StringEquals: {
             "aws:ResourceTag/managed-by": "assignee-ai",
