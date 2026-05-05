@@ -1,73 +1,139 @@
 /**
- * Matcher precedence — pinned `it.todo` for the deferred follow-up
- * story `error-message-stale-session-token.md`.
+ * Matcher precedence — STS session-token errors must classify as
+ * STALE_SESSION_TOKEN, not MISSING_CREDENTIALS / LLM_API_KEY_INVALID.
  *
- * ## Why this file exists
+ * Pre-demo audit (2026-05-06) follow-up: closes the deferred
+ * Adversarial #4 HIGH from commit 24cc60a4 (env-writer paired-token
+ * eviction). The env-writer fix prevents stale tokens from landing in
+ * .env after `assignee setup`, but a stale token can still arrive via
+ * a stale shell export, a stale paste of `aws configure
+ * export-credentials`, or — most relevant for the customer demo
+ * tomorrow — a user who forgets to re-run `assignee setup` after
+ * pulling the new operator policy. The matcher fix is the safety net
+ * for those user paths: AWS rejects with "The security token included
+ * in the request is invalid" / "InvalidClientTokenId" / "ExpiredToken"
+ * and the user sees an actionable "re-run `assignee setup`" hint
+ * instead of the misleading "No AWS credentials detected".
  *
- * When AWS rejects a request because a session token is invalid
- * (typical message: "The security token included in the request is
- * invalid"), the assignee error matchers currently classify the
- * failure as `ErrorCode.MISSING_CREDENTIALS` because
- * `matchConfigError` substring-matches "credentials" before any
- * STS-specific rule has a chance to fire. The user-visible result is
- * misleading: the user is told "No AWS credentials detected" when in
- * fact the credentials WERE detected — they were just paired with a
- * stale STS session token from a prior `aws sso login`.
- *
- * The user reported exactly this: after running `assignee setup` they
- * saw "No AWS credentials detected" because their .env still carried
- * `ASSIGNEE_OPERATOR_SESSION_TOKEN` from a prior SSO session, AWS
- * Bedrock returned `InvalidClientTokenId`, and the matcher mapped that
- * to `MISSING_CREDENTIALS`.
- *
- * The env-writer fix (commit 24cc60a4) prevents the stale token from
- * landing in .env after `assignee setup` — but a stale token can
- * still arrive via a stale shell export or a stale paste of
- * `aws configure export-credentials`. The matcher fix is the safety
- * net for those user paths.
- *
- * ## Implementer playbook (when picking up the follow-up)
- *
- *   1. Add `ErrorCode.STALE_SESSION_TOKEN` (or similar) to
- *      `packages/core/src/constants/errors.ts`.
- *   2. Register an entry in `catalog-config.ts` (or a new
- *      `catalog-aws-sts.ts`) with `what / why / howToFix` that points
- *      the user at `aws sso login` + re-export, plus — for assignee
- *      operator credentials — `assignee setup` to refresh long-term
- *      IAM keys.
- *   3. Add the matcher rule BEFORE the generic "credentials" branch
- *      in `matchAwsErrorName` (or hoist it to a top-level matcher
- *      that runs ahead of `matchConfigError`). The pattern set is at
- *      least:
- *        - "The security token included in the request is invalid"
- *        - "InvalidClientTokenId"
- *        - "ExpiredToken"
- *        - "ExpiredTokenException"
- *   4. Flip this test from `it.todo` to a real `it(...)` block that
- *      asserts:
- *        - the resolved entry's `code` is `STALE_SESSION_TOKEN`
- *        - the entry's `code` is NOT `MISSING_CREDENTIALS`
- *        - the `howToFix` mentions `aws sso login` and/or
- *          `assignee setup`
- *      against `defaultErrorMessageRegistry.resolveFromMessage(...)`
- *      (or whichever public surface ends up exposing the matcher).
- *
- * The test stays pinned as `it.todo` so vitest reports the
- * outstanding work in its summary without going red on main — the
- * follow-up implementer has a concrete failing test to drive against
- * the moment they remove `.todo`.
- *
- * @see packages/core/src/utils/error-messages/matchers.ts — the
- *   generic "credentials" branch that currently swallows the case
- *   (matchConfigError, around line 88).
- * @see follow-up story: error-message-stale-session-token.md (TBD path)
- * @see env-writer fix: commit 24cc60a4 (apps/cli/src/utils/env-writer.ts)
+ * @see _bmad-output/implementation-artifacts/error-message-stale-session-token.md
+ * @see commit 24cc60a4 (env-writer.ts) — root-cause fix
+ * @see packages/core/src/utils/error-messages/matchers.ts:matchStsAuthError
  */
 
-import { describe, it } from "vitest";
+import { describe, it, expect } from "vitest";
+import {
+  defaultErrorMessageRegistry,
+  ConfigurationError,
+  BedrockError,
+} from "../../../index.js";
+import { ErrorCode } from "../../../constants/errors.js";
 
 describe("matcher precedence — stale STS session token", () => {
-  it.todo(
-    'AWS "The security token included in the request is invalid" → STALE_SESSION_TOKEN, not MISSING_CREDENTIALS',
-  );
+  describe("via resolveMessage (raw error-message strings)", () => {
+    it.each([
+      "The security token included in the request is invalid",
+      "InvalidClientTokenId: The security token included in the request is invalid",
+      "ExpiredTokenException: The security token included in the request has expired",
+      "ExpiredToken: provided session token is expired",
+      "TokenRefreshRequired: token refresh is required for this credential",
+    ])(
+      "classifies %s as STALE_SESSION_TOKEN (not MISSING_CREDENTIALS)",
+      (message) => {
+        const entry = defaultErrorMessageRegistry.resolveMessage(message);
+        expect(entry.code).toBe(ErrorCode.STALE_SESSION_TOKEN);
+        expect(entry.code).not.toBe(ErrorCode.MISSING_CREDENTIALS);
+        expect(entry.howToFix).toContain("assignee setup");
+      },
+    );
+
+    it("howToFix mentions both `assignee setup` AND the SSO refresh path", () => {
+      const entry = defaultErrorMessageRegistry.resolveMessage(
+        "The security token included in the request is invalid",
+      );
+      expect(entry.howToFix).toContain("assignee setup");
+      expect(entry.howToFix.toLowerCase()).toMatch(/sso|aws\s+configure/);
+    });
+
+    it("does NOT misclassify a genuine missing-credentials message as STALE_SESSION_TOKEN", () => {
+      // The original "No AWS credentials" path must still fire when no
+      // STS-token markers are present in the message. Wording is
+      // chosen to land on the generic credentials branch rather than
+      // the more-specific MISSING_ACCESS_KEY (which would fire if the
+      // message included "access key" / the AKID env-var name).
+      const entry = defaultErrorMessageRegistry.resolveMessage(
+        "No AWS credentials detected for the operator role.",
+      );
+      expect(entry.code).toBe(ErrorCode.MISSING_CREDENTIALS);
+    });
+
+    it("does NOT misclassify an AccessDenied (real auth) as STALE_SESSION_TOKEN", () => {
+      const entry = defaultErrorMessageRegistry.resolveMessage(
+        "AccessDenied: User: arn:aws:iam::112233445566:user/test is not authorized to perform iam:CreateRole",
+      );
+      expect(entry.code).not.toBe(ErrorCode.STALE_SESSION_TOKEN);
+    });
+  });
+
+  describe("via resolve (typed error instances)", () => {
+    it("ConfigurationError with stale-token wording → STALE_SESSION_TOKEN, not MISSING_CREDENTIALS", () => {
+      // Important: ConfigurationError previously short-circuited to
+      // matchConfigError, which substring-matched "credentials" and
+      // returned MISSING_CREDENTIALS. The fix adds a matchStsAuthError
+      // pre-check on every typed branch.
+      const err = new ConfigurationError(
+        "The security token included in the request is invalid",
+      );
+      const entry = defaultErrorMessageRegistry.resolve(err);
+      expect(entry.code).toBe(ErrorCode.STALE_SESSION_TOKEN);
+    });
+
+    it("BedrockError with InvalidClientTokenId → STALE_SESSION_TOKEN, not LLM_API_KEY_INVALID", () => {
+      // Important: BedrockError previously short-circuited to
+      // matchLlmError, where "UnrecognizedClientException" maps to
+      // LLM_API_KEY_INVALID — wrong category for an STS issue. The fix
+      // hoists matchStsAuthError ahead of matchLlmError on the typed
+      // LlmError/BedrockError branch.
+      const err = new BedrockError(
+        "InvalidClientTokenId: The security token included in the request is invalid",
+      );
+      const entry = defaultErrorMessageRegistry.resolve(err);
+      expect(entry.code).toBe(ErrorCode.STALE_SESSION_TOKEN);
+      expect(entry.code).not.toBe(ErrorCode.LLM_API_KEY_INVALID);
+    });
+
+    it("plain Error with stale-token wording → STALE_SESSION_TOKEN", () => {
+      const err = new Error(
+        "ExpiredTokenException: The security token included in the request has expired",
+      );
+      const entry = defaultErrorMessageRegistry.resolve(err);
+      expect(entry.code).toBe(ErrorCode.STALE_SESSION_TOKEN);
+    });
+
+    it("string-thrown error with stale-token wording → STALE_SESSION_TOKEN", () => {
+      const entry = defaultErrorMessageRegistry.resolve(
+        "The security token included in the request is invalid",
+      );
+      expect(entry.code).toBe(ErrorCode.STALE_SESSION_TOKEN);
+    });
+  });
+
+  describe("entry shape", () => {
+    it("STALE_SESSION_TOKEN entry exposes a non-empty what / why / howToFix triple", () => {
+      const entry = defaultErrorMessageRegistry.get(
+        ErrorCode.STALE_SESSION_TOKEN,
+      );
+      expect(entry).toBeDefined();
+      expect(entry?.code).toBe(ErrorCode.STALE_SESSION_TOKEN);
+      expect(entry?.what.length).toBeGreaterThan(0);
+      expect(entry?.why.length).toBeGreaterThan(0);
+      expect(entry?.howToFix.length).toBeGreaterThan(0);
+    });
+
+    it("STALE_SESSION_TOKEN.why distinguishes 'stale-paired token' from 'missing credentials'", () => {
+      const entry = defaultErrorMessageRegistry.get(
+        ErrorCode.STALE_SESSION_TOKEN,
+      );
+      expect(entry?.why.toLowerCase()).toMatch(/stale|expired|paired|session/);
+    });
+  });
 });

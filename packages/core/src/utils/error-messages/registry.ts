@@ -33,6 +33,7 @@ import {
   matchLlmError,
   matchMcpError,
   matchCheckpointError,
+  matchStsAuthError,
 } from "./matchers.js";
 
 /**
@@ -90,18 +91,36 @@ export class ErrorMessageRegistry {
     if (error instanceof ProvisioningError) {
       const entry = this.entries.get(error.provisioningCode);
       if (entry) return entry;
+      // STS session-token errors must beat the broad AWS-name match
+      // (see matchStsAuthError doc) so a CCAPI failure carrying
+      // "The security token...is invalid" routes to STALE_SESSION_TOKEN
+      // instead of the AWS-error-name catch-all.
+      const stsMatch = matchStsAuthError(error.message, lookup);
+      if (stsMatch) return stsMatch;
       const awsMatch = matchAwsErrorName(error.message, lookup);
       if (awsMatch) return awsMatch;
       return this.unknownWithMessage(error.message);
     }
 
     if (error instanceof ConfigurationError) {
+      // STS check beats the broad "credentials" substring branch in
+      // matchConfigError so a stale-token wrapped as ConfigurationError
+      // surfaces as STALE_SESSION_TOKEN with the actionable hint.
+      const stsMatch = matchStsAuthError(error.message, lookup);
+      if (stsMatch) return stsMatch;
       const configEntry = matchConfigError(error.message, lookup);
       if (configEntry) return configEntry;
       return this.unknownWithMessage(error.message);
     }
 
     if (error instanceof LlmError || error instanceof BedrockError) {
+      // STS check beats matchLlmError's "UnrecognizedClientException"
+      // → LLM_API_KEY_INVALID branch — when the underlying cause is a
+      // stale session token, the user shouldn't be told their "API key
+      // is invalid" (they don't have an API key — they have AWS creds
+      // with a stale STS token).
+      const stsMatch = matchStsAuthError(error.message, lookup);
+      if (stsMatch) return stsMatch;
       const llmEntry = matchLlmError(error.message, lookup);
       if (llmEntry) return llmEntry;
       return this.unknownWithMessage(error.message);
@@ -145,12 +164,16 @@ export class ErrorMessageRegistry {
     }
 
     if (error instanceof Error) {
+      const stsMatch = matchStsAuthError(error.message, lookup);
+      if (stsMatch) return stsMatch;
       const awsMatch = matchAwsErrorName(error.message, lookup);
       if (awsMatch) return awsMatch;
       return this.unknownWithMessage(error.message);
     }
 
     if (typeof error === "string") {
+      const stsMatch = matchStsAuthError(error, lookup);
+      if (stsMatch) return stsMatch;
       const awsMatch = matchAwsErrorName(error, lookup);
       if (awsMatch) return awsMatch;
       return this.unknownWithMessage(error);
@@ -172,6 +195,13 @@ export class ErrorMessageRegistry {
 
   private resolveMessageRaw(errorMessage: string): ErrorMessageEntry {
     const lookup = (code: string) => this.entries.get(code);
+
+    // STS session-token check FIRST — beats the broad AWS-name +
+    // ConfigurationError "credentials" branches so the user gets the
+    // actionable "re-run `assignee setup` to refresh credentials" hint
+    // instead of "No AWS credentials detected".
+    const stsMatch = matchStsAuthError(errorMessage, lookup);
+    if (stsMatch) return stsMatch;
 
     const awsMatch = matchAwsErrorName(errorMessage, lookup);
     if (awsMatch) return awsMatch;
