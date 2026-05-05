@@ -38,6 +38,7 @@ import {
 } from "@/index.js";
 import { resolveAmiFromOsName } from "@/utils/aws-resource-discovery/index.js";
 import { assertSshIntentNotWindowsAmi } from "../ssh-windows-guard.js";
+import { isSshIntent } from "@/utils/ssh-intent.js";
 import type { AgentState } from "@/graph/graph-state.js";
 
 export interface PostProcessOk {
@@ -173,7 +174,7 @@ async function postProcessEc2Instance(
     }
   }
 
-  if (userIntent && /\bssh\b/i.test(userIntent)) {
+  if (isSshIntent(userIntent)) {
     // Fail-fast on Windows AMI BEFORE we inject the SSH key placeholder
     // — we want the user to see the actionable error, not waste time
     // wiring a keypair that will be useless on a Windows box.

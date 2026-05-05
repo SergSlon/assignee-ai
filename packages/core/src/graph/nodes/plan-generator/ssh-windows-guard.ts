@@ -30,6 +30,7 @@ import {
   getAmiPlatformDetails,
   PLATFORM_DETAILS_WINDOWS,
 } from "@/utils/aws-resource-discovery/ami-default-user.js";
+import { isSshIntent } from "@/utils/ssh-intent.js";
 
 /**
  * Error code for SSH-on-Windows fail-fast — see
@@ -54,7 +55,7 @@ export async function assertSshIntentNotWindowsAmi(
   desiredState: Record<string, unknown>,
   userIntent: string | undefined,
 ): Promise<void> {
-  if (!userIntent || !/\bssh\b/i.test(userIntent)) return;
+  if (!isSshIntent(userIntent)) return;
   const imageId = desiredState[CfnKey.IMAGE_ID];
   if (typeof imageId !== "string" || !imageId.startsWith("ami-")) return;
   const platform = await getAmiPlatformDetails(imageId);
