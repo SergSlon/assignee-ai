@@ -17,8 +17,45 @@ const DEPRECATED_KEYS = [
 ];
 
 /**
+ * Compute the set of stale `*_SESSION_TOKEN` keys that must be evicted
+ * because their paired `*_ACCESS_KEY_ID` is being rewritten without a
+ * matching session token in the same update.
+ *
+ * Session tokens are only valid for the temporary AKID/SECRET pair they
+ * were issued with. If `assignee setup` rotates an operator user to a
+ * fresh long-lived AKIA-prefixed key, any pre-existing
+ * `ASSIGNEE_OPERATOR_SESSION_TOKEN` from a previous SSO/STS session is
+ * stale — leaving it on disk causes Bedrock and CCAPI to reject calls
+ * with "The security token included in the request is invalid".
+ *
+ * Scope is intentionally restricted to the three roles `assignee setup`
+ * actually rotates — OPERATOR / READER / AUDITOR (see
+ * `apps/cli/src/commands/setup/constants.ts`). A broader regex like
+ * `^(.+)_ACCESS_KEY_ID$` would also match `AWS_ACCESS_KEY_ID` (which
+ * users may legitimately have from `aws sso export`), the deprecated
+ * `MCP_AWS_ACCESS_KEY_ID`, or compound keys such as
+ * `ASSIGNEE_OPERATOR_PRIMARY_ACCESS_KEY_ID`, evicting unrelated session
+ * tokens or deriving nonsense token keys. Add a new role here only when
+ * the setup command starts rotating it.
+ */
+function staleSessionTokenKeys(updates: Record<string, string>): Set<string> {
+  const stale = new Set<string>();
+  for (const key of Object.keys(updates)) {
+    const m = /^(ASSIGNEE_(?:OPERATOR|READER|AUDITOR))_ACCESS_KEY_ID$/.exec(
+      key,
+    );
+    if (!m) continue;
+    const tokenKey = `${m[1]!}_SESSION_TOKEN`;
+    if (!(tokenKey in updates)) stale.add(tokenKey);
+  }
+  return stale;
+}
+
+/**
  * Reads an existing .env file, upserts the given key-value pairs,
- * removes deprecated MCP_AWS_* keys, and writes the result back.
+ * removes deprecated MCP_AWS_* keys, evicts stale `*_SESSION_TOKEN`
+ * entries paired with a rotated `*_ACCESS_KEY_ID`, and writes the
+ * result back.
  *
  * @param envPath - Absolute path to the .env file.
  * @param updates - Key-value pairs to upsert.
@@ -37,6 +74,7 @@ export function mergeEnvFile(
 
   // Track which keys have been updated (to avoid duplicates)
   const updatedKeys = new Set<string>();
+  const staleTokens = staleSessionTokenKeys(updates);
 
   // Process existing lines: update values for matching keys, remove deprecated keys
   const processedLines: string[] = [];
@@ -45,6 +83,11 @@ export function mergeEnvFile(
 
     // Skip deprecated keys
     if (DEPRECATED_KEYS.some((key) => trimmed.startsWith(`${key}=`))) {
+      continue;
+    }
+
+    // Skip stale `*_SESSION_TOKEN` keys whose paired AKID is being rotated.
+    if ([...staleTokens].some((key) => trimmed.startsWith(`${key}=`))) {
       continue;
     }
 
