@@ -13,6 +13,50 @@ import type { ErrorMessageEntry } from "./types.js";
 
 export type EntryLookup = (code: string) => ErrorMessageEntry | undefined;
 
+/**
+ * Pre-demo audit (2026-05-06) follow-up: STS session-token errors must
+ * be classified BEFORE the broad "credentials" / "UnrecognizedClientException"
+ * matchers in `matchConfigError` and `matchLlmError`, otherwise a stale
+ * session token surfaces as the misleading "No AWS credentials detected"
+ * (or "API key invalid") instead of the actionable "re-run `assignee
+ * setup` to refresh credentials".
+ *
+ * Patterns (anchored on substring; AWS service-side wording, never
+ * marshalled through our own code):
+ *   - "The security token included in the request is invalid"
+ *     (Bedrock + most CCAPI surfaces — the canonical phrasing)
+ *   - "InvalidClientTokenId"
+ *     (AWS SDK error name when the AKID is good but the session token
+ *     no longer matches it)
+ *   - "ExpiredToken" / "ExpiredTokenException"
+ *     (STS/AssumeRole flows where the temporary credential window has
+ *     elapsed)
+ *   - "TokenRefreshRequired"
+ *     (CredentialsProviderError variant from AWS SDK v3)
+ *
+ * Caller pattern: `registry.ts` runs this matcher BEFORE
+ * `matchAwsErrorName` / `matchConfigError` / `matchLlmError` so the
+ * specific STS classification wins over the broader catch-alls.
+ */
+export function matchStsAuthError(
+  message: string,
+  lookup: EntryLookup,
+): ErrorMessageEntry | undefined {
+  const STS_PATTERNS: readonly string[] = [
+    "The security token included in the request is invalid",
+    "InvalidClientTokenId",
+    "ExpiredTokenException",
+    "ExpiredToken",
+    "TokenRefreshRequired",
+  ];
+  for (const pattern of STS_PATTERNS) {
+    if (message.includes(pattern)) {
+      return lookup(ErrorCode.STALE_SESSION_TOKEN);
+    }
+  }
+  return undefined;
+}
+
 export function matchAwsErrorName(
   message: string,
   lookup: EntryLookup,

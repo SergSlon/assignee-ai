@@ -72,6 +72,19 @@ export const ErrorCode = {
   MISSING_ACCESS_KEY: "MISSING_ACCESS_KEY",
   MISSING_SECRET_KEY: "MISSING_SECRET_KEY",
   MISSING_REGION: "MISSING_REGION",
+  /**
+   * Pre-demo audit (2026-05-06) follow-up to commit 24cc60a4 (env-writer
+   * Adversarial #4 HIGH): emitted when AWS rejects a request because the
+   * paired session token is invalid / expired (typical Bedrock + STS
+   * messages: "The security token included in the request is invalid",
+   * "InvalidClientTokenId", "ExpiredToken[Exception]"). Distinct from
+   * `MISSING_CREDENTIALS` so the user sees an actionable hint
+   * ("re-run `assignee setup` to refresh credentials") instead of the
+   * misleading "No AWS credentials detected" — credentials WERE present,
+   * they were just stale-paired with an expired session token. Spec:
+   * `_bmad-output/implementation-artifacts/error-message-stale-session-token.md`.
+   */
+  STALE_SESSION_TOKEN: "STALE_SESSION_TOKEN",
 
   // ── LLM errors ──────────────────────────────────────────────
   LLM_TIMEOUT: "LLM_TIMEOUT",

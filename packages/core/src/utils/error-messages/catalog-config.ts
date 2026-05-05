@@ -39,4 +39,11 @@ export const CONFIG_ERROR_MESSAGES: Record<string, ErrorMessageEntry> = {
     howToFix:
       "Configure credentials via one of:\n  1) ASSIGNEE_OPERATOR_ACCESS_KEY_ID / ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY environment variables\n  2) Run `assignee setup` to create IAM users and credentials\nThen run `assignee init` to verify{?profile: profile {profile}}.",
   },
+  [ErrorCode.STALE_SESSION_TOKEN]: {
+    code: ErrorCode.STALE_SESSION_TOKEN,
+    what: "AWS rejected the request because the session token is stale or expired.",
+    why: "Your operator AKID + SECRET are present, but the paired session token was issued with a previous SSO/STS session and has expired (or never matched the current AKID). AWS surfaces this as 'The security token included in the request is invalid' / 'InvalidClientTokenId' / 'ExpiredToken'. Credentials are not missing — they're just stale.",
+    howToFix:
+      "Refresh credentials via one of:\n  1) `assignee setup` — rotates the long-lived assignee-operator IAM keys and (per env-writer fix 2026-05-05) drops any paired stale `*_SESSION_TOKEN` from your .env\n  2) For SSO sessions: `aws sso login` then re-export with `aws configure export-credentials`\n  3) Manually delete `ASSIGNEE_OPERATOR_SESSION_TOKEN` (and READER/AUDITOR) from your .env if you are using long-lived IAM keys without STS",
+  },
 };
