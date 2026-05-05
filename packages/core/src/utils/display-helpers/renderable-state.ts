@@ -65,4 +65,47 @@ export interface RenderableState {
    * Resource Type header.
    */
   provisionable?: boolean;
+  /**
+   * SSH-bundle Story ii — public network address surfaced on the
+   * apply-success line for resources that have one (EC2 instances
+   * with a public IP, public Lightsail instances, etc.). Populated
+   * from a post-apply DescribeInstances call by `apply-single.ts`;
+   * silently absent for RDS / Lambda / S3 / private EC2 / etc.
+   * IPv4 only — IPv6 is intentionally out of scope per the spec.
+   */
+  publicIpAddress?: string;
+  /**
+   * SSH-bundle Story ii — public DNS hostname for the same resource.
+   * AWS sometimes returns this as an empty string for instances that
+   * have no public DNS configured; treat the empty string as
+   * "absent" at the renderer boundary so the field is suppressed.
+   */
+  publicDnsName?: string;
+  /**
+   * SSH-bundle Story iii — the keypair name used by the freshly-
+   * provisioned EC2 instance. Populated from `state.desiredState[KeyName]`
+   * by `apply-single.ts` when the resource was created via the SSH
+   * bundle (auto-managed keypair under `~/.assignee/keys/<name>.pem`).
+   * The renderer composes a copy-pasteable `ssh -i ...pem` line ONLY
+   * when ALL of `keyName` + `sshUsername` + `publicIpAddress` are set.
+   */
+  keyName?: string;
+  /**
+   * SSH-bundle Story iii — the AMI's default Linux user (e.g. `ec2-user`,
+   * `ubuntu`, `admin`) resolved from `Image.Name` via
+   * `getAmiDefaultUser` in `apply-single.ts`. Absent for non-EC2
+   * resources, for EC2 instances created without the SSH bundle, and
+   * when the post-create DescribeImages call fails (info-logged, not
+   * an apply failure).
+   */
+  sshUsername?: string;
+  /**
+   * SSH-bundle Story iii — the resolved AMI ID (`ami-…`) of the
+   * provisioned instance, surfaced for the AMI→user lookup and for
+   * any future renderer that wants to reflect the AMI back to the
+   * user. Stored as the resolved `ami-…` form (compound-plan and the
+   * LLM-plan post-process both resolve OS-name placeholders before
+   * apply lands here).
+   */
+  amiId?: string;
 }

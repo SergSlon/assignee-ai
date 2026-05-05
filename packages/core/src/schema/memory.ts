@@ -17,6 +17,18 @@ export const ProvisionRecordSchema = z.object({
   desiredStateHash: z.string(),
   estimatedMonthlyCost: z.string(),
   timestamp: z.string().datetime(),
+  /**
+   * SSH-bundle Story iv — apply-time public IP snapshot for EC2
+   * instances. Captured by `memory-recorder.ts` when the
+   * `formatApplySingleSuccess` overlay populated `publicIpAddress`
+   * on the renderable state. Optional + additive: pre-Story-iv
+   * provision records validate without it, and non-EC2 resources
+   * (S3 / RDS / Lambda) never carry a value. Used by
+   * `assignee describe` to render the `(was X at apply time)`
+   * annotation when the live IP differs (stop/start gives EC2 a
+   * new public IP).
+   */
+  publicIpAddressAtApply: z.string().optional(),
 });
 
 export const FailureRecordSchema = z.object({

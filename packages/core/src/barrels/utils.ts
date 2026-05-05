@@ -94,6 +94,12 @@ export {
   discoverRdsEngineVersions,
   discoverRdsInstanceClasses,
   discoverLambdaRuntimes,
+  // SSH-bundle Story iii / iv — surface the AMI → default-SSH-user
+  // resolver through the public barrel so the CLI `describe` command
+  // can re-render the Connect line for previously-applied EC2
+  // instances using the same logic apply-time uses.
+  getAmiDefaultUser,
+  tryGetAmiDefaultUser,
 } from "../utils/aws-resource-discovery/index.js";
 
 // Utils — Structured JSON logger (Story 50-4 Wave 5 Pass A)

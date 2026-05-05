@@ -18,6 +18,7 @@ import * as path from "node:path";
 import * as fs from "node:fs/promises";
 import { MemoryService } from "../services/memory/service.js";
 import { upsertPatternRecord, writeFailureRecord } from "./memory-recorder.js";
+import type { ProvisionRecord } from "../schema/memory.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -164,5 +165,87 @@ describe("writeFailureRecord — errorMessage account ID redaction", () => {
     const { redactAccountIdsInPrompt } = await import("./redact.js");
     const clean = "Operation succeeded — bucket created in us-east-1";
     expect(redactAccountIdsInPrompt(clean)).toBe(clean);
+  });
+});
+
+// ── SSH-bundle Story iv: publicIpAddressAtApply round-trip ────────────────────
+
+describe("MemoryService.appendProvision — publicIpAddressAtApply round-trip (Story iv)", () => {
+  let service: MemoryService;
+  let dir: string;
+  const RUN_ID = "550e8400-e29b-41d4-a716-446655440000";
+  const EC2_ARN =
+    "arn:aws:ec2:us-east-1:123456789012:instance/i-0abc123def4567890";
+  const APPLY_TIME_IP = "54.99.10.5";
+
+  beforeEach(async () => {
+    const tmp = await makeTmpMemoryService();
+    service = tmp.service;
+    dir = tmp.dir;
+  });
+
+  it("persists publicIpAddressAtApply when included in the record", async () => {
+    const record: ProvisionRecord = {
+      runId: RUN_ID,
+      resourceType: "AWS::EC2::Instance",
+      resourceArn: EC2_ARN,
+      region: "us-east-1",
+      desiredStateHash: "abc123",
+      estimatedMonthlyCost: "$8.30/mo",
+      timestamp: "2026-05-05T10:00:00.000Z",
+      publicIpAddressAtApply: APPLY_TIME_IP,
+    };
+
+    await service.appendProvision(record);
+
+    const diskContent = await readJsonFile(path.join(dir, "provisions.json"));
+    expect(diskContent).toContain(APPLY_TIME_IP);
+
+    const records = await service.readProvisions();
+    expect(records).toHaveLength(1);
+    expect(records[0]!.publicIpAddressAtApply).toBe(APPLY_TIME_IP);
+  });
+
+  it("omits publicIpAddressAtApply key when absent (non-EC2 / private subnet)", async () => {
+    const record: ProvisionRecord = {
+      runId: RUN_ID,
+      resourceType: "AWS::S3::Bucket",
+      resourceArn: "arn:aws:s3:::my-static-site-1714867200",
+      region: "us-east-1",
+      desiredStateHash: "def456",
+      estimatedMonthlyCost: "$0.023/GB-month",
+      timestamp: "2026-05-05T11:00:00.000Z",
+    };
+
+    await service.appendProvision(record);
+
+    const diskContent = await readJsonFile(path.join(dir, "provisions.json"));
+    expect(diskContent).not.toContain("publicIpAddressAtApply");
+
+    const records = await service.readProvisions();
+    expect(records[0]!.publicIpAddressAtApply).toBeUndefined();
+  });
+
+  it("backwards-compat: pre-Story-iv record (no field) reads without error", async () => {
+    const fs = await import("node:fs/promises");
+    const legacyRecord = {
+      runId: RUN_ID,
+      resourceType: "AWS::EC2::Instance",
+      resourceArn: EC2_ARN,
+      region: "us-east-1",
+      desiredStateHash: "abc123",
+      estimatedMonthlyCost: "$8.30/mo",
+      timestamp: "2026-03-01T10:00:00.000Z",
+    };
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(
+      path.join(dir, "provisions.json"),
+      JSON.stringify([legacyRecord]),
+      "utf-8",
+    );
+
+    const records = await service.readProvisions();
+    expect(records).toHaveLength(1);
+    expect(records[0]!.publicIpAddressAtApply).toBeUndefined();
   });
 });

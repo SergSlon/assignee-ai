@@ -140,6 +140,155 @@ describe("MemoryService — provisions", () => {
   });
 });
 
+// --- SSH-bundle Story iv: readProvisionRecord helper ---
+
+describe("MemoryService — readProvisionRecord (Story iv)", () => {
+  const RUN_ID_A = "550e8400-e29b-41d4-a716-446655440000";
+  const RUN_ID_B = "660e8400-e29b-41d4-a716-446655440000";
+  const ARN_EC2 =
+    "arn:aws:ec2:us-east-1:123456789012:instance/i-0abc123def4567890";
+  const ARN_S3 = "arn:aws:s3:::my-static-site-1714867200";
+  const ARN_GOVCLOUD =
+    "arn:aws-us-gov:ec2:us-gov-west-1:123456789012:instance/i-0fedcba987654321f";
+
+  it("returns the matching record by runId", async () => {
+    const ec2Record = makeProvision({
+      runId: RUN_ID_A,
+      resourceType: "AWS::EC2::Instance",
+      resourceArn: ARN_EC2,
+      publicIpAddressAtApply: "54.99.10.5",
+    });
+    const s3Record = makeProvision({
+      runId: RUN_ID_B,
+      resourceType: "AWS::S3::Bucket",
+      resourceArn: ARN_S3,
+    });
+    await service.appendProvision(ec2Record);
+    await service.appendProvision(s3Record);
+
+    const found = await service.readProvisionRecord(RUN_ID_A);
+    expect(found).toBeDefined();
+    expect(found?.runId).toBe(RUN_ID_A);
+    expect(found?.resourceArn).toBe(ARN_EC2);
+    expect(found?.publicIpAddressAtApply).toBe("54.99.10.5");
+  });
+
+  it("returns the matching record by full ARN (aws partition)", async () => {
+    await service.appendProvision(
+      makeProvision({
+        runId: RUN_ID_A,
+        resourceType: "AWS::EC2::Instance",
+        resourceArn: ARN_EC2,
+      }),
+    );
+
+    const found = await service.readProvisionRecord(ARN_EC2);
+    expect(found?.runId).toBe(RUN_ID_A);
+    expect(found?.resourceArn).toBe(ARN_EC2);
+  });
+
+  it("returns the matching record by ARN in aws-us-gov partition", async () => {
+    await service.appendProvision(
+      makeProvision({
+        runId: RUN_ID_B,
+        resourceType: "AWS::EC2::Instance",
+        resourceArn: ARN_GOVCLOUD,
+      }),
+    );
+
+    const found = await service.readProvisionRecord(ARN_GOVCLOUD);
+    expect(found?.runId).toBe(RUN_ID_B);
+  });
+
+  it("returns undefined when no record matches", async () => {
+    await service.appendProvision(makeProvision({ runId: RUN_ID_A }));
+
+    const missing = await service.readProvisionRecord(RUN_ID_B);
+    expect(missing).toBeUndefined();
+  });
+
+  it("returns undefined for empty input", async () => {
+    await service.appendProvision(makeProvision({ runId: RUN_ID_A }));
+
+    expect(await service.readProvisionRecord("")).toBeUndefined();
+  });
+
+  it("trims whitespace before routing — leading-space copy-paste of an ARN still finds the record", async () => {
+    // Reviewer MED #4: copy-pasted ARNs frequently pick up a leading
+    // space from the terminal (e.g. `assignee describe  arn:aws:...`
+    // → Commander forwards "arn:aws:..." with a stray space when the
+    // pasted value contains one). Without the trim, the partition-
+    // aware ARN regex would miss " arn:aws:..." and silently route
+    // to the runId branch, returning undefined for an otherwise-
+    // valid resource. The trim lives at the top of
+    // readProvisionRecord, so both ARN and runId variants are
+    // covered.
+    await service.appendProvision(
+      makeProvision({
+        runId: RUN_ID_A,
+        resourceType: "AWS::EC2::Instance",
+        resourceArn: ARN_EC2,
+      }),
+    );
+
+    // Leading + trailing whitespace — both must be trimmed.
+    const found = await service.readProvisionRecord(`  ${ARN_EC2}\n`);
+    expect(found).toBeDefined();
+    expect(found?.runId).toBe(RUN_ID_A);
+    expect(found?.resourceArn).toBe(ARN_EC2);
+
+    // Same trim applies to runId-shaped input.
+    const foundByRunId = await service.readProvisionRecord(`\t${RUN_ID_A}  `);
+    expect(foundByRunId).toBeDefined();
+    expect(foundByRunId?.runId).toBe(RUN_ID_A);
+
+    // Whitespace-only input collapses to empty after trim → undefined.
+    expect(await service.readProvisionRecord("   \t\n")).toBeUndefined();
+  });
+
+  it("ARN lookup does NOT match by runId substring (exact match only)", async () => {
+    // A pathological case: an ARN that contains a runId-like substring.
+    // The polymorphism rule says ARN-shaped input only ever filters on
+    // resourceArn, so a record whose runId equals the substring must
+    // not be returned for the ARN query.
+    await service.appendProvision(
+      makeProvision({
+        runId: RUN_ID_A,
+        resourceType: "AWS::S3::Bucket",
+        resourceArn: ARN_S3,
+      }),
+    );
+
+    // ARN query → must filter only on resourceArn.
+    expect(await service.readProvisionRecord(ARN_EC2)).toBeUndefined();
+  });
+
+  it("backwards-compat: reads pre-Story-iv records (no publicIpAddressAtApply)", async () => {
+    // Hand-craft a provision file without the new field — simulates a
+    // record written before Story iv landed.
+    await fs.mkdir(tmpDir, { recursive: true });
+    const legacyRecord = {
+      runId: RUN_ID_A,
+      resourceType: "AWS::EC2::Instance",
+      resourceArn: ARN_EC2,
+      region: "us-east-1",
+      desiredStateHash: "abc123",
+      estimatedMonthlyCost: "$8.30/mo",
+      timestamp: "2026-03-01T10:00:00.000Z",
+      // NO publicIpAddressAtApply field
+    };
+    await fs.writeFile(
+      path.join(tmpDir, "provisions.json"),
+      JSON.stringify([legacyRecord]),
+      "utf-8",
+    );
+
+    const found = await service.readProvisionRecord(RUN_ID_A);
+    expect(found).toBeDefined();
+    expect(found?.publicIpAddressAtApply).toBeUndefined();
+  });
+});
+
 // --- Story 19.4: Failure log tests ---
 
 function makeFailure(overrides: Partial<FailureRecord> = {}): FailureRecord {

@@ -25,7 +25,10 @@ import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
 import type { AgentState } from "../../graph-state.js";
 import { enrichBpWithMcp } from "../advice/bp-mcp-enricher/orchestrator.js";
 import { loadCached } from "./rule-loader.js";
-import { suppressCompoundFindings } from "./compound-suppressor.js";
+import {
+  suppressCompoundFindings,
+  suppressIntentFindings,
+} from "./compound-suppressor.js";
 
 /**
  * bp_evaluator graph node.
@@ -91,9 +94,18 @@ export async function bpEvaluatorNode(
     }
   }
 
-  // Phase 3: Compound-pattern suppression
-  const { findings: filteredFindings, suppressedCount } =
+  // Phase 3a: Compound-pattern suppression (patternId-gated)
+  const { findings: patternFiltered, suppressedCount: patternSuppressed } =
     suppressCompoundFindings(findings, state.resourcePattern?.patternId);
+  // Phase 3b: Intent-based suppression (e.g. SSH-bundle BP-EC2-004 once
+  // the auto-attached IAM instance profile is in desiredState).
+  const { findings: filteredFindings, suppressedCount: intentSuppressed } =
+    suppressIntentFindings(
+      patternFiltered,
+      state.userIntent,
+      (state.desiredState as Record<string, unknown>) ?? undefined,
+    );
+  const suppressedCount = patternSuppressed + intentSuppressed;
 
   if (filteredFindings.length > 0 || suppressedCount > 0) {
     log({

@@ -47,6 +47,7 @@ import {
   REQUEST_TAG_SCOPED_SNAPSHOT_ACTIONS,
   TAG_SCOPED_SECRETS_ACTIONS,
   DESTRUCTIVE_SERVICE_ACTIONS,
+  IAM_INSTANCE_PROFILE_SCOPED_ACTIONS,
 } from "./action-collector.js";
 
 /**
@@ -310,6 +311,32 @@ export function operatorPolicy(
             "aws:ResourceTag/managed-by": "assignee-ai",
           },
         },
+      },
+      {
+        // Story i (SSH-IAM compound BLOCKER #1): the SSH-bundle
+        // pre-provision hook (`ssh-iam.ts`) calls 4 instance-profile
+        // verbs (Create / Delete / AddRole / RemoveRole) plus
+        // GetInstanceProfile (idempotency check) and TagInstanceProfile
+        // (so the auto-created profile is discoverable by any future
+        // IAM-aware destroy sweep — per
+        // feedback_assignee_infra_safety_allowlist +
+        // feedback_iam_role_rgta_gap. Story 50-3 removed the bulk
+        // destroy CLI surface; tags remain the durable mechanism).
+        //
+        // Resource scope mirrors the IAM-role scoped statements above:
+        // `arn:*:iam::${aws:AccountId}:instance-profile/assignee-*` —
+        // partition wildcard `*` is the only IAM-spec partition wildcard
+        // accepted by Access Analyzer; `${aws:AccountId}` expands at
+        // policy-evaluation time. The naming-prefix `assignee-` aligns
+        // with the `assignee-ssh-<runId-suffix>` convention enforced by
+        // `ensureSshIamProfile()` in ssh-iam.ts.
+        //
+        // No iam:PassedToService Condition: that key applies to PassRole
+        // only; AWS rejects it on instance-profile lifecycle operations.
+        Sid: "IamInstanceProfileAssigneeScoped",
+        Effect: IamEffect.ALLOW,
+        Action: [...IAM_INSTANCE_PROFILE_SCOPED_ACTIONS].sort(),
+        Resource: "arn:*:iam::${aws:AccountId}:instance-profile/assignee-*",
       },
       {
         // W13-S2 (M-α-17): secretsmanager:GetSecretValue was

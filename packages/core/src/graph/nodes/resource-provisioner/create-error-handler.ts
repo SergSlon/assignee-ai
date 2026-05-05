@@ -23,6 +23,7 @@ import type { ProvisioningPortError } from "@/ports/provisioning-port.js";
 import type { AgentState } from "../../graph-state.js";
 import { cleanupAllocatedResources } from "./cleanup.js";
 import { classifyCreateError } from "./error-classifier.js";
+import type { SshIamCreated } from "./ssh-iam.js";
 
 /**
  * Context passed to `handleCreateError` — gathered at the call site so the
@@ -34,6 +35,8 @@ export interface CreateErrorCtx {
   readonly desiredState: Record<string, unknown>;
   readonly freshlyAllocatedEipIds: Set<string>;
   readonly sshKeyCreatedName: string | undefined;
+  /** SSH-bundle IAM artifacts to tear down on CCAPI create-failure. */
+  readonly sshIamCreated?: SshIamCreated | undefined;
 }
 
 /**
@@ -59,6 +62,7 @@ export async function handleCreateError(
   await cleanupAllocatedResources(state, {
     eipReleased: ctx.freshlyAllocatedEipIds,
     sshDeleted: ctx.sshKeyCreatedName,
+    sshIamCreated: ctx.sshIamCreated,
   });
 
   return {

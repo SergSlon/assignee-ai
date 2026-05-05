@@ -31,6 +31,18 @@ export const SECURITY_ACTIONS: Record<string, string[]> = {
     // Wave 19 Bug #8: preflight verifies ManagedPolicyArns via iam:GetPolicy
     // before CCAPI sees them — closes the LLM-hallucinated-ARN gap.
     "iam:GetPolicy",
+    // SSH-bundle compound (Story i): ssh-iam.ts auto-creates an IAM
+    // instance profile so EC2 instances spawned via `Create EC2 with
+    // SSH` are SSM-capable. The 6 instance-profile actions are scoped
+    // away from the unscoped service sweep into the dedicated
+    // `IamInstanceProfileAssigneeScoped` statement in operator.ts —
+    // see action-collector.ts `IAM_INSTANCE_PROFILE_SCOPED_ACTIONS`.
+    "iam:CreateInstanceProfile",
+    "iam:DeleteInstanceProfile",
+    "iam:GetInstanceProfile",
+    "iam:AddRoleToInstanceProfile",
+    "iam:RemoveRoleFromInstanceProfile",
+    "iam:TagInstanceProfile",
   ],
   // A11 (2026-04-09): AWS::KMS::Key.
   [RESOURCE_TYPES.KMS_KEY]: [

@@ -12,6 +12,16 @@ export { clearDiscoveryCache } from "./cache.js";
 export { discoverInstanceTypes } from "./ec2-instance-types.js";
 export { discoverAmis, resolveAmiFromOsName, searchAmis } from "./ec2-amis.js";
 export {
+  getAmiDefaultUser,
+  getAmiPlatformDetails,
+  tryGetAmiDefaultUser,
+  matchAmiNameToUser,
+  clearAmiDefaultUserCache,
+  AmiIsWindowsError,
+  DEFAULT_SSH_USER_FALLBACK,
+  PLATFORM_DETAILS_WINDOWS,
+} from "./ami-default-user.js";
+export {
   discoverSubnets,
   discoverSecurityGroups,
   discoverKeyPairs,

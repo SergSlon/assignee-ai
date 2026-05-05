@@ -22,6 +22,10 @@ import { AWS_REGION } from "@/config/constants/aws.js";
 import { defaultMemoryService } from "@/services/memory.js";
 import { tryAssigneeCredentials } from "@/config/aws-credentials.js";
 import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
+import {
+  assertSshIntentNotWindowsAmi,
+  WINDOWS_SSH_INCOMPATIBLE_CODE,
+} from "./ssh-windows-guard.js";
 import type { AgentState } from "../../graph-state.js";
 
 /**
@@ -374,15 +378,28 @@ export function injectPluginRequiredDefaults(
 }
 
 /**
+ * Re-export the shared SSH-on-Windows fail-fast error code so existing
+ * imports (`compound-helpers.test.ts`) continue to resolve. Canonical
+ * definition lives in `./ssh-windows-guard.ts`.
+ */
+export { WINDOWS_SSH_INCOMPATIBLE_CODE };
+
+/**
  * EC2 post-processing for compound mode — mirrors the standalone path.
  * Strips empty/placeholder SecurityGroupIds and injects KeyName placeholder
  * for SSH-intent flows.
+ *
+ * Story iii (this file): also fail-fast on Windows AMI when the SSH
+ * bundle is in play. Throws `AssigneeError` with code
+ * `WINDOWS_SSH_INCOMPATIBLE` so the apply does not start. See
+ * `assertSshIntentNotWindowsAmi` for the lookup contract (best-effort,
+ * non-Windows on lookup failure).
  */
-export function postProcessEc2Compound(
+export async function postProcessEc2Compound(
   desiredState: Record<string, unknown>,
   currentResource: QueuedResource,
   userIntent: string | undefined,
-): void {
+): Promise<void> {
   if (currentResource.resourceType !== RESOURCE_TYPES.EC2_INSTANCE) return;
   const sgIds = desiredState[CfnKey.SECURITY_GROUP_IDS];
   if (Array.isArray(sgIds)) {
@@ -396,6 +413,10 @@ export function postProcessEc2Compound(
     }
   }
   if (userIntent && /\bssh\b/i.test(userIntent)) {
+    // Fail-fast on Windows AMI BEFORE we inject the SSH key placeholder
+    // — we want the user to see the actionable error, not waste time
+    // wiring a keypair that will be useless on a Windows box.
+    await assertSshIntentNotWindowsAmi(desiredState, userIntent);
     if (!desiredState[CfnKey.KEY_NAME]) {
       desiredState[CfnKey.KEY_NAME] = ResourceDefault.SSH_KEY_PLACEHOLDER;
     }

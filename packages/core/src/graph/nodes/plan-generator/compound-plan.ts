@@ -165,7 +165,7 @@ export async function runCompoundPlan(
 
   const compoundMemoryHints = await readCompoundPatternMemoryHints(state);
   injectPluginRequiredDefaults(desiredState, currentResource, state.runId);
-  postProcessEc2Compound(desiredState, currentResource, state.userIntent);
+  await postProcessEc2Compound(desiredState, currentResource, state.userIntent);
 
   log({
     ts: new Date().toISOString(),
