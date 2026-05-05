@@ -9,6 +9,7 @@
 export const CommandName = {
   APPLY: "apply",
   COMPLETIONS: "completions",
+  DESCRIBE: "describe",
   DESTROY: "destroy",
   DOCTOR: "doctor",
   DRIFT: "drift",
@@ -25,6 +26,8 @@ export type CommandNameType = (typeof CommandName)[keyof typeof CommandName];
 export const CommandDescription = {
   APPLY: "Execute an approved infrastructure plan",
   COMPLETIONS: "Output shell completion script",
+  DESCRIBE:
+    "Re-render the apply-success line for a previously-applied resource by run id or ARN",
   DESTROY: "Safely destroy a managed AWS resource",
   DOCTOR:
     "Run a non-destructive health check of credentials, Bedrock, MCP servers, cache, config and best-practices",

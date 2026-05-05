@@ -65,6 +65,67 @@ vi.mock("@aws-sdk/client-ec2", () => {
   };
 });
 
+// ── IAM mock for SSH-bundle IAM instance-profile pre-hook ────────────────────
+// The SSH-IAM pre-hook (Story SSH-Bundle-i) fires whenever userIntent matches
+// /\bssh\b/i AND no IamInstanceProfile is supplied. The tests below that
+// trigger that path expect the EC2 CCAPI create to PROCEED — so the IAM SDK
+// must resolve every call to a success $metadata response. AccessDenied or
+// network failure here would short-circuit the pre-hook to FAILED before
+// CCAPI even runs.
+const { mockIamSend } = vi.hoisted(() => ({ mockIamSend: vi.fn() }));
+vi.mock("@aws-sdk/client-iam", () => {
+  class IAMClient {
+    send = mockIamSend;
+    destroy = vi.fn();
+  }
+  function CreateRoleCommand(input: unknown) {
+    return { _type: "CreateRoleCommand", input };
+  }
+  function AttachRolePolicyCommand(input: unknown) {
+    return { _type: "AttachRolePolicyCommand", input };
+  }
+  function CreateInstanceProfileCommand(input: unknown) {
+    return { _type: "CreateInstanceProfileCommand", input };
+  }
+  function AddRoleToInstanceProfileCommand(input: unknown) {
+    return { _type: "AddRoleToInstanceProfileCommand", input };
+  }
+  // BLOCKER #2 fix (Story i SSH-IAM compound review): ssh-iam.ts now
+  // tags the auto-created instance profile via TagInstanceProfileCommand
+  // (CreateInstanceProfile does NOT accept inline Tags). Without this
+  // entry the dynamic destructure in ssh-iam.ts:170 yields `undefined`
+  // and `new TagInstanceProfileCommand(...)` throws `not a constructor`,
+  // failing the SSH pre-hook → every SSH-bundle test sees FAILED instead
+  // of IN_PROGRESS.
+  function TagInstanceProfileCommand(input: unknown) {
+    return { _type: "TagInstanceProfileCommand", input };
+  }
+  function RemoveRoleFromInstanceProfileCommand(input: unknown) {
+    return { _type: "RemoveRoleFromInstanceProfileCommand", input };
+  }
+  function DeleteInstanceProfileCommand(input: unknown) {
+    return { _type: "DeleteInstanceProfileCommand", input };
+  }
+  function DetachRolePolicyCommand(input: unknown) {
+    return { _type: "DetachRolePolicyCommand", input };
+  }
+  function DeleteRoleCommand(input: unknown) {
+    return { _type: "DeleteRoleCommand", input };
+  }
+  return {
+    IAMClient,
+    CreateRoleCommand,
+    AttachRolePolicyCommand,
+    CreateInstanceProfileCommand,
+    AddRoleToInstanceProfileCommand,
+    TagInstanceProfileCommand,
+    RemoveRoleFromInstanceProfileCommand,
+    DeleteInstanceProfileCommand,
+    DetachRolePolicyCommand,
+    DeleteRoleCommand,
+  };
+});
+
 // ── FS mocks for SSH key pair creation ───────────────────────────────────────
 const { mockMkdirSync, mockWriteFileSync, mockChmodSync } = vi.hoisted(() => ({
   mockMkdirSync: vi.fn(),
@@ -149,6 +210,13 @@ beforeEach(() => {
   process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
   process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] =
     "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+  // SSH-bundle IAM pre-hook (Story SSH-Bundle-i): default to a plain success
+  // response so existing tests that include "SSH" in userIntent continue to
+  // proceed past the pre-hook into the CCAPI path. Tests that want to assert
+  // IAM-specific behaviour can mockReset / mockResolvedValueOnce.
+  mockIamSend.mockResolvedValue({
+    $metadata: { httpStatusCode: 200, requestId: "iam-test-default" },
+  });
 });
 
 afterEach(() => {

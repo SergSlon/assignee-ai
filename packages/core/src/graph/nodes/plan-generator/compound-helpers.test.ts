@@ -7,18 +7,41 @@
  *     across slots. See e96.W1.B1 (Epic 95 A-01 regression of Epic 94 R2).
  *   - `rewriteManagedPolicyArnsForPartition` — W-010 partition-aware ARN
  *     rewrite for AWS-managed policy ARNs in compound template defaultOptions.
+ *   - `postProcessEc2Compound` SSH-bundle Windows fail-fast — Story iii
+ *     guards against `assignee apply "Create a Windows EC2 with SSH"` by
+ *     throwing `AssigneeError(WINDOWS_SSH_INCOMPATIBLE)` BEFORE wizard
+ *     rendering / keypair creation.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   RESOURCE_TYPES,
   CfnKey,
   AwsManagedPolicy,
+  ResourceDefault,
+  AssigneeError,
   awsManagedPolicyArn,
 } from "@/index.js";
+
+vi.mock("@/utils/aws-resource-discovery/ami-default-user.js", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/utils/aws-resource-discovery/ami-default-user.js")
+  >("@/utils/aws-resource-discovery/ami-default-user.js");
+  return {
+    ...actual,
+    getAmiPlatformDetails: vi.fn(),
+  };
+});
+
 import {
   filterElicitedForSlot,
   rewriteManagedPolicyArnsForPartition,
+  postProcessEc2Compound,
+  WINDOWS_SSH_INCOMPATIBLE_CODE,
 } from "./compound-helpers.js";
+import {
+  getAmiPlatformDetails,
+  PLATFORM_DETAILS_WINDOWS,
+} from "@/utils/aws-resource-discovery/ami-default-user.js";
 
 describe("filterElicitedForSlot", () => {
   it("drops FunctionName from a non-Lambda slot (the A-01 leak)", () => {
@@ -270,5 +293,160 @@ describe("rewriteManagedPolicyArnsForPartition", () => {
       rewriteManagedPolicyArnsForPartition(state, "aws-us-gov");
       expect(state["ManagedPolicyArns"]).toBeUndefined();
     });
+  });
+});
+
+// ── postProcessEc2Compound — Story iii Windows SSH fail-fast ─────────────────
+
+describe("postProcessEc2Compound — SSH-bundle Windows fail-fast", () => {
+  const AMI_LINUX = "ami-0abcdef1234567890";
+  const AMI_WINDOWS = "ami-0d1e2f3a4b5c6d7e8";
+  const ec2Resource = {
+    resourceType: RESOURCE_TYPES.EC2_INSTANCE,
+    resourceId: "ec2-1",
+    displayName: "EC2 instance ec2-1",
+  } as const;
+
+  beforeEach(() => {
+    vi.mocked(getAmiPlatformDetails).mockReset();
+  });
+
+  it("Linux AMI + SSH intent: passes through, injects KeyName placeholder", async () => {
+    vi.mocked(getAmiPlatformDetails).mockResolvedValueOnce("Linux/UNIX");
+    const desiredState: Record<string, unknown> = {
+      [CfnKey.IMAGE_ID]: AMI_LINUX,
+    };
+
+    await postProcessEc2Compound(
+      desiredState,
+      ec2Resource,
+      "Create an EC2 with SSH access",
+    );
+
+    expect(getAmiPlatformDetails).toHaveBeenCalledWith(AMI_LINUX);
+    expect(desiredState[CfnKey.KEY_NAME]).toBe(
+      ResourceDefault.SSH_KEY_PLACEHOLDER,
+    );
+  });
+
+  it("Windows AMI + SSH intent: throws AssigneeError(WINDOWS_SSH_INCOMPATIBLE) and does NOT inject KeyName", async () => {
+    vi.mocked(getAmiPlatformDetails).mockResolvedValueOnce(
+      PLATFORM_DETAILS_WINDOWS,
+    );
+    const desiredState: Record<string, unknown> = {
+      [CfnKey.IMAGE_ID]: AMI_WINDOWS,
+    };
+
+    await expect(
+      postProcessEc2Compound(
+        desiredState,
+        ec2Resource,
+        "Create a Windows EC2 with SSH",
+      ),
+    ).rejects.toBeInstanceOf(AssigneeError);
+
+    // Re-run to capture the message + code on the rejected promise.
+    vi.mocked(getAmiPlatformDetails).mockResolvedValueOnce(
+      PLATFORM_DETAILS_WINDOWS,
+    );
+    await expect(
+      postProcessEc2Compound(
+        desiredState,
+        ec2Resource,
+        "Create a Windows EC2 with SSH",
+      ),
+    ).rejects.toMatchObject({
+      code: WINDOWS_SSH_INCOMPATIBLE_CODE,
+      message: expect.stringContaining(
+        "Cannot create EC2 with SSH on a Windows AMI",
+      ),
+    });
+
+    // The fail-fast must run BEFORE the KeyName placeholder injection,
+    // i.e. desiredState is left untouched.
+    expect(desiredState[CfnKey.KEY_NAME]).toBeUndefined();
+  });
+
+  it("Windows AMI + non-SSH intent: passes through, no AMI lookup, no error", async () => {
+    const desiredState: Record<string, unknown> = {
+      [CfnKey.IMAGE_ID]: AMI_WINDOWS,
+    };
+
+    await postProcessEc2Compound(
+      desiredState,
+      ec2Resource,
+      "Create a Windows EC2 for batch processing",
+    );
+
+    expect(getAmiPlatformDetails).not.toHaveBeenCalled();
+    expect(desiredState[CfnKey.KEY_NAME]).toBeUndefined();
+  });
+
+  it("SSH intent + AMI lookup returns null (transient API blip): passes through to KeyName injection (assume non-Windows)", async () => {
+    vi.mocked(getAmiPlatformDetails).mockResolvedValueOnce(null);
+    const desiredState: Record<string, unknown> = {
+      [CfnKey.IMAGE_ID]: AMI_LINUX,
+    };
+
+    await postProcessEc2Compound(
+      desiredState,
+      ec2Resource,
+      "Create an EC2 with SSH",
+    );
+
+    expect(desiredState[CfnKey.KEY_NAME]).toBe(
+      ResourceDefault.SSH_KEY_PLACEHOLDER,
+    );
+  });
+
+  it("SSH intent + ImageId still an OS-name placeholder (not yet resolved): no AMI lookup, KeyName injected", async () => {
+    // Defense-in-depth: compound-plan.ts:148-162 resolves OS names to
+    // ami-* before postProcessEc2Compound runs, but if some path
+    // missed resolution we must NOT pass an OS-name string to
+    // getAmiPlatformDetails (it would call DescribeImages with garbage).
+    const desiredState: Record<string, unknown> = {
+      [CfnKey.IMAGE_ID]: "amazon-linux-2023",
+    };
+
+    await postProcessEc2Compound(
+      desiredState,
+      ec2Resource,
+      "Create EC2 with SSH",
+    );
+
+    expect(getAmiPlatformDetails).not.toHaveBeenCalled();
+    expect(desiredState[CfnKey.KEY_NAME]).toBe(
+      ResourceDefault.SSH_KEY_PLACEHOLDER,
+    );
+  });
+
+  it("non-EC2 resource: no SSH guard runs", async () => {
+    const desiredState: Record<string, unknown> = {};
+    await postProcessEc2Compound(
+      desiredState,
+      {
+        resourceType: RESOURCE_TYPES.S3_BUCKET,
+        resourceId: "s3-1",
+        displayName: "S3 bucket s3-1",
+      } as const,
+      "Create EC2 with SSH",
+    );
+    expect(getAmiPlatformDetails).not.toHaveBeenCalled();
+  });
+
+  it("preserves the existing SecurityGroupIds scrub semantics on Linux/SSH path", async () => {
+    vi.mocked(getAmiPlatformDetails).mockResolvedValueOnce("Linux/UNIX");
+    const desiredState: Record<string, unknown> = {
+      [CfnKey.IMAGE_ID]: AMI_LINUX,
+      [CfnKey.SECURITY_GROUP_IDS]: ["sg-12345678", "not-a-real-sg", ""],
+    };
+
+    await postProcessEc2Compound(
+      desiredState,
+      ec2Resource,
+      "Create an EC2 with SSH",
+    );
+
+    expect(desiredState[CfnKey.SECURITY_GROUP_IDS]).toEqual(["sg-12345678"]);
   });
 });

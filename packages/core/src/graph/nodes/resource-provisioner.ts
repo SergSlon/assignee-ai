@@ -31,6 +31,10 @@ import { safeCloneDesiredState } from "./resource-provisioner/state.js";
 import { runStateGuard } from "./resource-provisioner/state-guard.js";
 import { allocateNatGatewayEip } from "./resource-provisioner/eip-allocator.js";
 import { ensureSshKeypair } from "./resource-provisioner/ssh-keypair.js";
+import {
+  ensureSshIamProfile,
+  type SshIamCreated,
+} from "./resource-provisioner/ssh-iam.js";
 import { ensureSubnet } from "./resource-provisioner/subnet.js";
 import { cleanupAllocatedResources } from "./resource-provisioner/cleanup.js";
 import {
@@ -123,12 +127,27 @@ export async function resourceProvisionerNode(
   }
   const sshKeyCreatedName = sshRes.sshKeyCreatedName;
 
+  // Pre-hook: SSH-bundle IAM instance profile (auto-attaches the AWS-managed
+  // AmazonSSMManagedInstanceCore policy so the instance is SSM-reachable
+  // even when SSH is firewalled). No-op for non-SSH-intent applies.
+  const iamRes = await ensureSshIamProfile(state, desiredState);
+  if (!iamRes.ok) {
+    await cleanupAllocatedResources(state, {
+      eipReleased: freshlyAllocatedEipIds,
+      sshDeleted: sshKeyCreatedName,
+      sshIamCreated: iamRes.created,
+    });
+    return iamRes.partial;
+  }
+  const sshIamCreated: SshIamCreated = iamRes.created;
+
   // Pre-hook: resolve SUBNET_PLACEHOLDER to the default VPC's first subnet.
   const subnetRes = await ensureSubnet(state, desiredState);
   if (!subnetRes.ok) {
     await cleanupAllocatedResources(state, {
       eipReleased: freshlyAllocatedEipIds,
       sshDeleted: sshKeyCreatedName,
+      sshIamCreated,
     });
     return {
       executionStatus: ExecutionStatus.FAILED,
@@ -209,6 +228,7 @@ export async function resourceProvisionerNode(
       desiredState,
       freshlyAllocatedEipIds,
       sshKeyCreatedName,
+      sshIamCreated,
     });
   }
 

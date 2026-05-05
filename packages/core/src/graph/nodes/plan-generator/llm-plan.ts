@@ -125,7 +125,7 @@ export async function runLlmPlan(
   desiredState = repaired.desiredState;
 
   // Phase 4b — post-repair post-processing (EC2 SG cleanup + SSH injection).
-  desiredState = postRepairPostProcess(desiredState, state);
+  desiredState = await postRepairPostProcess(desiredState, state);
 
   log({
     ts: new Date().toISOString(),

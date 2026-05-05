@@ -17,6 +17,7 @@ import { planCommand } from "./commands/plan.js";
 import { applyCommand } from "./commands/apply.js";
 import { completionsCommand } from "./commands/completions.js";
 import { initCommand } from "./commands/init.js";
+import { describeCommand } from "./commands/describe.js";
 import { destroyCommand } from "./commands/destroy.js";
 import { driftCommand } from "./commands/drift.js";
 import { optimizeCommand } from "./commands/optimize.js";
@@ -146,6 +147,7 @@ program.hook("preSubcommand", (thisCommand) => {
 program.addCommand(versionCommand);
 
 program.addCommand(completionsCommand);
+program.addCommand(describeCommand);
 program.addCommand(destroyCommand);
 program.addCommand(driftCommand);
 program.addCommand(optimizeCommand);

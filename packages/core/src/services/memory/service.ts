@@ -90,6 +90,50 @@ export class MemoryService extends FileStore {
     }
   }
 
+  /**
+   * SSH-bundle Story iv — read-side filter that returns the single
+   * provision record matching a `runId` (UUID-shaped) or a `resourceArn`
+   * (full ARN — `arn:aws…:`). Used by `assignee describe` to look up the
+   * apply-time snapshot before re-rendering the apply-success line with
+   * a fresh DescribeInstances overlay.
+   *
+   * Polymorphism rule: if `runIdOrArn` matches the partition-aware ARN
+   * regex (`/^arn:aws[\w-]*:/`, covering aws / aws-us-gov / aws-cn —
+   * see `feedback_partition_aware_arn_matching` memory) we filter on
+   * `resourceArn`; otherwise we filter on `runId`. The match is exact —
+   * no prefix / suffix matching — so a stray substring of one record's
+   * ARN can never alias another. Returns `undefined` (not an error)
+   * when no record matches; the caller surfaces a friendly
+   * "No provision record found" message.
+   *
+   * Reuses `readProvisions()` for the underlying read (with all of its
+   * Zod validation + per-record drop semantics), so this helper does
+   * NOT introduce a new persistence path — it's a thin in-memory
+   * filter on top of the existing array. Backwards-compatible against
+   * pre-Story-iv records that lack `publicIpAddressAtApply` because the
+   * Zod field is `.optional()`.
+   */
+  async readProvisionRecord(
+    runIdOrArn: string,
+  ): Promise<ProvisionRecord | undefined> {
+    if (!runIdOrArn) return undefined;
+    // Trim before any matching: copy-pasted ARNs / runIds frequently
+    // pick up leading or trailing whitespace from the terminal, and
+    // routing on the un-trimmed input would silently fall through to
+    // the runId branch (the ARN regex would miss the leading space)
+    // and return undefined for an otherwise-valid resource ARN.
+    const input = runIdOrArn.trim();
+    if (input.length === 0) return undefined;
+    const records = await this.readProvisions();
+    // Partition-aware ARN regex (aws, aws-us-gov, aws-cn) — see
+    // `feedback_partition_aware_arn_matching` memory.
+    const isArn = /^arn:aws[\w-]*:/.test(input);
+    if (isArn) {
+      return records.find((r) => r.resourceArn === input);
+    }
+    return records.find((r) => r.runId === input);
+  }
+
   async appendProvision(record: ProvisionRecord): Promise<void> {
     await this.ensureDir();
     const target = this.filePath(FileName.PROVISIONS);

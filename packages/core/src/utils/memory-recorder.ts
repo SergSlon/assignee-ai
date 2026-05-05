@@ -37,6 +37,23 @@ const PROVISIONS_LOCK_NAME = path.join(
 );
 
 /**
+ * Optional extras for `writeProvisionRecord`. Kept as a separate object
+ * so future SSH-bundle / drift / reconcile fields can be slotted in
+ * without re-reordering the positional arguments at the call sites
+ * (apply-single.ts, apply-compound.ts).
+ *
+ * SSH-bundle Story iv: `publicIpAddressAtApply` is captured one-shot at
+ * apply time so `assignee describe` can show `(was <old-ip> at apply
+ * time)` when a stop/start cycle changes the EC2 public IP. Apply-time
+ * is the only legal write site — describe never updates the field
+ * (provision record stays a snapshot of what we provisioned).
+ */
+export interface ProvisionRecordExtras {
+  /** Apply-time PublicIpAddress for EC2; undefined for non-EC2 / private. */
+  publicIpAddressAtApply?: string;
+}
+
+/**
  * Writes a provision record to the memory log (Story 19.3).
  * Fire-and-forget: failures are logged but never block the apply result.
  */
@@ -47,6 +64,7 @@ export async function writeProvisionRecord(
   desiredState: Record<string, unknown> | undefined,
   estimatedMonthlyCost: string | undefined,
   config?: ConfigPort,
+  extras?: ProvisionRecordExtras,
 ): Promise<void> {
   const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
   // W4-03: advisory lock wraps the full write.
@@ -66,6 +84,16 @@ export async function writeProvisionRecord(
           .digest("hex"),
         estimatedMonthlyCost: estimatedMonthlyCost ?? CostEstimateLabel.NA,
         timestamp: new Date().toISOString(),
+        // Story iv: only persist the field when the caller actually
+        // captured a public IP (EC2 happy path). Omit the property
+        // entirely for non-EC2 / private-subnet resources so the
+        // resulting JSON stays free of `"publicIpAddressAtApply": null`
+        // / empty-string clutter — Zod-optional means absence is the
+        // back-compat baseline.
+        ...(extras?.publicIpAddressAtApply &&
+        extras.publicIpAddressAtApply.length > 0
+          ? { publicIpAddressAtApply: extras.publicIpAddressAtApply }
+          : {}),
       });
     } catch (err) {
       log({

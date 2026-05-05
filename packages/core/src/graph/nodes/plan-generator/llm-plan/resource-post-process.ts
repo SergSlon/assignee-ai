@@ -37,6 +37,7 @@ import {
   AwsDefault,
 } from "@/index.js";
 import { resolveAmiFromOsName } from "@/utils/aws-resource-discovery/index.js";
+import { assertSshIntentNotWindowsAmi } from "../ssh-windows-guard.js";
 import type { AgentState } from "@/graph/graph-state.js";
 
 export interface PostProcessOk {
@@ -83,13 +84,18 @@ export async function preRepairPostProcess(
  * Post-repair branch: EC2 SG cleanup + SSH key-pair injection. Runs AFTER
  * `repairRequiredFields` so the SSH injection can see a KeyName that
  * repair would have filled (and therefore NOT override it).
+ *
+ * Async since SSH-intent flows now perform a (cached) DescribeImages
+ * lookup via `assertSshIntentNotWindowsAmi` — see the shared
+ * `ssh-windows-guard.ts` module — to fail-fast before injecting the
+ * KeyName placeholder when the AMI is Windows.
  */
-export function postRepairPostProcess(
+export async function postRepairPostProcess(
   desiredState: Record<string, unknown>,
   state: AgentState,
-): Record<string, unknown> {
+): Promise<Record<string, unknown>> {
   if (state.resourceType === RESOURCE_TYPES.EC2_INSTANCE) {
-    postProcessEc2Instance(desiredState, state.userIntent ?? "");
+    await postProcessEc2Instance(desiredState, state.userIntent ?? "");
   }
   return desiredState;
 }
@@ -145,12 +151,16 @@ function populateNatEipPlaceholder(
  *   - Drops SG IDs that are not real `sg-...` values (and removes the list
  *     entirely when every entry was bogus — CloudControl rejects empty arrays).
  *   - Injects an SSH key-pair placeholder when the user intent mentions `ssh`
- *     but the LLM omitted `KeyName`.
+ *     but the LLM omitted `KeyName` — gated behind the shared SSH-on-Windows
+ *     fail-fast (`assertSshIntentNotWindowsAmi`) so a Windows AMI + SSH
+ *     intent throws `AssigneeError(WINDOWS_SSH_INCOMPATIBLE)` BEFORE the
+ *     placeholder lands. Mirrors the compound-path guard in
+ *     `compound-helpers.ts:postProcessEc2Compound`.
  */
-function postProcessEc2Instance(
+async function postProcessEc2Instance(
   desiredState: Record<string, unknown>,
   userIntent: string,
-): void {
+): Promise<void> {
   const sgIds = desiredState[CfnKey.SECURITY_GROUP_IDS];
   if (Array.isArray(sgIds)) {
     const valid = (sgIds as string[]).filter(
@@ -163,11 +173,13 @@ function postProcessEc2Instance(
     }
   }
 
-  if (
-    userIntent &&
-    /\bssh\b/i.test(userIntent) &&
-    !desiredState[CfnKey.KEY_NAME]
-  ) {
-    desiredState[CfnKey.KEY_NAME] = ResourceDefault.SSH_KEY_PLACEHOLDER;
+  if (userIntent && /\bssh\b/i.test(userIntent)) {
+    // Fail-fast on Windows AMI BEFORE we inject the SSH key placeholder
+    // — we want the user to see the actionable error, not waste time
+    // wiring a keypair that will be useless on a Windows box.
+    await assertSshIntentNotWindowsAmi(desiredState, userIntent);
+    if (!desiredState[CfnKey.KEY_NAME]) {
+      desiredState[CfnKey.KEY_NAME] = ResourceDefault.SSH_KEY_PLACEHOLDER;
+    }
   }
 }

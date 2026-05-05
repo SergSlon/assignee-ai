@@ -63,6 +63,27 @@ export const PRIV_ESC_SCOPED_IAM_ACTIONS = new Set<string>([
 ]);
 
 /**
+ * IAM instance-profile lifecycle actions used by the SSH-bundle compound
+ * (`ssh-iam.ts`). Must be excluded from the unscoped service sweep and
+ * emitted instead via a dedicated `IamInstanceProfileAssigneeScoped`
+ * statement scoped to `instance-profile/assignee-*` in operator.ts.
+ *
+ * Story i (SSH-IAM compound BLOCKER #1): leaving these in
+ * `ServiceSpecificActionsA/B` with `Resource: "*"` would let a leaked
+ * operator credential create / delete / mutate ANY instance profile in
+ * the account. The scoped statement restricts to the
+ * `assignee-ssh-<runId-suffix>` naming prefix.
+ */
+export const IAM_INSTANCE_PROFILE_SCOPED_ACTIONS = new Set<string>([
+  "iam:CreateInstanceProfile",
+  "iam:DeleteInstanceProfile",
+  "iam:GetInstanceProfile",
+  "iam:AddRoleToInstanceProfile",
+  "iam:RemoveRoleFromInstanceProfile",
+  "iam:TagInstanceProfile",
+]);
+
+/**
  * SecretsManager actions that must be excluded from the unscoped
  * service sweep and emitted instead via a tag-scoped statement in
  * operatorPolicy(). Follows the same pattern as
@@ -156,6 +177,13 @@ export function collectServiceActions(): {
       // via SecretsManagerGetValueTagScoped with
       // aws:ResourceTag/managed-by = assignee-ai. Leaving it in
       // the unscoped sweep would allow reading any secret.
+      continue;
+    } else if (IAM_INSTANCE_PROFILE_SCOPED_ACTIONS.has(action)) {
+      // Story i (SSH-IAM compound BLOCKER #1): emitted separately
+      // in operatorPolicy() via IamInstanceProfileAssigneeScoped
+      // with Resource scoped to `instance-profile/assignee-*`. The
+      // unscoped sweep would let a leaked operator credential mutate
+      // any instance profile in the account.
       continue;
     } else if (DESTRUCTIVE_SERVICE_ACTIONS.has(action)) {
       // SEC-011 (full-audit-2026-04-29): emitted separately in
