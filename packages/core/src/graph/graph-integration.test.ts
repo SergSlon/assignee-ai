@@ -98,7 +98,10 @@ vi.mock("@ai-sdk/amazon-bedrock", () => ({
 // Mock LlmAdapter — delegates to the same ai mock so existing test fixtures
 // work. Plain class survives vitest's mockReset:true between tests.
 vi.mock("../llm/adapter.js", async () => {
-  const { LlmError, safeTry } = await import("../index.js");
+  // Imports LlmError + safeTry from non-barrel source paths to avoid the
+  // vi.mock identity-cycle on `../index.js` (see test-deadlock-investigation-2026-05-05.md).
+  const { LlmError } = await import("../errors.js");
+  const { safeTry } = await import("../types/result.js");
   const ai = await import("ai");
   class LlmAdapter {
     async generateStructured(

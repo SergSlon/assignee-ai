@@ -5,25 +5,8 @@ export default defineConfig({
   plugins: [tsconfigPaths()],
   test: {
     include: ["src/**/*.test.ts"],
-    // TODO(test-hang-2026-05-05): exclude 4 graph-integration test files that
-    // hang at module-collect under vitest 3.2.4. Investigation showed the hang
-    // is reproducible on baseline c29587db (predates the audit cycle) and
-    // appears to be a vi.mock-chain deadlock specific to the
-    // `vi.mock("../index.js") + vi.mock("@assignee/core") + vi.mock("../llm/adapter.js")`
-    // combination — bare imports of the same modules load in 4s; mocks in
-    // isolation work; the combination locks. Each file ran 60+ seconds with
-    // no output past the RUN banner. Pre-push gate now completes in ~40s with
-    // these excluded; CI should still run them with a long timeout to catch
-    // any future fix. Re-enable once the mock pattern is debugged or the
-    // tests are restructured to avoid the dual-singleton barrel-mock pattern.
-    exclude: [
-      "**/node_modules/**",
-      "**/dist/**",
-      "src/__tests__/validate-desired-state-wiring.test.ts",
-      "src/graph/__tests__/apply-mode-audit.test.ts",
-      "src/graph/__tests__/bp-enforcement-integration.test.ts",
-      "src/graph/graph-integration.test.ts",
-    ],
+    // Explicit floor; vitest defaults already include these but listing makes future edits safer.
+    exclude: ["**/node_modules/**", "**/dist/**", "**/build/**"],
     environment: "node",
     clearMocks: true,
     restoreMocks: true,
