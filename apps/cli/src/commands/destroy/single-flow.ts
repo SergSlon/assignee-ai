@@ -17,6 +17,7 @@ import {
   arnToResourceType,
   appendDestroyedArn,
 } from "@assignee/core";
+import { maybeDestroySshBundleIamForArn } from "@assignee/core/graph";
 import { getCostSavingsEstimate } from "../../services/billing.js";
 import { getBillingMcpToolsAsync } from "../../services/mcp-client.js";
 import { startSpinner, stopSpinner } from "../../utils/display.js";
@@ -190,6 +191,32 @@ export async function singleDestroyAction(
   // Record destroyed ARN so list filters it while AWS keeps the resource
   // in INACTIVE state (ECS clusters linger ~1h after deletion, BUG-9).
   await appendDestroyedArn("", result.arn);
+
+  // SSH-bundle IAM cleanup (audit 2026-05-05 H3) — for EC2 instances,
+  // tear down the auto-created `assignee-ssh-<runId-suffix>` IAM role +
+  // instance profile so they don't accumulate as orphans across destroy
+  // cycles. Best-effort at TWO layers: the helper itself swallows every
+  // step's failure and returns a warnings array; this call site wraps
+  // in try/catch as defense-in-depth so a hypothetical helper bug
+  // (uncaught throw) cannot fail the destroy command — the EC2 itself
+  // was already successfully destroyed and surfacing IAM cleanup
+  // failures to stderr would confuse the operator about whether the
+  // primary destroy worked. See
+  // `packages/core/src/graph/nodes/resource-provisioner/ssh-iam-destroy.ts`
+  // for the deterministic name-derivation + idempotent teardown
+  // sequence.
+  try {
+    await maybeDestroySshBundleIamForArn(
+      result.arn,
+      resolved.resourceType,
+      resolved.region,
+    );
+  } catch {
+    // Helper claims to never throw; defense-in-depth swallow keeps the
+    // contract enforceable at the call site even if that claim ever
+    // regresses. The helper's internal log emits already cover
+    // observability — no double-log here.
+  }
 
   renderDestroySuccess(estimatedMonthlyCost);
 }
