@@ -52,6 +52,19 @@ import { routeProvisioningByPartition } from "../../provisioning/partition-aware
 // these by name from "./resource-provisioner.js".
 export { sanitizeKeyName, formatErrorForLog };
 
+// SSH-bundle IAM teardown — Pre-demo audit (2026-05-05) H3: post-destroy
+// cleanup for the auto-created `assignee-ssh-<runId-suffix>` role +
+// instance profile so destroying an EC2 doesn't leave them orphaned.
+// Re-exported here so apps/cli can reach the helpers via the
+// graph-nodes barrel (the @assignee/core public surface) without
+// pulling in the internal sub-path.
+export {
+  computeSshBundleIamNames,
+  destroySshBundleIam,
+  maybeDestroySshBundleIamForArn,
+  type SshIamDestroyResult,
+} from "./resource-provisioner/ssh-iam-destroy.js";
+
 export async function resourceProvisionerNode(
   state: AgentState,
   provisioner: ProvisioningPort,

@@ -41,6 +41,15 @@ export { fixApplicatorNode } from "./nodes/fix-applicator/orchestrator.js";
 export { resultFormatterNode } from "./nodes/result-formatter.js";
 export { preflightGuardNode } from "./nodes/preflight-guard.js";
 export { resourceProvisionerNode } from "./nodes/resource-provisioner.js";
+// SSH-bundle IAM post-destroy cleanup (audit 2026-05-05 H3) — re-exported
+// here so apps/cli's destroy flow can call `maybeDestroySshBundleIamForArn`
+// without pulling in the internal `nodes/resource-provisioner/...` sub-path.
+export {
+  computeSshBundleIamNames,
+  destroySshBundleIam,
+  maybeDestroySshBundleIamForArn,
+  type SshIamDestroyResult,
+} from "./nodes/resource-provisioner.js";
 export { createPlanGeneratorNode } from "./nodes/plan-generator.js";
 export { optionElicitorNode } from "./nodes/option-elicitor.js";
 export { createAdviceGeneratorNode } from "./nodes/advice-generator.js";
