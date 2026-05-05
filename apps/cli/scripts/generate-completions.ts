@@ -27,6 +27,7 @@ import { planCommand } from "../src/commands/plan.js";
 import { applyCommand } from "../src/commands/apply.js";
 import { initCommand } from "../src/commands/init.js";
 import { completionsCommand } from "../src/commands/completions.js";
+import { describeCommand } from "../src/commands/describe.js";
 import { destroyCommand } from "../src/commands/destroy.js";
 import { driftCommand } from "../src/commands/drift.js";
 import { optimizeCommand } from "../src/commands/optimize.js";
@@ -55,6 +56,7 @@ function buildProgram(): Command {
   program.addCommand(applyCommand);
   program.addCommand(initCommand);
   program.addCommand(completionsCommand);
+  program.addCommand(describeCommand);
   program.addCommand(destroyCommand);
   program.addCommand(driftCommand);
   program.addCommand(optimizeCommand);

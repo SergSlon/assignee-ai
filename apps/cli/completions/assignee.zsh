@@ -18,6 +18,7 @@ _assignee() {
         'apply:Execute an approved infrastructure plan'
         'init:Initialize assignee.ai project configuration'
         'completions:Output shell completion script'
+        'describe:Re-render the apply-success line for a previously-applied resource by run id or ARN'
         'destroy:Safely destroy a managed AWS resource'
         'drift:Check managed resources for configuration drift'
         'optimize:Scan managed resources for cost-rightsizing opportunities'
@@ -68,6 +69,11 @@ _assignee() {
             '--profile[AWS profile to use for credential resolution (reads ~/.aws/config; supports SSO, assumed-role, static)]:profile:'
           ;;
         completions)
+          ;;
+        describe)
+          _arguments \
+            '--output[Output format (json|text)]:format:' \
+            '--json[Shorthand for --output json]'
           ;;
         destroy)
           _arguments \

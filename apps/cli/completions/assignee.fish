@@ -9,6 +9,7 @@ complete -c assignee -n __fish_use_subcommand -a plan -d 'Generate an infrastruc
 complete -c assignee -n __fish_use_subcommand -a apply -d 'Execute an approved infrastructure plan'
 complete -c assignee -n __fish_use_subcommand -a init -d 'Initialize assignee.ai project configuration'
 complete -c assignee -n __fish_use_subcommand -a completions -d 'Output shell completion script'
+complete -c assignee -n __fish_use_subcommand -a describe -d 'Re-render the apply-success line for a previously-applied resource by run id or ARN'
 complete -c assignee -n __fish_use_subcommand -a destroy -d 'Safely destroy a managed AWS resource'
 complete -c assignee -n __fish_use_subcommand -a drift -d 'Check managed resources for configuration drift'
 complete -c assignee -n __fish_use_subcommand -a optimize -d 'Scan managed resources for cost-rightsizing opportunities'
@@ -50,6 +51,10 @@ complete -c assignee -n "__fish_seen_subcommand_from init" -l wizard -d 'Run the
 complete -c assignee -n "__fish_seen_subcommand_from init" -l region -r -d 'AWS region to write into the config (skips the region prompt)'
 complete -c assignee -n "__fish_seen_subcommand_from init" -l auto-fix -r -d 'Set preferences.auto_fix mode: ask | apply | skip (skips the auto-fix prompt)'
 complete -c assignee -n "__fish_seen_subcommand_from init" -l profile -r -d 'AWS profile to use for credential resolution (reads ~/.aws/config; supports SSO, assumed-role, static)'
+
+# Options for 'describe'
+complete -c assignee -n "__fish_seen_subcommand_from describe" -l output -s o -r -d 'Output format (json|text)'
+complete -c assignee -n "__fish_seen_subcommand_from describe" -l json -d 'Shorthand for --output json'
 
 # Options for 'destroy'
 complete -c assignee -n "__fish_seen_subcommand_from destroy" -l yes -s y -d 'Auto-confirm destroy without interactive prompt (for CI/CD)'
