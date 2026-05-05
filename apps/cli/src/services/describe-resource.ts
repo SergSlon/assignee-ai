@@ -54,9 +54,13 @@
  *     mint a separate auditor credential before running `describe`.
  */
 
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { DescribeInstancesCommand, type Instance } from "@aws-sdk/client-ec2";
 import {
   AssigneeError,
+  ASSIGNEE_DIR,
   type RenderableState,
   type ProvisionRecord,
   defaultMemoryService,
@@ -66,6 +70,40 @@ import {
 } from "@assignee/core";
 import { tryAssigneeCredentials } from "../config/aws-credentials.js";
 import { AWS_REGION } from "../config/constants.js";
+
+/**
+ * Whitelist sanitizer for SSH keypair filenames. Re-implemented here to
+ * avoid widening the `@assignee/core` public surface for one call site;
+ * the canonical implementation lives at
+ * `packages/core/src/graph/nodes/resource-provisioner/util.ts:sanitizeKeyName`
+ * and any change there must be mirrored here. Identity on the SSH-bundle
+ * placeholder (`assignee-ssh-key`); only meaningful when a future call
+ * site surfaces a user-supplied KeyName containing path separators or
+ * shell metacharacters.
+ */
+function sanitizeKeyNameForDescribe(name: string): string {
+  let cleaned = name.replace(/[^A-Za-z0-9._-]/g, "_");
+  while (cleaned.length > 0 && (cleaned[0] === "." || cleaned[0] === "_")) {
+    cleaned = cleaned.slice(1);
+  }
+  return cleaned.length === 0 ? "assignee_key" : cleaned;
+}
+
+/**
+ * Pre-demo audit (2026-05-05): mirror the apply-single.ts existsSync gate
+ * so `assignee describe` does NOT render a Connect line pointing to a
+ * `.pem` that doesn't exist on this box (cross-machine describe scenario).
+ * The renderer's `if (!keyName) return;` guard then silently suppresses
+ * the Connect line, matching apply-time semantics.
+ *
+ * Returns the sanitized key name only when the on-disk file is present;
+ * otherwise undefined → renderer suppresses.
+ */
+function readKeyNameIfPemPresent(rawKeyName: string): string | undefined {
+  const safe = sanitizeKeyNameForDescribe(rawKeyName);
+  const keyPath = join(homedir(), ASSIGNEE_DIR, "keys", `${safe}.pem`);
+  return existsSync(keyPath) ? safe : undefined;
+}
 
 /**
  * Error thrown when no provision record matches the supplied
@@ -259,8 +297,17 @@ export async function describeResource(
   // time KeyName was persisted to AWS as `Instance.KeyName`); the AMI
   // default user is resolved via the same DescribeImages helper Story
   // iii used.
+  //
+  // Pre-demo audit (2026-05-05): also mirror apply-single.ts's
+  // existsSync gate so the Connect line is suppressed silently when the
+  // local `.pem` is missing (cross-machine describe scenario). Without
+  // this, describe would render a Connect line pointing to a file the
+  // user can't actually use.
   if (live.KeyName) {
-    state.keyName = live.KeyName;
+    const presentKeyName = readKeyNameIfPemPresent(live.KeyName);
+    if (presentKeyName) {
+      state.keyName = presentKeyName;
+    }
   }
   if (live.ImageId) {
     state.amiId = live.ImageId;
