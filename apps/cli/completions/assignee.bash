@@ -8,7 +8,7 @@ _assignee_completions() {
   cur="${COMP_WORDS[COMP_CWORD]}"
   prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-  commands="plan apply init completions destroy drift optimize list setup status reconcile doctor version"
+  commands="plan apply init completions describe destroy drift optimize list setup status reconcile doctor version"
 
   if [[ ${COMP_CWORD} -eq 1 ]]; then
     COMPREPLY=( $(compgen -W "${commands}" -- "${cur}") )
@@ -28,6 +28,9 @@ _assignee_completions() {
       ;;
     completions)
       COMPREPLY=( $(compgen -W "" -- "${cur}") )
+      ;;
+    describe)
+      COMPREPLY=( $(compgen -W "--output --json" -- "${cur}") )
       ;;
     destroy)
       COMPREPLY=( $(compgen -W "--yes --pending-window-in-days --recovery-window-in-days --force-delete-without-recovery --output --json --target-account" -- "${cur}") )
