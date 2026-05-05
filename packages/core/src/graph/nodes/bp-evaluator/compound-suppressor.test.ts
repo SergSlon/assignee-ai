@@ -87,37 +87,44 @@ describe("suppressIntentFindings (intent-based, INTENT_BASED_SUPPRESSIONS)", () 
     const e = INTENT_BASED_SUPPRESSIONS[0]!;
     expect(e.intentRegex.source).toBe("\\bssh\\b");
     expect(e.intentRegex.flags).toContain("i");
-    expect(e.mustHaveDesiredKey).toBe("IamInstanceProfile");
+    // Pre-demo audit (2026-05-05): the SSH-bundle entry now omits
+    // `mustHaveDesiredKey` because `bp_evaluator` runs at PLAN time but
+    // `ensureSshIamProfile` only populates `desiredState.IamInstanceProfile`
+    // at APPLY time — the guard would always fail and BP-EC2-004 would
+    // fire spuriously in the plan box.
+    expect(e.mustHaveDesiredKey).toBeUndefined();
     expect(e.suppressIds).toEqual(["BP-EC2-004"]);
   });
 
-  it("suppresses BP-EC2-004 when SSH intent + IamInstanceProfile is set", () => {
+  it("suppresses BP-EC2-004 when SSH intent is present (desiredState populated)", () => {
     const fs = [finding("BP-EC2-004"), finding("BP-EC2-001")];
     const r = suppressIntentFindings(fs, "Create a EC2 with SSH", sshState);
     expect(r.findings.map((f) => f.practiceId)).toEqual(["BP-EC2-001"]);
     expect(r.suppressedCount).toBe(1);
   });
 
-  it("does NOT suppress BP-EC2-004 when SSH intent but IamInstanceProfile is empty", () => {
+  it("suppresses BP-EC2-004 at plan time even when IamInstanceProfile is empty (Phase-2 pre-hook hasn't run yet)", () => {
+    // Pre-demo audit (2026-05-05): the inverted assertion. Previously the
+    // guard required `desiredState.IamInstanceProfile` to be populated;
+    // because `bp_evaluator` runs at plan time and the SSH-IAM pre-hook
+    // runs at apply time, the guard always failed for the canonical
+    // "Create EC2 with SSH" intent and BP-EC2-004 fired spuriously.
     const fs = [finding("BP-EC2-004"), finding("BP-EC2-001")];
     const r = suppressIntentFindings(fs, "Create a EC2 with SSH", {});
-    expect(r.findings.map((f) => f.practiceId)).toEqual([
-      "BP-EC2-004",
-      "BP-EC2-001",
-    ]);
-    expect(r.suppressedCount).toBe(0);
+    expect(r.findings.map((f) => f.practiceId)).toEqual(["BP-EC2-001"]);
+    expect(r.suppressedCount).toBe(1);
   });
 
-  it("does NOT suppress when IamInstanceProfile is whitespace-only", () => {
+  it("suppresses BP-EC2-004 even when IamInstanceProfile is whitespace-only (no longer guard-gated)", () => {
     const fs = [finding("BP-EC2-004")];
     const r = suppressIntentFindings(fs, "ssh me up", {
       IamInstanceProfile: "   ",
     });
-    expect(r.findings).toHaveLength(1);
-    expect(r.suppressedCount).toBe(0);
+    expect(r.findings).toHaveLength(0);
+    expect(r.suppressedCount).toBe(1);
   });
 
-  it("accepts {Arn: ...} object shape for IamInstanceProfile", () => {
+  it("suppresses BP-EC2-004 when IamInstanceProfile is set to {Arn: ...} (no behaviour change for populated state)", () => {
     const fs = [finding("BP-EC2-004")];
     const r = suppressIntentFindings(fs, "ssh", {
       IamInstanceProfile: {
@@ -128,7 +135,7 @@ describe("suppressIntentFindings (intent-based, INTENT_BASED_SUPPRESSIONS)", () 
     expect(r.suppressedCount).toBe(1);
   });
 
-  it("accepts {Name: ...} object shape for IamInstanceProfile", () => {
+  it("suppresses BP-EC2-004 when IamInstanceProfile is set to {Name: ...} (no behaviour change for populated state)", () => {
     const fs = [finding("BP-EC2-004")];
     const r = suppressIntentFindings(fs, "ssh", {
       IamInstanceProfile: { Name: "my-profile" },
@@ -165,11 +172,15 @@ describe("suppressIntentFindings (intent-based, INTENT_BASED_SUPPRESSIONS)", () 
     expect(r.suppressedCount).toBe(0);
   });
 
-  it("returns findings unchanged when desiredState is undefined", () => {
+  it("suppresses BP-EC2-004 even when desiredState is undefined (SSH entry has no desired-key guard)", () => {
+    // Pre-demo audit (2026-05-05): inverted from the original
+    // "returns unchanged" assertion. The SSH-bundle entry no longer
+    // gates on desiredState — the intent alone is sufficient evidence
+    // the apply-time pre-hook will satisfy BP-EC2-004.
     const fs = [finding("BP-EC2-004")];
     const r = suppressIntentFindings(fs, "ssh me", undefined);
-    expect(r.findings).toHaveLength(1);
-    expect(r.suppressedCount).toBe(0);
+    expect(r.findings).toHaveLength(0);
+    expect(r.suppressedCount).toBe(1);
   });
 
   it("matches intent case-insensitively (SSH, Ssh)", () => {
