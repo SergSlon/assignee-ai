@@ -21,9 +21,22 @@
  * compound). To suppress BP-EC2-004 ("EC2 instance should have IAM
  * instance profile attached") on the SSH-bundle path, we introduce a
  * sibling `INTENT_BASED_SUPPRESSIONS` array keyed on the user's intent
- * regex AND a guard that requires the desiredState key to be populated
- * (defends against the SSH-IAM pre-hook silently failing — if the
- * profile isn't actually attached, the BP MUST still fire).
+ * regex.
+ *
+ * Pre-demo audit (2026-05-05): the original design also gated the
+ * suppression on `desiredState[IamInstanceProfile]` being populated
+ * (defence against the SSH-IAM pre-hook silently failing). That guard
+ * was load-bearing only if BP evaluation re-ran AFTER the pre-hook —
+ * but `bp_evaluator` runs at PLAN time (Phase 1) and `ensureSshIamProfile`
+ * runs at APPLY time (Phase 2, see `resource-provisioner.ts`). The
+ * pre-hook never gets a chance to populate `desiredState` before the
+ * suppressor reads it, so the guard ALWAYS failed → BP-EC2-004 always
+ * fired in the plan box for "Create EC2 with SSH" intents, undermining
+ * the bundle's UX promise. The guard is now optional (per-entry
+ * `mustHaveDesiredKey` field); the SSH-bundle entry omits it because
+ * the intent itself is sufficient evidence the bundle WILL satisfy
+ * BP-EC2-004 at apply time. If a future entry needs the guard back,
+ * set `mustHaveDesiredKey` and the original semantics return.
  */
 
 import type { BPFinding } from "@assignee/best-practices";
@@ -56,27 +69,39 @@ export const COMPOUND_SUPPRESSIONS: Record<string, Set<string>> = {
  * iff:
  *   1. `userIntent` matches `intentRegex` (case-insensitive at the entry's
  *      discretion — entries declare their own flags).
- *   2. `desiredState[mustHaveDesiredKey]` is non-empty (string OR object
- *      with `Arn`/`Name`).
+ *   2. (Optional) `desiredState[mustHaveDesiredKey]` is non-empty (string
+ *      OR object with `Arn`/`Name`).
  *
- * The desired-state guard is mandatory: it ensures we ONLY suppress when
- * the bundle actually attached the resource. If the auto-attach path
- * silently failed, the BP must still fire so the user is alerted.
+ * The desired-state guard is OPTIONAL — entries that need to defer
+ * suppression until a sibling pre-hook has populated the slot include
+ * `mustHaveDesiredKey`; entries whose pre-hook runs in a later phase
+ * (so the guard would always fail at suppressor-eval time) omit it. See
+ * the SSH-bundle entry below for the canonical apply-time-pre-hook case.
  */
 export interface IntentBasedSuppression {
   intentRegex: RegExp;
-  mustHaveDesiredKey: string;
+  /**
+   * When set, the desired-state slot at this key must be non-empty for
+   * the suppression to apply. Omit when the pre-hook that populates the
+   * slot runs AFTER `bp_evaluator` (Phase-2 apply hooks) — at plan time
+   * the slot is structurally empty so the guard would always fail.
+   */
+  mustHaveDesiredKey?: string;
   suppressIds: string[];
 }
 
 export const INTENT_BASED_SUPPRESSIONS: ReadonlyArray<IntentBasedSuppression> =
   [
     {
-      // SSH-bundle: when the user said "ssh" AND the SSH-IAM pre-hook
-      // populated IamInstanceProfile, BP-EC2-004 ("attach IAM instance
-      // profile") is structurally satisfied by the bundle.
+      // SSH-bundle: when the user said "ssh", BP-EC2-004 ("attach IAM
+      // instance profile") is structurally satisfied by the bundle's
+      // `ensureSshIamProfile` Phase-2 pre-hook (`resource-provisioner/
+      // ssh-iam.ts`). No `mustHaveDesiredKey` because the pre-hook runs
+      // at apply time AFTER bp_evaluator already evaluated — gating on
+      // `desiredState.IamInstanceProfile` would always fail at plan-eval
+      // time and the BP would fire in the plan box despite the bundle
+      // being about to satisfy it.
       intentRegex: /\bssh\b/i,
-      mustHaveDesiredKey: "IamInstanceProfile",
       suppressIds: ["BP-EC2-004"],
     },
   ];
@@ -147,8 +172,15 @@ export function suppressIntentFindings(
   const suppressed = new Set<string>();
   for (const entry of INTENT_BASED_SUPPRESSIONS) {
     if (!entry.intentRegex.test(userIntent)) continue;
-    if (!hasPopulatedDesiredKey(desiredState, entry.mustHaveDesiredKey))
+    // The desired-state guard is OPTIONAL — entries omit it when the
+    // pre-hook that populates the slot runs AFTER bp_evaluator (Phase-2
+    // apply hooks). See the SSH-bundle entry in INTENT_BASED_SUPPRESSIONS.
+    if (
+      entry.mustHaveDesiredKey !== undefined &&
+      !hasPopulatedDesiredKey(desiredState, entry.mustHaveDesiredKey)
+    ) {
       continue;
+    }
     for (const id of entry.suppressIds) suppressed.add(id);
   }
   if (suppressed.size === 0) return { findings, suppressedCount: 0 };
