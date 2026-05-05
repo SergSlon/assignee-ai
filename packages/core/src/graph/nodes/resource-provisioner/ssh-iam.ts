@@ -47,6 +47,7 @@ import type { AgentState } from "../../graph-state.js";
 import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
 import { AWS_REGION } from "@/config/constants/aws.js";
 import { requireAssigneeCredentials } from "@/config/aws-credentials.js";
+import { isSshIntent } from "@/utils/ssh-intent.js";
 
 /** Tracker passed to cleanup so partial creates can be torn down. */
 export interface SshIamCreated {
@@ -126,7 +127,8 @@ const emptyCreated: SshIamCreated = {
 /**
  * Create (or reuse) the SSH-bundle IAM role + instance profile and
  * write the profile name into `desiredState[IamInstanceProfile]`. No-op
- * unless this is an EC2::Instance with userIntent matching `/\bssh\b/i`
+ * unless this is an EC2::Instance, the userIntent passes the shared
+ * `isSshIntent` gate (positive `\bssh\b` and no negation phrasing),
  * AND the user did not supply their own profile.
  */
 export async function ensureSshIamProfile(
@@ -137,9 +139,10 @@ export async function ensureSshIamProfile(
   if (state.resourceType !== RESOURCE_TYPES.EC2_INSTANCE) {
     return { ok: true, created: emptyCreated };
   }
-  // Gate 2: only when userIntent says ssh.
-  const userIntent = state.userIntent ?? "";
-  if (!/\bssh\b/i.test(userIntent)) {
+  // Gate 2: only when userIntent affirmatively asks for SSH (the
+  // shared `isSshIntent` helper rejects negation phrasings like
+  // "without ssh", "no ssh", "disable ssh" — see audit H2 / 2026-05-05).
+  if (!isSshIntent(state.userIntent)) {
     return { ok: true, created: emptyCreated };
   }
   // Gate 3: skip if the user already supplied a profile.

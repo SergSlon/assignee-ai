@@ -40,6 +40,7 @@
  */
 
 import type { BPFinding } from "@assignee/best-practices";
+import { isSshIntent } from "@/utils/ssh-intent.js";
 
 export const COMPOUND_SUPPRESSIONS: Record<string, Set<string>> = {
   "vpc-networking": new Set([
@@ -67,8 +68,10 @@ export const COMPOUND_SUPPRESSIONS: Record<string, Set<string>> = {
 /**
  * Intent-based suppression entry. Each entry suppresses `suppressIds`
  * iff:
- *   1. `userIntent` matches `intentRegex` (case-insensitive at the entry's
- *      discretion — entries declare their own flags).
+ *   1. `intentMatcher(userIntent)` returns true. The matcher is a pure
+ *      string predicate so entries can encode arbitrary intent semantics
+ *      (positive match, negation-aware match, multi-keyword, etc.) in
+ *      one place — no caller has to compose multiple regexes.
  *   2. (Optional) `desiredState[mustHaveDesiredKey]` is non-empty (string
  *      OR object with `Arn`/`Name`).
  *
@@ -77,9 +80,18 @@ export const COMPOUND_SUPPRESSIONS: Record<string, Set<string>> = {
  * `mustHaveDesiredKey`; entries whose pre-hook runs in a later phase
  * (so the guard would always fail at suppressor-eval time) omit it. See
  * the SSH-bundle entry below for the canonical apply-time-pre-hook case.
+ *
+ * Pre-demo audit (2026-05-05) H2: previous shape used `intentRegex:
+ * RegExp`. A bare `\bssh\b` regex matched substrings on negation
+ * phrasings like "create EC2 without SSH" and the bundle would still
+ * fire (and BP-EC2-004 would still suppress) on intents that explicitly
+ * NEGATED the SSH ask. The matcher-function shape lets the SSH entry
+ * delegate to `isSshIntent`, which is the same negation-aware gate the
+ * 4 production SSH-bundle pre-hooks use — keeping suppression
+ * semantically locked to whether the bundle WILL ACTUALLY fire.
  */
 export interface IntentBasedSuppression {
-  intentRegex: RegExp;
+  intentMatcher: (userIntent: string) => boolean;
   /**
    * When set, the desired-state slot at this key must be non-empty for
    * the suppression to apply. Omit when the pre-hook that populates the
@@ -93,15 +105,18 @@ export interface IntentBasedSuppression {
 export const INTENT_BASED_SUPPRESSIONS: ReadonlyArray<IntentBasedSuppression> =
   [
     {
-      // SSH-bundle: when the user said "ssh", BP-EC2-004 ("attach IAM
-      // instance profile") is structurally satisfied by the bundle's
-      // `ensureSshIamProfile` Phase-2 pre-hook (`resource-provisioner/
-      // ssh-iam.ts`). No `mustHaveDesiredKey` because the pre-hook runs
-      // at apply time AFTER bp_evaluator already evaluated — gating on
-      // `desiredState.IamInstanceProfile` would always fail at plan-eval
-      // time and the BP would fire in the plan box despite the bundle
-      // being about to satisfy it.
-      intentRegex: /\bssh\b/i,
+      // SSH-bundle: when the user said "ssh" (and didn't negate it),
+      // BP-EC2-004 ("attach IAM instance profile") is structurally
+      // satisfied by the bundle's `ensureSshIamProfile` Phase-2 pre-hook
+      // (`resource-provisioner/ssh-iam.ts`). No `mustHaveDesiredKey`
+      // because the pre-hook runs at apply time AFTER bp_evaluator
+      // already evaluated — gating on `desiredState.IamInstanceProfile`
+      // would always fail at plan-eval time and the BP would fire in
+      // the plan box despite the bundle being about to satisfy it.
+      // `isSshIntent` is the shared gate — same one all 4 production
+      // SSH-bundle call sites use, so suppression and bundle-firing
+      // never disagree on a given intent.
+      intentMatcher: isSshIntent,
       suppressIds: ["BP-EC2-004"],
     },
   ];
@@ -171,7 +186,7 @@ export function suppressIntentFindings(
   // Build the union of suppressed practice IDs from every matching entry.
   const suppressed = new Set<string>();
   for (const entry of INTENT_BASED_SUPPRESSIONS) {
-    if (!entry.intentRegex.test(userIntent)) continue;
+    if (!entry.intentMatcher(userIntent)) continue;
     // The desired-state guard is OPTIONAL — entries omit it when the
     // pre-hook that populates the slot runs AFTER bp_evaluator (Phase-2
     // apply hooks). See the SSH-bundle entry in INTENT_BASED_SUPPRESSIONS.

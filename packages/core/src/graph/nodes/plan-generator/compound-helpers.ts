@@ -26,6 +26,7 @@ import {
   assertSshIntentNotWindowsAmi,
   WINDOWS_SSH_INCOMPATIBLE_CODE,
 } from "./ssh-windows-guard.js";
+import { isSshIntent } from "@/utils/ssh-intent.js";
 import type { AgentState } from "../../graph-state.js";
 
 /**
@@ -412,7 +413,7 @@ export async function postProcessEc2Compound(
       desiredState[CfnKey.SECURITY_GROUP_IDS] = valid;
     }
   }
-  if (userIntent && /\bssh\b/i.test(userIntent)) {
+  if (isSshIntent(userIntent)) {
     // Fail-fast on Windows AMI BEFORE we inject the SSH key placeholder
     // — we want the user to see the actionable error, not waste time
     // wiring a keypair that will be useless on a Windows box.

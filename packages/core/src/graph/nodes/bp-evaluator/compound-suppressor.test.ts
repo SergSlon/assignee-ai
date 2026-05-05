@@ -85,9 +85,16 @@ describe("suppressIntentFindings (intent-based, INTENT_BASED_SUPPRESSIONS)", () 
   it("exposes the SSH-bundle entry as the first INTENT_BASED_SUPPRESSIONS row", () => {
     expect(INTENT_BASED_SUPPRESSIONS).toHaveLength(1);
     const e = INTENT_BASED_SUPPRESSIONS[0]!;
-    expect(e.intentRegex.source).toBe("\\bssh\\b");
-    expect(e.intentRegex.flags).toContain("i");
-    // Pre-demo audit (2026-05-05): the SSH-bundle entry now omits
+    // Pre-demo audit (2026-05-05) H2: shape changed from `intentRegex:
+    // RegExp` to `intentMatcher: (userIntent) => boolean` so the SSH
+    // entry can delegate to the shared negation-aware `isSshIntent`
+    // helper. Match-by-function lets suppression stay locked to whether
+    // the SSH bundle WILL fire (the four production pre-hooks use the
+    // same helper).
+    expect(typeof e.intentMatcher).toBe("function");
+    expect(e.intentMatcher("Create EC2 with SSH")).toBe(true);
+    expect(e.intentMatcher("Create EC2 without SSH")).toBe(false);
+    // Pre-demo audit (2026-05-05) B2: the SSH-bundle entry omits
     // `mustHaveDesiredKey` because `bp_evaluator` runs at PLAN time but
     // `ensureSshIamProfile` only populates `desiredState.IamInstanceProfile`
     // at APPLY time — the guard would always fail and BP-EC2-004 would
@@ -190,6 +197,32 @@ describe("suppressIntentFindings (intent-based, INTENT_BASED_SUPPRESSIONS)", () 
     const r2 = suppressIntentFindings(fs, "Ssh me", sshState);
     expect(r2.suppressedCount).toBe(1);
   });
+
+  it.each([
+    "Create EC2 without SSH",
+    "Create EC2 with no SSH access",
+    "Spin up an EC2 with SSH disabled",
+    "Remove SSH from this instance",
+    "Drop SSH access on the box",
+  ])(
+    "does NOT suppress BP-EC2-004 for SSH-negation phrasing %s (audit H2)",
+    (intent) => {
+      // Pre-demo audit (2026-05-05) H2: previously the bare \bssh\b
+      // regex matched these strings as substring "ssh", so BP-EC2-004
+      // was suppressed even though the SSH bundle does NOT fire for
+      // negated intents — the EC2 would land with NO IAM profile and
+      // NO BP warning. The matcher now delegates to `isSshIntent`,
+      // which is the same negation-aware gate the production pre-hooks
+      // use, so suppression and bundle-firing always agree.
+      const fs = [finding("BP-EC2-004"), finding("BP-EC2-001")];
+      const r = suppressIntentFindings(fs, intent, sshState);
+      expect(r.findings.map((f) => f.practiceId)).toEqual([
+        "BP-EC2-004",
+        "BP-EC2-001",
+      ]);
+      expect(r.suppressedCount).toBe(0);
+    },
+  );
 
   it("only filters listed practiceIds — leaves other findings intact", () => {
     const fs = [
