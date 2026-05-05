@@ -5,14 +5,7 @@ pnpm lint:shims
 pnpm doc-lint
 pnpm citation-lint
 pnpm lint:ci-multiplier
-
-# `pnpm test` removed from pre-push (2026-05-05 fix).
-# Reason: the full vitest suite across 4 packages took 25+ minutes when any
-# single test had a failing assertion (vitest retry-on-failure compounded
-# across workers) — turning every push into an hour-long stall.
-# CI runs the full unconstrained test suite on every push; this hook is for
-# fast, deterministic local-only checks (lint, type-check, doc-lint, citation-lint).
-# To run tests locally before pushing: `pnpm test` directly, or rely on CI.
+pnpm test
 
 # Reviewer-skip BAN enforcement (CLAUDE.md §"Reviewer-skip BAN (mandatory)")
 # Rejects pushes whose commits lack reviewer evidence in their body.
