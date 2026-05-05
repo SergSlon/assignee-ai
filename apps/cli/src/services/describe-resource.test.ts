@@ -13,13 +13,30 @@ import type { ProvisionRecord } from "@assignee/core";
 
 // ── Hoisted mocks ────────────────────────────────────────────────────────────
 
-const { mockEc2Send, mockEc2Destroy, mockTryGetAmiDefaultUser } = vi.hoisted(
-  () => ({
-    mockEc2Send: vi.fn(),
-    mockEc2Destroy: vi.fn(),
-    mockTryGetAmiDefaultUser: vi.fn(),
-  }),
-);
+const {
+  mockEc2Send,
+  mockEc2Destroy,
+  mockTryGetAmiDefaultUser,
+  mockExistsSync,
+} = vi.hoisted(() => ({
+  mockEc2Send: vi.fn(),
+  mockEc2Destroy: vi.fn(),
+  mockTryGetAmiDefaultUser: vi.fn(),
+  // Pre-demo audit (2026-05-05): describe-resource now gates the
+  // Connect-line keyName overlay on existsSync of the local .pem.
+  // Default to TRUE so existing happy-path tests don't need to seed
+  // a real tmpdir; the suppression branch has its own targeted test
+  // that flips this to FALSE.
+  mockExistsSync: vi.fn(() => true),
+}));
+
+vi.mock("node:fs", async () => {
+  const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
+  return {
+    ...actual,
+    existsSync: mockExistsSync,
+  };
+});
 
 vi.mock("@aws-sdk/client-ec2", () => {
   function DescribeInstancesCommand(input: unknown) {
@@ -301,6 +318,47 @@ describe("describeResource — EC2 live overlay", () => {
 
     expect(result.state.publicIpAddress).toBe(APPLY_TIME_IP);
     expect(result.liveFetchSucceeded).toBe(false);
+  });
+
+  it("suppresses keyName overlay when local .pem is missing (cross-machine describe)", async () => {
+    // Pre-demo audit (2026-05-05): when the user runs `assignee describe`
+    // on a different box than the one that ran apply, the local
+    // ~/.assignee/keys/<name>.pem does NOT exist. The Connect line must
+    // be silently suppressed (matching apply-single.ts:145-148) — the
+    // alternative is rendering a copy-pasteable command pointing to a
+    // file that doesn't exist on this machine.
+    mockExistsSync.mockReturnValueOnce(false);
+
+    vi.mocked(defaultMemoryService.readProvisionRecord).mockResolvedValue(
+      ec2Provision({ publicIpAddressAtApply: LIVE_IP }),
+    );
+    mockEc2Send.mockResolvedValueOnce({
+      Reservations: [
+        {
+          Instances: [
+            {
+              InstanceId: EC2_INSTANCE_ID,
+              PublicIpAddress: LIVE_IP,
+              PublicDnsName: LIVE_DNS,
+              KeyName: KEY_NAME,
+              ImageId: AMI_ID,
+            },
+          ],
+        },
+      ],
+    });
+    mockTryGetAmiDefaultUser.mockResolvedValueOnce(SSH_USERNAME);
+
+    const result = await describeResource(RUN_ID);
+
+    // IP / DNS / AMI / sshUsername still surface (they don't depend
+    // on the local .pem) — only keyName is suppressed.
+    expect(result.state.publicIpAddress).toBe(LIVE_IP);
+    expect(result.state.publicDnsName).toBe(LIVE_DNS);
+    expect(result.state.amiId).toBe(AMI_ID);
+    expect(result.state.sshUsername).toBe(SSH_USERNAME);
+    expect(result.state.keyName).toBeUndefined();
+    expect(result.liveFetchSucceeded).toBe(true);
   });
 
   it("EC2 with no public IP (private subnet): live fetch succeeds, no IP, no annotation", async () => {
