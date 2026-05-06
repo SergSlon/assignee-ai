@@ -101,13 +101,37 @@ export function enrichDescriptionWithEnv(
 
 /**
  * Branch on the graph's terminal execution status. FAILED and
- * UNSUPPORTED_RESOURCE short-circuit with a structured error; all
- * other statuses advance to the checkpoint-and-respond step.
+ * UNSUPPORTED_RESOURCE short-circuit with a structured error; QUERY_INTENT
+ * returns a structured query response (the output was already rendered by
+ * the result-formatter node); all other statuses advance to the
+ * checkpoint-and-respond step.
+ *
+ * Story feature-query-intent-classifier: MCP parity for kind=query intents.
  */
 export function checkExecutionStatus(
   finalState: Record<string, unknown>,
 ): StepResult<void> {
   const status = finalState[StateField.EXECUTION_STATUS];
+
+  // QUERY_INTENT: the graph already rendered the output via result-formatter.
+  // Return a structured informational response so the MCP client knows the
+  // intent was recognised as a query (not a plan). The `queryResult` payload
+  // carries the resolved resources if available.
+  if (status === ExecutionStatus.QUERY_INTENT) {
+    const queryResult = (finalState as Record<string, unknown>)["queryResult"];
+    const queryMsg = queryResult
+      ? "Query resolved — see queryResult for matched resources."
+      : ((finalState[StateField.ERROR_MESSAGE] as string) ??
+        "Query intent recognised; use `assignee list` for managed resources.");
+    return doneStep(
+      buildPlanErrorResponse({
+        message: queryMsg,
+        status: ExecutionStatus.QUERY_INTENT as string,
+        hint: "To list managed resources via MCP, use the `list_managed_resources` tool instead.",
+      }),
+    );
+  }
+
   if (
     status !== ExecutionStatus.FAILED &&
     status !== ExecutionStatus.UNSUPPORTED_RESOURCE

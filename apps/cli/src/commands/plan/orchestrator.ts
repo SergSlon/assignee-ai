@@ -109,6 +109,21 @@ export async function runPlan(
 
   let finalState = await invokePlan(ctx.intent);
 
+  // Story feature-query-intent-classifier: query intents complete inside
+  // the graph (result already printed by result_formatter). Return success
+  // without rendering an error or prompting for apply.
+  if (finalState.executionStatus === ExecutionStatus.QUERY_INTENT) {
+    log({
+      ts: new Date().toISOString(),
+      runId: ctx.runId,
+      level: "info",
+      action: LOG_ACTIONS.PLAN_COMPLETE,
+      durationMs: Date.now() - ctx.startTs,
+      result: finalState.executionStatus,
+    });
+    return { success: true };
+  }
+
   let failed =
     finalState.executionStatus === ExecutionStatus.FAILED ||
     finalState.executionStatus === ExecutionStatus.UNSUPPORTED_RESOURCE;

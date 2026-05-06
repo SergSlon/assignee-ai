@@ -13,6 +13,38 @@ import { ExecutionMode, ExecutionStatus } from "../index.js";
 import { GraphNode } from "../constants/graph-node.js";
 import type { AgentState } from "./graph-state.js";
 
+/**
+ * Routes after intent_parser:
+ * - QUERY_INTENT → query_handler (bypasses creation pipeline)
+ * - FAILED / UNSUPPORTED_RESOURCE → result_formatter directly (short-circuits
+ *   creation pipeline for terminal states so schema_fetcher / wizard / plan
+ *   don't fire on a payload that will never be provisioned)
+ * - Else → schema_fetcher (normal creation path)
+ *
+ * MED 4 fix: without the FAILED/UNSUPPORTED_RESOURCE check, destroy-redirect
+ * messages (BLOCKER 1 fix) and hallucinated-type errors (HIGH 5 fix) fell
+ * through to schema_fetcher, producing confusing downstream errors.
+ *
+ * Story: feature-query-intent-classifier
+ */
+export function routeIntentParser(
+  state: AgentState,
+):
+  | typeof GraphNode.SCHEMA_FETCHER
+  | typeof GraphNode.QUERY_HANDLER
+  | typeof GraphNode.RESULT_FORMATTER {
+  if (state.executionStatus === ExecutionStatus.QUERY_INTENT) {
+    return GraphNode.QUERY_HANDLER;
+  }
+  if (
+    state.executionStatus === ExecutionStatus.FAILED ||
+    state.executionStatus === ExecutionStatus.UNSUPPORTED_RESOURCE
+  ) {
+    return GraphNode.RESULT_FORMATTER;
+  }
+  return GraphNode.SCHEMA_FETCHER;
+}
+
 /** Routes after START: checkpoint resumed → human_approval (skip Phase 1), else → intent_parser. */
 export function routeCheckpointEntry(
   state: AgentState,

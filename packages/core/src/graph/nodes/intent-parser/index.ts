@@ -68,11 +68,31 @@ export {
 
 const SUPPORTED_TYPES_HINT = renderSupportedTypesHint("short");
 
+/**
+ * MED 1: Type guard for AgentState["intentKind"] — replaces unsafe `as` casts.
+ * The Zod schema constrains output.kind to the enum, but TypeScript still
+ * requires a type guard to narrow `string` to the union without `as`.
+ */
+function isIntentKind(v: unknown): v is AgentState["intentKind"] {
+  return v === "create" || v === "query" || v === "destroy" || v === "update";
+}
+
+/**
+ * Extended intent classification schema — adds a `kind` discriminant so the
+ * graph can route read-only queries away from the heavy creation pipeline.
+ *
+ * Back-compat guarantee: `kind` defaults to `"create"` on parse failure or
+ * when the LLM omits it, so every existing creation-intent test passes
+ * unchanged. `resourceType` is still required; for `kind=query` the LLM
+ * returns the inferred type (e.g. "AWS::CloudFront::Distribution") OR
+ * "UNSUPPORTED" when no specific type was identified.
+ */
 const intentParserSchema = z.object({
   resourceType: z.enum([...SUPPORTED_TYPES, "UNSUPPORTED"] as [
     string,
     ...string[],
   ]),
+  kind: z.enum(["create", "query", "destroy", "update"]).default("create"),
 });
 
 /**
@@ -267,9 +287,12 @@ export function createIntentParserNode({ llmClient }: { llmClient: LlmPort }) {
         action: LOG_ACTIONS.INTENT_PARSED,
         extras: { resourceType: singletonType, pattern: null },
       });
-      return buildExtractionSuccessUpdate(safeIntent, extraction, state, {
-        resourceType: singletonType,
-      });
+      return {
+        ...buildExtractionSuccessUpdate(safeIntent, extraction, state, {
+          resourceType: singletonType,
+        }),
+        intentKind: "create" as const,
+      };
     }
 
     // Step 2 — Pattern-ID literal lookup (C-07) → falls through to detect.
@@ -296,16 +319,38 @@ export function createIntentParserNode({ llmClient }: { llmClient: LlmPort }) {
         action: LOG_ACTIONS.INTENT_PARSED,
         extras: { resourceType: null, pattern: detectedPattern.patternId },
       });
-      return buildExtractionSuccessUpdate(safeIntent, extraction, state, {
-        resourcePattern: detectedPattern,
-      });
+      return {
+        ...buildExtractionSuccessUpdate(safeIntent, extraction, state, {
+          resourcePattern: detectedPattern,
+        }),
+        intentKind: "create" as const,
+      };
     }
 
     // Step 4 — Bedrock classification on the sanitised intent.
-    const prompt = `Classify this AWS infrastructure request into one of these types: ${SUPPORTED_TYPES.join(", ")} or UNSUPPORTED.
-If the request says "standalone", "bare", "single", "on its own", or "just the X" (or otherwise explicitly asks for one resource in isolation), classify it as that exact type — do NOT reroute to a compound / multi-resource pattern even if the resource is usually deployed alongside others.
-Events::Connection and Events::ApiDestination ARE first-class types in this list — classify as those when the intent is to create the Connection or ApiDestination itself, even without an accompanying Rule or EventBus.
-RDS::DBInstance is first-class and MUST be classified as AWS::RDS::DBInstance when the request asks for a standalone database, regardless of whether a VPC / subnet group is mentioned.
+    //
+    // The prompt now requests TWO classifications:
+    //   1. `kind`: whether this is a create / query / destroy / update intent.
+    //   2. `resourceType`: the CFN type (same as before), OR "UNSUPPORTED".
+    //
+    // Back-compat: existing creation intents produce the same output as
+    // before because `kind` defaults to "create" on parse failure.
+    const prompt = `Classify this AWS infrastructure request.
+
+Return JSON with two fields:
+1. "kind": one of "create", "query", "destroy", "update".
+   - "create": the user wants to provision a NEW resource.
+   - "query": the user wants to READ, LIST, DESCRIBE, FIND, or ASK ABOUT existing resources. Examples: "what's my CloudFront URL?", "list my S3 buckets", "show me my Lambda functions", "how many EC2 instances do I have?", "what does my account cost?".
+   - "destroy": the user wants to DELETE or REMOVE a resource.
+   - "update": the user wants to MODIFY an existing resource.
+   When in doubt, default to "create" for back-compat.
+
+2. "resourceType": classify into one of these types: ${SUPPORTED_TYPES.join(", ")} or UNSUPPORTED.
+   - For "query" kind: use the type the user is asking about if identifiable, otherwise "UNSUPPORTED".
+   - For "create" kind: same rules as before.
+   - If the request says "standalone", "bare", "single", "on its own", or "just the X", classify as that exact type.
+   - Events::Connection and Events::ApiDestination ARE first-class types.
+   - RDS::DBInstance MUST be classified when the request asks for a standalone database.
 
 Request: "${safeIntent}"`;
     const [err, output] = await llmClient.generateStructured(
@@ -314,15 +359,123 @@ Request: "${safeIntent}"`;
       { callsite: "intent_parser", runId: state.runId },
     );
     if (err) {
+      // HIGH 5: Distinguish Zod schema-validation failures from network errors.
+      // When the LLM halluccinates a resourceType not in the supported set (e.g.
+      // "AWS::Foo::Bar"), the AI SDK's Output.object() throws a Zod validation
+      // error. That is NOT a Bedrock connectivity issue — surfacing a
+      // "check Bedrock connectivity" hint when Bedrock is fine is misleading.
+      const isValidationFailure =
+        err.message.includes("Validation") ||
+        err.message.includes("validation") ||
+        err.message.includes("Expected") ||
+        err.message.includes("Invalid enum value") ||
+        err.message.includes("ZodError");
+      if (isValidationFailure) {
+        log({
+          ts: new Date().toISOString(),
+          runId: state.runId,
+          level: "warn",
+          action: LOG_ACTIONS.INTENT_PARSED,
+          extras: { outcome: "unsupported_resource", reason: "zod_validation" },
+        });
+        return {
+          userIntent: safeIntent,
+          executionStatus: ExecutionStatus.UNSUPPORTED_RESOURCE,
+          errorMessage:
+            "I couldn't tell whether you wanted to create, list, or describe something, " +
+            "or the resource type you mentioned isn't supported yet. " +
+            `Try \`assignee plan --help\` for examples of supported types. ${SUPPORTED_TYPES_HINT}.`,
+        };
+      }
+      log({
+        ts: new Date().toISOString(),
+        runId: state.runId,
+        level: "error",
+        action: LOG_ACTIONS.INTENT_PARSED,
+        extras: { outcome: "failed", reason: "llm_error" },
+      });
       return {
         userIntent: safeIntent,
         executionStatus: ExecutionStatus.FAILED,
         errorMessage: `Intent parsing failed. Hint: check Bedrock connectivity and AWS credentials. Error: ${err.message}`,
       };
     }
-    if (output.resourceType === "UNSUPPORTED") {
+
+    // ── Query-intent short-circuit ────────────────────────────────────────
+    // When the LLM classifies this as a read-only query, bypass the heavy
+    // creation pipeline (schema-fetch / wizard / plan-generator / HITL gate).
+    // Store `intentKind` for the clarifier + result-formatter; set
+    // `executionStatus=QUERY_INTENT` so the routing function sends us to the
+    // query_handler node instead of schema_fetcher.
+    if (output.kind === "query") {
+      // For query intents, resourceType may be "UNSUPPORTED" (= "list all")
+      // or a valid CFN type (= "list this type"). Either is fine for the
+      // query-handler; we just don't run the creation validation path.
+      const resolvedQueryType =
+        output.resourceType !== "UNSUPPORTED" ? output.resourceType : undefined;
+      log({
+        ts: new Date().toISOString(),
+        runId: state.runId,
+        level: "info",
+        action: LOG_ACTIONS.INTENT_PARSED,
+        extras: { resourceType: resolvedQueryType ?? null, kind: "query" },
+      });
       return {
         userIntent: safeIntent,
+        intentKind: "query",
+        executionStatus: ExecutionStatus.QUERY_INTENT,
+        ...(resolvedQueryType ? { resourceType: resolvedQueryType } : {}),
+      };
+    }
+
+    // ── Destroy-intent guardrail ──────────────────────────────────────────
+    // When the LLM classifies this as a destroy intent, surface a clear
+    // redirect message. We MUST NOT let kind=destroy reach the creation
+    // pipeline — the user would see a CREATE plan for the resource they
+    // intended to delete (the HITL gate prevents the actual write, but the
+    // UX is broken and confusing).
+    //
+    // A dedicated destroy-routing node is deferred to a follow-up story.
+    // Until that exists, we terminate with UNSUPPORTED_RESOURCE and an
+    // actionable message pointing the user to `assignee destroy <arn>`.
+    if (output.kind === "destroy") {
+      const typeLabel =
+        output.resourceType !== "UNSUPPORTED"
+          ? output.resourceType
+          : "resource";
+      log({
+        ts: new Date().toISOString(),
+        runId: state.runId,
+        level: "info",
+        action: LOG_ACTIONS.INTENT_PARSED,
+        extras: { kind: "destroy", resourceType: typeLabel },
+      });
+      return {
+        userIntent: safeIntent,
+        intentKind: "destroy",
+        executionStatus: ExecutionStatus.UNSUPPORTED_RESOURCE,
+        errorMessage:
+          `I detected you want to destroy a ${typeLabel}. ` +
+          `Use \`assignee destroy <arn>\` directly. ` +
+          `Run \`assignee list\` to see managed ARNs.`,
+      };
+    }
+
+    if (output.resourceType === "UNSUPPORTED") {
+      log({
+        ts: new Date().toISOString(),
+        runId: state.runId,
+        level: "warn",
+        action: LOG_ACTIONS.INTENT_PARSED,
+        extras: {
+          outcome: "unsupported_resource",
+          reason: "llm_returned_unsupported",
+          kind: output.kind,
+        },
+      });
+      return {
+        userIntent: safeIntent,
+        intentKind: isIntentKind(output.kind) ? output.kind : "create",
         executionStatus: ExecutionStatus.UNSUPPORTED_RESOURCE,
         errorMessage: `Unsupported resource type. ${SUPPORTED_TYPES_HINT}.`,
       };
@@ -336,10 +489,17 @@ Request: "${safeIntent}"`;
       runId: state.runId,
       level: "info",
       action: LOG_ACTIONS.INTENT_PARSED,
-      extras: { resourceType: output.resourceType, pattern: null },
+      extras: {
+        resourceType: output.resourceType,
+        kind: output.kind,
+        pattern: null,
+      },
     });
-    return buildExtractionSuccessUpdate(safeIntent, extraction, state, {
-      resourceType: output.resourceType,
-    });
+    return {
+      ...buildExtractionSuccessUpdate(safeIntent, extraction, state, {
+        resourceType: output.resourceType,
+      }),
+      intentKind: isIntentKind(output.kind) ? output.kind : "create",
+    };
   };
 }

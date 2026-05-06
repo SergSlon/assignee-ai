@@ -77,7 +77,7 @@ describe("intentParserNode", () => {
     expect(result.resourceType).toBeUndefined();
   });
 
-  it("returns FAILED when LLM call fails", async () => {
+  it("returns FAILED when LLM call fails (network error)", async () => {
     const mock = new MockLlmAdapter(undefined, "", true, "ThrottlingException");
     const node = createIntentParserNode({ llmClient: mock });
 
@@ -86,6 +86,31 @@ describe("intentParserNode", () => {
 
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(result.errorMessage).toContain("ThrottlingException");
+    // Network errors should still hint at Bedrock connectivity
+    expect(result.errorMessage).toContain("Bedrock connectivity");
+  });
+
+  it("HIGH 5: returns UNSUPPORTED_RESOURCE (not FAILED) when LLM returns a Zod validation error", async () => {
+    // When the LLM halluccinates a resourceType like "AWS::Foo::Bar" (not in
+    // the supported enum), the AI SDK's Output.object() throws a Zod validation
+    // error. That error message contains "Validation" or "Invalid enum value".
+    // The intent-parser must return UNSUPPORTED_RESOURCE with a helpful message,
+    // NOT FAILED with a misleading "check Bedrock connectivity" hint.
+    const mock = new MockLlmAdapter(
+      undefined,
+      "",
+      true,
+      "Invalid enum value. Expected one of: ..., received: AWS::Foo::Bar",
+    );
+    const node = createIntentParserNode({ llmClient: mock });
+
+    const state = { userIntent: "create an AWS::Foo::Bar" } as AgentState;
+    const result = await node(state);
+
+    expect(result.executionStatus).toBe(ExecutionStatus.UNSUPPORTED_RESOURCE);
+    // Must NOT hint at Bedrock connectivity for a Zod validation error.
+    expect(result.errorMessage).not.toContain("Bedrock connectivity");
+    expect(result.errorMessage).toContain("assignee plan --help");
   });
 
   it("SUPPORTED_TYPES contains all expected resource types", () => {
@@ -683,5 +708,181 @@ describe("token validators", () => {
     it("rejects non-numeric", () => {
       expect(isValidEngineVersion("latest")).toBe(false);
     });
+  });
+});
+
+// ─── Story: feature-query-intent-classifier ───────────────────────────────────
+// Kind-classifier fixtures — NEW tests. All existing tests above must remain
+// green (back-compat). These fixtures exercise the `kind` field added to the
+// intent-parser schema. The MockLlmAdapter bypasses Zod parsing, so we supply
+// `kind` explicitly in the fixture object.
+
+describe("intentParserNode — kind classifier (feature-query-intent-classifier)", () => {
+  it("routes kind=query to QUERY_INTENT status and stamps intentKind", async () => {
+    const mock = new MockLlmAdapter({
+      resourceType: "AWS::CloudFront::Distribution",
+      kind: "query",
+    });
+    const node = createIntentParserNode({ llmClient: mock });
+
+    const state = {
+      userIntent: "what's my CloudFront site URL?",
+    } as AgentState;
+    const result = await node(state);
+
+    expect(result.executionStatus).toBe(ExecutionStatus.QUERY_INTENT);
+    expect(result.intentKind).toBe("query");
+    expect(result.resourceType).toBe("AWS::CloudFront::Distribution");
+  });
+
+  it("routes kind=query with UNSUPPORTED type (no specific type) — still QUERY_INTENT", async () => {
+    const mock = new MockLlmAdapter({
+      resourceType: "UNSUPPORTED",
+      kind: "query",
+    });
+    const node = createIntentParserNode({ llmClient: mock });
+
+    const state = {
+      userIntent: "list my managed resources",
+    } as AgentState;
+    const result = await node(state);
+
+    expect(result.executionStatus).toBe(ExecutionStatus.QUERY_INTENT);
+    expect(result.intentKind).toBe("query");
+    // No specific type — resourceType should be omitted
+    expect(result.resourceType).toBeUndefined();
+  });
+
+  it("kind=create with existing intent remains unchanged (back-compat)", async () => {
+    const mock = new MockLlmAdapter({
+      resourceType: "AWS::S3::Bucket",
+      kind: "create",
+    });
+    const node = createIntentParserNode({ llmClient: mock });
+
+    const state = { userIntent: "create an S3 bucket" } as AgentState;
+    const result = await node(state);
+
+    // Must behave identically to the legacy test above (no QUERY_INTENT).
+    expect(result.executionStatus).toBeUndefined();
+    expect(result.resourceType).toBe("AWS::S3::Bucket");
+    expect(result.intentKind).toBe("create");
+  });
+
+  it("kind undefined (missing from LLM) defaults to create (back-compat)", async () => {
+    // Legacy fixture shape — no 'kind' field. Must still work.
+    const mock = new MockLlmAdapter({
+      resourceType: "AWS::S3::Bucket",
+      // kind: omitted intentionally
+    });
+    const node = createIntentParserNode({ llmClient: mock });
+
+    const state = { userIntent: "create an S3 bucket" } as AgentState;
+    const result = await node(state);
+
+    expect(result.executionStatus).toBeUndefined();
+    expect(result.resourceType).toBe("AWS::S3::Bucket");
+    // undefined ?? "create" = "create"
+    expect(result.intentKind).toBe("create");
+  });
+
+  it("kind=destroy redirects with UNSUPPORTED_RESOURCE + actionable message (BLOCKER 1 fix)", async () => {
+    // BLOCKER 1: destroy intent must NOT reach the creation pipeline.
+    // The guardrail terminates with UNSUPPORTED_RESOURCE + a redirect
+    // message pointing the user to `assignee destroy <arn>`.
+    const mock = new MockLlmAdapter({
+      resourceType: "AWS::S3::Bucket",
+      kind: "destroy",
+    });
+    const node = createIntentParserNode({ llmClient: mock });
+
+    const state = {
+      userIntent: "destroy my old test bucket called genai-demo-logs",
+    } as AgentState;
+    const result = await node(state);
+
+    expect(result.executionStatus).toBe(ExecutionStatus.UNSUPPORTED_RESOURCE);
+    expect(result.intentKind).toBe("destroy");
+    // errorMessage must contain the redirect hint — NOT the 38-type wall
+    expect(result.errorMessage).toContain("assignee destroy");
+    expect(result.errorMessage).toContain("assignee list");
+    // resourceType must NOT be set — destroy must not reach the creation pipeline
+    expect(result.resourceType).toBeUndefined();
+  });
+
+  it("kind=destroy with UNSUPPORTED type still redirects cleanly", async () => {
+    const mock = new MockLlmAdapter({
+      resourceType: "UNSUPPORTED",
+      kind: "destroy",
+    });
+    const node = createIntentParserNode({ llmClient: mock });
+
+    const state = {
+      userIntent: "destroy my old thing",
+    } as AgentState;
+    const result = await node(state);
+
+    expect(result.executionStatus).toBe(ExecutionStatus.UNSUPPORTED_RESOURCE);
+    expect(result.intentKind).toBe("destroy");
+    expect(result.errorMessage).toContain("assignee destroy");
+    expect(result.resourceType).toBeUndefined();
+  });
+
+  it("kind=update stamps intentKind and continues to creation path (deferred)", async () => {
+    const mock = new MockLlmAdapter({
+      resourceType: "AWS::S3::Bucket",
+      kind: "update",
+    });
+    const node = createIntentParserNode({ llmClient: mock });
+
+    const state = {
+      userIntent: "update my S3 bucket to enable versioning",
+    } as AgentState;
+    const result = await node(state);
+
+    expect(result.executionStatus).toBeUndefined();
+    expect(result.intentKind).toBe("update");
+    expect(result.resourceType).toBe("AWS::S3::Bucket");
+  });
+
+  it("kind=query with S3 type — stamps QUERY_INTENT (acceptance criterion 2)", async () => {
+    const mock = new MockLlmAdapter({
+      resourceType: "AWS::S3::Bucket",
+      kind: "query",
+    });
+    const node = createIntentParserNode({ llmClient: mock });
+
+    const state = { userIntent: "list my S3 buckets" } as AgentState;
+    const result = await node(state);
+
+    expect(result.executionStatus).toBe(ExecutionStatus.QUERY_INTENT);
+    expect(result.intentKind).toBe("query");
+    expect(result.resourceType).toBe("AWS::S3::Bucket");
+  });
+});
+
+// ─── HIGH 3: singleton-override + pattern-detect must set intentKind ──────────
+// Before the fix, the singleton-override branch (Step 1) and pattern-detect
+// branch (Step 3) returned buildExtractionSuccessUpdate() without setting
+// intentKind. A query intent that happened to match a singleton override
+// keyword would then get intentKind=undefined, falling into the creation
+// pipeline.
+
+describe("intentParserNode — intentKind stamped on all fast-path branches (HIGH 3)", () => {
+  it("singleton-override branch stamps intentKind='create'", async () => {
+    // "EFS mount target" triggers the singleton override for AWS::EFS::MountTarget
+    // (from SINGLETON_OVERRIDE_CUES) without reaching the LLM classifier.
+    const mock = new MockLlmAdapter({ resourceType: "AWS::EFS::MountTarget" });
+    const node = createIntentParserNode({ llmClient: mock });
+
+    const state = {
+      userIntent: "Create an EFS mount target for my existing file system",
+    } as AgentState;
+    const result = await node(state);
+
+    // Singleton-override takes the Step 1 fast-path — LLM is NOT called.
+    // intentKind must be explicitly "create" (not undefined).
+    expect(result.intentKind).toBe("create");
+    expect(result.executionStatus).toBeUndefined();
   });
 });

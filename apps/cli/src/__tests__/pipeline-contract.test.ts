@@ -1,11 +1,14 @@
 /**
  * Pipeline State Contract Test — validates that graph state flows correctly
- * through all 14 nodes in the Assignee.ai pipeline.
+ * through all nodes in the Assignee.ai pipeline.
  *
  * Epic 94 R1 (A-01): `validate_desired_state` joined the roster when the
  * Epic 92 u.c.1 plan-time S3 validator was finally wired into
  * `create-graph.ts`. The expected-nodes list is strengthened (not
  * weakened) — we still require every prior node AND the new one.
+ *
+ * Story feature-query-intent-classifier: `query_handler` (15th node) added
+ * for read-only query intents that bypass the creation pipeline.
  *
  * Mocks at the AWS boundary (CloudControl, Bedrock), not at the node boundary.
  * Verifies key state fields are populated at each stage.
@@ -35,11 +38,13 @@ describe("Pipeline contract — graph node enumeration", () => {
     "bp_evaluator",
     "fix_applicator",
     "result_formatter",
+    // Story feature-query-intent-classifier: 15th node for read-only queries.
+    "query_handler",
   ] as const;
 
-  it("GraphNode has exactly 14 nodes", () => {
+  it("GraphNode has exactly 15 nodes", () => {
     const nodeValues = Object.values(GraphNode);
-    expect(nodeValues).toHaveLength(14);
+    expect(nodeValues).toHaveLength(15);
   });
 
   it.each(expectedNodes)("GraphNode contains '%s'", (nodeName) => {

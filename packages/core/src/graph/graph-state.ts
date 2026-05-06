@@ -35,6 +35,25 @@ import type {
 } from "../index.js";
 import { AssigneeError } from "../errors.js";
 import type { FreeTierNote } from "../utils/free-tier.js";
+import type { ManagedResource } from "../list-resources/types.js";
+
+/**
+ * Structured result from the query_handler node. Populated when
+ * intentKind="query" and the query-handler successfully resolved the
+ * user's question against managed resources.
+ *
+ * Story: feature-query-intent-classifier
+ */
+export interface QueryResult {
+  /** The resource type the user was asking about (if resolved). */
+  resourceType?: string;
+  /** Resolved managed resources matching the query. */
+  resources: ManagedResource[];
+  /** Human-readable one-liner summarising what was asked. */
+  naturalQuestion: string;
+  /** Whether the result set is empty for the queried type. */
+  isEmpty: boolean;
+}
 import type { AppliedFix, SecurityFinding } from "../types/fix-finding.js";
 import type { BPFinding } from "@assignee/best-practices";
 import type { Advisory } from "./nodes/intent-parser.js";
@@ -277,6 +296,31 @@ export const graphAnnotation = Annotation.Root({
   config: Annotation<ConfigPort>({
     reducer: (a, b) => b ?? a,
     default: () => new ProcessEnvConfigAdapter(),
+  }),
+  /**
+   * Intent kind classified by the intent-parser. Set for every intent;
+   * defaults to undefined (treated as "create") for backward-compat.
+   *
+   * - "create"  — user wants to provision a new resource (existing path).
+   * - "query"   — user wants to read/list/describe existing resources.
+   * - "destroy" — user wants to remove a resource (routes to destroy flow).
+   * - "update"  — user wants to modify a resource (deferred, falls through to create).
+   */
+  intentKind: Annotation<"create" | "query" | "destroy" | "update" | undefined>(
+    {
+      reducer: (_, b) => b,
+      default: () => undefined,
+    },
+  ),
+  /**
+   * Structured output from the query-handler node. Populated when
+   * intentKind="query" and the query-handler successfully resolved the
+   * user's question against managed resources. The result-formatter
+   * renders this instead of the plan/apply output.
+   */
+  queryResult: Annotation<QueryResult | undefined>({
+    reducer: (_, b) => b,
+    default: () => undefined,
   }),
 });
 

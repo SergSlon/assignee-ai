@@ -104,6 +104,16 @@ export const LOG_ACTIONS = {
    * visible under `--verbose`.
    */
   SCHEMA_STALE_CACHE_FALLBACK: "schema_stale_cache_fallback",
+  /**
+   * Story feature-query-intent-classifier: emitted by the query_handler node
+   * after the user's query intent has been resolved to a set of managed
+   * resources. Distinct from INTENT_PARSED (which fires in intent-parser)
+   * so log consumers can distinguish classification from resolution.
+   *
+   * HIGH 1 fix: replaced the incorrect INTENT_PARSED action that was
+   * previously used inside query_handler (wrong callsite semantics).
+   */
+  QUERY_RESOLVED: "query_resolved",
 } as const;
 
 export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];

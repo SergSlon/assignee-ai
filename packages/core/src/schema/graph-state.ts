@@ -22,6 +22,13 @@ export const ExecutionStatus = {
   POLICY_BLOCKED: "POLICY_BLOCKED",
   UNSUPPORTED_RESOURCE: "UNSUPPORTED_RESOURCE",
   CANCELLED: "CANCELLED",
+  /**
+   * Set by the intent-parser when the user's input is a read-only query
+   * (kind=query). The graph routes directly from intent_parser →
+   * query_handler → result_formatter, bypassing the heavy creation pipeline
+   * (schema-fetch / wizard / plan-generator). Zero AWS writes are performed.
+   */
+  QUERY_INTENT: "QUERY_INTENT",
 } as const;
 export type ExecutionStatusType =
   (typeof ExecutionStatus)[keyof typeof ExecutionStatus];

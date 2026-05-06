@@ -40,6 +40,7 @@ import {
 } from "../../telemetry/timing.js";
 import { resolveCredentials } from "./credentials.js";
 import { buildLlmClient } from "./llm-factory.js";
+import { fetchManagedResources } from "../../services/list-resources.js";
 
 export interface CommandContext {
   intent: string;
@@ -125,6 +126,12 @@ export async function runCommand(opts: RunCommandOptions): Promise<void> {
         const graph = createGraph(tools, {
           llmClient,
           recorder: recorder ?? undefined,
+          // Story feature-query-intent-classifier: inject the RGTA-backed
+          // managed-resource fetcher so kind=query intents resolve live AWS
+          // resources in the query_handler node. `fetchManagedResources` uses
+          // `tools` for optional billing enrichment.
+          resourceFetcher: (resourceTypeFilter) =>
+            fetchManagedResources(undefined, resourceTypeFilter, tools),
         });
 
         const result = await opts.run({
