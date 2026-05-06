@@ -268,7 +268,7 @@ Docs follow the [Diátaxis](https://diataxis.fr/) framework. Top-level entry poi
 
 The course-submission pitch deck for this project (10 slides, dark tech-talk theme):
 
-- **Live**: <https://d1eka2i9dtl8tu.cloudfront.net/> — provisioned by Assignee.ai itself via the static-website compound pattern (S3 + CloudFront + OAC + uploads).
+- **Live**: <https://sergslon.github.io/assignee-ai/presentation/> — served via GitHub Pages directly from `main`.
 - **Source in repo**: [presentation/index.html](presentation/index.html) — single self-contained HTML file (~94 KB, no external assets except Google Fonts).
 - **Demo script**: [presentation/DEMO.md](presentation/DEMO.md) — pre-demo setup, 5-minute live script, backup plans, cleanup.
 
