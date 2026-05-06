@@ -8,14 +8,14 @@ Get from zero to a provisioned AWS resource in under 60 seconds.
 
 ## Install
 
-Both `@assignee/cli` and `@assignee/mcp-server` are currently `private` and not published to npm. Build from source locally and link the CLI into your `$PATH`:
+The workspace packages (`assignee` CLI and the MCP server) are `"private": true` — this is a course-submission project and nothing is published to npm or Homebrew. Build from source locally and link the CLI into your `$PATH`:
 
 ```bash
 git clone https://github.com/SergSlon/assignee-ai.git
 cd assignee-ai
 pnpm install
 pnpm build
-pnpm setup               # one-time: writes pnpm global bin to $PATH (reload shell after)
+pnpm setup               # pnpm CLI's global-bin bootstrap (writes pnpm bin to $PATH; not assignee-specific). Reload shell after.
 pnpm link --global        # adds 'assignee' to PATH
 assignee doctor --short   # verify AWS credentials + Bedrock region
 ```
@@ -31,7 +31,7 @@ assignee.ai auto-detects AWS credentials from the standard chain:
 3. `~/.aws/credentials` file
 4. AWS SSO session (`aws sso login`)
 
-The CLI also needs Amazon Bedrock access in your region (default: `us-east-1`).
+The CLI also needs Amazon Bedrock access in your region (fallback: `us-east-1`, used when neither `AWS_REGION` env nor an `~/.aws/config` default region is set).
 
 ## First Run
 
@@ -57,7 +57,7 @@ What happens:
 2. **Schema Fetcher** -- fetches the CloudFormation schema for S3 buckets
 3. **Option Elicitor** -- prompts for any required fields not inferred from your intent
 4. **Plan Generator** -- Bedrock produces a desired-state JSON with all fields populated
-5. **BP Evaluator** -- evaluates 185 best practice rules (security, cost, reliability)
+5. **BP Evaluator** -- evaluates the full best-practice rule set (security, cost, reliability). The exact count is a runtime SSOT — see `packages/best-practices/manifest.json`.
 6. **Auto-Fix** -- patches fixable violations (e.g., enables S3 public access blocking, versioning, encryption, lifecycle policies)
 7. **Preflight Guard** -- blocks the plan if critical violations remain
 8. **Cost Estimator** -- fetches real-time pricing via the Pricing MCP
@@ -68,7 +68,7 @@ What happens:
 > assignee plan --set BucketName=my-logs --set Tags=env:prod "Create an S3 bucket"
 > ```
 
-The output is a plan box showing the desired state, estimated monthly cost, and any best practice findings. A checkpoint file is saved to `.assignee/checkpoint-<runId>.json` (valid for 72 hours).
+The output is a plan box showing the desired state, estimated monthly cost, and any best practice findings. A checkpoint file is saved to `~/.assignee/checkpoint-<runId>.json` (valid for 72 hours).
 
 ## Quick mode
 
@@ -87,7 +87,7 @@ assignee plan --quick "Create an S3 bucket for cold-storage-backups"
 assignee apply "create an S3 bucket named my-app-logs"
 
 # Or apply a saved plan checkpoint
-assignee apply --checkpoint .assignee/checkpoint-abc123.json
+assignee apply --checkpoint ~/.assignee/checkpoint-abc123.json
 
 # Or just run apply with no args -- auto-detects the latest checkpoint
 assignee apply
@@ -97,7 +97,7 @@ The apply flow adds these steps after planning:
 
 8. **Human Approval** -- shows the plan and asks you to confirm (type "yes"). When resuming from a checkpoint (including the plan-to-apply flow), confirmation is auto-approved to avoid double prompting.
 9. **Resource Provisioner** -- creates the resource via AWS CloudControl API. State guard is skipped for S3 buckets (globally unique names cause false positives).
-10. **Status Poller** -- polls every 2s until CloudControl reports SUCCESS or FAILED (extended 20-min timeout for CloudFront / RDS / ELBv2 / NatGateway)
+10. **Status Poller** -- polls CloudControl with exponential backoff (base 2 s, cap 60 s, jitter) until it reports SUCCESS or FAILED (extended 20-min timeout for CloudFront / RDS / ELBv2 / NatGateway)
 11. **Result Formatter** -- displays the created resource ARN, tags, and cost
 
 ## What Just Happened
@@ -106,9 +106,10 @@ The 14-node LangGraph pipeline processed your intent through these stages:
 
 ```
 intent_parser -> schema_fetcher -> option_elicitor -> compound_dispatcher
-     -> plan_generator -> advice_generator -> bp_evaluator -> fix_applicator
-     -> preflight_guard -> human_approval -> resource_provisioner
-     -> status_poller -> result_formatter
+     -> plan_generator -> validate_desired_state -> advice_generator
+     -> bp_evaluator -> fix_applicator -> preflight_guard
+     -> human_approval -> resource_provisioner -> status_poller
+     -> result_formatter
 ```
 
 Each node is a pure function operating on a shared state object. The graph supports both `plan` mode (stops at preflight_guard) and `apply` mode (runs the full pipeline).

@@ -12,26 +12,23 @@
 This page is the reference entry for `AWS::EC2::Instance` as supported by Assignee.ai.
 It is auto-generated from the supported-types registry — edit
 `packages/core/src/config/resource-types/supported.ts` or the plugin at
-`packages/core/src/plugins/` to update the authoritative source.
+`packages/core/src/resource-plugins/plugins/` to update the authoritative source.
 
 ## Assignee.ai support
 
 Assignee.ai provisions `AWS::EC2::Instance` resources via the AWS CloudControl API.
-A dedicated plugin handles schema elicitation, default injection, and
-best-practice rule evaluation for this type.
+A dedicated plugin handles schema elicitation, default injection, and best-practice rule evaluation for this type.
 
 ### Typical intent examples
 
 ```bash
-assignee plan "Create a Instance"
-assignee apply "Create a Instance named my-ec2-instance"
+assignee plan "Create an EC2 instance"
+assignee apply "Create an EC2 instance named my-ec2-instance"
 ```
 
 ### Best-practice rules
 
-Best-practice rules for this type are defined in
-`packages/best-practices/rules/`. Run `assignee plan` to see which rules
-apply to your specific configuration.
+Best-practice rules for this type live under `packages/best-practices/ec2/` (per-service subdirectories). Run `assignee plan` to see which rules apply to your specific configuration.
 
 ### Pricing
 

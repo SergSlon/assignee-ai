@@ -14,10 +14,10 @@ canonical: true
 ## Quick reference
 
 ```bash
-pnpm test                                         # full suite, ~20s, no AWS needed (see "pnpm -r test:coverage" for live counts)
-pnpm check-types                                  # TypeScript type check
-pnpm --filter @assignee/mcp-server test:e2e       # MCP E2E against real AWS (~43 min)
-RUN_E2E=1 pnpm --filter assignee test             # CLI graph E2E against real AWS (opt-in gate)
+pnpm test                                                       # full suite, ~20s, no AWS needed (see "pnpm -r test:coverage" for live counts)
+pnpm check-types                                                # TypeScript type check
+RUN_E2E_MCP=1 pnpm --filter @assignee/mcp-server test:e2e       # MCP E2E against real AWS (~43 min)
+RUN_E2E=1 pnpm --filter assignee test                           # CLI graph E2E against real AWS (opt-in gate)
 RUN_E2E=1 npx vitest run src/e2e/nightly-destroy-smoke.test.ts  # destroy-smoke suite (opt-in)
 RUN_INSTALL_MITM_FIXTURE=1 npx vitest run src/e2e/install-sh-mitm.test.ts  # install-script MITM fixture
 ```
@@ -26,23 +26,29 @@ RUN_INSTALL_MITM_FIXTURE=1 npx vitest run src/e2e/install-sh-mitm.test.ts  # ins
 
 ## CLI E2E gate — `RUN_E2E=1` and turbo cache keys
 
-The CLI graph E2E suite (`apps/cli/src/e2e/e2e-plan.test.ts`) hits real AWS via the
-full LangGraph pipeline with real MCP servers and operator credentials. It is
-**opt-in only**. The gate is implemented at lines 27-28 of the file:
+The CLI graph E2E suite is split across the
+`apps/cli/src/e2e/e2e-plan-*.test.ts` files (compute, data, network, events,
+iam, observability, s3, meta, plus four `compounds-*` files). Every spec
+hits real AWS via the full LangGraph pipeline with real MCP servers and
+operator credentials. The suite is **opt-in only**. The shared gate lives
+in `apps/cli/src/e2e/e2e-plan-shared.ts`:
 
 ```ts
 const RUN_E2E = process.env["RUN_E2E"] === "1";
 const describeE2E = RUN_E2E ? describe : describe.skip;
 ```
 
-Plain `pnpm test` (and any CI job without `RUN_E2E=1`) will always skip the
-31 E2E cases — no real provisioning happens. To opt in:
+Plain `pnpm test` (and any CI job without `RUN_E2E=1`) skips every E2E
+case — no real provisioning happens. The exact spec count is a runtime
+SSOT — see `pnpm -r test:coverage` for the live total. To opt in:
 
 ```bash
 # Make sure .env contains ASSIGNEE_OPERATOR_ACCESS_KEY_ID / SECRET and AWS_REGION
 RUN_E2E=1 pnpm --filter assignee test
-# or for just the e2e file (recommended — faster feedback):
-RUN_E2E=1 npx vitest run src/e2e/e2e-plan.test.ts --reporter=verbose
+# or for a single split file (recommended — faster feedback):
+RUN_E2E=1 npx vitest run src/e2e/e2e-plan-s3.test.ts --reporter=verbose
+# or the whole split set:
+RUN_E2E=1 npx vitest run "src/e2e/e2e-plan-*.test.ts" --reporter=verbose
 ```
 
 ### Why the gate needs turbo env passthrough (don't remove this!)
@@ -136,9 +142,11 @@ error-path handling without hitting real GitHub releases:
 RUN_INSTALL_MITM_FIXTURE=1 npx vitest run src/e2e/install-sh-mitm.test.ts
 ```
 
-Set `RUN_INSTALL_MITM_FIXTURE=1` in the `tasks.test.env` array in
-`turbo.json` if you add env-var branching inside that file (same rule as
-`RUN_E2E`).
+> **Cache-key gap:** `RUN_INSTALL_MITM_FIXTURE` is **not** currently in the
+> `tasks.test.env` array in `turbo.json`. If you start running this gate
+> through `pnpm test` (rather than directly via vitest), add it to
+> `tasks.test.env` AND `tasks.test:coverage.env` so turbo invalidates the
+> cache when the gate flips — same rule as `RUN_E2E`.
 
 ### Destroy-strategy coverage floor
 
@@ -159,7 +167,12 @@ suite — no special gate is needed.
 
 ## MCP Server E2E Tests (real AWS)
 
-Full lifecycle tests for all 38 resource types through the MCP server: plan → estimate → apply → list → destroy → verify.
+Full lifecycle tests for every supported resource type through the MCP
+server: plan → estimate → apply → list → destroy → verify. The suite walks
+every entry in `packages/core/src/config/resource-types/supported.ts`
+(`SUPPORTED_TYPES_ARRAY`) — run `pnpm -r test:coverage` for the live count
+rather than relying on a number kept in this doc. The suite is gated by
+`RUN_E2E_MCP=1` — every example below assumes the gate is set.
 
 ### Prerequisites
 
@@ -174,15 +187,17 @@ Full lifecycle tests for all 38 resource types through the MCP server: plan → 
 # Build first (E2E uses compiled MCP server)
 npx turbo build --force
 
-# Full run — 25 types × 6 steps = 150 test steps
-node apps/mcp-server/e2e-test.mjs 2>&1 | tee /tmp/mcp-e2e.log
+# Full run — one entry per `SUPPORTED_TYPES_ARRAY` row × 6 lifecycle steps
+# (see `packages/core/src/config/resource-types/supported.ts` for the
+# canonical list; `pnpm -r test:coverage` for the live count).
+RUN_E2E_MCP=1 node apps/mcp-server/e2e-test.mjs 2>&1 | tee /tmp/mcp-e2e.log
 
 # Single resource type
-node apps/mcp-server/e2e-test.mjs --type Lambda
-node apps/mcp-server/e2e-test.mjs --type RDS
+RUN_E2E_MCP=1 node apps/mcp-server/e2e-test.mjs --type Lambda
+RUN_E2E_MCP=1 node apps/mcp-server/e2e-test.mjs --type RDS
 
 # Smoke test (cheap resources only)
-node apps/mcp-server/e2e-test.mjs --smoke
+RUN_E2E_MCP=1 node apps/mcp-server/e2e-test.mjs --smoke
 ```
 
 ### What it tests
@@ -196,9 +211,20 @@ node apps/mcp-server/e2e-test.mjs --smoke
 | destroy  | CloudControl + pre-delete hooks            | Resource deleted, dependencies handled      |
 | verify   | Confirm resource absent                    | Tagging API de-index or AWS API state check |
 
-### Resource types (38 first-class CCAPI types, 0 SDK-routable)
+### Resource types (CCAPI-routed)
 
-All 38 supported resource types flow through the CloudControl API (36 with dedicated plugins + 2 compound-only types — `EC2::VPCGatewayAttachment`, `EC2::SubnetRouteTableAssociation` — that share the generic fallback plugin). There are no remaining SDK write paths. See [docs/resource-types.md](resource-types.md) for the full list including the recently added EFS (FileSystem + MountTarget), EventBridge (Rule, EventBus, Connection, ApiDestination), KMS Key, CloudFront (Distribution + OriginAccessControl), S3 BucketPolicy, and SNS Subscription. 11 compound patterns are exercised end-to-end (VPC networking, VPC public-only, lambda-with-exec-role, efs-with-vpc, static-website, scheduled-lambda, serverless-api, message-processing, container-service, three-tier-web, plus websocket-api).
+Every type in `SUPPORTED_TYPES_ARRAY` (see
+`packages/core/src/config/resource-types/supported.ts`) flows through the
+CloudControl API. Most ship with a dedicated plugin; two compound-only
+types — `EC2::VPCGatewayAttachment`, `EC2::SubnetRouteTableAssociation` —
+share the generic fallback plugin. There are no SDK write paths. See
+[docs/resource-types.md](resource-types.md) for the full list (recently
+added: EFS FileSystem + MountTarget, EventBridge Rule / EventBus /
+Connection / ApiDestination, KMS Key, CloudFront Distribution +
+OriginAccessControl, S3 BucketPolicy, SNS Subscription). The compound
+patterns exercised end-to-end are listed in
+`packages/core/src/pattern-templates/index.ts` (run `pnpm -r
+test:coverage` for the live count).
 
 ### Cost
 
@@ -206,7 +232,10 @@ Actual AWS costs for a full end-to-end run vary by region and pricing changes. M
 
 ### Duration
 
-~43 minutes. RDS provisioning is the bottleneck (~8 min apply + ~5 min destroy).
+The full run is dominated by RDS provisioning (~8 min apply + ~5 min
+destroy) plus CloudFront / NAT / ELB. Wall-clock duration depends on
+region, AWS-side queue times, and which resource types are exercised —
+plan for "a long coffee break" rather than a fixed minute count.
 
 ---
 
@@ -221,22 +250,16 @@ pnpm check-types   # TypeScript type check
 
 All MCP mock responses in `apps/cli/src/test-fixtures/mcp-mock-responses.ts` are captured from **live MCP servers** (`aws-pricing-mcp-server`, `aws-documentation-mcp-server`, `iam-mcp-server`, `well-architected-security-mcp-server`, `billing-cost-management-mcp-server`). No fabricated data.
 
-> **Historical note:** the CFN schema fixtures were originally captured from the now-removed `awslabs.cfn-mcp-server` (Story 7.6 migrated CloudFormation schema access to `@aws-sdk/client-cloudformation`). The cached JSON fixtures remain valid because they shape-match what the SDK returns; they are no longer regenerated. See `apps/cli/scripts/capture-mcp-responses.mjs` for the legacy capture path.
+> **Historical note:** the CFN schema fixtures were originally captured from the now-removed `awslabs.cfn-mcp-server`; CloudFormation schema access was later migrated to `@aws-sdk/client-cloudformation`. The cached JSON fixtures remain valid because they shape-match what the SDK returns; they are no longer regenerated. See `apps/cli/scripts/capture-mcp-responses.mjs` for the legacy capture path.
 
-**What's included:**
-
-| Category                  | Count | Source                                                                                                   |
-| ------------------------- | ----- | -------------------------------------------------------------------------------------------------------- |
-| CFN schemas               | 8     | historical capture from `awslabs.cfn-mcp-server` (now via `@aws-sdk/client-cloudformation`)              |
-| Pricing                   | 11    | `awslabs.aws-pricing-mcp-server`                                                                         |
-| Doc search                | 4     | `awslabs.aws-documentation-mcp-server`                                                                   |
-| Doc read sections         | 5     | `awslabs.aws-documentation-mcp-server`                                                                   |
-| Doc read full             | 2     | `awslabs.aws-documentation-mcp-server`                                                                   |
-| IAM                       | 3     | `awslabs.iam-mcp-server` (s3BucketAllowed, ec2InstancePartialDeny, lambdaFunctionAllowed)                |
-| Well-Architected Security | 2     | `awslabs.well-architected-security-mcp-server` (s3BucketPosture, noFindings)                             |
-| Billing                   | 4     | `awslabs.billing-cost-management-mcp-server` (s3BucketCost, multiResourceCost, noCostData, costForecast) |
-
-Total: ~39 captured responses, plus synthetic edge cases (empty responses, malformed JSON, null, errors) for boundary testing.
+**What's included:** captured fixtures cover CFN schemas (historical capture
+from `awslabs.cfn-mcp-server`, now served via `@aws-sdk/client-cloudformation`),
+AWS Pricing MCP, AWS Documentation MCP (search, sections, full read), IAM MCP,
+Well-Architected Security MCP, and Billing/Cost-Management MCP responses, plus
+synthetic edge cases (empty responses, malformed JSON, null, errors) for
+boundary testing. Exact per-category fixture counts drift as new captures
+land — see `apps/cli/src/test-fixtures/mcp-mock-responses/` and the
+`pnpm -r test:coverage` summary for the live counts.
 
 **Usage in tests:**
 
@@ -309,89 +332,93 @@ node capture-mcp-responses.mjs      # spawns MCP servers, captures ~39 responses
 node process-captured-responses.mjs  # trims schemas/pricing/docs to fixture size
 ```
 
-> `build-fixture-ts.mjs` is **disabled** (exits 2) since story 48-10 split the
-> monolithic fixture into per-resource files under
-> `packages/core/src/test-fixtures/mcp-mock-responses/`. To add or update fixtures,
-> edit the per-resource files directly — see the directory layout and the facade
-> re-export in `mcp-mock-responses.ts`.
+> `build-fixture-ts.mjs` is **disabled** (exits 2) — the monolithic fixture
+> was split into per-resource files under
+> `packages/core/src/test-fixtures/mcp-mock-responses/`. To add or update
+> fixtures, edit the per-resource files directly — see the directory layout
+> and the facade re-export in `mcp-mock-responses.ts`.
 
 > `captured-responses/` is now tracked in git (committed alongside the TypeScript fixture). `processed-responses/` is still gitignored — only the final TypeScript fixture and the raw captures are committed.
 
 ### Key test files
 
-| File                                  | Tests | What it covers                                                                                                               |
-| ------------------------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `graph-integration.test.ts`           | 29    | Full graph pipeline: S3, EC2, Lambda, IAM, DynamoDB, error paths, pricing edge cases                                         |
-| `preflight-guard.test.ts`             | 10    | Required field validation, cost estimation, pricing timeout                                                                  |
-| `intent-parser.test.ts`               | 11    | Resource type classification, compound pattern detection                                                                     |
-| `schema-fetcher.test.ts`              | 7     | MCP schema retrieval, error handling                                                                                         |
-| `option-elicitor.test.ts`             | ~50   | Interactive prompts, showIf conditionals, CI mode                                                                            |
-| `plan-generator.test.ts`              | 8     | LLM plan generation, JSON parsing                                                                                            |
-| `pricing-lookup.test.ts`              | 17    | EC2/RDS live price enrichment                                                                                                |
-| `result-formatter.test.ts`            | ~45   | Memory writes, security checks, output formatting                                                                            |
-| `status-poller.test.ts`               | —     | CloudControl status polling, timeout handling                                                                                |
-| `destroy.test.ts`                     | ~25   | Safe teardown, confirmation prompts, error paths                                                                             |
-| `list.test.ts`                        | 7     | Managed resource listing, filtering                                                                                          |
-| `status.test.ts`                      | 4     | Summary with cost totals                                                                                                     |
-| `resource-resolver.test.ts`           | 7     | Resource type resolution, ARN parsing                                                                                        |
-| `list-resources.test.ts`              | 14    | Resource enumeration, tag-based filtering                                                                                    |
-| `billing.test.ts`                     | 11    | Cost data retrieval, forecast, multi-resource aggregation                                                                    |
-| `status-aggregator.test.ts`           | 19    | Status rollup across multiple resources                                                                                      |
-| `memory.test.ts` (service)            | —     | Memory service read/write, hint retrieval                                                                                    |
-| `memory.test.ts` (core schema)        | —     | Memory schema validation                                                                                                     |
-| `iam-actions.test.ts`                 | 6     | IAM action resolution, permission checks                                                                                     |
-| `distribution.test.ts`                | —     | CLI + MCP server distribution packaging                                                                                      |
-| `mcp-servers.test.ts`                 | 6     | MCP server config loading, lifecycle                                                                                         |
-| `server.test.ts` (MCP)                | —     | MCP server startup, tool registration                                                                                        |
-| `plan-resource.test.ts` (MCP)         | —     | MCP plan-resource tool handler                                                                                               |
-| `apply-plan.test.ts` (MCP)            | —     | MCP apply-plan tool handler                                                                                                  |
-| `list-managed-resources.test.ts`      | —     | MCP list-managed-resources tool handler                                                                                      |
-| `estimate-cost.test.ts` (MCP)         | —     | MCP estimate-cost tool handler                                                                                               |
-| Plugin tests (core)                   | ~100+ | S3, EC2, RDS, Lambda, generic plugin config hints                                                                            |
-| `bp-all-rules-audit.test.ts`          | 266   | All 185 BP rules fire correctly (manifest-tracked)                                                                           |
-| `bp-auto-fix-audit.test.ts`           | 55    | All 27 auto-fixable rules verified end-to-end                                                                                |
-| `compound-provisioning-audit.test.ts` | 69    | Compound patterns through dispatcher+provisioner (coverage count is derived at runtime — see the audit test's registry loop) |
-| `compound-failure-injector.test.ts`   | 12    | Failure-injection harness: in-memory port, tracker, synthetic error at index N                                               |
-| `compound-cleanup-matrix.test.ts`     | 19    | VPC 17-position reverse-edge cleanup invariant (parameterized)                                                               |
-| `compound-smoke-trace.test.ts`        | 21    | Happy-path smoke + marker-ref validation for 6 compound patterns                                                             |
-| `apply-mode-audit.test.ts`            | 5     | Full apply mode: plan->bp->fix->approval->provision->result                                                                  |
-| `destroy-service.test.ts`             | 16    | destroySingleResource: CloudControl, SDK fallback, CloudFront                                                                |
-| `s3-upload.test.ts`                   | 19    | S3 file upload with MIME types, progress, error handling                                                                     |
-| `bulk-destroy.test.ts`                | 21    | Tier ordering, IAM exclusion, pattern filtering                                                                              |
-| `decomposer-integration.test.ts`      | —     | Decomposer integration across all resource types                                                                             |
-| `bp-enforcement-integration.test.ts`  | —     | Best-practice enforcement modes (enforce/warn/skip) integration                                                              |
-| `secure-defaults-audit.test.ts`       | —     | Secure default values audit across all resource types                                                                        |
-| `cost-estimator-e2e.test.ts`          | —     | Cost estimator end-to-end with real pricing data                                                                             |
-| `coverage.test.ts`                    | 47    | Integration: asserts 38/38 pricing strategies + 38/38 decomposers registered                                                 |
+> **Test counts drift.** The numbers below are illustrative snapshots.
+> Run `pnpm -r test:coverage` for the current per-file totals — the
+> table is intentionally not kept in step with HEAD.
 
-### Pricing decomposer tests (Epic 39)
+| File                                  | Tests | What it covers                                                                                                                             |
+| ------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `graph-integration.test.ts`           | 29    | Full graph pipeline: S3, EC2, Lambda, IAM, DynamoDB, error paths, pricing edge cases                                                       |
+| `preflight-guard.test.ts`             | 10    | Required field validation, cost estimation, pricing timeout                                                                                |
+| `intent-parser.test.ts`               | 11    | Resource type classification, compound pattern detection                                                                                   |
+| `schema-fetcher.test.ts`              | 7     | MCP schema retrieval, error handling                                                                                                       |
+| `option-elicitor.test.ts`             | ~50   | Interactive prompts, showIf conditionals, CI mode                                                                                          |
+| `plan-generator.test.ts`              | 8     | LLM plan generation, JSON parsing                                                                                                          |
+| `pricing-lookup.test.ts`              | 17    | EC2/RDS live price enrichment                                                                                                              |
+| `result-formatter.test.ts`            | ~45   | Memory writes, security checks, output formatting                                                                                          |
+| `status-poller.test.ts`               | —     | CloudControl status polling, timeout handling                                                                                              |
+| `destroy.test.ts`                     | ~25   | Safe teardown, confirmation prompts, error paths                                                                                           |
+| `list.test.ts`                        | 7     | Managed resource listing, filtering                                                                                                        |
+| `status.test.ts`                      | 4     | Summary with cost totals                                                                                                                   |
+| `resource-resolver.test.ts`           | 7     | Resource type resolution, ARN parsing                                                                                                      |
+| `list-resources.test.ts`              | 14    | Resource enumeration, tag-based filtering                                                                                                  |
+| `billing.test.ts`                     | 11    | Cost data retrieval, forecast, multi-resource aggregation                                                                                  |
+| `status-aggregator.test.ts`           | 19    | Status rollup across multiple resources                                                                                                    |
+| `memory.test.ts` (service)            | —     | Memory service read/write, hint retrieval                                                                                                  |
+| `memory.test.ts` (core schema)        | —     | Memory schema validation                                                                                                                   |
+| `iam-actions.test.ts`                 | 6     | IAM action resolution, permission checks                                                                                                   |
+| `distribution.test.ts`                | —     | CLI + MCP server distribution packaging                                                                                                    |
+| `mcp-servers.test.ts`                 | 6     | MCP server config loading, lifecycle                                                                                                       |
+| `server.test.ts` (MCP)                | —     | MCP server startup, tool registration                                                                                                      |
+| `plan-resource.test.ts` (MCP)         | —     | MCP plan-resource tool handler                                                                                                             |
+| `apply-plan.test.ts` (MCP)            | —     | MCP apply-plan tool handler                                                                                                                |
+| `list-managed-resources.test.ts`      | —     | MCP list-managed-resources tool handler                                                                                                    |
+| `estimate-cost.test.ts` (MCP)         | —     | MCP estimate-cost tool handler                                                                                                             |
+| Plugin tests (core)                   | ~100+ | S3, EC2, RDS, Lambda, generic plugin config hints                                                                                          |
+| `bp-all-rules-audit.test.ts`          | ~266  | Every BP rule in `packages/best-practices/manifest.json` fires correctly (count is manifest-driven; see manifest for current rule total)   |
+| `bp-auto-fix-audit.test.ts`           | 55    | All 27 auto-fixable rules verified end-to-end                                                                                              |
+| `compound-provisioning-audit.test.ts` | 69    | Compound patterns through dispatcher+provisioner (coverage count is derived at runtime — see the audit test's registry loop)               |
+| `compound-failure-injector.test.ts`   | 12    | Failure-injection harness: in-memory port, tracker, synthetic error at index N                                                             |
+| `compound-cleanup-matrix.test.ts`     | 19    | VPC 17-position reverse-edge cleanup invariant (parameterized)                                                                             |
+| `compound-smoke-trace.test.ts`        | 21    | Happy-path smoke + marker-ref validation for 6 compound patterns                                                                           |
+| `apply-mode-audit.test.ts`            | 5     | Full apply mode: plan->bp->fix->approval->provision->result                                                                                |
+| `destroy-service.test.ts`             | 16    | destroySingleResource: CloudControl, SDK fallback, CloudFront                                                                              |
+| `s3-upload.test.ts`                   | 19    | S3 file upload with MIME types, progress, error handling                                                                                   |
+| `bulk-destroy.test.ts`                | 21    | Tier ordering, IAM exclusion, pattern filtering                                                                                            |
+| `decomposer-integration.test.ts`      | —     | Decomposer integration across all resource types                                                                                           |
+| `bp-enforcement-integration.test.ts`  | —     | Best-practice enforcement modes (enforce/warn/skip) integration                                                                            |
+| `secure-defaults-audit.test.ts`       | —     | Secure default values audit across all resource types                                                                                      |
+| `cost-estimator-e2e.test.ts`          | —     | Cost estimator end-to-end with real pricing data                                                                                           |
+| `coverage.test.ts`                    | —     | Integration: asserts pricing strategies and decomposers cover every `SUPPORTED_TYPES_ARRAY` entry (live count via `pnpm -r test:coverage`) |
+
+### Pricing decomposer tests
 
 All supported resource types have pricing decomposers registered in `packages/core/src/pricing/index.ts`. Each decomposer breaks a resource into billable line items (e.g., EC2 → compute + storage + IPv4 + data transfer) with real AWS Pricing API `serviceCode` and `productFamily` filter values.
 
 **Test files** in `packages/core/src/pricing/decomposers/`:
 
-| File                       | Tests | What it covers                                                                  |
-| -------------------------- | ----- | ------------------------------------------------------------------------------- |
-| `ec2.test.ts`              | ~10   | Compute, EBS volumes, public IPv4, data transfer; instance type extraction      |
-| `rds.test.ts`              | ~10   | Compute, storage, backup; Multi-AZ vs Single-AZ; engine mapping                 |
-| `s3.test.ts`               | 7     | Storage, PUT/GET requests, data transfer; all usage-based                       |
-| `lambda.test.ts`           | ~6    | Requests, duration (GB-seconds), CloudWatch Logs                                |
-| `dynamodb.test.ts`         | ~8    | PAY_PER_REQUEST vs PROVISIONED; read/write capacity; storage                    |
-| `nat-gateway.test.ts`      | 9     | Hourly rate (fixed) + data processing (usage-based)                             |
-| `elbv2.test.ts`            | ~10   | ALB vs NLB detection (case-insensitive); hourly + LCU/NLCU                      |
-| `apigatewayv2.test.ts`     | 8     | HTTP vs WEBSOCKET protocol; requests + data transfer / messages + minutes       |
-| `sqs.test.ts`              | ~8    | Standard vs FIFO (boolean + string "true" + .fifo suffix); productFamily switch |
-| `sns.test.ts`              | ~8    | Standard vs FIFO detection; publishes + HTTP notifications                      |
-| `secretsmanager.test.ts`   | ~8    | Fixed secret storage + usage-based API calls                                    |
-| `cloudwatch-alarm.test.ts` | ~10   | Standard vs High Resolution (Period < 60); boundary: 0, null, NaN               |
-| `logs.test.ts`             | ~8    | STANDARD vs INFREQUENT_ACCESS class; ingestion + storage                        |
-| `ecr.test.ts`              | 6     | Single storage line item (usage-based)                                          |
-| `ssm.test.ts`              | ~10   | Standard tier (free, empty array) vs Advanced (2 items); case-insensitive Tier  |
-| `free.test.ts`             | 24    | 8 free resources (VPC, Subnet, SG, IAM, IGW, RT, Route, ECS) → empty arrays     |
-| `red-team.test.ts`         | 368   | All 38 decomposers × 16 adversarial inputs (NaN, null, undefined, wrong types)  |
-| `coverage.test.ts`         | 47    | Integration: asserts 38/38 pricing strategies + 38/38 decomposers registered    |
+| File                       | Tests | What it covers                                                                                                     |
+| -------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------ |
+| `ec2.test.ts`              | ~10   | Compute, EBS volumes, public IPv4, data transfer; instance type extraction                                         |
+| `rds.test.ts`              | ~10   | Compute, storage, backup; Multi-AZ vs Single-AZ; engine mapping                                                    |
+| `s3.test.ts`               | 7     | Storage, PUT/GET requests, data transfer; all usage-based                                                          |
+| `lambda.test.ts`           | ~6    | Requests, duration (GB-seconds), CloudWatch Logs                                                                   |
+| `dynamodb.test.ts`         | ~8    | PAY_PER_REQUEST vs PROVISIONED; read/write capacity; storage                                                       |
+| `nat-gateway.test.ts`      | 9     | Hourly rate (fixed) + data processing (usage-based)                                                                |
+| `elbv2.test.ts`            | ~10   | ALB vs NLB detection (case-insensitive); hourly + LCU/NLCU                                                         |
+| `apigatewayv2.test.ts`     | 8     | HTTP vs WEBSOCKET protocol; requests + data transfer / messages + minutes                                          |
+| `sqs.test.ts`              | ~8    | Standard vs FIFO (boolean + string "true" + .fifo suffix); productFamily switch                                    |
+| `sns.test.ts`              | ~8    | Standard vs FIFO detection; publishes + HTTP notifications                                                         |
+| `secretsmanager.test.ts`   | ~8    | Fixed secret storage + usage-based API calls                                                                       |
+| `cloudwatch-alarm.test.ts` | ~10   | Standard vs High Resolution (Period < 60); boundary: 0, null, NaN                                                  |
+| `logs.test.ts`             | ~8    | STANDARD vs INFREQUENT_ACCESS class; ingestion + storage                                                           |
+| `ecr.test.ts`              | 6     | Single storage line item (usage-based)                                                                             |
+| `ssm.test.ts`              | ~10   | Standard tier (free, empty array) vs Advanced (2 items); case-insensitive Tier                                     |
+| `free.test.ts`             | 24    | 8 free resources (VPC, Subnet, SG, IAM, IGW, RT, Route, ECS) → empty arrays                                        |
+| `red-team.test.ts`         | —     | Every registered decomposer × 16 adversarial inputs (NaN, null, undefined, wrong types) — count is registry-driven |
+| `coverage.test.ts`         | —     | Integration: asserts every `SUPPORTED_TYPES_ARRAY` entry has a pricing strategy + a registered decomposer          |
 
-### Cost estimator and free tier tests (Epic 40)
+### Cost estimator and free tier tests
 
 | File (MCP server)              | Tests | What it covers                                                                        |
 | ------------------------------ | ----- | ------------------------------------------------------------------------------------- |
@@ -410,16 +437,18 @@ All supported resource types have pricing decomposers registered in `packages/co
 
 The same lifecycle coverage now lives in code:
 
-- **CLI E2E gate** — `apps/cli/src/e2e/e2e-plan.test.ts` (31 specs, run via
-  `RUN_E2E=1 npx vitest run src/e2e/e2e-plan.test.ts --reporter=verbose`).
+- **CLI E2E gate** — the split files under
+  `apps/cli/src/e2e/e2e-plan-*.test.ts`, run via
+  `RUN_E2E=1 npx vitest run "src/e2e/e2e-plan-*.test.ts" --reporter=verbose`.
   Each spec exercises the full plan → apply → list → destroy → list lifecycle
-  against real AWS for one resource type or compound pattern.
-  **Current score: 28-29 pass / 0-1 fail / 2 skip** (up from the 19/12/0
-  baseline). Known skips: `three-tier-web` and `container-service` (skeleton
-  patterns needing VPC redesign before they can run reliably in E2E).
-  All other compounds are covered (VPC, lambda-with-exec-role, efs-with-vpc,
-  static-website, scheduled-lambda, serverless-api, message-processing) plus
-  the VPC EIP-leak regression and SSM single-resource apply.
+  against real AWS for one resource type or compound pattern. The current
+  pass / fail / skip mix drifts; check the latest CI run or
+  `pnpm -r test:coverage` for the live number. Known skips include
+  `three-tier-web` and `container-service` (skeleton patterns needing VPC
+  redesign before they can run reliably in E2E). All other compounds are
+  covered (VPC, lambda-with-exec-role, efs-with-vpc, static-website,
+  scheduled-lambda, serverless-api, message-processing) plus regressions
+  such as VPC EIP-leak and SSM single-resource apply.
 - **MCP Server E2E** — `apps/mcp-server/e2e-test.mjs` (see the section above
   for the `RUN_E2E_MCP=1` gate, mirrors the CLI lifecycle through the MCP API).
 - **Plan-only / dry-run coverage** — the unit suite under
@@ -479,9 +508,24 @@ The following mechanisms were added to improve E2E reliability and isolation:
 
 ---
 
-## Smoke test checklist
+## Legacy reference (do not run manually)
 
-Run all tests and mark pass/fail:
+> **Do not run this checklist manually.** It is preserved as a
+> historical scope-tracker only — the same coverage now lives in the
+> automated CLI E2E split files (`apps/cli/src/e2e/e2e-plan-*.test.ts`)
+> and the MCP server E2E suite (`apps/mcp-server/e2e-test.mjs`). The
+> automated paths are kept in step with HEAD; the rows below drift.
+
+The previous version of this guide carried the full 54-row manual
+checklist (Test 1 — Test 54). To recover it for a release rehearsal,
+see the "End-to-end smoke tests" section above for the git-history
+recovery hint, or run the automated suite directly.
+
+### Legacy smoke-test scope (frozen — historical reference only)
+
+The condensed table below records the scope the manual checklist used
+to cover. Do not execute it row-by-row; run the automated CLI E2E
+suite instead.
 
 | #   | Test                                                                                         | Result |
 | --- | -------------------------------------------------------------------------------------------- | ------ |
@@ -489,7 +533,7 @@ Run all tests and mark pass/fail:
 | 2   | `apply` + approve → S3 bucket created with 3 tags                                            | ⬜     |
 | 3   | `apply` + decline → exits 0, no resource                                                     | ⬜     |
 | 4   | State Guard — second apply aborts with "Stale Plan"                                          | ⬜     |
-| 5   | Unsupported type → actionable error with all 38 supported types                              | ⬜     |
+| 5   | Unsupported type → actionable error listing every entry in `SUPPORTED_TYPES_ARRAY`           | ⬜     |
 | 6   | SSM Parameter provisioning                                                                   | ⬜     |
 | 7   | IAM Role provisioning, cost shows Free                                                       | ⬜     |
 | 8   | Non-TTY / pipe → no ANSI codes                                                               | ⬜     |
@@ -510,7 +554,7 @@ Run all tests and mark pass/fail:
 | 23  | `assignee destroy` — safe teardown with "yes" confirmation                                   | ⬜     |
 | 24  | `assignee status` — summary with cost totals                                                 | ⬜     |
 | 25  | `assignee init` — project setup                                                              | ⬜     |
-| 26  | `assignee plan --no-wizard` — non-interactive plan                                           | ⬜     |
+| 26  | `assignee plan --quick` — non-interactive plan (accepts wizard defaults)                     | ⬜     |
 | 27  | `assignee apply --yes --checkpoint` — CI mode auto-confirm                                   | ⬜     |
 | 28  | Best practices findings in plan output                                                       | ⬜     |
 | 29  | Memory hints ("Previous provision: <live monthly cost from Pricing MCP>") in plan output     | ⬜     |
@@ -539,9 +583,9 @@ Run all tests and mark pass/fail:
 | 54  | Bulk destroy all types — create, list, dry-run, destroy, verify                              | ⬜     |
 
 Tests 1–8 passing = Core demo-ready.
-Tests 9–12 passing = Option elicitation (Story 7.3) verified.
-Tests 13–16 passing = Compound provisioning (Story 8.2) verified.
-Tests 17–18 passing = Architecture hardening (Epic 9) verified.
+Tests 9–12 passing = Option elicitation verified.
+Tests 13–16 passing = Compound provisioning verified.
+Tests 17–18 passing = Architecture hardening verified.
 Tests 19–21 passing = Expanded resource types + pattern logging verified.
 Tests 22–25 passing = Utility commands (list, destroy, status, init) verified.
 Tests 26–27 passing = CI/non-interactive mode verified.

@@ -27,14 +27,14 @@ privacy model but serve different purposes:
 The pipeline observability layer lives in `packages/core/src/telemetry/`
 and consists of four components:
 
-| File                             | Purpose                                                                                   |
-| -------------------------------- | ----------------------------------------------------------------------------------------- |
-| `telemetry-port.ts`              | `TelemetryPort` hexagonal port + `emitFiltered` helper + opt-in gate                      |
-| `telemetry-event-schema.ts`      | `TelemetryEvent` data shape (`event_name`, `timestamp`, `node_id`, `tenant_id`, `extras`) |
-| `otel-allowlist.ts`              | `OTEL_FIELD_ALLOWLIST` with `@privacy: PII/SYSTEM/OPERATIONAL` per field                  |
-| `spans.ts`                       | Per-graph-node span emitter (entry + exit events, duration backfill)                      |
-| `in-memory-telemetry-adapter.ts` | Ring-buffer adapter (cap 1 000 events); used in tests and dev                             |
-| `otel-exporter.ts`               | HTTP/OTEL export when `ASSIGNEE_OTEL_ENDPOINT` is set                                     |
+| File                                                         | Purpose                                                                                   |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `packages/core/src/ports/telemetry-port.ts`                  | `TelemetryPort` hexagonal port + `emitFiltered` helper + opt-in gate                      |
+| `packages/core/src/telemetry/telemetry-event-schema.ts`      | `TelemetryEvent` data shape (`event_name`, `timestamp`, `node_id`, `tenant_id`, `extras`) |
+| `packages/core/src/telemetry/otel-allowlist.ts`              | `OTEL_FIELD_ALLOWLIST` with `@privacy: PII/SYSTEM/OPERATIONAL` per field                  |
+| `packages/core/src/telemetry/spans.ts`                       | Per-graph-node span emitter (entry + exit events, duration backfill)                      |
+| `packages/core/src/telemetry/in-memory-telemetry-adapter.ts` | Ring-buffer adapter (cap 1 000 events); used in tests and dev                             |
+| `packages/core/src/telemetry/otel-exporter.ts`               | HTTP/OTEL export when `ASSIGNEE_OTEL_ENDPOINT` is set                                     |
 
 ### Per-node spans
 
@@ -56,11 +56,15 @@ enabled) and always appear in the local JSONL log at `debug` level.
 `emitFiltered` applies three passes before the adapter ever sees an event:
 
 1. **`isTelemetryEnabled()` gate** — no-op when `ASSIGNEE_TELEMETRY_ADAPTER`
-   is absent or empty (L1-F52 invariant: no vendor phone-home by default).
-2. **`filterAllowlistedFields`** (W6) — drops any key in `extras` not
+   is absent or empty (the no-vendor-phone-home-by-default invariant).
+2. **`filterAllowlistedFields`** — drops any key in `extras` not
    present in `OTEL_FIELD_ALLOWLIST`. PII-classified fields are also
-   dropped unless `ASSIGNEE_OTEL_INCLUDE_PII=1`.
-3. **`filterSensitiveElicitedFields`** (W1) — redacts values that were
+   dropped unless `ASSIGNEE_OTEL_INCLUDE_PII=1`. The PII gate is an
+   **exact-equality** check against the literal string `"1"`: setting
+   the variable to `true`, `yes`, `on`, or simply exporting it bare
+   (no value) does **not** enable PII pass-through. The check is
+   strict by design so a typoed env-var value fails closed.
+3. **`filterSensitiveElicitedFields`** — redacts values that were
    produced from a `ResourceField` with `sensitive: true`. This pass runs
    after the allowlist check so credentials never reach the adapter even
    when they pass the allowlist filter on field name alone.
@@ -78,19 +82,17 @@ additional field-level filtering.
 
 ---
 
-## Usage telemetry shipping milestone
+## Usage telemetry — design intent only
 
 - **Current state**: Not implemented. Zero usage-telemetry code in the repo.
   No runtime code reads `telemetry.enabled` or `ASSIGNEE_TELEMETRY` (the
   usage-telemetry config key, distinct from `ASSIGNEE_TELEMETRY_ADAPTER`).
-- **Milestone**: **v0.2.2** — after the v0.2 npm-publish ships. The first
-  cohort of OSS users gets a known-good install (plan / apply / destroy,
-  config precedence, drift detection) for a release or two before any
-  data-collection prompt appears.
-- **Why deferred to v0.2.2**: Operators should see the tool work end-to-end
-  on their own infrastructure before being asked to opt in to anything. A
-  v0.2 that prompts for telemetry on first run is indistinguishable from a
-  tool that phones home by default.
+- **Status**: Design intent for any future productisation. Out of scope
+  for this course-submission build.
+- **Why deferred**: Operators should see the tool work end-to-end on their
+  own infrastructure before being asked to opt in to anything. A first
+  release that prompts for telemetry on first run is indistinguishable from
+  a tool that phones home by default.
 
 ---
 
@@ -102,17 +104,22 @@ in config is treated as "off", not "ask later".
 
 ---
 
-## Opt-in path
+## Opt-in path (design intent — not yet wired in CLI)
 
-1. `assignee init` asks once: _"Opt in to anonymous usage telemetry?"_
+> The flow below describes how the opt-in prompt would behave once
+> the usage-telemetry path is built. None of it is wired in `assignee
+init` today — the CLI does not ask, does not write `telemetry.enabled`,
+> and does not read `ASSIGNEE_TELEMETRY`.
+
+1. `assignee init` would ask once: _"Opt in to anonymous usage telemetry?"_
    with a link to this document. Default answer is **no**.
-2. The answer is written to `~/.assignee/config.yaml` under
-   `telemetry.enabled: true | false`. Users can edit the file later, or
+2. The answer would be written to `~/.assignee/config.yaml` under
+   `telemetry.enabled: true | false`. Users could edit the file later, or
    run `assignee init --reset-telemetry` to be asked again.
-3. `ASSIGNEE_TELEMETRY=0` in the environment overrides the config value
-   to `false`, no matter what the config says. `ASSIGNEE_TELEMETRY=1`
-   has no effect on its own — explicit opt-in must happen in config so
-   that an environment variable alone cannot enable data collection.
+3. `ASSIGNEE_TELEMETRY=0` in the environment would override the config
+   value to `false`, no matter what the config says. `ASSIGNEE_TELEMETRY=1`
+   would have no effect on its own — explicit opt-in must happen in config
+   so that an environment variable alone cannot enable data collection.
 
 ---
 
@@ -150,24 +157,25 @@ contribution-diff reviewers look at first.
 - Stack traces.
 - Any field derived from the operator's desiredState JSON.
 
-The `sensitive: true` marker on `ResourceField` (W1) and the `OTEL_FIELD_ALLOWLIST`
-`@privacy: PII` classification (W6) both enforce this — the same field-filtering
+The `sensitive: true` marker on `ResourceField` and the `OTEL_FIELD_ALLOWLIST`
+`@privacy: PII` classification both enforce this — the same field-filtering
 pipeline that guards the local observability layer gates the usage-telemetry path.
 
 ---
 
-## Where it would go
+## Where it would go (future intent only)
 
-When usage telemetry ships, the endpoint will be under a domain owned by
-the maintainer and operated with:
+If usage telemetry were ever shipped, the endpoint would be operated
+with:
 
 - TLS 1.3 termination.
-- Short retention (90 days hot; 12 months in anonymised rollups).
+- Short retention (e.g. 90 days hot; 12 months in anonymised rollups).
 - No third-party pixel trackers, ad networks, or session replay.
-- A public privacy policy at `/privacy` that predates the first record.
+- A public privacy policy that predates the first record.
 
-No endpoint exists today. This page will be updated with the real URL
-before the first record is sent.
+No endpoint exists today, no domain has been registered for it, and no
+privacy policy has been written. This page would be updated with
+concrete URLs before the first record is sent.
 
 ---
 
@@ -185,8 +193,8 @@ Before the first usage-telemetry PR merges:
 
 - [ ] Privacy policy page published at a stable URL.
 - [ ] Field allowlist schema in `packages/core/src/telemetry/schema.ts`
-      (v0.2.2 target — does not exist yet) with a unit test that
-      rejects any unlisted field.
+      (does not exist yet) with a unit test that rejects any unlisted
+      field.
 - [ ] End-to-end test that sends a record with a blocked field (e.g.
       raw intent) and asserts the serialiser drops it.
 - [ ] `assignee init` UX reviewed against the Contributor Covenant.

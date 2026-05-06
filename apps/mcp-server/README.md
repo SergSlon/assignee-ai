@@ -2,11 +2,11 @@
 
 AI-native AWS infrastructure provisioning via MCP (Model Context Protocol). Plan, estimate, and deploy AWS resources using natural language from any AI coding agent.
 
-> **Status:** Not yet published to npm. The instructions below use local paths from a cloned repo; an npm-based install will replace them once the package is published.
+This package is part of the Assignee.ai course-project submission for the Generative AI for Developers micro-master's program. The package is `private: true` — it is not published to npm and is consumed by running the locally-built `dist/index.js` from a clone of this repository.
 
 ## Prerequisites
 
-- **Node.js** >= 20.0.0
+- **Node.js** >= 20.11
 - **Python 3.10+** (required by MCP sub-servers)
 - **uvx** (Python package runner, used to launch pricing, documentation, IAM, security, and cost management sub-servers)
 - **AWS credentials** configured (environment variables or `~/.aws/credentials`)
@@ -110,7 +110,7 @@ Add to your Windsurf MCP configuration:
 | `AWS_SHARED_CREDENTIALS_FILE`         | No          | Path to credentials file if not at the default `~/.aws/credentials` location.                   |
 | `ASSIGNEE_OPERATOR_ACCESS_KEY_ID`     | No          | AWS access key (static-key fallback only — prefer `AWS_PROFILE`)                                |
 | `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` | No          | AWS secret key (static-key fallback only — prefer `AWS_PROFILE`)                                |
-| `ASSIGNEE_LLM_DEFAULT`                | No          | LLM model string (default: `us.amazon.nova-lite-v1:0` via Bedrock)                              |
+| `ASSIGNEE_LLM_DEFAULT`                | No          | LLM model string (default: `bedrock/amazon.nova-lite-v1:0`)                                     |
 
 > **Security Note:** Prefer `AWS_PROFILE` over embedding raw access keys in the MCP config. Raw keys in the `env` block are visible in the host process environment and in `ps eww` output for any local user with the same UID. Never commit AWS credentials to version control. For shared team setups, consider using `aws-vault` or similar credential management tools.
 
@@ -118,14 +118,14 @@ Add to your Windsurf MCP configuration:
 
 ### Server fails to start
 
-1. Verify Node.js version: `node --version` (must be >= 20.0.0)
+1. Verify Node.js version: `node --version` (must be >= 20.11)
 2. Check AWS credentials are configured: `aws sts get-caller-identity`
 3. Ensure Python 3.10+ is installed: `python3 --version`
 4. Ensure uvx is installed: `uvx --version`
 
 ### Tools return NOT_READY
 
-The MCP sub-servers (CloudFormation, pricing, knowledge base) may not have initialized. Check stderr output for initialization warnings. Ensure Python 3.10+ and uvx are available on your PATH.
+The MCP sub-servers (Pricing, Documentation, IAM, Well-Architected Security, Cost Management) may not have initialized. Check stderr output for initialization warnings. Ensure Python 3.10+ and uvx are available on your PATH. CloudFormation schemas are fetched directly via `@aws-sdk/client-cloudformation`, not via an MCP sub-server.
 
 ### Connection issues with AI agent
 
@@ -133,35 +133,6 @@ The MCP sub-servers (CloudFormation, pricing, knowledge base) may not have initi
 - Restart your AI agent after modifying MCP configuration
 - Check agent logs for MCP connection errors
 
-## After publish (coming soon)
+## Distribution
 
-Once `@assignee/mcp-server` is published to npm, the local-path `args` shown above can be replaced with an `npx` invocation, no clone required:
-
-```json
-{
-  "mcpServers": {
-    "assignee-ai": {
-      "command": "npx",
-      "args": ["-y", "@assignee/mcp-server"],
-      "env": {
-        "AWS_PROFILE": "your-aws-profile",
-        "AWS_REGION": "us-east-1"
-      }
-    }
-  }
-}
-```
-
-Equivalently, from a shell:
-
-```bash
-npx @assignee/mcp-server
-```
-
-The package stays `private` until the CLI is approved for release — see the project's [no-public-artifacts policy](../../CLAUDE.md).
-
-## Links
-
-- [assignee.ai](https://assignee.ai) -- Project homepage (coming soon)
-- [GitHub](https://github.com/SergSlon/assignee-ai) -- Source code (coming soon)
-- [npm package](https://www.npmjs.com/package/@assignee/mcp-server) -- npm registry (coming soon, package is currently private)
+This package stays `private: true` for the course-project submission. The no-public-artifacts policy is documented in the contributor guide — see [`CONTRIBUTING.md`](../../CONTRIBUTING.md).

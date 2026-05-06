@@ -7,62 +7,62 @@ canonical: true
 
 # Supported Resource Types
 
-assignee.ai supports 38 AWS resource types end-to-end via the CloudFormation CloudControl API. 36 have dedicated plugins; 2 (`AWS::EC2::VPCGatewayAttachment`, `AWS::EC2::SubnetRouteTableAssociation`) are **compound-only** — they are emitted from compound patterns (vpc-networking, three-tier-web) via the marker-token resolver and never directly from a user intent, so they share the generic fallback plugin rather than getting a dedicated one. Additional auxiliary types are used in compound patterns.
+assignee.ai supports a registry of AWS resource types end-to-end via the CloudFormation CloudControl API. The canonical source of truth is the resource-type registry — see [`packages/core/src/config/resource-types/supported.ts`](../packages/core/src/config/resource-types/supported.ts) for the live list. Most types have dedicated plugins; two (`AWS::EC2::VPCGatewayAttachment`, `AWS::EC2::SubnetRouteTableAssociation`) are **compound-only** — they are emitted from compound patterns (vpc-networking, three-tier-web) via the marker-token resolver and never directly from a user intent, so they share the generic fallback plugin rather than getting a dedicated one. Additional auxiliary types are used in compound patterns.
 
 ## Resource Type Table
 
-| #   | CloudFormation Type                              | Short Name           | Plugin                           | Co-provisions |
-| --- | ------------------------------------------------ | -------------------- | -------------------------------- | ------------- |
-| 1   | `AWS::S3::Bucket`                                | S3 Bucket            | s3-bucket                        | -             |
-| 2   | `AWS::SSM::Parameter`                            | SSM Parameter        | ssm-parameter                    | -             |
-| 3   | `AWS::IAM::Role`                                 | IAM Role             | iam-role                         | -             |
-| 4   | `AWS::EC2::Instance`                             | EC2 Instance         | ec2-instance                     | -             |
-| 5   | `AWS::RDS::DBInstance`                           | RDS Database         | rds-dbinstance                   | -             |
-| 6   | `AWS::Lambda::Function`                          | Lambda Function      | lambda-function                  | LogGroup      |
-| 7   | `AWS::EC2::VPC`                                  | VPC                  | vpc                              | -             |
-| 8   | `AWS::EC2::Subnet`                               | Subnet               | subnet                           | -             |
-| 9   | `AWS::EC2::SecurityGroup`                        | Security Group       | security-group                   | -             |
-| 10  | `AWS::DynamoDB::Table`                           | DynamoDB Table       | dynamodb-table                   | -             |
-| 11  | `AWS::SQS::Queue`                                | SQS Queue            | sqs-queue                        | -             |
-| 12  | `AWS::SNS::Topic`                                | SNS Topic            | sns-topic                        | -             |
-| 13  | `AWS::ElasticLoadBalancingV2::LoadBalancer`      | ALB/NLB              | elbv2-loadbalancer               | -             |
-| 14  | `AWS::ECS::Cluster`                              | ECS Cluster          | ecs-cluster                      | LogGroup      |
-| 15  | `AWS::ECR::Repository`                           | ECR Repository       | ecr-repository                   | -             |
-| 16  | `AWS::Logs::LogGroup`                            | CloudWatch Log Group | logs-loggroup                    | -             |
-| 17  | `AWS::EC2::InternetGateway`                      | Internet Gateway     | ec2-internet-gateway             | -             |
-| 18  | `AWS::EC2::RouteTable`                           | Route Table          | ec2-route-table                  | -             |
-| 19  | `AWS::EC2::Route`                                | Route                | ec2-route                        | -             |
-| 20  | `AWS::EC2::NatGateway`                           | NAT Gateway          | ec2-nat-gateway                  | -             |
-| 21  | `AWS::ApiGatewayV2::Api`                         | API Gateway V2       | apigatewayv2-api                 | -             |
-| 22  | `AWS::CloudWatch::Alarm`                         | CloudWatch Alarm     | cloudwatch-alarm                 | -             |
-| 23  | `AWS::SecretsManager::Secret`                    | Secrets Manager      | secretsmanager-secret            | -             |
-| 24  | `AWS::EC2::VPCGatewayAttachment`                 | VPC Gateway Attach   | (compound-only)                  | -             |
-| 25  | `AWS::EC2::SubnetRouteTableAssociation`          | Subnet→RT Assoc      | (compound-only)                  | -             |
-| 26  | `AWS::EFS::FileSystem` (A1)                      | EFS File System      | efs-file-system                  | -             |
-| 27  | `AWS::EFS::MountTarget` (A1 follow-up)           | EFS Mount Target     | efs-mount-target                 | -             |
-| 28  | `AWS::Events::Rule` (A8)                         | EventBridge Rule     | events-rule                      | -             |
-| 29  | `AWS::Events::EventBus` (A9)                     | EventBridge EventBus | events-eventbus                  | -             |
-| 30  | `AWS::SNS::Subscription` (A10)                   | SNS Subscription     | sns-subscription                 | -             |
-| 31  | `AWS::KMS::Key` (A11)                            | KMS Key (CMK)        | kms-key                          | -             |
-| 32  | `AWS::Events::Connection` (A12)                  | EventBridge Conn.    | events-connection                | Secret (auto) |
-| 33  | `AWS::Events::ApiDestination` (A13)              | EventBridge ApiDest. | events-apidestination            | -             |
-| 34  | `AWS::CloudFront::Distribution` (A14)            | CloudFront CDN       | cloudfront-distribution          | -             |
-| 35  | `AWS::CloudFront::OriginAccessControl` (Task 4b) | CloudFront OAC       | cloudfront-origin-access-control | -             |
-| 36  | `AWS::S3::BucketPolicy` (Task 4b)                | S3 Bucket Policy     | s3-bucket-policy                 | -             |
-| 37  | `AWS::RDS::DBSubnetGroup`                        | RDS DB Subnet Group  | rds-db-subnet-group              | -             |
-| 38  | `AWS::EC2::EIP`                                  | Elastic IP           | ec2-eip                          | -             |
+| #   | CloudFormation Type                         | Short Name           | Plugin                           | Co-provisions |
+| --- | ------------------------------------------- | -------------------- | -------------------------------- | ------------- |
+| 1   | `AWS::S3::Bucket`                           | S3 Bucket            | s3-bucket                        | -             |
+| 2   | `AWS::SSM::Parameter`                       | SSM Parameter        | ssm-parameter                    | -             |
+| 3   | `AWS::IAM::Role`                            | IAM Role             | iam-role                         | -             |
+| 4   | `AWS::EC2::Instance`                        | EC2 Instance         | ec2-instance                     | -             |
+| 5   | `AWS::RDS::DBInstance`                      | RDS Database         | rds-dbinstance                   | -             |
+| 6   | `AWS::Lambda::Function`                     | Lambda Function      | lambda-function                  | LogGroup      |
+| 7   | `AWS::EC2::VPC`                             | VPC                  | vpc                              | -             |
+| 8   | `AWS::EC2::Subnet`                          | Subnet               | subnet                           | -             |
+| 9   | `AWS::EC2::SecurityGroup`                   | Security Group       | security-group                   | -             |
+| 10  | `AWS::DynamoDB::Table`                      | DynamoDB Table       | dynamodb-table                   | -             |
+| 11  | `AWS::SQS::Queue`                           | SQS Queue            | sqs-queue                        | -             |
+| 12  | `AWS::SNS::Topic`                           | SNS Topic            | sns-topic                        | -             |
+| 13  | `AWS::ElasticLoadBalancingV2::LoadBalancer` | ALB/NLB              | elbv2-loadbalancer               | -             |
+| 14  | `AWS::ECS::Cluster`                         | ECS Cluster          | ecs-cluster                      | LogGroup      |
+| 15  | `AWS::ECR::Repository`                      | ECR Repository       | ecr-repository                   | -             |
+| 16  | `AWS::Logs::LogGroup`                       | CloudWatch Log Group | logs-loggroup                    | -             |
+| 17  | `AWS::EC2::InternetGateway`                 | Internet Gateway     | ec2-internet-gateway             | -             |
+| 18  | `AWS::EC2::RouteTable`                      | Route Table          | ec2-route-table                  | -             |
+| 19  | `AWS::EC2::Route`                           | Route                | ec2-route                        | -             |
+| 20  | `AWS::EC2::NatGateway`                      | NAT Gateway          | ec2-nat-gateway                  | -             |
+| 21  | `AWS::ApiGatewayV2::Api`                    | API Gateway V2       | apigatewayv2-api                 | -             |
+| 22  | `AWS::CloudWatch::Alarm`                    | CloudWatch Alarm     | cloudwatch-alarm                 | -             |
+| 23  | `AWS::SecretsManager::Secret`               | Secrets Manager      | secretsmanager-secret            | -             |
+| 24  | `AWS::EC2::VPCGatewayAttachment`            | VPC Gateway Attach   | (compound-only)                  | -             |
+| 25  | `AWS::EC2::SubnetRouteTableAssociation`     | Subnet→RT Assoc      | (compound-only)                  | -             |
+| 26  | `AWS::EFS::FileSystem`                      | EFS File System      | efs-file-system                  | -             |
+| 27  | `AWS::EFS::MountTarget`                     | EFS Mount Target     | efs-mount-target                 | -             |
+| 28  | `AWS::Events::Rule`                         | EventBridge Rule     | events-rule                      | -             |
+| 29  | `AWS::Events::EventBus`                     | EventBridge EventBus | events-eventbus                  | -             |
+| 30  | `AWS::SNS::Subscription`                    | SNS Subscription     | sns-subscription                 | -             |
+| 31  | `AWS::KMS::Key`                             | KMS Key (CMK)        | kms-key                          | -             |
+| 32  | `AWS::Events::Connection`                   | EventBridge Conn.    | events-connection                | Secret (auto) |
+| 33  | `AWS::Events::ApiDestination`               | EventBridge ApiDest. | events-apidestination            | -             |
+| 34  | `AWS::CloudFront::Distribution`             | CloudFront CDN       | cloudfront-distribution          | -             |
+| 35  | `AWS::CloudFront::OriginAccessControl`      | CloudFront OAC       | cloudfront-origin-access-control | -             |
+| 36  | `AWS::S3::BucketPolicy`                     | S3 Bucket Policy     | s3-bucket-policy                 | -             |
+| 37  | `AWS::RDS::DBSubnetGroup`                   | RDS DB Subnet Group  | rds-db-subnet-group              | -             |
+| 38  | `AWS::EC2::EIP`                             | Elastic IP           | ec2-eip                          | -             |
 
 A **generic plugin** handles any resource type not covered by a dedicated plugin, using CloudFormation schema defaults.
 
-### Static Website Compound — fully CCAPI as of Task 4b
+### Static Website Compound — CCAPI wiring
 
-Pre (f) 2026-04-09 the `static-website` compound pattern provisioned S3 via CCAPI but the CloudFront distribution, OriginAccessControl, and S3 bucket policy were created via direct SDK calls in a post-provision hook (`apps/cli/src/services/cloudfront-setup.ts`, ~430 LOC). That hook has been **deleted**. CloudFront + OAC + BucketPolicy are now first-class CCAPI resources in the compound, with marker-ref cross-references wiring them together:
+The `static-website` compound pattern provisions S3 + CloudFront + OAC + BucketPolicy entirely through CCAPI. The four resources are connected by marker-refs:
 
-- `website-bucket` → `cdn-oac` (parallel)
-- `cdn-distribution` references `cdn-oac` via `markerRef` (OriginAccessControlId) and `website-bucket` via `markerRef` (origin DomainName)
-- `bucket-policy` references `website-bucket` via `markerRef` (Bucket primary identifier) and `cdn-distribution` via `markerRef` (aws:SourceArn condition — resolved to the full account-scoped distribution ARN via `buildResourceArn`)
+- `website-bucket` and `cdn-oac` are created in parallel.
+- `cdn-distribution` references `cdn-oac` via `markerRef` (OriginAccessControlId) and `website-bucket` via `markerRef` (origin DomainName).
+- `bucket-policy` references `website-bucket` via `markerRef` (Bucket primary identifier) and `cdn-distribution` via `markerRef` (aws:SourceArn — resolved to the full account-scoped distribution ARN via `buildResourceArn`).
 
-The compound apply is fully deterministic via CCAPI; the destroy pipeline tiers `bucket-policy` first (tier 0), then the distribution (tier 1, two-step disable+delete), then the OAC (tier 2), then the bucket (tier 5). Story 50-3 removed the production `bulk-destroy` subtree; tier ordering for compound teardown now lives in the shared destroy strategies under `packages/core/src/destroy-strategies/` (with the CloudFront two-step handled by `packages/core/src/destroy-strategies/strategies/cloudfront-distribution.ts`), and the e2e sweep helper `apps/cli/src/e2e/bulk-sweep.ts` is the only remaining tier-aware enumerator.
+The compound destroy pipeline tiers `bucket-policy` first (tier 0), then the distribution (tier 1, two-step disable+delete), then the OAC (tier 2), then the bucket (tier 5). Tier ordering lives in the shared destroy strategies under [`packages/core/src/destroy-strategies/`](../packages/core/src/destroy-strategies/) (CloudFront's two-step handled by [`strategies/cloudfront-distribution.ts`](../packages/core/src/destroy-strategies/strategies/cloudfront-distribution.ts)). The e2e sweep helper at [`apps/cli/src/e2e/bulk-sweep.ts`](../apps/cli/src/e2e/bulk-sweep.ts) is the only remaining tier-aware enumerator (test-only — there is no user-reachable `--all` / `--include-iam` CLI flag).
 
 ## Provisioning Notes
 
@@ -74,7 +74,7 @@ Before provisioning, the resource provisioner performs a "state guard" check (Re
 
 ### Tags Format
 
-All 36 resource plugins accept tags in `Key:Value` format (comma-separated). Tags are validated at input time via a shared `TAGS_VALIDATE` function -- invalid formats (missing colon separator) are rejected with an error message:
+Every dedicated resource plugin accepts tags in `Key:Value` format (comma-separated). Tags are validated at input time via a shared `TAGS_VALIDATE` function -- invalid formats (missing colon separator) are rejected with an error message:
 
 ```
 Invalid tag format. Use Key:Value pairs separated by commas (e.g. env:production, team:backend)
@@ -111,41 +111,14 @@ The `AWS::ElasticLoadBalancingV2::LoadBalancer` plugin defaults `Scheme` to `int
 
 ## CCAPI Fallback Types
 
-After the A6 and A10 migrations, assignee.ai no longer has any direct
-SDK write paths for AWS resources — every first-class type flows through
-the CloudControl API. The only remaining entries in `CCAPI_FALLBACK_TYPES`
-are types that CCAPI cannot model at all, which are redirected to a
-supported alternative at plan time:
+assignee.ai has no direct SDK write paths for AWS resources — every first-class type flows through the CloudControl API. The only remaining entries in `CCAPI_FALLBACK_TYPES` are types that CCAPI cannot model at all, which are redirected to a supported alternative at plan time:
 
 | Unsupported Type                     | Recommended Alternative             |
 | ------------------------------------ | ----------------------------------- |
 | `AWS::Lambda::Permission`            | `AWS::Lambda::PermissionPolicy`     |
 | `AWS::ElastiCache::ReplicationGroup` | `AWS::ElastiCache::ServerlessCache` |
 
-Historical note:
-
-- **A6 (2026-04-08)** — `AWS::Lambda::EventSourceMapping` was migrated
-  from SDK fallback to CCAPI after a live-AWS probe confirmed full
-  handler support.
-- **A10 (2026-04-09)** — `AWS::SNS::Subscription` was promoted from
-  `CCAPI_FALLBACK_TYPES` to a first-class CCAPI type. The SDK
-  `SubscribeCommand`/`UnsubscribeCommand` code paths in
-  `sdk-fallback-dispatcher.ts` were deleted, and the `sns:Subscribe` /
-  `sns:Unsubscribe` IAM actions moved from the unscoped
-  `SdkFallbackActions` policy statement to the CCAPI-scoped
-  `ServiceSpecificActions` statements (split across
-  `operatorServicesAPolicy()` + `operatorServicesBPolicy()` after the
-  (f) 2026-04-09 A/B split).
-- **(f) 2026-04-09 A/B split** — the single
-  `AssigneeOperatorServicesPolicy` managed policy was split into two
-  byte-balanced halves (`AssigneeOperatorServicesAPolicy` +
-  `AssigneeOperatorServicesBPolicy`) so the combined service-action
-  surface fits inside AWS's 6144-byte managed-policy limit with
-  ~3300 bytes of headroom per half. All three operator policies
-  (core + A + B) attach to the same `assignee-operator` IAM user and
-  AWS evaluates the union — strictly equivalent to the pre-split
-  single-policy version. The split unblocks ~30 additional resource
-  type promotions before the next headroom threshold fires.
+The operator IAM bundle is split across three managed policies (core + Services-A + Services-B) so the combined service-action surface fits inside AWS's 6144-byte per-managed-policy limit. All three policies attach to the same `assignee-operator` IAM user and AWS evaluates their union — see [`packages/core/src/config/iam-policies/`](../packages/core/src/config/iam-policies/) for the canonical generators.
 
 ## Co-provisioning
 
@@ -190,7 +163,7 @@ Cost: dominated by the NAT Gateway hourly + data-processing fee. Run `assignee p
 
 **Public-only variant**: "simple vpc", "vpc public only" -- creates 9 resources (no NAT, no private subnets). All components are free-tier (VPC, subnets, IGW, route tables); run `assignee optimize` or `assignee plan --json "..."` to confirm against current AWS pricing.
 
-### WebSocket API (12 resources) — Epic 92 Wave 2.b
+### WebSocket API (12 resources)
 
 **Trigger keywords**: "websocket api", "realtime api", "chat api", "ws api"
 
@@ -212,6 +185,8 @@ Provisions a complete WebSocket API Gateway with Lambda backend, execution role,
 | Lambda Permission (disconnect) | `AWS::Lambda::Permission`        |
 
 The `protocolType` is `WEBSOCKET`. Clients connect via `wss://`. Lambda routes handle `$connect`, `$disconnect`, and `$default` message events. Lambda Permissions are display-only instructions (CCAPI routes `AWS::Lambda::Permission` through `AWS::Lambda::PermissionPolicy`).
+
+> **Note on rows above:** `AWS::Lambda::Permission`, `AWS::ApiGatewayV2::Integration`, `AWS::ApiGatewayV2::Route`, and `AWS::ApiGatewayV2::Stage` are **display-only** — they are not first-class entries in `SUPPORTED_TYPES_ARRAY` (`packages/core/src/config/resource-types/supported.ts`). They appear inside compound patterns via the generic-plugin fallback rather than via a dedicated plugin.
 
 ### Serverless API (8 resources)
 

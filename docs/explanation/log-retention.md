@@ -22,29 +22,22 @@ when a production incident occurs.
 
 **Audit logs** (`~/.assignee/audit/audit.log`) are a tamper-evident HMAC
 chain of every security-relevant event (who provisioned what, under which
-IAM role, at what time). These logs exist for regulators and auditors, not
-just operators. Two specific compliance obligations drive the floor here:
-
-- **ISO 27001 A.12.4** (Logging and monitoring) — requires that audit trails
-  be retained for a period sufficient to support investigation and
-  regulatory inquiries. Ninety days is the minimum widely accepted as
-  sufficient for a cloud IaC tool that may be subject to annual security
-  reviews.
-
-- **GDPR Art 30** (Records of processing activities — ROPA) — requires
-  documented records of data-processing activities. For a tool that
-  provisions infrastructure that may process personal data, the audit log
-  is part of that documentation. Ninety days ensures that a ROPA
-  inspection covering the previous quarter can always be satisfied.
+IAM role, at what time). These logs exist for the operator's audit-trail
+needs, not just day-to-day debugging. The 90-day floor below is an
+**industry-aligned floor for future productisation** — it matches the
+shortest quarter used in compliance calendars and is a defensible minimum
+for a credential-holding cloud-IaC tool. This is design intent; this
+course-submission build does not claim certification against any specific
+compliance regime.
 
 ---
 
 ## The floors
 
-| Log type            | Minimum floor | Env var to extend               | Cannot go below |
-| ------------------- | ------------- | ------------------------------- | --------------- |
-| General operational | 30 days       | `ASSIGNEE_LOG_RETENTION_DAYS`   | 30 days         |
-| Audit (HMAC chain)  | 90 days       | `ASSIGNEE_AUDIT_RETENTION_DAYS` | 90 days         |
+| Log type            | Minimum floor | Env var to extend               | Cannot go below | Floor-violation behaviour                                                                     |
+| ------------------- | ------------- | ------------------------------- | --------------- | --------------------------------------------------------------------------------------------- |
+| General operational | 30 days       | `ASSIGNEE_LOG_RETENTION_DAYS`   | 30 days         | Silent clamp — `resolveLogRetentionDays()` rounds any sub-floor value up to 30 with no error  |
+| Audit (HMAC chain)  | 90 days       | `ASSIGNEE_AUDIT_RETENTION_DAYS` | 90 days         | Hard error — the audit-log retention resolver throws so misconfiguration fails fast on stderr |
 
 The word "extend" above is deliberate: the env vars allow operators to
 _increase_ the window beyond the default, not reduce it below the floor.
@@ -74,16 +67,16 @@ enforced by `resolveLogRetentionDays()` which silently clamps any value below
 ### Why 90 days for audit logs?
 
 Ninety days matches the shortest quarter used in compliance calendars and is
-the minimum cited in ISO 27001 A.12.4 guidance for operational systems. It is
-also the minimum that allows a GDPR ROPA audit covering the previous quarter
-to be satisfied without gaps.
+the conventional minimum cited for audit retention on operational systems.
+It is also a workable minimum for any future audit window covering the
+previous quarter.
 
 The 90-day floor is _hard_ — intentionally not overridable downward. The
-reasoning: a compliance floor that operators can circumvent is not a floor, it
+reasoning: a floor that operators can circumvent is not a floor, it
 is a suggestion. If an operator must retain logs for a _shorter_ period for
 data-minimisation reasons, the right mechanism is a data-retention policy that
-covers the full data lifecycle (not just the Assignee audit log), reviewed
-with a data protection officer, not an env-var setting in a CLI tool.
+covers the full data lifecycle (not just the Assignee audit log), not an
+env-var setting in a CLI tool.
 
 ### Why is the floor enforced at the tool layer, not the OS layer?
 
@@ -133,9 +126,11 @@ The log-retention floor does not replace:
 - **OS-level rotation** (`logrotate`, systemd-journal, etc.) — these operate
   independently. If they are configured to delete files earlier than the
   Assignee floor, `assignee doctor` will surface the discrepancy.
-- **Remote audit sink** (KMS-signed S3 Object Lock) — deferred to Epic 101.
-  When the remote sink is enabled, the local audit log becomes a local cache
-  and the S3 Object Lock policy becomes the authoritative retention control.
+- **Remote audit sink** (KMS-signed S3 Object Lock) — hypothetical future
+  productisation feature, out of scope for this course-submission build.
+  If a remote sink were enabled in the future, the local audit log would
+  become a local cache and the S3 Object Lock policy would become the
+  authoritative retention control.
 - **Backup and disaster recovery** — out of scope for this policy. Log
   retention is about minimum availability for operational and compliance
   purposes, not about backup guarantees.

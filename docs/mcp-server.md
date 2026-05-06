@@ -3,7 +3,13 @@ diataxis: how-to
 canonical: true
 ---
 
-> **Diátaxis: How-to** — This is the canonical root page for this topic. Task-oriented guide for exposing assignee.ai as an MCP server to AI-powered IDEs.
+> [!WARNING]
+> **Multi-quadrant doc** — this page mixes Diátaxis quadrants: how-to (IDE
+> setup), reference (per-tool parameter schemas), and troubleshooting.
+> A future revision should shard it into separate how-to / reference /
+> troubleshooting pages; for now the boundaries are signposted by H2
+> headings (`Setup` is how-to, `Tools` is reference, `Troubleshooting`
+> is troubleshooting).
 
 # MCP Server
 
@@ -11,7 +17,7 @@ Expose assignee.ai as [Model Context Protocol](https://modelcontextprotocol.io/)
 
 ## What This Does
 
-The MCP server wraps the same 14-node LangGraph pipeline that powers the CLI into 5 MCP tools. Any MCP-compatible client (Cursor, Claude Code, Windsurf, etc.) can call these tools to manage AWS resources without leaving the editor.
+The MCP server wraps the same LangGraph pipeline that powers the CLI (see [`packages/core/src/graph/create-graph.ts`](../packages/core/src/graph/create-graph.ts)) and exposes it as MCP tools registered in [`apps/mcp-server/src/tools/`](../apps/mcp-server/src/tools/). Any MCP-compatible client (Cursor, Claude Code, Windsurf, etc.) can call these tools to manage AWS resources without leaving the editor.
 
 ## Prerequisites
 
@@ -20,24 +26,23 @@ The MCP server wraps the same 14-node LangGraph pipeline that powers the CLI int
 - Amazon Bedrock access in your region
 - A source build of the repo (see Install section below)
 
-## Install (source build required — v0.2 npm publish pending)
+## Install (source build required)
 
-> **Pre-release notice:** `@assignee/mcp-server` is `private: true` — it is not yet published to npm. The `npx -y assignee-mcp-server` form will fail with a 404 until v0.2. Use a local stdio command from a source checkout instead.
+> **Course-project notice:** `@assignee/mcp-server` is `"private": true` and is not published to any registry. This is a final-project submission for the "Generative AI for Developers" micro-master's program; there is no published npm package or hosted runtime. Use a local `node` invocation against the built dist file from a source checkout.
 
 ```bash
 git clone https://github.com/SergSlon/assignee-ai.git
 cd assignee-ai
 pnpm install && pnpm build
 # The built server entry is at: apps/mcp-server/dist/index.js
+# Invoke as: node apps/mcp-server/dist/index.js
 ```
 
 ## Setup
 
-Add the assignee.ai MCP server to your IDE's MCP configuration, pointing at the local build.
+Every supported IDE consumes the same canonical MCP server entry — only the config-file location differs. Drop the JSON snippet below into the file for your IDE, restart the IDE, and the server will start automatically when the first tool is called.
 
-### Cursor
-
-Edit `~/.cursor/mcp.json`:
+### Canonical MCP server entry
 
 ```json
 {
@@ -54,86 +59,21 @@ Edit `~/.cursor/mcp.json`:
 }
 ```
 
-> **Static-key fallback:** If you cannot use `AWS_PROFILE` (e.g., static-key-only environments), set `ASSIGNEE_OPERATOR_ACCESS_KEY_ID` and `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` in the `env` block instead. Using a named profile keeps credentials out of the MCP config file and out of process tables visible to other local users.
+### IDE → config-file path
 
-### Claude Code CLI
+| IDE             | Config file                                                                                                                                                                              |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cursor          | `~/.cursor/mcp.json`                                                                                                                                                                     |
+| Claude Code CLI | `.claude/mcp_config.json` (or run `claude mcp add assignee -- node /absolute/path/to/assignee-ai/apps/mcp-server/dist/index.js`)                                                         |
+| Claude Desktop  | macOS: `~/Library/Application Support/Claude/claude_desktop_config.json` · Windows: `%APPDATA%\Claude\claude_desktop_config.json` · Linux: `~/.config/Claude/claude_desktop_config.json` |
+| Windsurf        | `~/.windsurf/mcp.json`                                                                                                                                                                   |
 
-Add the server using the Claude Code CLI:
-
-```bash
-claude mcp add assignee -- node /absolute/path/to/assignee-ai/apps/mcp-server/dist/index.js
-```
-
-Or edit `.claude/mcp_config.json` directly:
-
-```json
-{
-  "mcpServers": {
-    "assignee": {
-      "command": "node",
-      "args": ["/absolute/path/to/assignee-ai/apps/mcp-server/dist/index.js"],
-      "env": {
-        "AWS_PROFILE": "your-aws-profile",
-        "AWS_REGION": "us-east-1"
-      }
-    }
-  }
-}
-```
-
-> **Static-key fallback:** Same as Cursor — set `ASSIGNEE_OPERATOR_ACCESS_KEY_ID` / `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` only when `AWS_PROFILE` is not available.
-
-### Claude Desktop
-
-Claude Desktop stores its MCP configuration in a platform-specific location:
-
-- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
-- **Linux:** `~/.config/Claude/claude_desktop_config.json`
-
-Edit the file for your platform:
-
-```json
-{
-  "mcpServers": {
-    "assignee": {
-      "command": "node",
-      "args": ["/absolute/path/to/assignee-ai/apps/mcp-server/dist/index.js"],
-      "env": {
-        "AWS_PROFILE": "your-aws-profile",
-        "AWS_REGION": "us-east-1"
-      }
-    }
-  }
-}
-```
-
-> **Static-key fallback:** Set `ASSIGNEE_OPERATOR_ACCESS_KEY_ID` / `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` in the `env` block only when a named profile is not available. Embedding raw keys in the config file exposes them in the host process's environment and in `ps eww` output.
-
-### Windsurf
-
-Edit `~/.windsurf/mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "assignee": {
-      "command": "node",
-      "args": ["/absolute/path/to/assignee-ai/apps/mcp-server/dist/index.js"],
-      "env": {
-        "AWS_PROFILE": "your-aws-profile",
-        "AWS_REGION": "us-east-1"
-      }
-    }
-  }
-}
-```
-
-> **Static-key fallback:** Set `ASSIGNEE_OPERATOR_ACCESS_KEY_ID` / `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` in the `env` block only when a named profile is not available.
-
-After saving the configuration, restart your IDE. The server starts automatically when the first tool is called.
-
-> **v0.2 note:** When `@assignee/mcp-server` is published to npm (target v0.2), the `"command": "node"` form above can be replaced with `"command": "npx", "args": ["-y", "assignee-mcp-server"]` for zero-install setup.
+> **Static-key fallback:** If you cannot use `AWS_PROFILE` (e.g.
+> static-key-only environments), set `ASSIGNEE_OPERATOR_ACCESS_KEY_ID`
+> and `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` in the `env` block instead.
+> Embedding raw keys in the config file exposes them in the host
+> process's environment and in `ps eww` output for any local user with
+> the same UID — prefer profile-based auth whenever possible.
 
 ## Tools
 
@@ -223,7 +163,7 @@ List all AWS resources currently managed by assignee.ai. Queries the Resource Gr
       "tags": { "managed-by": "assignee-ai", "env": "dev" }
     },
     {
-      "arn": "arn:aws:lambda:us-east-1:123456789:function:my-handler",
+      "arn": "arn:aws:lambda:us-east-1:123456789012:function:my-handler",
       "resourceType": "AWS::Lambda::Function",
       "tags": { "managed-by": "assignee-ai", "env": "prod" }
     }
@@ -343,7 +283,7 @@ Set `AWS_PROFILE` (and optionally `AWS_SHARED_CREDENTIALS_FILE` if your credenti
 
 Because the MCP server runs as a long-lived background process, SSO token refresh is not automatic — if you use short-lived credentials, set `ASSIGNEE_OPERATOR_SESSION_TOKEN` alongside the key pair, or rotate the credentials in the MCP config before the session expires.
 
-**Lazy credential resolution:** Each MCP sub-server (Pricing, Documentation, IAM, WA Security, Billing) resolves credentials independently with its own try/catch. A missing or invalid credential set for one server does not crash the others — the affected server reports a startup failure and the remaining servers continue normally.
+**Lazy credential resolution:** Each credentialed MCP sub-server (Pricing, IAM, WA Security, Billing) resolves credentials independently with its own try/catch. The Documentation server takes no AWS credentials. A missing or invalid credential set for one server does not crash the others — the affected server reports a startup failure and the remaining servers continue normally.
 
 ### "Graph context not initialized" error
 
@@ -375,7 +315,7 @@ space and permissions under `~/.assignee/logs/`.
 
 ### `destroy_resource` failures
 
-After the A6 and A10 migrations, every first-class supported type flows through the CloudControl API for destroy — there are no direct SDK write paths. Common failure causes:
+Every first-class supported type flows through the CloudControl API for destroy — there are no direct SDK write paths. Common failure causes:
 
 - **Resource not found / tag not propagated**: Tags take ~60s to propagate after creation. If the resource was just provisioned, wait and retry.
 - **CCAPI NotFound short-circuit**: If CloudControl returns NotFound, the destroy pipeline treats it as success (the resource is already gone). This is by design — see `packages/core/src/destroy-strategies/`.

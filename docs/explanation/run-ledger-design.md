@@ -1,10 +1,10 @@
 # Run-ledger design
 
 > Diátaxis: **explanation** (understanding-oriented). Why Assignee.ai
-> tags every resource with a run identifier, what the ledger buys us
-> today, and why `assignee destroy --run-id <uuid>` is a **v0.2
-> milestone** rather than a v0.1 feature (v0.1 uses the existing
-> per-resource `assignee destroy <resource>` flow).
+> tags every resource with a run identifier, what the ledger buys
+> today, and why `assignee destroy --run-id <uuid>` is a future-work
+> sketch rather than a shipped feature (the current build uses the
+> existing per-resource `assignee destroy <resource>` flow).
 
 ## What the run-ledger is
 
@@ -57,22 +57,21 @@ get-resources --tag-filters Key=assignee-run-id,Values=<uuid>`). No
 - **Switching-cost reduction** — tag-based ownership means users can
   migrate to Terraform or Pulumi in a single
   `aws resourcegroupstaggingapi` call, without exporting a proprietary
-  state file. This is explicitly a positive trust signal, documented in
-  the Epic 50 L10 review (at `_bmad-output/planning-artifacts/_archive/research/epic-50/L10-moat.md` in the workspace planning archive).
+  state file. This is explicitly a positive trust signal of the design.
 
 ### Workflow-stickiness goals
 
-The L10 moat review (at `_bmad-output/planning-artifacts/_archive/research/epic-50/L10-moat.md` in the workspace planning archive)
-identifies the flip side: near-zero switching cost is fatal for
-retention. The run-ledger is the one piece of infrastructure that
-creates _workflow_ stickiness without _data_ stickiness — the user
-types `assignee destroy <resource>` instead of hand-writing
+A tag-based design that imposes near-zero switching cost is comfortable
+for users but hostile to long-term retention if no workflow stickiness
+exists. The run-ledger is the one piece of infrastructure that creates
+_workflow_ stickiness without _data_ stickiness — the user types
+`assignee destroy <resource>` instead of hand-writing
 `aws cloudformation delete-stack`, and the tag-based lookup "just
 works" for every resource assignee touched.
 
 ## Current capabilities
 
-As of Story 50-10, the following run-ledger operations work today:
+The following run-ledger operations work in the current build:
 
 | Operation                                          | Command                                                                                                         | Source of truth             |
 | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | --------------------------- |
@@ -87,12 +86,12 @@ As of Story 50-10, the following run-ledger operations work today:
 A natural extension is `assignee destroy --run-id <uuid>`: "undo
 everything this run created, in one call." The design implications:
 
-1. **Re-introduces multi-resource destroy.** Story 50-3 explicitly cut
+1. **Re-introduces multi-resource destroy.** A previous iteration cut
    `--all` and `--include-iam` because the safety allowlist was a tacit
-   admission that bulk-destroy was too dangerous for v1 — the guard
-   prevented `AssigneeOperator`/`Reader`/`Auditor` IAM from being
-   swept, which meant the flag was always one blind `--include-iam`
-   away from a self-lockout.
+   admission that bulk-destroy was too dangerous — the guard prevented
+   `AssigneeOperator`/`Reader`/`Auditor` IAM from being swept, which
+   meant the flag was always one blind `--include-iam` away from a
+   self-lockout.
 2. **Requires per-resource typed-name confirmation.** The current
    single-flow typed-confirm (`destroy/typed-confirm.ts`) demands the
    resource identifier to be typed back. Multiplying that over a run
@@ -108,18 +107,18 @@ everything this run created, in one call." The design implications:
    flow needs a topological sort + rollback-on-error policy that we
    have not designed yet.
 
-The safer path forward: **the run-id-sticky destroy ships in
-v0.2** (the next public milestone), with the learnings from Story
-50-3 and the workflow-stickiness data from the OSS launch informing
-the UX. v0.1 — the current pre-public source build — ships the
+A safer path forward, sketched as future work: ship `assignee destroy
+--run-id <uuid>` once the dependency-ordering and bulk-confirm UX
+questions below have been resolved. The current build ships the
 _read-only_ audit trail plus the existing per-resource
-`assignee destroy <resource>` primitive; that is the deliberate
-OSS-launch gate and no separate "future epic" disclaimer is needed.
+`assignee destroy <resource>` primitive — that is deliberate, and
+this section is a future-work sketch, not a committed feature for
+this course-submission build.
 
-## What the design WILL look like (sketch, non-binding)
+## What the design might look like (sketch, non-binding)
 
-When v0.2 lands `assignee destroy --run-id <uuid>`, the shape will
-probably be:
+If `assignee destroy --run-id <uuid>` were implemented, the shape
+might be:
 
 ```text
 $ assignee destroy --run-id 0f8e1c…
@@ -151,12 +150,12 @@ Key properties of the future design:
 - **No `--include-iam` flag.** IAM destruction remains single-resource-
   only forever — the self-lockout risk is not worth the convenience.
 
-This sketch is non-binding — revisit when the implementation epic
-lands.
+This sketch is non-binding — revisit if the feature is ever
+implemented.
 
 ## Related reading
 
-- [`oss-vs-saas.md`](./oss-vs-saas.md) — the run-ledger is OSS forever;
-  drift detection on top is the future SaaS anchor.
+- [`oss-vs-saas.md`](./oss-vs-saas.md) — the run-ledger is open;
+  drift detection on top is sketched as future productisation work.
 - [`invariants.md`](./invariants.md) — destroy-time invariants that any
   future multi-resource path must preserve.

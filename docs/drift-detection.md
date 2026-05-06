@@ -62,8 +62,10 @@ assignee drift --status DRIFTED
 # Exclude unadopted resources (CI mode)
 assignee drift --exclude BASELINE_MISSING
 
-# Adopt a pre-existing resource into drift tracking
-assignee drift --baseline arn:aws:s3:::adopted-bucket
+# Adopt a pre-existing resource into drift tracking. The ARN is a
+# positional argument and must come BEFORE the `--baseline` flag —
+# Commander parses `--baseline <ARN>` as a boolean flag with no argument.
+assignee drift arn:aws:s3:::adopted-bucket --baseline
 ```
 
 `--resource` and `--region` filter before the CloudControl calls (fewer API calls). `--status` and `--exclude` filter after (all resources are still checked).
@@ -75,7 +77,7 @@ assignee drift --baseline arn:aws:s3:::adopted-bucket
 assignee drift --json
 
 # Write JSON report to a file
-assignee drift --json --output drift-report.json
+assignee drift --json --output-file drift-report.json
 ```
 
 The JSON report includes a summary object with counts, check duration, and an array of per-resource results with full field-level detail.
@@ -114,7 +116,7 @@ Last provisioned: 2026-03-20T14:30:00Z
   MemorySize     desired: 256          actual: 512           MODIFIED
 ```
 
-- **Green** fields are in sync (shown with `--verbose`)
+- **Green** fields are in sync (shown with `--detailed`)
 - **Red** fields are modified
 - **Yellow** fields were added externally or removed
 
@@ -169,10 +171,13 @@ Each drifted resource is listed with its field differences, but no prompts are s
 Reconcile all drifted resources without interactive prompts:
 
 ```bash
-assignee reconcile --yes
+assignee reconcile --auto-reconcile --yes
 ```
 
-A warning is displayed before proceeding. Press Enter to continue or Ctrl+C to abort.
+`--auto-reconcile` skips the per-resource action menu (every drifted
+resource is reconciled), and `--yes` skips the final confirmation prompt.
+A warning is displayed before proceeding. Press Enter to continue or
+Ctrl+C to abort.
 
 ### Filter by Resource Type
 
@@ -208,8 +213,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install assignee
-        # Pre-v0.2: build from source and link into PATH.
-        # Available after v0.2 publish — replace with:  run: npm i -g assignee
+        # Course-submission project — not published to npm or Homebrew.
+        # Build from source and link into PATH:
         run: |
           git clone https://github.com/SergSlon/assignee-ai.git /tmp/assignee-ai
           cd /tmp/assignee-ai
@@ -221,7 +226,7 @@ jobs:
         env:
           ASSIGNEE_OPERATOR_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        run: assignee drift --json --output drift-report.json --concurrency 20
+        run: assignee drift --json --output-file drift-report.json --concurrency 20
 
       - name: Upload report
         if: always()
@@ -239,7 +244,7 @@ The step fails (exit code 1) if any drift is detected, which marks the workflow 
 #!/usr/bin/env bash
 set -euo pipefail
 
-assignee drift --json --output /tmp/drift-report.json --concurrency 20
+assignee drift --json --output-file /tmp/drift-report.json --concurrency 20
 
 if [ $? -eq 1 ]; then
   echo "Drift detected — see /tmp/drift-report.json"
@@ -251,24 +256,27 @@ fi
 
 ### `assignee drift`
 
-| Flag                 | Description                                                                                            | Default |
-| -------------------- | ------------------------------------------------------------------------------------------------------ | ------- |
-| `[resource-id]`      | Show field-level detail for one resource                                                               | --      |
-| `--resource <type>`  | Filter by CloudFormation resource type                                                                 | all     |
-| `--region <region>`  | Filter by AWS region                                                                                   | all     |
-| `--status <status>`  | Filter output by drift status                                                                          | all     |
-| `--exclude <status>` | Exclude a drift status from output (e.g. `--exclude BASELINE_MISSING` for CI)                          | none    |
-| `--baseline`         | Adopt the given `[resource-id]` into drift tracking by snapshotting its live CCAPI state as a baseline | false   |
-| `--json`             | Output as JSON                                                                                         | false   |
-| `--output <file>`    | Write JSON report to file (requires `--json`)                                                          | stdout  |
-| `--concurrency <n>`  | Max parallel drift checks (1-50)                                                                       | 10      |
-| `--verbose`          | Show all fields including matching ones                                                                | false   |
-| `--no-color`         | Disable color output                                                                                   | false   |
+| Flag                   | Description                                                                                            | Default |
+| ---------------------- | ------------------------------------------------------------------------------------------------------ | ------- |
+| `[resource-id]`        | Show field-level detail for one resource                                                               | --      |
+| `--resource <type>`    | Filter by CloudFormation resource type                                                                 | all     |
+| `--region <region>`    | Filter by AWS region                                                                                   | all     |
+| `--status <status>`    | Filter output by drift status                                                                          | all     |
+| `--exclude <status>`   | Exclude a drift status from output (e.g. `--exclude BASELINE_MISSING` for CI)                          | none    |
+| `--baseline`           | Adopt the given `[resource-id]` into drift tracking by snapshotting its live CCAPI state as a baseline | false   |
+| `--json`               | Output as JSON                                                                                         | false   |
+| `-o, --output <fmt>`   | Output format (`json`, `text`) — `text` produces the table view                                        | text    |
+| `--output-file <path>` | Write report to file (combine with `-o json` for a JSON report)                                        | stdout  |
+| `--concurrency <n>`    | Max parallel drift checks (1-50)                                                                       | 10      |
+| `--detailed`           | Show all fields including matching ones                                                                | false   |
 
 ### `assignee reconcile`
 
-| Flag                | Description                            | Default |
-| ------------------- | -------------------------------------- | ------- |
-| `--resource <type>` | Filter by CloudFormation resource type | all     |
-| `--dry-run`         | Preview without making changes         | false   |
-| `--yes`             | Reconcile all without prompting        | false   |
+| Flag                 | Description                                                     | Default |
+| -------------------- | --------------------------------------------------------------- | ------- |
+| `--resource <type>`  | Filter by CloudFormation resource type                          | all     |
+| `--dry-run`          | Preview without making changes                                  | false   |
+| `--auto-reconcile`   | Skip the per-resource action menu; reconcile every drifted      | false   |
+| `-o, --output <fmt>` | Output format (`json`, `text`) — `text` produces the table view | text    |
+| `--json`             | Output as JSON (alias for `-o json`)                            | false   |
+| `-y, --yes`          | Skip the final confirmation prompt                              | false   |

@@ -1,9 +1,9 @@
 ---
-diataxis: explanation
+diataxis: reference
 canonical: true
 ---
 
-> **Diátaxis: Explanation** — This is the canonical root page for this topic. Background and design of the best-practice rule engine.
+> **Diátaxis: Reference** — This is the canonical root page for this topic. Catalog of the best-practice rule engine, its rule format, and operator-facing controls.
 
 # Best Practices Engine
 
@@ -11,28 +11,27 @@ assignee.ai evaluates every plan against a library of AWS best practice rules be
 
 ## How It Works
 
-The best practices pipeline runs as three nodes in the 14-node LangGraph graph:
+The best practices pipeline runs as four nodes in the LangGraph pipeline (see [`packages/core/src/graph/create-graph.ts`](../packages/core/src/graph/create-graph.ts) for the full node list):
 
 ```
-plan_generator -> bp_evaluator -> auto_fix_applier -> preflight_guard
+plan_generator -> bp_evaluator -> fix_applicator -> preflight_guard
 ```
 
-1. **bp_evaluator**: Loads all YAML rules from `packages/best-practices/`, matches them by resource type and triggers, then evaluates each rule's `check_type` against the plan's `desiredState`. Produces a list of `BPFinding` objects. The library contains **185 BP rule YAML files** tracked in `manifest.json`, covering 22 service directories across security, cost, reliability, performance, and compliance categories. Completes in <10ms for all rules.
+1. **bp_evaluator**: Loads all YAML rules from `packages/best-practices/`, matches them by resource type and triggers, then evaluates each rule's `check_type` against the plan's `desiredState`. Produces a list of `BPFinding` objects. The library is the BP rule library — see [`manifest.json`](../packages/best-practices/manifest.json) for the canonical rule count and per-service breakdown across security, cost, reliability, performance, and compliance categories. Completes in <10ms for all rules.
 
-2. **auto_fix_applier**: For findings with `fixType: auto`, patches the `desiredState` directly using `desiredStatePatch`. For findings with `fixType: interactive`, prompts the user with choices. Respects the `preferences.auto_fix` config setting (`ask` / `apply` / `skip`).
+2. **fix_applicator**: For findings with `fixType: auto`, patches the `desiredState` directly using `desiredStatePatch`. For findings with `fixType: interactive`, prompts the user with choices. Respects the `preferences.auto_fix` config setting (`ask` / `apply` / `skip`). The graph node is named `GraphNode.FIX_APPLICATOR`.
 
 3. **preflight_guard**: Checks if any `blocking: true` findings remain unfixed. If so, sets `executionStatus: FAILED` and halts the pipeline. Non-blocking findings are displayed as warnings but allow provisioning to proceed.
 
 ## Categories
 
-| Category            | Description                                                |
-| ------------------- | ---------------------------------------------------------- |
-| `security`          | Encryption, public access, IAM policies, network exposure  |
-| `cost`              | Pricing tier selection, over-provisioning                  |
-| `cost_optimization` | Free tier usage, reserved capacity, lifecycle policies     |
-| `reliability`       | Multi-AZ, backups, deletion protection, dead letter queues |
-| `performance`       | Instance sizing, throughput settings, caching              |
-| `compliance`        | Tagging, naming conventions, regulatory requirements       |
+| Category      | Description                                                                                       |
+| ------------- | ------------------------------------------------------------------------------------------------- |
+| `compliance`  | Tagging, naming conventions, regulatory requirements                                              |
+| `cost`        | Pricing tier selection, over-provisioning, free-tier usage, reserved capacity, lifecycle policies |
+| `performance` | Instance sizing, throughput settings, caching                                                     |
+| `reliability` | Multi-AZ, backups, deletion protection, dead letter queues                                        |
+| `security`    | Encryption, public access, IAM policies, network exposure                                         |
 
 ## Severity Levels
 
@@ -189,34 +188,39 @@ This scans the rule directory at runtime and displays:
 
 Example output:
 
+> [!NOTE]
+> Sample output — counts evolve. Run `assignee status --bp-coverage` for the live numbers; the dashboard reads [`packages/best-practices/manifest.json`](../packages/best-practices/manifest.json) at runtime, so any figure printed below should be treated as illustrative only.
+
 ```
 BP Coverage Dashboard
 =====================
 
 Resource Type                              Rules Auto-Fix Interactive Manual Last Verified
 ────────────────────────────────────────────────────────────────────────────────────────────
-AWS::S3::Bucket                               18       12           2      4    2026-03-22
-AWS::EC2::Instance                            14        8           1      5    2026-03-22
-AWS::RDS::DBInstance                          10        6           1      3    2026-03-22
+AWS::S3::Bucket                               20       12           2      6    2026-03-22
+AWS::EC2::Instance                            32       12           4     16    2026-03-22
+AWS::RDS::DBInstance                          13        7           2      4    2026-03-22
 AWS::ECS::Service                              9        5           1      3    2026-03-22
 ...
 
-Summary: 185 rules | 40 auto-fixable (22%) | 13 interactive | 132 manual
+Summary: <N> rules | <Nx> auto-fixable | <Ny> interactive | <Nz> manual
 ```
 
-## Excluding Rules
+## Excluding Rules (planned — not yet implemented)
 
-Rules can be excluded from evaluation using `excludePatterns` in the project or global config:
+> **Note:** `bestPractices.excludePatterns` is design intent, not a parsed config key today. The current schema (`packages/core/src/config/config-schema.ts`) does not read this section, so the YAML below has no effect. The block is documented to reserve the shape for future productisation.
+
+Rules will be excludable from evaluation using `excludePatterns` in the project or global config:
 
 ```yaml
 bestPractices:
   excludePatterns:
     - "BP-S3-010" # Exclude a specific rule by ID
     - "BP-EC2-*" # Exclude all EC2 rules (glob pattern)
-    - "cost_optimization" # Exclude by category
+    - "cost" # Exclude by category
 ```
 
-Patterns support exact ID matching, glob wildcards, and category-based exclusion. Excluded rules are skipped entirely during evaluation and do not produce findings.
+Patterns are intended to support exact ID matching, glob wildcards, and category-based exclusion. Excluded rules will be skipped entirely during evaluation and produce no findings.
 
 ## Controlling Auto-Fix Behavior
 
@@ -235,18 +239,7 @@ preferences:
   auto_fix: ask # ask | apply | skip
 ```
 
-In project init:
-
-```yaml
-autoFixBestPractices: true # equivalent to auto_fix: apply
-```
-
-## Destroy Strategy Unit-Test Floor
-
-Every destroy strategy in `packages/core/src/destroy-strategies/strategies/` must maintain **≥ 80 % line coverage**. This floor was established alongside a quality pass that added dedicated test files for S3, IGW, RouteTable, DynamoDB, EFS, ELBv2, and CloudFront strategies.
-
-If you add or modify a strategy, CI enforces the 80 % floor via `pnpm -r test:coverage`. Strategies with non-trivial branching (pre-delete hooks, AWS API fallback paths) must test each branch — the coverage number alone is not sufficient.
-
-## Non-Fatal Warnings in Destroy Strategies
-
-Seven strategies — S3, IGW, RouteTable, DynamoDB, EFS, ELBv2, and CloudFront — emit non-fatal warnings via the `DestroyContext.warn` callback for advisory conditions (e.g., a dependency that cannot be cleaned up automatically, a rate-limiting backoff). Do NOT write directly to `process.stderr` or use any static `warnDestroy()` call that bypasses the context. Using the `ctx.warn` callback keeps warnings observable in tests and structured in the JSON log output.
+<!-- "Destroy Strategy Unit-Test Floor" + "Non-Fatal Warnings in Destroy
+Strategies" sections moved to docs/engineering/ — those are
+contributor-facing engineering rules, not operator-facing reference
+content for the BP engine. -->

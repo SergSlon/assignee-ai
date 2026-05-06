@@ -5,10 +5,9 @@ All notable changes to Assignee.ai are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Both `@assignee/cli` and `@assignee/mcp-server` packages are currently
-`private: true` — nothing is published to npm yet. `0.1.0` below is the
-internal development baseline; the first published version (`0.2.0` or
-later) will land when the project is ready for public release.
+Both `assignee` and `@assignee/mcp-server` packages are `private: true`
+— nothing is published to npm. `0.1.0` below is the internal version
+baseline; no npm release is planned for the course-project submission.
 
 For the full engineering history including BMAD story IDs, wave labels, and
 review methodology notes, see

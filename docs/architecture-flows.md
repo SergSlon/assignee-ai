@@ -28,25 +28,26 @@ flowchart TD
 
         subgraph PHASE1["Phase 1 — Planning"]
             IP["1. INTENT_PARSER<br/>—————<br/>Pattern match OR<br/>Bedrock LLM classify"]
-            SF["2. SCHEMA_FETCHER<br/>—————<br/>AWS SDK: CloudFormation<br/>DescribeType (Story 31.1)"]
+            SF["2. SCHEMA_FETCHER<br/>—————<br/>AWS SDK: CloudFormation<br/>DescribeType"]
             OE["3. OPTION_ELICITOR<br/>—————<br/>Interactive wizard<br/>+ live pricing<br/>+ AWS discovery<br/>+ workload classification<br/>+ option ranking<br/>+ --set key=value pre-fills"]
             CD["4. COMPOUND_DISPATCHER<br/>—————<br/>Single vs multi-resource<br/>routing"]
             PG["5. PLAN_GENERATOR<br/>—————<br/>LLM generates CFN JSON<br/>+ toCfn transforms<br/>+ assembleComposites"]
-            AG["6. ADVICE_GENERATOR<br/>—————<br/>LLM advice on<br/>generated plan"]
-            BP["7. BP_EVALUATOR<br/>—————<br/>YAML best practices<br/>evaluate findings"]
-            FA["8. FIX_APPLICATOR<br/>—————<br/>Auto-fix autoFixable<br/>BP patches (user consent)"]
-            PF["9. PREFLIGHT_GUARD<br/>—————<br/>Cost estimate<br/>+ IAM pre-check<br/>+ blocking BP check"]
+            VDS["6. VALIDATE_DESIRED_STATE<br/>—————<br/>Schema + invariant checks<br/>on generated CFN JSON<br/>(short-circuits to RESULT_FORMATTER<br/>on validation failure)"]
+            AG["7. ADVICE_GENERATOR<br/>—————<br/>LLM advice on<br/>generated plan"]
+            BP["8. BP_EVALUATOR<br/>—————<br/>YAML best practices<br/>evaluate findings"]
+            FA["9. FIX_APPLICATOR<br/>—————<br/>Auto-fix autoFixable<br/>BP patches (user consent)"]
+            PF["10. PREFLIGHT_GUARD<br/>—————<br/>Cost estimate<br/>+ IAM pre-check<br/>+ blocking BP check"]
         end
 
-        HA["10. HUMAN_APPROVAL<br/>—————<br/>Display plan + cost<br/>User confirms / cancels<br/>⚡ LangGraph INTERRUPT<br/>Auto-approve on checkpoint resume<br/>(no double confirm)"]
+        HA["11. HUMAN_APPROVAL<br/>—————<br/>Display plan + cost<br/>User confirms / cancels<br/>⚡ LangGraph INTERRUPT<br/>Auto-approve on checkpoint resume<br/>(no double confirm)"]
 
         subgraph PHASE2["Phase 2 — Provisioning"]
-            RP["11. RESOURCE_PROVISIONER<br/>—————<br/>CloudControl CreateResource<br/>State guard skipped for S3<br/>(globally unique names)<br/>provisionable=false → skip<br/>Post-hooks: S3 upload"]
-            SP["12. STATUS_POLLER<br/>—————<br/>Poll every 2s<br/>MAX_POLL_ITERATIONS=450 guard<br/>Extended timeout for RDS/ELBv2/<br/>NatGateway (15 min)"]
-            RF["13. RESULT_FORMATTER<br/>—————<br/>SUCCESS / FAILED<br/>+ security posture check"]
+            RP["12. RESOURCE_PROVISIONER<br/>—————<br/>CloudControl CreateResource<br/>State guard skipped for S3<br/>(globally unique names)<br/>provisionable=false → skip<br/>Post-hooks: S3 upload"]
+            SP["13. STATUS_POLLER<br/>—————<br/>Polls every 2 s (base);<br/>exponential backoff on<br/>ThrottlingException only<br/>20 min extended timeout for<br/>RDS_DB_INSTANCE, RDS_DB_CLUSTER,<br/>ELBV2, NAT_GATEWAY, CLOUDFRONT<br/>(5 types)"]
+            RF["14. RESULT_FORMATTER<br/>—————<br/>SUCCESS / FAILED<br/>+ security posture check"]
         end
 
-        IP --> SF --> OE --> CD --> PG --> AG --> BP --> FA --> PF
+        IP --> SF --> OE --> CD --> PG --> VDS --> AG --> BP --> FA --> PF
 
         PF -->|"PLAN mode"| RF
         PF -->|"APPLY mode"| HA
@@ -69,7 +70,7 @@ flowchart TD
     APPLY_MODE --> IP
     RESUME -->|"checkpoint loaded"| HA
 
-    DESTROY["DESTROY<br/>—————<br/>Single resource only (bulk removed Story 50-3)<br/>Resolve ARN via Tags API<br/>CloudControl DeleteResource<br/>+ pre-delete hooks<br/>+ Billing MCP cost savings<br/>Confirm: type resource name to proceed"]
+    DESTROY["DESTROY<br/>—————<br/>Single resource only<br/>(bulk-destroy --all / --include-iam removed)<br/>Resolve ARN via Tags API<br/>CloudControl DeleteResource<br/>+ pre-delete hooks<br/>+ Billing MCP cost savings<br/>Confirm: type resource name to proceed"]
     LIST["LIST<br/>—————<br/>Resource Groups Tagging API<br/>Filter: managed-by=assignee-ai"]
     SETUP["SETUP<br/>—————<br/>Create 3 IAM users<br/>operator / reader / auditor<br/>Least-privilege policies"]
     INIT["INIT<br/>—————<br/>Detect AWS creds/region<br/>Create .assignee/config.yaml"]
@@ -92,14 +93,13 @@ flowchart LR
         direction TB
         PRICING["💰 aws-pricing-mcp-server<br/>uvx awslabs.aws-pricing-mcp-server<br/>—————<br/>Creds: READER<br/>Region: us-east-1"]
         DOCS["📖 aws-documentation-mcp-server<br/>uvx awslabs.aws-documentation-mcp-server<br/>—————<br/>Creds: None (public)"]
-        KNOW["🧠 aws-knowledge-mcp-server<br/>fastmcp remote API (opt-in)<br/>—————<br/>Creds: None (public)"]
     end
 
     subgraph OPT["Optional MCP Servers (Graceful Degrade)"]
         direction TB
         IAM["🔐 iam-mcp-server<br/>uvx --readonly<br/>—————<br/>Creds: AUDITOR"]
-        SEC["🛡️ well-architected-security<br/>uvx awslabs server<br/>—————<br/>Creds: AUDITOR"]
-        BILL["📊 billing-cost-management-mcp-server<br/>uvx awslabs server<br/>—————<br/>Creds: READER"]
+        SEC["🛡️ well-architected-security<br/>uvx awslabs.well-architected-security-mcp-server@0.1.7<br/>—————<br/>Creds: AUDITOR"]
+        BILL["📊 billing-cost-management-mcp-server<br/>uvx awslabs.billing-cost-management-mcp-server@0.0.17<br/>—————<br/>Creds: READER"]
     end
 
     subgraph NODES["Graph Nodes Consuming MCP"]
@@ -137,7 +137,7 @@ flowchart LR
 
     subgraph LOCAL["Hardcoded / Embedded"]
         direction TB
-        PLUGINS["Resource Plugins<br/>35 plugins × fields<br/>Labels, hints, validators<br/>toCfn transforms"]
+        PLUGINS["Resource Plugins<br/>38 plugins (37 type-specific +<br/>1 generic fallback)<br/>Labels, hints, validators<br/>toCfn transforms"]
         BPYAML["Best Practices<br/>YAML rules<br/>Severity + remediation"]
         PATTERNS["Intent Patterns<br/>Regex matchers<br/>Zero-latency shortcut"]
         LOCALP["Local Pricing Registry<br/>Fallback estimates"]
@@ -232,7 +232,7 @@ flowchart TD
     FILTER --> Q1
 
     subgraph COMMON["Common Fields (6)"]
-        Q1["📋 InstanceType<br/>type: categorySelect<br/>4 categories, 28 types<br/>initial: t3.micro<br/>─────<br/>📦 HARDCODED categories<br/>🔄 DYNAMIC: DescribeInstanceTypes<br/>fetches current-gen types<br/>💰 DYNAMIC: Pricing MCP<br/>fetches live $/hr per type<br/>🧠 Smart-filtered by<br/>workload profile"]
+        Q1["📋 InstanceType<br/>type: categorySelect<br/>see `instance-type-registry.ts`<br/>(registry SSOT for categories +<br/>types)<br/>initial: t3.micro<br/>─────<br/>📦 HARDCODED categories<br/>🔄 DYNAMIC: DescribeInstanceTypes<br/>fetches current-gen types<br/>💰 DYNAMIC: Pricing MCP<br/>fetches live $/hr per type<br/>🧠 Smart-filtered by<br/>workload profile"]
         Q2["📋 ImageId / AMI<br/>type: enum<br/>Static OS fallback options:<br/>amazon-linux-2023 / ubuntu-24.04 /<br/>ubuntu-22.04 / windows-2022<br/>initial: amazon-linux-2023<br/>─────<br/>🔄 DYNAMIC: fetcher=discover-amis<br/>SSM GetParameter + DescribeImages<br/>6s timeout, fallback: static OS list<br/>🔍 searchAmis() for 'Other' flow<br/>resolveAmiFromOsName() at plan time"]
         Q3["📋 KeyName<br/>type: enum<br/>options: EMPTY at build<br/>─────<br/>🔄 DYNAMIC: fetcher=discover-key-pairs<br/>EC2 DescribeKeyPairs<br/>6s timeout, fallback: manual"]
         Q4["📋 SubnetId<br/>type: enum<br/>options: EMPTY at build<br/>─────<br/>🔄 DYNAMIC: fetcher=discover-subnets<br/>EC2 DescribeSubnets<br/>6s timeout, fallback: manual"]
@@ -466,7 +466,6 @@ flowchart TB
     subgraph CORE_MCP["Core MCP Servers"]
         PRICE["aws-pricing-mcp-server"]
         DOCS["aws-documentation-mcp-server<br/>(no creds needed)"]
-        KNOW["aws-knowledge-mcp-server<br/>(opt-in, no creds needed)"]
     end
 
     subgraph OPT_MCP["Optional MCP Servers"]
@@ -511,7 +510,6 @@ flowchart TB
 
     BED --> N_IP
     BED --> N_OE
-    BED --> N_PF
     PRICE --> N_OE
     PRICE --> N_PF
     EC2D --> N_OE
@@ -540,9 +538,10 @@ flowchart TD
         WIND["Windsurf"]
     end
 
-    subgraph MCP_SERVER["@assignee/mcp-server<br/>npx @assignee/mcp-server<br/>stdio transport"]
+    subgraph MCP_SERVER["@assignee/mcp-server<br/>node apps/mcp-server/dist/index.js<br/>stdio transport"]
         PLAN["plan_resource<br/>─────<br/>Input: description, region?, env?<br/>Invokes: LangGraph PLAN mode<br/>Returns: desired-state JSON<br/>+ estimated cost<br/>+ checkpoint path"]
         APPLY["apply_plan<br/>─────<br/>Input: checkpointPath, confirmed<br/>Safety: rejects unconfirmed<br/>Invokes: LangGraph APPLY mode<br/>Returns: resource ARN or error"]
+        DESTROY["destroy_resource<br/>─────<br/>Input: resourceArn (or identifier)<br/>+ confirmed flag<br/>Uses: destroy-strategies registry<br/>(per-type pre-delete hooks)<br/>Invokes: CloudControl DeleteResource<br/>Returns: deletion result"]
         LIST["list_managed_resources<br/>─────<br/>Input: region?, resourceType?<br/>Queries: Resource Groups Tags<br/>Filter: managed-by=assignee-ai<br/>Returns: JSON array"]
         ESTIMATE["estimate_cost<br/>─────<br/>Input: description, resourceType?,<br/>desiredState?, region?<br/>Uses: local PricingStrategyRegistry<br/>Fast: no remote calls<br/>Returns: monthly cost estimate"]
     end
@@ -553,12 +552,13 @@ flowchart TD
 
     subgraph INTERNAL["Internal: Reuses CLI Graph"]
         GRAPH["LangGraph Agent<br/>(same 14 nodes)"]
-        MCPS["Core MCP Servers<br/>(pricing, docs, knowledge)"]
+        MCPS["Core MCP Servers<br/>(pricing + docs)"]
         AWS["AWS CloudControl<br/>+ pre-delete hooks"]
     end
 
     PLAN -->|"ExecutionMode.PLAN"| GRAPH
     APPLY -->|"ExecutionMode.APPLY"| GRAPH
+    DESTROY -->|"DeleteResource"| AWS
     LIST --> AWS
     ESTIMATE -->|"local registry"| INTERNAL
 

@@ -1,48 +1,66 @@
-# SPDX Software Bill of Materials (SBOM)
+# SPDX Software Bill of Materials (SBOM) — design intent
 
-## What is the SBOM?
+> **Status for this build.** SBOM generation is **wired in
+> `.github/workflows/release.yml`** (the `generate-sbom` job) but the
+> release workflow is dry-run-by-default — gated by the
+> `ASSIGNEE_RELEASE_PUBLISH=1` env var, which has not been flipped for
+> this course-submission build. **No public release has been
+> published**, so no SBOM artefact has actually been emitted to a
+> GitHub release page. The verification commands below describe the
+> _design_ of how a consumer would verify an SBOM if a real release
+> existed; treat them as hypothetical until that day comes.
 
-The Assignee.ai release pipeline generates a Software Bill of Materials (SBOM)
-in **SPDX 2.3 JSON** format for every published release. The SBOM is an
-exhaustive inventory of every open-source package that ships inside the
-Assignee.ai CLI tarball, including their versions, licences, and dependency
-relationships.
+## What the SBOM is meant to be
 
-The SBOM is attached to each GitHub release as
-`assignee-<version>-sbom.spdx.json`.
+The Assignee.ai release workflow is designed to generate a Software
+Bill of Materials in **SPDX 2.3 JSON** format for every published
+release. The SBOM is intended to be an exhaustive inventory of every
+open-source package that ships inside the CLI tarball, including
+versions, licences, and dependency relationships.
 
-## Why does it exist?
+When a release is eventually published, the SBOM would be attached to
+each GitHub release as `assignee-<version>-sbom.spdx.json`.
 
-The SBOM satisfies requirements from:
+## Why the design includes an SBOM
 
-- **EU Cyber Resilience Act (CRA) 2027** — Annex I, Part II, § 1(b): products
-  with digital elements must supply a machine-readable SBOM in a commonly
-  used format.
-- **NIS2 Directive** — Article 21(2)(g): essential-entity supply-chain risk
-  management requires component transparency.
-- **US Executive Order 14028** (NTIA minimum elements) — mandates SBOM for
-  software used in federal procurement pipelines.
+Component transparency is industry-standard practice for any
+credential-handling tool. Generating an SBOM from the production
+`node_modules` tree at release time is a low-cost, high-clarity way to
+make that transparency machine-readable.
 
-## How is it generated?
+## How it is generated (when releases run)
 
-The `generate-sbom` job in `.github/workflows/release.yml.disabled` uses
-[`@anchore/sbom-action`](https://github.com/anchore/sbom-action) to scan the
-production `node_modules` tree produced by `pnpm deploy --prod` and emit an
-SPDX 2.3 JSON document.
+The `generate-sbom` job in `.github/workflows/release.yml` uses
+[`@anchore/sbom-action`](https://github.com/anchore/sbom-action) to
+scan the workspace tree (`anchore/sbom-action` is invoked with
+`path: .`); package-manager metadata (`devDependencies` keys in
+`package.json` plus `pnpm-lock.yaml` resolution data) is what
+distinguishes prod from dev dependencies in the resulting SPDX
+document. Verified at `release.yml:597-602` (action invocation +
+`path: .`).
 
-A validation step immediately follows, running `spdx-tools validate` to assert
-the document is spec-compliant before it is attached to the GitHub release.
+A validation step immediately follows, running `spdx-tools validate`
+to assert the document is spec-compliant before it would be attached
+to the GitHub release.
 
-The SBOM is generated AFTER `smoke-test` passes (i.e., only when the tarball
-is known good) and BEFORE the `generate-provenance` step attaches cosign
-signatures.
+The job is sequenced as `cross-platform-build → generate-sbom`
+(declared at `release.yml:537`: `generate-sbom: needs: cross-platform-build`),
+i.e. the SBOM job runs against the same tarball the cross-platform
+matrix produced. The cosign provenance job (`generate-provenance`)
+in turn declares `needs: [smoke-test, generate-sbom]` at
+`release.yml:680`, so cosign signing only proceeds after both the
+tarball smoke-test and the SBOM emission have succeeded.
 
-## How to verify the SBOM
+## How a consumer would verify an SBOM (hypothetical — no published releases yet)
+
+The commands below describe the verification flow once a release has
+been published. They will not work today because no release exists.
 
 1. Download the SBOM from the GitHub release page:
 
    ```sh
-   curl -LO https://github.com/SergSlon/assignee-ai/releases/download/v<VERSION>/assignee-v<VERSION>-sbom.spdx.json
+   # Hypothetical — no published releases yet
+   curl -LO https://github.com/<owner>/<repo>/releases/download/v<VERSION>/assignee-v<VERSION>-sbom.spdx.json
    ```
 
 2. Install spdx-tools:
@@ -83,7 +101,8 @@ signatures.
 
 ## Relationship to supply-chain provenance
 
-The SBOM documents _what_ is in the tarball. The SLSA provenance attestation
-(see [`supply-chain-provenance.md`](supply-chain-provenance.md)) documents
-_how_ the tarball was built and by whom. Together they satisfy the full
-CRA 2027 artefact attestation requirement.
+The SBOM documents _what_ would be in a release tarball. The cosign
+provenance design (see [`supply-chain-provenance.md`](supply-chain-provenance.md))
+documents _how_ a tarball would be built and by whom. Both pieces are
+sketched as design intent for future productisation; neither has yet
+been exercised on a published release.

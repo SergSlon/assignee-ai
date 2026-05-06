@@ -12,26 +12,23 @@
 This page is the reference entry for `AWS::SNS::Subscription` as supported by Assignee.ai.
 It is auto-generated from the supported-types registry — edit
 `packages/core/src/config/resource-types/supported.ts` or the plugin at
-`packages/core/src/plugins/` to update the authoritative source.
+`packages/core/src/resource-plugins/plugins/` to update the authoritative source.
 
 ## Assignee.ai support
 
 Assignee.ai provisions `AWS::SNS::Subscription` resources via the AWS CloudControl API.
-A dedicated plugin handles schema elicitation, default injection, and
-best-practice rule evaluation for this type.
+A dedicated plugin handles schema elicitation, default injection, and best-practice rule evaluation for this type.
 
 ### Typical intent examples
 
 ```bash
-assignee plan "Create a Subscription"
-assignee apply "Create a Subscription named my-sns-subscription"
+assignee plan "Create an SNS subscription"
+assignee apply "Create an SNS subscription named my-sns-subscription"
 ```
 
 ### Best-practice rules
 
-Best-practice rules for this type are defined in
-`packages/best-practices/rules/`. Run `assignee plan` to see which rules
-apply to your specific configuration.
+Best-practice rules for this type live under `packages/best-practices/sns/` (per-service subdirectories). Run `assignee plan` to see which rules apply to your specific configuration.
 
 ### Pricing
 

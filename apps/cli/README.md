@@ -19,19 +19,23 @@ This is the user-facing CLI of Assignee.ai. It wires a [LangGraph](https://githu
 
 Registered in `src/index.ts` and implemented under `src/commands/`:
 
-| Command                    | Purpose                                                           |
-| -------------------------- | ----------------------------------------------------------------- |
-| `assignee init`            | First-run setup: config, credentials, auto-fix mode               |
-| `assignee setup`           | Provision Assignee IAM users and policies in your AWS account     |
-| `assignee plan`            | Plan resources from natural-language intent (writes a checkpoint) |
-| `assignee apply`           | Apply a previously-planned checkpoint                             |
-| `assignee destroy`         | Tear down resources created by Assignee                           |
-| `assignee drift`           | Detect drift between checkpoint and live AWS state                |
-| `assignee reconcile`       | Reconcile checkpoint after out-of-band changes                    |
-| `assignee list` / `status` | Inspect tracked resources and recent runs                         |
-| `assignee clean` / `cache` | Manage local state under `~/.assignee/`                           |
-| `assignee completions`     | Print shell completion scripts (bash/zsh/fish)                    |
-| `assignee version`         | Print version, Node version, and platform                         |
+| Command                       | Purpose                                                           |
+| ----------------------------- | ----------------------------------------------------------------- |
+| `assignee init`               | First-run setup: config, credentials, auto-fix mode               |
+| `assignee setup`              | Provision Assignee IAM users and policies in your AWS account     |
+| `assignee plan`               | Plan resources from natural-language intent (writes a checkpoint) |
+| `assignee apply`              | Apply a previously-planned checkpoint                             |
+| `assignee destroy`            | Tear down resources created by Assignee                           |
+| `assignee drift`              | Detect drift between checkpoint and live AWS state                |
+| `assignee reconcile`          | Reconcile checkpoint after out-of-band changes                    |
+| `assignee list` / `status`    | Inspect tracked resources and recent runs                         |
+| `assignee describe`           | Describe a managed resource by ARN or identifier                  |
+| `assignee optimize`           | Surface cost / right-sizing recommendations for managed resources |
+| `assignee doctor`             | Environment + config + credential diagnostics with `--fix` mode   |
+| `assignee restore-provisions` | Replay audit-log apply events to rebuild `provisions.json`        |
+| `assignee audit-verify`       | Verify the integrity of the local audit log                       |
+| `assignee completions`        | Print shell completion scripts (bash/zsh/fish)                    |
+| `assignee version`            | Print version, Node version, and platform                         |
 
 ## Developing
 
@@ -39,9 +43,9 @@ From the repo root:
 
 ```bash
 pnpm install
-pnpm --filter assignee build      # tsc + generate completions
+pnpm --filter assignee build && pnpm --filter assignee generate-completions   # tsc, then write shell completions
 pnpm --filter assignee test       # vitest
-pnpm --filter assignee test:e2e   # RUN_E2E=1 vitest src/e2e/e2e-plan.test.ts
+pnpm --filter assignee test:e2e   # RUN_E2E=1 vitest run --pool=forks --poolOptions.forks.singleFork=true 'src/e2e/e2e-plan-*.test.ts'
 ```
 
 The full CI gate is `pnpm build && pnpm test` from the repo root.
