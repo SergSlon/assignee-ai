@@ -270,7 +270,6 @@ The course-submission pitch deck for this project (10 slides, dark tech-talk the
 
 - **Live**: <https://sergslon.github.io/assignee-ai/presentation/> — served via GitHub Pages directly from `main`.
 - **Source in repo**: [presentation/index.html](presentation/index.html) — single self-contained HTML file (~94 KB, no external assets except Google Fonts).
-- **Demo script**: [presentation/DEMO.md](presentation/DEMO.md) — pre-demo setup, 5-minute live script, backup plans, cleanup.
 
 Navigation: ← / → / Space. Text is selectable.
 
