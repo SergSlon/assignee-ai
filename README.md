@@ -1,5 +1,8 @@
 # Assignee.ai
 
+[![CI](https://github.com/SergSlon/assignee-ai/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/SergSlon/assignee-ai/actions/workflows/ci.yml)
+[![Cross-platform](https://github.com/SergSlon/assignee-ai/actions/workflows/ci-cross-platform.yml/badge.svg?branch=main)](https://github.com/SergSlon/assignee-ai/actions/workflows/ci-cross-platform.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/SergSlon/f9d960dd5a1defd7b8fbd4656df40915/raw/assignee-ai-coverage.json)](https://github.com/SergSlon/assignee-ai/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D20.11-brightgreen?logo=node.js)](package.json)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript)](packages/typescript-config/strict.json)
