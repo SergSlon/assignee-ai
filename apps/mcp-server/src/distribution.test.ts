@@ -102,7 +102,11 @@ describe("Distribution package configuration", () => {
       expect(content).toContain("Claude Code");
       expect(content).toContain("Cursor");
       expect(content).toContain("Windsurf");
-      expect(content).toContain("npx @assignee/mcp-server");
+      // Canonical local-build invocation (course-submission build, not
+      // published to npm). The previous assertion checked for
+      // `npx @assignee/mcp-server` which is the post-publish form;
+      // the README has been reframed to source-build only.
+      expect(content).toContain("apps/mcp-server/dist/index.js");
     }
   });
 

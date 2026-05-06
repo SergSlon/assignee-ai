@@ -27,10 +27,16 @@ Exported from `src/index.ts`:
 - **IAM helpers** — `getRequiredIamActions`, `operatorPolicy`, `readerPolicy`, `auditorPolicy`.
 - **CloudFormation schema service** — `CloudFormationSchemaService`, `SchemaCacheWarmer`, `adaptDescribeTypeToMcpFormat`.
 - **Errors** — `AssigneeError` and its subclasses (`McpError`, `LlmError`, `StateGuardError`, `ProvisioningError`, `MissingRequiredFieldsError`, `UserCancelledError`, ...) plus `defaultErrorHintRegistry`.
-- **Ports (hexagonal)** — `LlmPort`, `MockLlmAdapter`.
+- **Ports (hexagonal)** — `LlmPort`.
 - **Constants** — `CfnKey`, `ResourceDefault`, `AwsDefault`, `AssigneeTag`, `RESOURCE_TYPES`, `SUPPORTED_TYPES_ARRAY`, `ASSIGNEE_DIR`, ...
 
 See `src/index.ts` for the full export surface.
+
+### Sub-path exports
+
+Some helpers ship behind dedicated sub-paths so production code never accidentally imports test-only utilities:
+
+- **`@assignee/core/testing`** — `MockLlmAdapter` (test-only LLM port stub used by unit/integration tests). Never import from production code.
 
 ## Developing
 

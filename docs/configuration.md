@@ -13,14 +13,14 @@ assignee.ai uses a layered configuration system. Everything works out of the box
 
 Settings are resolved in this order (highest priority first):
 
-| Priority | Source                | Example                                          |
-| -------- | --------------------- | ------------------------------------------------ |
-| 1        | CLI flags             | `--yes`, `-o json`, `--set BucketName=my-bucket` |
-| 2        | Environment variables | `ASSIGNEE_AUTO_FIX=apply`                        |
-| 3        | Project config        | `.assignee/config.yaml`                          |
-| 4        | User config           | `~/.config/assignee/config.yaml`                 |
-| 5        | Org policy            | SaaS-delivered or local org policy file          |
-| 6        | Plugin defaults       | Built-in defaults per resource type              |
+| Priority | Source                | Example                                                      |
+| -------- | --------------------- | ------------------------------------------------------------ |
+| 1        | CLI flags             | `--yes`, `-o json`, `--set BucketName=my-bucket`             |
+| 2        | Environment variables | `ASSIGNEE_AUTO_FIX=apply`                                    |
+| 3        | Project config        | `.assignee/config.yaml`                                      |
+| 4        | User config           | `~/.config/assignee/config.yaml`                             |
+| 5        | Org policy            | Local org policy file (`org_policy:` in user/project config) |
+| 6        | Plugin defaults       | Built-in defaults per resource type                          |
 
 Higher-priority values override lower ones. Unknown keys are silently ignored for forward compatibility.
 
@@ -107,7 +107,7 @@ preferences:
 
 ### Org Policy
 
-Org policies can be delivered via the SaaS API or stored locally. They enforce company-wide guardrails.
+Org policies are loaded from local config files (`org_policy:` block under user or project config) and enforce company-wide guardrails. The fetch-from-SaaS path is design intent for future productisation; today only local-file policies are read.
 
 ```yaml
 org_policy:
@@ -136,7 +136,7 @@ org_policy:
 | ---------------------- | ---- | ------- | ------------------------------------------------------ |
 | `preferences.auto_fix` | enum | `ask`   | How to handle BP auto-fixes: `ask`, `apply`, or `skip` |
 
-> Story 50-7 removed `preferences.output_format` and `preferences.verbosity`
+> `preferences.output_format` and `preferences.verbosity` were removed
 > — no CLI command branched on those keys (`ASSIGNEE_VERBOSITY=verbose`
 > still works via the logger's direct env read).
 
@@ -170,9 +170,9 @@ bestPractices:
 
 Pass-through section for organization-wide policies. Keys are domain-specific (e.g., `security`, `cost`). No deep validation -- the policy engine interprets them at runtime.
 
-### `llm` Section (Story 44.1)
+### `llm` Section
 
-> **Note:** The `llm` config-file section is planned but does **not** exist in the current config schema (`packages/core/src/config/config-schema.ts`). Per-node LLM routing is currently driven entirely by the `ASSIGNEE_LLM_*` environment variables listed below. The YAML example describes the intended future design — reading `llm.*` keys from `.assignee/config.yaml` is a no-op today.
+> **Note:** `llm.*` keys are not parsed today. The YAML example below describes the intended future design; the current config schema (`packages/core/src/config/config-schema.ts`) does not read these keys. Model selection is driven by the `ASSIGNEE_LLM_DEFAULT` environment variable instead.
 
 LLM model selection. By default, all pipeline nodes use the same model (`ASSIGNEE_LLM_DEFAULT` or the built-in default `bedrock/amazon.nova-lite-v1:0`).
 
@@ -188,31 +188,31 @@ llm:
 
 Each value must be in `provider/model-id` format. Supported providers: `bedrock`, `anthropic`, `openai`, `google`, `ollama`.
 
-**Per-node routing — designed but not wired (R9b-02 / Epic 100 P038).**
-The four per-callsite slots (`llm.plan_generator`, `llm.intent_parser`,
-`llm.advice_generator`, `llm.workload_classifier`) and their matching
-`ASSIGNEE_LLM_*` env-var twins were defined in Story 44.1 but the factory
-sites that would read them were never built. The dead env-var constants
-were removed in R9b-02; setting the keys (or env vars) has no effect
-today. See the descope note in
+**Per-node routing — designed but not wired.** The four per-callsite
+slots (`llm.plan_generator`, `llm.intent_parser`, `llm.advice_generator`,
+`llm.workload_classifier`) and their matching `ASSIGNEE_LLM_*` env-var
+twins were defined as a routing surface but the factory sites that
+would read them were never built. The dead env-var constants have been
+removed; setting the keys (or env vars) has no effect today. See the
+descope note in
 [`packages/core/src/constants/env-vars.ts`](../packages/core/src/constants/env-vars.ts)
 for revival guidance — wire the factory sites first, then re-add the slots.
 
 **Diagnostics:** Run `assignee doctor` to see the resolved model.
 
-### Data Registries (Epic 46)
+### Data Registries
 
 Several data tables that previously lived inline in source modules have been extracted into dedicated registry files. This gives each table a single source of truth, simplifies updates when AWS adds new instance families or Bedrock regions, and creates a clean seam for future config-driven overrides.
 
 | Registry                 | File                                                           | Purpose                                                       | Consumer(s)                    |
 | ------------------------ | -------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------ |
 | Instance type catalog    | `packages/core/src/resource-plugins/instance-type-registry.ts` | EC2 instance types offered in the wizard, grouped by workload | `ec2-instance.ts` (wizard)     |
-| Bedrock region list      | `apps/cli/src/constants/bedrock-regions.ts`                    | Known regions where Bedrock + Claude/Nova are available       | `llm-adapter.ts` (error hints) |
+| Bedrock region list      | `packages/core/src/constants/bedrock-regions.ts`               | Known regions where Bedrock + Claude/Nova are available       | `llm-adapter.ts` (error hints) |
 | Instance family registry | `apps/cli/src/constants/instance-family-registry.ts`           | ARM equivalents, Spot eligibility, RDS class detection tables | `cost-advisor` (advice node)   |
 
 These registries are pure data declarations (no I/O, no imports of heavy modules). To add a new instance family or Bedrock region, edit only the relevant registry file -- no other source changes required.
 
-### DataSource Tagging (Story 46.2)
+### DataSource Tagging
 
 Every user-facing dollar amount, security finding, or pricing hint carries a `DataSource` provenance tag so the display layer can tell the user where a value came from.
 
@@ -228,6 +228,20 @@ The `DataSource` type and `formatLabelWithSource()` helper live in `@assignee/co
 
 ## Environment Variables
 
+The full table below is grouped logically by audience. The same variable
+appears in only one row regardless of audience; use the index below to
+jump to the section relevant to your operator role.
+
+| Audience                 | Variables                                                                                                                                                                                                                                                                                                                              |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Credentials              | `AWS_REGION`, `AWS_PROFILE`, `ASSIGNEE_OPERATOR_ACCESS_KEY_ID`, `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY`, `ASSIGNEE_OPERATOR_SESSION_TOKEN`, `ASSIGNEE_READER_ACCESS_KEY_ID`, `ASSIGNEE_READER_SECRET_ACCESS_KEY`, `ASSIGNEE_AUDITOR_ACCESS_KEY_ID`, `ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY`                                                 |
+| Behavior                 | `BEDROCK_MODEL_ID`, `ASSIGNEE_LLM_DEFAULT`, `ASSIGNEE_BP_INTEGRITY`, `ASSIGNEE_BP_SIGNING_KEY`, `ASSIGNEE_BP_REQUIRE_SIGNATURE`, `ASSIGNEE_NO_CLARIFIER`, `ASSIGNEE_DEMO_REDACT_ACCOUNT`, `ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS`, `ASSIGNEE_SAAS_URL`, `ASSIGNEE_ORG_POLICY_TTL_MS`, `OLLAMA_BASE_URL`, `ASSIGNEE_MCP_MAX_ACTIVE_APPLIES` |
+| Logging & Telemetry      | `ASSIGNEE_VERBOSITY`, `ASSIGNEE_LOG_LEVEL`, `ASSIGNEE_LOG_DIR`, `ASSIGNEE_LOG_RETENTION_DAYS`, `ASSIGNEE_OTEL_ENDPOINT`, `ASSIGNEE_OTEL_SERVICE_NAME`, `ASSIGNEE_OTEL_INCLUDE_PII`, `ASSIGNEE_TELEMETRY_ADAPTER`                                                                                                                       |
+| Audit                    | `ASSIGNEE_AUDIT_KEY`, `ASSIGNEE_AUDIT_FSYNC`, `ASSIGNEE_AUDIT_RETENTION_DAYS`                                                                                                                                                                                                                                                          |
+| Release pipeline         | `ASSIGNEE_RELEASE_PUBLISH`, `ASSIGNEE_TAP_PUBLISH`, `ASSIGNEE_DOWNGRADE_ACK`                                                                                                                                                                                                                                                           |
+| Test-only / fixtures     | `RUN_E2E`, `ASSIGNEE_NIGHTLY_BUDGET_USD`, `ASSIGNEE_NIGHTLY_LEDGER_DIR`, `RUN_INSTALL_MITM_FIXTURE`                                                                                                                                                                                                                                    |
+| Reserved (not yet wired) | `ASSIGNEE_OIDC_ADAPTER`                                                                                                                                                                                                                                                                                                                |
+
 | Variable                              | Description                                                                                                                                                                                                                                                                                                            | Default                                         |
 | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
 | `AWS_REGION`                          | AWS region for all API calls. Also drives the Bedrock inference profile region, SaaS API base URL selection, and Pricing MCP region. Previously hard-coded to `us-east-1`; now **derived** from the environment — set explicitly for non-us-east-1 deployments.                                                        | `us-east-1`                                     |
@@ -238,7 +252,7 @@ The `DataSource` type and `formatLabelWithSource()` helper live in `@assignee/co
 | `ASSIGNEE_READER_SECRET_ACCESS_KEY`   | Secret key for the reader IAM user (MCP)                                                                                                                                                                                                                                                                               | -                                               |
 | `ASSIGNEE_AUDITOR_ACCESS_KEY_ID`      | Access key for the auditor IAM user (MCP)                                                                                                                                                                                                                                                                              | -                                               |
 | `ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY`  | Secret key for the auditor IAM user (MCP)                                                                                                                                                                                                                                                                              | -                                               |
-| `ASSIGNEE_LLM_DEFAULT`                | Override the default LLM model for every pipeline callsite (per-node `ASSIGNEE_LLM_PLAN_GENERATOR` / `_INTENT_PARSER` / `_ADVICE_GENERATOR` / `_WORKLOAD_CLASSIFIER` slots were removed in R9b-02 — never wired; see `llm` section)                                                                                    | -                                               |
+| `ASSIGNEE_LLM_DEFAULT`                | Override the default LLM model for every pipeline callsite. The per-node `ASSIGNEE_LLM_PLAN_GENERATOR` / `_INTENT_PARSER` / `_ADVICE_GENERATOR` / `_WORKLOAD_CLASSIFIER` slots are not wired today — see the `llm` section.                                                                                            | -                                               |
 | `ASSIGNEE_VERBOSITY`                  | Set to `verbose` to enable structured log output                                                                                                                                                                                                                                                                       | -                                               |
 | `ASSIGNEE_LOG_LEVEL`                  | Set to `debug` to enable structured log output                                                                                                                                                                                                                                                                         | -                                               |
 | `ASSIGNEE_SAAS_URL`                   | SaaS API base URL for org policy fetch. Must start with `https://` or `http://localhost` — other schemes are rejected at startup.                                                                                                                                                                                      | `https://app.assignee.ai`                       |
@@ -250,9 +264,8 @@ The `DataSource` type and `formatLabelWithSource()` helper live in `@assignee/co
 | `ASSIGNEE_LOG_RETENTION_DAYS`         | Days to retain persistent warn/error log files before auto-prune (runs at most once per hour via `autoPruneLogsIfDue`) deletes them                                                                                                                                                                                    | `14`                                            |
 | `ASSIGNEE_OTEL_ENDPOINT`              | When set, every structured log event is also POSTed to `<endpoint>/v1/logs` in OTLP/HTTP-JSON format. Errors and timeouts are swallowed silently — the exporter never blocks the CLI. Example: `http://localhost:4318` for a local OpenTelemetry Collector.                                                            | unset (disabled)                                |
 | `ASSIGNEE_OTEL_SERVICE_NAME`          | Optional `service.name` resource attribute attached to every emitted log record. Only consulted when `ASSIGNEE_OTEL_ENDPOINT` is set.                                                                                                                                                                                  | `assignee-cli`                                  |
-| `ASSIGNEE_ENABLE_REMOTE_MCP`          | Set to `1` to enable the optional remote knowledge MCP server (see security note below)                                                                                                                                                                                                                                | unset (disabled)                                |
 | `ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS`   | Set to `1` to escalate unknown preflight verification errors to fail-closed (strict mode for SaaS/regulated tenants). See [invariants.md](explanation/invariants.md#preflight-fail-closed-on-auth-with-opt-in-unknown-error-escalation)                                                                                | unset (fail-open for unknown)                   |
-| `ASSIGNEE_DEMO_REDACT_ACCOUNT`        | Set to `1` to redact 12-digit AWS account IDs in all CLI output (useful for demos and screenshots). State files and provision logs keep real ARNs; only rendered output is redacted. Source: `apps/cli/src/commands/output-format.ts`.                                                                                 | unset (OFF — real account IDs appear in output) |
+| `ASSIGNEE_DEMO_REDACT_ACCOUNT`        | Set to `1` to redact 12-digit AWS account IDs in all CLI output (useful for demos and screenshots). State files and provision logs keep real ARNs; only rendered output is redacted. Source: `packages/core/src/constants/env-vars.ts` (canonical name) + `apps/cli/src/commands/output-format.ts` (consumer).         | unset (OFF — real account IDs appear in output) |
 | `ASSIGNEE_NO_CLARIFIER`               | Set to `1` to skip the intent-clarifier prompt on ambiguous inputs (useful in CI or scripted flows where no operator is available to answer). Source: `apps/cli/src/services/clarifier.ts`.                                                                                                                            | unset                                           |
 | `ASSIGNEE_MCP_MAX_ACTIVE_APPLIES`     | Override the default 100 concurrent-apply ceiling on the MCP server. Tune for high-concurrency CI fleets. Must be a positive integer — invalid values fall back to `100`. Source: `apps/mcp-server/src/tools/apply-plan/active-applies.ts`.                                                                            | `100`                                           |
 | `RUN_E2E`                             | Set to `1` to enable the nightly destroy-smoke E2E suite (otherwise skipped). See also `ASSIGNEE_NIGHTLY_BUDGET_USD`.                                                                                                                                                                                                  | unset (skipped)                                 |
@@ -265,10 +278,10 @@ The `DataSource` type and `formatLabelWithSource()` helper live in `@assignee/co
 | `ASSIGNEE_OTEL_INCLUDE_PII`           | Set to `1` to include PII fields (user identifiers, resource names) in OTEL log events. Default off — PII is stripped before export.                                                                                                                                                                                   | unset (off)                                     |
 | `ASSIGNEE_NIGHTLY_BUDGET_USD`         | Cost cap (USD) for the nightly real-AWS smoke run. The runner aborts before launching additional resources once cumulative spend reaches this ceiling.                                                                                                                                                                 | `5` (approx.)                                   |
 | `ASSIGNEE_NIGHTLY_LEDGER_DIR`         | Directory for the JSONL cost ledger written by the nightly smoke runner.                                                                                                                                                                                                                                               | `~/.assignee/nightly-ledger`                    |
-| `ASSIGNEE_RELEASE_PUBLISH`            | Release-pipeline gate. Without `=1`, every publish-side step (npm publish, GitHub Release, Homebrew tap push) runs in dry-run mode.                                                                                                                                                                                    | unset (dry-run)                                 |
-| `ASSIGNEE_TAP_PUBLISH`                | Homebrew tap publish gate. Requires `ASSIGNEE_RELEASE_PUBLISH=1` as well. Without `=1`, the tap formula update step is skipped.                                                                                                                                                                                        | unset (skipped)                                 |
+| `ASSIGNEE_RELEASE_PUBLISH`            | **Release pipeline only — no published artifacts yet.** Without `=1`, every publish-side step (npm publish, GitHub Release, Homebrew tap push) runs in dry-run mode. The flag has not been flipped on this course-submission build, so all release outputs are currently dry-run.                                      | unset (dry-run)                                 |
+| `ASSIGNEE_TAP_PUBLISH`                | **Release pipeline only — no published artifacts yet.** Homebrew tap publish gate. Requires `ASSIGNEE_RELEASE_PUBLISH=1` as well. The Homebrew tap repository has not been published.                                                                                                                                  | unset (skipped)                                 |
 | `ASSIGNEE_DOWNGRADE_ACK`              | Allowlist override for `install.sh` — acknowledges that a specific past version known to be vulnerable may be installed. Set to the exact version string.                                                                                                                                                              | unset                                           |
-| `ASSIGNEE_OIDC_ADAPTER`               | Placeholder for OIDC adapter selection (Epic 101). Today its absence triggers the "OIDC not configured; using AWS_PROFILE SSO" message in `assignee init`.                                                                                                                                                             | unset                                           |
+| `ASSIGNEE_OIDC_ADAPTER`               | **Reserved / not yet wired.** Placeholder for OIDC adapter selection. Today its absence triggers the "OIDC not configured; using AWS_PROFILE SSO" message in `assignee init`. The adapter slot is reserved for future productisation; nothing reads the value today.                                                   | unset                                           |
 | `OLLAMA_BASE_URL`                     | Base URL for a local Ollama server when `ollama` is the configured LLM provider. Must start with `https://` or `http://localhost` — other schemes are rejected.                                                                                                                                                        | `http://localhost:11434`                        |
 | `RUN_INSTALL_MITM_FIXTURE`            | Set to `1` to enable the `install.sh` MITM-tampering test fixture (CI only). Do not set in production environments.                                                                                                                                                                                                    | unset (disabled)                                |
 
@@ -318,10 +331,6 @@ Persistent warn/error log files (`cli-YYYY-MM-DD.jsonl` and their numbered rotat
 - **How it runs:** the auto-prune hook (`autoPruneLogsIfDue` in `apps/cli/src/services/cleanup/orchestrator.ts`) runs opportunistically at most once per hour, gated by a `.last-prune` marker file inside the log directory. There is no `assignee clean` CLI command — pruning is entirely automatic and throttled.
 - **Manual control:** if you need to force a prune, delete the `.last-prune` marker (`rm ~/.assignee/logs/.last-prune`) so the next CLI invocation re-runs the hook. To inspect retained files, run `ls ~/.assignee/logs/`.
 
-### `ASSIGNEE_ENABLE_REMOTE_MCP`
-
-Set to exactly `1` to enable the optional remote knowledge MCP server. **Security note:** when enabled, the CLI fetches and executes a remote MCP server over the network at runtime. Only enable this in trusted environments and only after reviewing the upstream server. Any other value (including `true`, `yes`, `on`) leaves the server disabled.
-
 ### `ASSIGNEE_AUDIT_FSYNC`
 
 After each entry is appended to the HMAC-chained audit log (`~/.assignee/audit/`), the audit writer calls `fsync` twice:
@@ -346,7 +355,7 @@ ASSIGNEE_AUDIT_FSYNC=0 assignee apply "Create S3 bucket"
 
 **Trade-off:** with fsync disabled, a hard kernel panic in the narrow window between the `appendFile` returning and the OS flushing its write-back cache can cause the last N appended entries to be missing from the audit file on recovery. On modern SSDs with power-loss protection this window is very short; on NFS/EBS it is effectively closed by the replication layer.
 
-> Introduced in Wave 8 (W8-S1). Extended to include directory fsync in Wave 9 (W9). Source: `packages/core/src/audit/audit-log.ts`.
+> Source: [`packages/core/src/audit/audit-log.ts`](../packages/core/src/audit/audit-log.ts).
 
 ### `ASSIGNEE_AUDIT_RETENTION_DAYS`
 
@@ -372,7 +381,7 @@ The audit log at `~/.assignee/audit/` is subject to a rolling-window retention p
 
 > **Note:** Lowering below 90 is never permitted. The env var can only extend, never shrink, the minimum retention window.
 
-> Introduced in Wave 5 (Story 50-4). Source: `packages/core/src/utils/logger/retention.ts`.
+> Source: [`packages/core/src/utils/logger/retention.ts`](../packages/core/src/utils/logger/retention.ts).
 
 ## Org Policy Semantics
 
@@ -443,3 +452,24 @@ assignee init
 # Global user config
 assignee init --global
 ```
+
+---
+
+## Appendix — Planned but not implemented
+
+The configuration surface below describes design intent. None of the
+items in this appendix is parsed by the current schema in
+[`packages/core/src/config/config-schema.ts`](../packages/core/src/config/config-schema.ts);
+setting them has no effect today. The docs above point at this appendix
+rather than embedding "planned but not yet implemented" disclaimers
+inline.
+
+| Surface                                                                                                            | Status today                                                                                                                             |
+| ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `bestPractices.excludePatterns`                                                                                    | Not parsed. Today's BP control surface is `preferences.auto_fix` and `ASSIGNEE_BP_INTEGRITY`.                                            |
+| `bestPractices.enforcement` / `bestPractices.autoFix` (config-file forms)                                          | Not parsed. The same controls are exposed today via env vars and `preferences.auto_fix`.                                                 |
+| `llm.plan_generator` / `llm.intent_parser` / `llm.advice_generator` / `llm.workload_classifier` (per-node routing) | Not parsed. The factory sites that would read them were never built; only `llm.default` (or `ASSIGNEE_LLM_DEFAULT`) is honoured.         |
+| `ASSIGNEE_LLM_PLAN_GENERATOR` / `_INTENT_PARSER` / `_ADVICE_GENERATOR` / `_WORKLOAD_CLASSIFIER`                    | Not read. The dead env-var constants have been removed.                                                                                  |
+| `ASSIGNEE_OIDC_ADAPTER`                                                                                            | Reserved. Today's absence triggers the "OIDC not configured; using AWS_PROFILE SSO" message in `assignee init`; nothing reads the value. |
+| Org-policy `fetch-from-SaaS` source                                                                                | Not implemented. Only local-file `org_policy:` blocks under user/project config are read.                                                |
+| Release-pipeline gates (`ASSIGNEE_RELEASE_PUBLISH=1`, `ASSIGNEE_TAP_PUBLISH=1`)                                    | Read by `.github/workflows/release.yml`, never flipped on this course-submission build, so all release outputs run dry-run.              |

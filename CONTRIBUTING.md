@@ -4,14 +4,17 @@ Thanks for your interest in contributing. This document describes how to
 land a change, the conventions we follow, and the workflow the project
 expects from both human contributors and AI coding agents.
 
-Assignee.ai is pre-1.0 and under active development. The contribution
-bar is "make it green on CI and explain the change." We prefer small,
+Assignee.ai is a final project for the Generative AI for Developers
+micro-master's program. All packages are `private: true`; nothing is
+published to npm or any public registry. The contribution bar is
+"make it green on CI and explain the change." We prefer small,
 focused commits over large rewrites.
 
 ## Quick Start
 
+Clone the repository from your local source mirror, then:
+
 ```bash
-git clone https://github.com/SergSlon/assignee-ai.git
 cd assignee-ai
 pnpm install           # pnpm >= 9, Node >= 20.11
 pnpm build             # compile all 4 packages
@@ -81,7 +84,7 @@ NotFound as destroy success`.
 - The project does **not** require a DCO sign-off. If that changes, this
   section will be updated and the requirement will gate CI.
 
-## Pre-commit and Pre-push Hooks (W10-04 / P064)
+## Pre-commit and Pre-push Hooks
 
 The project uses a **two-tier hook split** so the commit cycle stays fast
 while the full quality suite runs at push time.
@@ -109,9 +112,9 @@ This is the authoritative quality gate; CI mirrors it.
 
 ### When is `--no-verify` acceptable?
 
-Per `feedback_parallel_worker_commit_rhythm`, the ONLY sanctioned use of
-`--no-verify` is **parallel-worker mid-wave commits** inside an automated
-Epic story harness where:
+By project convention, the ONLY sanctioned use of `--no-verify` is
+**parallel-worker mid-wave commits** inside an automated story harness
+where:
 
 - A reviewer has already gated the story implementation.
 - The wave coordinator runs `pnpm build` + `pnpm test` (or
@@ -144,18 +147,21 @@ ASSIGNEE_SKIP_BUILD=1 git commit --no-verify
 
 ## Continuous integration
 
-The repo has five active workflow files under `.github/workflows/` (plus two disabled for future use):
+The repo has ten active workflow files under `.github/workflows/` (plus one disabled for future use):
 
-| File                        | Trigger                         | Purpose                                                                |
-| --------------------------- | ------------------------------- | ---------------------------------------------------------------------- |
-| `ci.yml`                    | every push to `main` + every PR | Default gate: ubuntu-latest × node 22 only                             |
-| `ci-cross-platform.yml`     | manual (button in Actions UI)   | On-demand: ubuntu + macOS + windows × configurable node                |
-| `ci-core.yml`               | reusable (`workflow_call` only) | Core job matrix — called by `ci.yml` and `ci-cross-platform.yml`       |
-| `mock-fixture-drift.yml`    | schedule (daily) + manual       | Detects fixture drift between captured MCP responses and live AWS data |
-| `nightly-e2e.yml`           | schedule (nightly) + manual     | Full E2E suite (`RUN_E2E=1`) against real AWS infrastructure           |
-| `vacation-quality.yml`      | schedule (daily, added Epic 98) | Demo-readiness gate: builds + short doctor + citation-lint + doc-lint  |
-| `release.yml.disabled`      | — (disabled)                    | Future: npm publish + GitHub release (pending v0.2)                    |
-| `test-actions.yml.disabled` | — (disabled)                    | Future: action-level integration tests                                 |
+| File                        | Trigger                         | Purpose                                                                     |
+| --------------------------- | ------------------------------- | --------------------------------------------------------------------------- |
+| `ci.yml`                    | every push to `main` + every PR | Default gate: ubuntu-latest × node 22 only                                  |
+| `ci-cross-platform.yml`     | manual (button in Actions UI)   | On-demand: ubuntu + macOS + windows × configurable node                     |
+| `ci-core.yml`               | reusable (`workflow_call` only) | Core job matrix — called by `ci.yml` and `ci-cross-platform.yml`            |
+| `ci-security.yml`           | every push + every PR           | Security-only quick gate (audit + secret scans)                             |
+| `codeql.yml`                | schedule + push                 | GitHub CodeQL static analysis                                               |
+| `finops-monthly-budget.yml` | schedule (monthly)              | Reports billed-minute usage against the monthly Actions budget              |
+| `mock-fixture-drift.yml`    | schedule (daily) + manual       | Detects fixture drift between captured MCP responses and live AWS data      |
+| `nightly-e2e.yml`           | schedule (nightly) + manual     | Full E2E suite (`RUN_E2E=1`) against real AWS infrastructure                |
+| `release.yml`               | tag push (gated)                | Release pipeline; dry-run by default, gated by `ASSIGNEE_RELEASE_PUBLISH=1` |
+| `vacation-quality.yml`      | schedule (daily)                | Demo-readiness gate: builds + short doctor + citation-lint + doc-lint       |
+| `test-actions.yml.disabled` | — (disabled)                    | Future: action-level integration tests                                      |
 
 The split exists for a billing reason: on GitHub's Free plan for
 private repos, macOS minutes are billed **10×** Linux and Windows
@@ -264,10 +270,10 @@ Human contributors can ignore the BMAD workflow and open standard PRs.
 
 ## Contributing a Best-Practice Rule
 
-The 185 shipped BP rules ([`packages/best-practices/`](packages/best-practices))
-are YAML files, not TypeScript. That means you can add a new rule with no
-build step and no schema class — drop a file in the right directory, the
-CI gate validates it.
+The BP rules in this repository ([`packages/best-practices/`](packages/best-practices))
+are YAML files, not TypeScript (live count: see [`manifest.json`](packages/best-practices/manifest.json)).
+That means you can add a new rule with no build step and no schema class —
+drop a file in the right directory, the CI gate validates it.
 
 ### Where rules live
 

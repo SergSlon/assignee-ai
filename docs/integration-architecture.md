@@ -20,27 +20,30 @@ Assignee.ai has three primary packages that integrate with each other:
                     |  pricing, config, |
                     |  graph, nodes)    |
                     +-------------------+
-                       /             \
-                      /               \
-          +-----------+           +------------------+
-          |  apps/cli |           | apps/mcp-server  |
-          | (13 cmds, |           | (5 MCP tools,    |
-          |  shim     |           |  stdio transport) |
-          |  nodes)   |           |                  |
-          +-----------+           +------------------+
-               |                         |
-               |  depends on             |  depends on
-               v                         v
-    +--------------------+    +--------------------+
-    | @assignee/best-    |    | @assignee/core +   |
-    | practices          |    | @assignee/best-    |
-    |                    |    | practices (no CLI) |
-    +--------------------+    +--------------------+
+                       ^             ^
+                       |             |
+                       |             |
+          +-----------+|             |+-----------------+
+          |  apps/cli ||             ||apps/mcp-server  |
+          | (16 cmds, ||             ||(5 MCP tools,    |
+          |  shim     ||             ||stdio transport) |
+          |  nodes)   ||             ||                 |
+          +-----------+|             |+-----------------+
+                       |             |
+        depends on:    |             |    depends on:
+        @assignee/core |             |    @assignee/core
+        @assignee/best-practices     |    @assignee/best-practices
+                       |             |    (no `assignee` CLI runtime dep —
+                       |             |     dependency-inversion refactor)
+                       v             v
+              +--------------------------+
+              | @assignee/best-practices |
+              +--------------------------+
 ```
 
-**Wave-5 invariant:** `apps/mcp-server` no longer depends on the
-`assignee` (CLI) workspace package at runtime. Both apps now import
-`createGraph` and all node implementations directly from
+**Dependency-inversion invariant:** `apps/mcp-server` no longer depends
+on the `assignee` (CLI) workspace package at runtime. Both apps now
+import `createGraph` and all node implementations directly from
 `@assignee/core/graph`.
 
 ## What Lives Where
@@ -51,8 +54,9 @@ The shared foundation. Contains **zero business logic** -- only types, data, and
 
 **Provides to both CLI and MCP server:**
 
+- 14-node LangGraph pipeline (`createGraph()` + every node implementation under `packages/core/src/graph/nodes/`); both apps consume it directly. `apps/cli/src/services/graph.ts` and `apps/cli/src/nodes/` are thin re-export shims for backward compatibility.
 - All 38 user-addressable resource type constants and type definitions (36 with dedicated plugins + 2 compound-only that fall through to the generic plugin)
-- Resource plugin registry (38 registered plugins: 36 type-specific + generic fallback; two compound-only types share the generic)
+- Resource plugin registry (38 registered plugins — 37 type-specific + 1 generic fallback; the two compound-only types `EC2::VPCGatewayAttachment` and `EC2::SubnetRouteTableAssociation` share the generic) <!-- doc-lint: plugin-count -->. The runtime SSOT for the supported-type list is `packages/core/src/config/resource-types/supported.ts`.
 - Pattern template registry (11 compound architecture patterns)
 - Pricing strategy registry (38 strategies) and decomposer registry (38 decomposers)
 - CloudFormation schema service (DescribeType + disk cache)
@@ -81,9 +85,8 @@ The primary user-facing application. Contains all business logic.
 
 **Unique to CLI:**
 
-- 14-node LangGraph pipeline (graph.ts + all nodes)
 - Interactive wizard (option-elicitor with clack prompts)
-- 13 Commander.js commands
+- 16 Commander.js commands
 - MCP server process management (spawn/lifecycle)
 - AWS SDK integration (Bedrock, CloudControl, CloudFront, CloudWatch Logs, DynamoDB, EC2, IAM, Lambda, RDS, Resource Groups Tagging API, S3, SNS, SSM, STS)
 - 6-level configuration precedence system
@@ -116,7 +119,7 @@ Exposes CLI capabilities to AI coding assistants via Model Context Protocol.
 
 ### Shared Graph
 
-Both CLI and MCP server use the **same LangGraph pipeline**, whose canonical definition lives in `packages/core/src/graph/create-graph.ts`. The MCP server imports `createGraph()` **directly from `@assignee/core/graph`** — the Wave-5 Pass I refactor inverted the earlier dependency, so the MCP server no longer needs a runtime import of the CLI package. The CLI keeps a thin re-export shim at `apps/cli/src/services/graph.ts` for backward compatibility with internal import paths, but there is no code-level coupling from MCP to CLI for the graph itself.
+Both CLI and MCP server use the **same LangGraph pipeline**, whose canonical definition lives in `packages/core/src/graph/create-graph.ts`. The MCP server imports `createGraph()` **directly from `@assignee/core/graph`** — a dependency-inversion refactor moved the canonical graph into `@assignee/core`, so the MCP server no longer needs a runtime import of the CLI package. The CLI keeps a thin re-export shim at `apps/cli/src/services/graph.ts` for backward compatibility with internal import paths, but there is no code-level coupling from MCP to CLI for the graph itself.
 
 **CLI invocation path:**
 
@@ -151,20 +154,21 @@ MCP tool handler -> createGraphContext() -> graph.invoke(initialState)
 
 The MCP server's only workspace runtime deps are `@assignee/core` and
 `@assignee/best-practices` (the `"assignee": "workspace:*"` runtime dep
-was removed in Story 50-4 Wave 5 Pass I). Through `@assignee/core` the
-MCP server accesses:
+on the CLI workspace package was retired during the dependency
+inversion refactor). Through `@assignee/core` the MCP server accesses:
 
 - `createGraph()` and every node implementation (all 14 nodes live
   under `packages/core/src/graph/nodes/`; `apps/cli/src/nodes/` is
-  shim-only)
-- `CloudControlAdapter` (Story 50-7 inlined the former SDKFallbackDispatcher redirect classifier)
+  shim-only) <!-- doc-lint: node-count -->
+- `CloudControlAdapter` (the former SDKFallbackDispatcher redirect
+  classifier was inlined into the adapter)
 - `MemoryService` for provision/failure recording
 - `fetchManagedResources()` for resource listing
 - Display utilities (the MCP server formats differently but shares the
   underlying formatting primitives)
 - Checkpoint serialization functions
 - The shared destroy-strategies registry under
-  `packages/core/src/destroy-strategies/` (replaces the pre-Wave-5
+  `packages/core/src/destroy-strategies/` (replaces the earlier
   per-app registries)
 
 ### What MCP Server Does NOT Reuse
@@ -181,18 +185,17 @@ MCP server accesses:
 
 ### MCP Servers Consumed by CLI
 
-The CLI spawns MCP server child processes for external data:
+The CLI spawns MCP server child processes for external data. Pins are the canonical `MCP_PINS` constants from `packages/core/src/config/mcp-servers.ts:48-58`:
 
-| Server                                 | Package | Credential | Purpose                                                    |
-| -------------------------------------- | ------- | ---------- | ---------------------------------------------------------- |
-| `aws-pricing-mcp-server`               | uvx     | Reader     | Real-time AWS pricing data                                 |
-| `aws-documentation-mcp-server`         | uvx     | None       | AWS documentation references                               |
-| `iam-mcp-server`                       | uvx     | Auditor    | IAM permission simulation                                  |
-| `billing-cost-management-mcp-server`   | uvx     | Reader     | Live billing data                                          |
-| `well-architected-security-mcp-server` | uvx     | Auditor    | Post-provision security checks                             |
-| `aws-knowledge-mcp-server`             | uvx     | None       | Remote knowledge (opt-in via ASSIGNEE_ENABLE_REMOTE_MCP=1) |
+| Server                                 | Package | Pin       | Credential | Purpose                        |
+| -------------------------------------- | ------- | --------- | ---------- | ------------------------------ |
+| `aws-pricing-mcp-server`               | uvx     | `@1.0.27` | Reader     | Real-time AWS pricing data     |
+| `aws-documentation-mcp-server`         | uvx     | `@1.1.20` | None       | AWS documentation references   |
+| `iam-mcp-server`                       | uvx     | `@1.0.17` | Auditor    | IAM permission simulation      |
+| `billing-cost-management-mcp-server`   | uvx     | `@0.0.17` | Reader     | Live billing data              |
+| `well-architected-security-mcp-server` | uvx     | `@0.1.7`  | Auditor    | Post-provision security checks |
 
-**Lazy loading:** Not all servers start on every command. Each command declares which servers it needs (Story 29.3).
+**Lazy loading:** Not all servers start on every command. Each command declares which servers it needs.
 
 **Graceful degradation:** All MCP server failures are non-blocking. The pipeline falls back to local estimates, skips security checks, etc.
 
@@ -206,7 +209,14 @@ Via Vercel AI SDK (`ai` package), the CLI integrates with:
 - Google (`@ai-sdk/google`)
 - Ollama (via OpenAI-compatible endpoint)
 
-LLM is used in exactly 2 nodes: intent_parser (structured classification) and plan_generator (JSON generation).
+LLM (`LlmPort`) is consumed by every node that needs natural-language reasoning:
+
+- `intent_parser` — structured classification of `userIntent` into resource type / pattern.
+- `option_elicitor` — workload classification (`classifyWorkload`) plus wizard-time enrichment, prompt loop, and review-handler passes.
+- `plan_generator` — CloudFormation JSON generation from elicited options.
+- `advice_generator` — narrative advice on the generated plan.
+
+Other nodes (`schema_fetcher`, `compound_dispatcher`, `validate_desired_state`, `bp_evaluator`, `fix_applicator`, `preflight_guard`, `human_approval`, `resource_provisioner`, `status_poller`, `result_formatter`) run without an LLM call.
 
 ### AWS SDK Services
 

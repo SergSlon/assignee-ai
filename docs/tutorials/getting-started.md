@@ -50,8 +50,8 @@ You need:
 
 ## Step 1 — Install assignee
 
-assignee.ai is currently a private package (no public npm release yet),
-so you'll build it from source:
+assignee.ai is a course-submission project (no npm publication; workspace
+packages are `"private": true`), so you'll build it from source:
 
 ```bash
 git clone https://github.com/SergSlon/assignee-ai.git
@@ -112,11 +112,12 @@ assignee will:
   bucket name.
 - Fetch the CloudFormation schema for S3 buckets.
 - Generate a desired-state JSON with safe defaults.
-- Run all 185 best-practice rules — encryption, public-access blocking,
-  versioning — and auto-fix the fixable ones.
+- Run the full best-practice rule set — encryption, public-access blocking,
+  versioning — and auto-fix the fixable ones. (Exact rule count is a
+  runtime SSOT — see `packages/best-practices/manifest.json`.)
 - Estimate the monthly cost from real-time AWS pricing.
 - Print a **plan box** showing every field, every finding, and the
-  estimated cost. A checkpoint is saved under `.assignee/checkpoint-<runId>.json`.
+  estimated cost. A checkpoint is saved under `~/.assignee/checkpoint-<runId>.json`.
 
 Read the plan box. If a field looks wrong, you can re-run with
 `--set key=value` to override, or pass `--quick` to accept all defaults.
@@ -139,9 +140,10 @@ confirm, and then provisions through AWS CloudControl API. You'll see:
 - Live status lines as CloudControl creates the bucket.
 - A success summary with the resource ARN, tags, and a cost figure.
 
-Behind the scenes, assignee polls the CloudControl API every two
-seconds until the resource reports `SUCCESS` or `FAILED`. The whole
-flow usually finishes in under a minute for an S3 bucket.
+Behind the scenes, assignee polls the CloudControl API with exponential
+backoff (starting at two seconds, capped at 60, with jitter) until the
+resource reports `SUCCESS` or `FAILED`. The whole flow usually finishes
+in under a minute for an S3 bucket.
 
 ---
 
@@ -161,16 +163,16 @@ you just provisioned AWS infrastructure from a sentence in English.
 ## Step 6 — Destroy the bucket
 
 Tutorials shouldn't leave resources behind, and assignee makes cleanup
-easy. Pass the bucket name (or its ARN) to `destroy`:
+easy. Pass the resource ARN (the most reliable identifier) to `destroy`:
 
 ```bash
-assignee destroy my-tutorial-bucket-NNNN
+assignee destroy arn:aws:s3:::my-tutorial-bucket-NNNN
 ```
 
-Replace `NNNN` with whatever suffix you picked. assignee resolves the
-name to a tagged resource, prints a destroy box, asks you to confirm
-by typing the resource name back, and then deletes the bucket via
-CloudControl.
+Replace `NNNN` with whatever suffix you picked. (Bare-name resolution
+works for some resource types but not all; ARN form is the safe path.)
+assignee prints a destroy box, asks you to confirm by typing the
+resource name back, and then deletes the bucket via CloudControl.
 
 Verify it's gone:
 

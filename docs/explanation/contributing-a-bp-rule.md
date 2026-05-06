@@ -35,7 +35,9 @@ ls packages/best-practices/efs/
 
 At the time of writing, `efs/` contains `BP-EFS-001.yaml` through
 `BP-EFS-003.yaml`. None of them checks `KmsKeyId`. Good — the rule slot
-is open. Pick the next free number: `BP-EFS-004`.
+is open. Pick the next free number: `BP-EFS-004`. (If others have landed
+EFS rules since this doc was written, the actual next free number may
+be higher — re-run `ls packages/best-practices/efs/` to check.)
 
 ### Step 2 — Write the rule
 
@@ -69,7 +71,7 @@ Why the fields are what they are:
   precondition. Anything lower would underplay it.
 - **`check_type: "exists"` + `expected_value: true`** — this is the
   idiomatic way to say "this field must be set." See
-  [`packages/best-practices/src/evaluate.ts`](../../packages/best-practices/src/evaluate.ts)
+  [`packages/best-practices/src/evaluate/rule-runner.ts`](../../packages/best-practices/src/evaluate/rule-runner.ts)
   for every check type the engine recognises.
 - **`lastVerified`** — the ISO date you re-read the AWS doc. Rule
   maintenance sweeps look at this field; stale rules trigger warnings
@@ -99,12 +101,14 @@ npx tsx packages/best-practices/scripts/validate.ts
 Expected output:
 
 ```
-✓ BP validation passed (186 rules, manifest OK)
+✓ BP validation passed (185 rules, manifest OK)
 ```
 
-The count above (`186`) reflects the post-contribution total — i.e., the
-current 185 rules plus the new `BP-EFS-004` you just added. If you add
-multiple rules in one PR the count grows accordingly.
+The count above reflects the prior rule count from the regenerated
+manifest. After adding `BP-EFS-004`, the post-contribution total
+becomes `185 + 1 = 186`. If you add multiple rules in one PR the count
+grows accordingly. For the current rule count see
+[`manifest.json`](../../packages/best-practices/manifest.json).
 
 If the script finds a schema violation it prints `<file> [<rule-id>]:
 <reason>` and exits 1. Common failures:
@@ -173,12 +177,12 @@ The three things that make the BP-rule library extensible:
 2. **Validation at PR time.** `manifest-freshness.test.ts` +
    `validate-bp-rules.test.ts` run under `pnpm test` in CI — broken
    rules never reach main.
-3. **SHA-256 manifest instead of signed artifacts.** Story 50-3 cut GPG
-   signing as supply-chain theatre. An in-tree SHA-256 manifest
-   - git history is enough provenance for an MIT-licensed OSS rule
-     library; consumers with stronger threat models can re-sign at
-     package time.
+3. **SHA-256 manifest instead of signed artifacts.** GPG signing was cut
+   as supply-chain theatre. An in-tree SHA-256 manifest plus git history
+   is enough provenance for an MIT-licensed source tree; consumers with
+   stronger threat models can re-sign at package time.
 
 See [`docs/explanation/oss-vs-saas.md`](./oss-vs-saas.md) for the
-contribution-first positioning: the community BP library is the
-long-term moat, not the current 185 rules.
+contribution-first positioning. **Design intent**: in a productised
+future the BP library would be the community extension surface; for
+the course-submission build it's a contribution-pattern reference.

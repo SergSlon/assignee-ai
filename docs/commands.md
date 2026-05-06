@@ -11,6 +11,31 @@ All commands follow the pattern: `assignee <command> [args] [options]`
 
 Global options: `--version`, `--help`, `--verbose`
 
+## Contents
+
+Jump to a command by name. The CLI's full command surface is registered
+in [`apps/cli/src/index.ts`](../apps/cli/src/index.ts); the rows below
+are the user-facing subset.
+
+| Command                                     | Purpose                                                                  |
+| ------------------------------------------- | ------------------------------------------------------------------------ |
+| [`plan`](#plan)                             | Generate an infrastructure plan from a natural-language intent           |
+| [`apply`](#apply)                           | Provision a previously generated plan via CloudControl                   |
+| [`list`](#list)                             | List all resources tagged `managed-by=assignee-ai`                       |
+| [`status`](#status)                         | Aggregated metrics + BP coverage dashboard                               |
+| [`destroy`](#destroy)                       | Delete a single managed resource (typed-confirmation gate)               |
+| [`drift`](#drift)                           | Compare desired vs live state for managed resources                      |
+| [`reconcile`](#reconcile)                   | Reconcile drifted resources back to desired state                        |
+| [`optimize`](#optimize)                     | Cost-rightsizing recommendations from the Pricing MCP                    |
+| [`init`](#init)                             | Initialize project or global configuration                               |
+| [`setup`](#setup)                           | Create the three IAM users and policies for least-privilege provisioning |
+| [`doctor`](#doctor)                         | Non-destructive end-to-end health check                                  |
+| [`completions`](#completions)               | Output shell completion scripts                                          |
+| [`audit-verify`](#audit-verify)             | Verify the integrity of the on-disk audit log chain                      |
+| [`restore-provisions`](#restore-provisions) | Restore the provision registry from a backup snapshot                    |
+| [`version`](#version)                       | Print the CLI's version string                                           |
+| [`describe`](#describe)                     | Self-describe blob suitable for bug reports                              |
+
 The `--verbose` flag is registered on the root program and must appear **before** the subcommand name (the same rule as `--version` and `--help`):
 
 ```bash
@@ -20,20 +45,21 @@ assignee --verbose apply --yes "Create an S3 bucket named audit-logs"
 
 When set, structured JSON diagnostic logs are written to stderr. Without it, info-level logs are suppressed so they never pollute terminal output (`warn`/`error` events are still persisted to `~/.assignee/logs/cli-YYYY-MM-DD.jsonl` regardless). You can also enable verbose output via `ASSIGNEE_LOG_LEVEL=debug` or `ASSIGNEE_VERBOSITY=verbose` environment variables — the CLI flag has the highest priority. See [configuration.md](./configuration.md#--verbose-flag) for the full precedence rules.
 
-> **Note:** `assignee drift` has a local `--verbose` option that controls drift-table verbosity (showing all fields including matching ones). To get JSON diagnostic logs during a drift run, pass the global flag first: `assignee --verbose drift`. Both can be combined: `assignee --verbose drift --verbose`.
+> **Note:** `assignee drift` has a local `--detailed` option that controls drift-table verbosity (showing all fields including matching ones). To get JSON diagnostic logs during a drift run, pass the global flag first: `assignee --verbose drift`. Both can be combined: `assignee --verbose drift --detailed`.
 
 ## Exit Codes
 
-| Code  | Meaning                                                                                                                                                                                                                                     |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `0`   | Success                                                                                                                                                                                                                                     |
-| `1`   | General error¹                                                                                                                                                                                                                              |
-| `2`   | `assignee doctor` returned warnings only (no hard failures, see `--short`)                                                                                                                                                                  |
-| `10`  | Policy / safety abort (typed-confirm mismatch, state guard, preflight rejection, BP block, etc.) — includes `BP_BLOCKED` envelope when a blocking best-practice finding blocks the apply path (see `packages/core/src/constants/errors.ts`) |
-| `11`  | MCP server startup failure                                                                                                                                                                                                                  |
-| `12`  | Not implemented — `--target-account` was passed but cross-account provisioning is not yet available. Scripts can detect this code to fall back gracefully without treating it as a general error.                                           |
-| `130` | Interrupted via SIGINT (Ctrl-C)                                                                                                                                                                                                             |
-| `143` | Terminated via SIGTERM                                                                                                                                                                                                                      |
+| Code  | Meaning                                                                                                                                                                                                                                      |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0`   | Success                                                                                                                                                                                                                                      |
+| `1`   | General error¹                                                                                                                                                                                                                               |
+| `2`   | `assignee doctor` returned warnings only (no hard failures, see `--short`)                                                                                                                                                                   |
+| `10`  | Policy / safety abort (typed-confirm mismatch, state guard, preflight rejection, BP block, etc.) — includes `BP_BLOCKED` envelope when a blocking best-practice finding blocks the apply path (see `packages/core/src/constants/errors.ts`)  |
+| `11`  | MCP server startup failure                                                                                                                                                                                                                   |
+| `12`  | Not implemented — `--target-account` was passed but cross-account provisioning is not yet available. Scripts can detect this code to fall back gracefully without treating it as a general error.                                            |
+| `73`  | Usage error — invalid CLI flags / arguments (e.g. unrecognised option, mutually exclusive flags). Surfaces as `USAGE_ERROR` from `packages/core/src/constants/errors.ts:27`. Distinct from exit `1` so scripts can branch on parse failures. |
+| `130` | Interrupted via SIGINT (Ctrl-C)                                                                                                                                                                                                              |
+| `143` | Terminated via SIGTERM                                                                                                                                                                                                                       |
 
 ¹ Plan failure, provision failure, or — from `assignee drift` — drift
 detected. The drift case is the **designed outcome** of the `drift`
@@ -70,16 +96,21 @@ assignee plan [intent] [options]
 | Flag                    | Description                                                                                           | Default |
 | ----------------------- | ----------------------------------------------------------------------------------------------------- | ------- |
 | `-o, --output <format>` | Output format (`json` or `text`)                                                                      | `text`  |
+| `--json`                | Shortcut for `-o json` (mutually exclusive with `-o`)                                                 | false   |
 | `--no-apply`            | Skip the "Apply now?" prompt after plan display                                                       | false   |
+| `--no-advice`           | Skip the cost-advice / advisory MCP enrichment phase                                                  | false   |
+| `-y, --yes`             | Auto-accept the "Apply now?" prompt (CI/CD mode)                                                      | false   |
+| `-q, --quick`           | Quick mode — skip optional MCP enrichment for a faster pipeline                                       | false   |
+| `--wizard`              | Force the interactive configuration wizard even when defaults could be auto-selected from intent      | false   |
 | `--set <key=value...>`  | Pre-set wizard field values (repeatable)                                                              | -       |
 | `--source <path>`       | Source directory for static website S3 upload                                                         | -       |
 | `--target-account <ID>` | **Not yet implemented** — reserved for future cross-account provisioning. Exits with code `12` today. | -       |
 
 **Behavior:**
 
-- Runs the 14-node pipeline in plan mode (stops before provisioning)
+- Runs the LangGraph pipeline (see [`packages/core/src/graph/create-graph.ts`](../packages/core/src/graph/create-graph.ts)) in plan mode (stops before provisioning)
 - Saves a checkpoint to `.assignee/checkpoint-<runId>.json` (valid 72h)
-- `-o json` outputs structured JSON to stdout (suppresses spinners, prompts, and the "Apply now?" prompt)
+- `-o json` (or `--json`) outputs structured JSON to stdout (suppresses spinners, prompts, and the "Apply now?" prompt)
 - If preflight passes and `--no-apply` is not set, prompts "Apply now?"
 - Accepting the prompt transitions directly to provisioning without re-running the plan or re-confirming (auto-approved on checkpoint resume)
 - `--set` pre-fills wizard fields, skipping their interactive prompts (e.g., `--set BucketName=my-bucket --set Tags=env:prod`)
@@ -119,6 +150,10 @@ assignee apply [intent] [options]
 | ------------------------- | ----------------------------------------------------------------------------------------------------- | ------- |
 | `--wizard`                | Run interactive configuration wizard (without this flag, defaults are auto-selected from your intent) | false   |
 | `-y, --yes`               | Auto-confirm without interactive prompt (CI/CD mode)                                                  | false   |
+| `-q, --quick`             | Quick mode — skip optional MCP enrichment for a faster pipeline                                       | false   |
+| `--no-advice`             | Skip the cost-advice / advisory MCP enrichment phase                                                  | false   |
+| `-o, --output <format>`   | Output format (`json` or `text`)                                                                      | `text`  |
+| `--json`                  | Shortcut for `-o json` (mutually exclusive with `-o`)                                                 | false   |
 | `-c, --checkpoint <path>` | Use a saved plan checkpoint instead of re-planning                                                    | -       |
 | `--set <key=value...>`    | Pre-set wizard field values (repeatable)                                                              | -       |
 | `--source <path>`         | Source directory for static website S3 upload                                                         | -       |
@@ -155,11 +190,13 @@ assignee list [options]
 
 **Options:**
 
-| Flag                | Description                                                                               | Default     |
-| ------------------- | ----------------------------------------------------------------------------------------- | ----------- |
-| `--json`            | Output as JSON array                                                                      | false       |
-| `--region <region>` | Filter to a specific AWS region                                                           | all regions |
-| `--total-cost`      | Print an estimated monthly total after the table (skips Free / N/A / unparseable entries) | false       |
+| Flag                     | Description                                                                               | Default     |
+| ------------------------ | ----------------------------------------------------------------------------------------- | ----------- |
+| `--json`                 | Output as JSON array                                                                      | false       |
+| `--region <region>`      | Filter to a specific AWS region                                                           | all regions |
+| `--total-cost`           | Print an estimated monthly total after the table (skips Free / N/A / unparseable entries) | false       |
+| `-o, --output <format>`  | Output format (`json` or `text`) — equivalent to `--json` when `json`                     | `text`      |
+| `--resource-type <type>` | Filter to a specific CloudFormation type (e.g. `AWS::S3::Bucket`)                         | all types   |
 
 **Behavior:**
 
@@ -194,6 +231,8 @@ assignee status [options]
 | `--bp-coverage`             | Show BP rule coverage dashboard                                                                                                | false       |
 | `--gaps-only`               | Only meaningful with `--bp-coverage`. Prints just the list of resource types with zero rules, exits 1 if any gaps              | false       |
 | `--include-structural-gaps` | Only meaningful with `--bp-coverage --gaps-only`. Includes structural/cross-reference types (RouteTable, etc.) in the gap list | false       |
+| `-o, --output <format>`     | Output format (`json` or `text`) — equivalent to `--json` when `json`                                                          | `text`      |
+| `--resource-type <type>`    | Filter to a specific CloudFormation type (e.g. `AWS::Lambda::Function`)                                                        | all types   |
 
 **Behavior:**
 
@@ -229,16 +268,21 @@ assignee destroy <resource> [options]
 
 **Options:**
 
-| Flag                    | Description                                                                                           | Default |
-| ----------------------- | ----------------------------------------------------------------------------------------------------- | ------- |
-| `-y, --yes`             | Auto-confirm without interactive prompt (CI/CD mode)                                                  | false   |
-| `--target-account <ID>` | **Not yet implemented** — reserved for future cross-account provisioning. Exits with code `12` today. | -       |
+| Flag                              | Description                                                                                                                   | Default |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `-y, --yes`                       | Auto-confirm without interactive prompt (CI/CD mode)                                                                          | false   |
+| `--target-account <ID>`           | **Not yet implemented** — reserved for future cross-account provisioning. Exits with code `12` today.                         | -       |
+| `--pending-window-in-days <n>`    | KMS key only — soft-delete window before AWS finalises deletion (`AWS::KMS::Key`). Range 7–30                                 | -       |
+| `--recovery-window-in-days <n>`   | Secrets Manager only — recovery window before final delete (`AWS::SecretsManager::Secret`). Range 7–30                        | -       |
+| `--force-delete-without-recovery` | Secrets Manager only — bypass the recovery window and delete immediately. Mutually exclusive with `--recovery-window-in-days` | false   |
+| `-o, --output <format>`           | Output format (`json` or `text`)                                                                                              | `text`  |
+| `--json`                          | Shortcut for `-o json`                                                                                                        | false   |
 
 **Behavior:**
 
 - Resolves the resource via the Resource Groups Tagging API, displays resource details (type, ARN, region, estimated cost savings), requires typing the identifier for confirmation (strict typed-name confirmation, not Y/n), deletes via CloudControl API and polls for completion.
 - Uses SDK fallback for types that CloudControl cannot model (see [resource-types.md](./resource-types.md#ccapi-fallback-types) for the current redirect list).
-- Bulk destroy (`--all` / `--include-iam`) was removed in Story 50-3. Delete resources one at a time, or pipe `assignee list --json` through `jq` + a `destroy` loop for scripted sweeps.
+- Bulk destroy (`--all` / `--include-iam`) is no longer supported. Delete resources one at a time, or pipe `assignee list --json` through `jq` + a `destroy` loop for scripted sweeps.
 
 **Examples:**
 
@@ -268,24 +312,24 @@ assignee drift [resource-id] [options]
 
 **Options:**
 
-| Flag                 | Description                                                                 | Default     |
-| -------------------- | --------------------------------------------------------------------------- | ----------- |
-| `--resource <type>`  | Filter by resource type                                                     | all types   |
-| `--region <region>`  | Filter by AWS region                                                        | all regions |
-| `--status <status>`  | Filter by drift status (IN_SYNC, DRIFTED, DELETED, ERROR, BASELINE_MISSING) | all         |
-| `--exclude <status>` | Exclude a drift status (e.g. `--exclude BASELINE_MISSING` for CI)           | none        |
-| `--baseline`         | Adopt `[resource-id]` into tracking by snapshotting its live CCAPI state    | false       |
-| `--json`             | Output as JSON                                                              | false       |
-| `--output <file>`    | Write JSON report to file (requires `--json`)                               | stdout      |
-| `--concurrency <n>`  | Max parallel drift checks (1-50)                                            | 10          |
-| `--no-color`         | Disable color output                                                        | false       |
-| `--verbose`          | Show all fields including matching ones                                     | false       |
+| Flag                    | Description                                                                 | Default     |
+| ----------------------- | --------------------------------------------------------------------------- | ----------- |
+| `--resource <type>`     | Filter by resource type                                                     | all types   |
+| `--region <region>`     | Filter by AWS region                                                        | all regions |
+| `--status <status>`     | Filter by drift status (IN_SYNC, DRIFTED, DELETED, ERROR, BASELINE_MISSING) | all         |
+| `--exclude <status>`    | Exclude a drift status (e.g. `--exclude BASELINE_MISSING` for CI)           | none        |
+| `--baseline`            | Adopt `[resource-id]` into tracking by snapshotting its live CCAPI state    | false       |
+| `--json`                | Output as JSON                                                              | false       |
+| `-o, --output <format>` | Output format (`json` or `text`)                                            | `text`      |
+| `--output-file <file>`  | Write JSON report to file (requires `--json` or `-o json`)                  | stdout      |
+| `--concurrency <n>`     | Max parallel drift checks (1-50)                                            | 10          |
+| `--detailed`            | Show all fields in the drift table, including matching ones                 | false       |
 
 **Behavior:**
 
 Compares the desired state (from checkpoint files) against the actual state (from CloudControl GetResource). Shows a table with drift status per resource. Exit code 1 if any resource has drifted.
 
-After the drift scan, the provision log is deduped by ARN keeping the newest entry per resource (A3 follow-up fix). This avoids spamming the operator with hundreds of identical `BASELINE_MISSING` rows from past test fixtures.
+After the drift scan, the provision log is deduped by ARN keeping the newest entry per resource. This avoids spamming the operator with hundreds of identical `BASELINE_MISSING` rows from past test fixtures.
 
 **Drift statuses:**
 
@@ -319,8 +363,9 @@ assignee drift --resource AWS::S3::Bucket
 assignee drift --status DRIFTED
 assignee drift --exclude BASELINE_MISSING  # CI mode: ignore unadopted rows
 assignee drift --baseline arn:aws:s3:::adopted-bucket
-assignee drift --json --output drift-report.json
+assignee drift --json --output-file drift-report.json
 assignee drift --concurrency 20
+assignee drift --detailed
 ```
 
 ### reconcile
@@ -378,11 +423,14 @@ assignee optimize [resource-id] [options]
 
 **Options:**
 
-| Flag                | Description                                     | Default      |
-| ------------------- | ----------------------------------------------- | ------------ |
-| `--region <region>` | AWS region to scan                              | `AWS_REGION` |
-| `--json`            | Emit recommendations as JSON instead of a table | false        |
-| `--no-color`        | Disable color output                            | false        |
+| Flag                    | Description                                                                  | Default      |
+| ----------------------- | ---------------------------------------------------------------------------- | ------------ |
+| `--region <region>`     | AWS region to scan                                                           | `AWS_REGION` |
+| `--json`                | Emit recommendations as JSON instead of a table                              | false        |
+| `-o, --output <format>` | Output format (`json` or `text`) — equivalent to `--json` when `json`        | `text`       |
+| `--min-savings <usd>`   | Suppress recommendations whose monthly savings fall below this USD threshold | `0`          |
+| `--apply`               | Reserved — print the suggested `assignee plan` commands without running them | false        |
+| `--resource <type>`     | Restrict the scan to a single CloudFormation type                            | all types    |
 
 **Supported resource types:**
 
@@ -427,7 +475,7 @@ recommendation" instead of a stale price.
 assignee optimize
 assignee optimize --json
 assignee optimize i-0123456789abcdef0
-assignee optimize --json --no-color
+assignee optimize --json --min-savings 5
 ```
 
 **Sample output:**
@@ -477,10 +525,14 @@ assignee init [options]
 
 **Options:**
 
-| Flag               | Description                                                                          | Default   |
-| ------------------ | ------------------------------------------------------------------------------------ | --------- |
-| `--global`         | Create global user config instead of project config                                  | false     |
-| `--profile <name>` | AWS SSO profile name to resolve credentials from. Honored when `AWS_PROFILE` is set. | `default` |
+| Flag                | Description                                                                          | Default   |
+| ------------------- | ------------------------------------------------------------------------------------ | --------- |
+| `--global`          | Create global user config instead of project config                                  | false     |
+| `--profile <name>`  | AWS SSO profile name to resolve credentials from. Honored when `AWS_PROFILE` is set. | `default` |
+| `-y, --yes`         | Non-interactive mode — accept all defaults and skip the wizard prompts               | false     |
+| `--wizard`          | Force the interactive wizard even when `-y/--yes` would normally skip prompts        | false     |
+| `--region <region>` | Pre-fill the default AWS region (skips the region prompt)                            | -         |
+| `--auto-fix <mode>` | Pre-fill the auto-fix preference (`ask` / `apply` / `skip`) — skips that prompt      | -         |
 
 **Behavior:**
 
@@ -497,8 +549,6 @@ assignee init [options]
 - Tags (key=value pairs)
 - Resource naming prefix
 - Auto-fix mode (ask/apply/skip)
-- Output format (table/json)
-- Verbosity (quiet/normal/verbose)
 
 Both modes prompt before overwriting existing config files. `assignee init` does **not** require AWS credentials — it only writes a local config file. Provision credentials separately with `assignee setup` (or by editing `.env`) before running `plan`/`apply`.
 
@@ -576,12 +626,12 @@ assignee doctor [options]
 
 **Options:**
 
-| Flag             | Description                                                                              | Default |
-| ---------------- | ---------------------------------------------------------------------------------------- | ------- |
-| `--json`         | Emit the report as JSON instead of formatted text                                        | false   |
-| `--skip-bedrock` | Skip the LLM invoke check (offline / hermetic CI)                                        | false   |
-| `--skip-mcp`     | Skip the MCP server launch probe (offline / hermetic CI)                                 | false   |
-| `--short`        | Fast identity-only summary (STS account + ARN + region + config path); replaces `whoami` | false   |
+| Flag             | Description                                                                                              | Default |
+| ---------------- | -------------------------------------------------------------------------------------------------------- | ------- |
+| `--json`         | Emit the report as JSON instead of formatted text                                                        | false   |
+| `--skip-bedrock` | Skip the LLM invoke check (offline / hermetic CI)                                                        | false   |
+| `--skip-mcp`     | Skip the MCP server launch probe (offline / hermetic CI)                                                 | false   |
+| `--short`        | Fast identity-only summary (STS account + ARN + region + Role + Redact + config path); replaces `whoami` | false   |
 
 **Checks (each capped at 5 s):**
 
@@ -611,17 +661,17 @@ Doctor summary (assignee.ai 0.1.0):
 [✓] Bedrock (us-east-1, model us.amazon.nova-lite-v1:0)
     • ✓ LLM (bedrock/amazon.nova-lite-v1:0) → responded (Hello! How can I help…)
 [!] MCP servers (4/5 ok)
-    • ✓ awslabs.aws-pricing-mcp-server@1.0.27    → launched (uvx)
-    • ✓ awslabs.aws-documentation-mcp-server@1.1.20 → launched (uvx)
-    • ✓ awslabs.iam-mcp-server@1.0.17            → launched (uvx)
-    • ✗ awslabs.well-architected-security-mcp-server@0.1.7 → uvx exited with code 127
-    • ✓ awslabs.billing-cost-management-mcp-server@0.0.17 → launched (uvx)
+    • ✓ awslabs.aws-pricing-mcp-server               → launched (uvx)
+    • ✓ awslabs.aws-documentation-mcp-server         → launched (uvx)
+    • ✓ awslabs.iam-mcp-server                       → launched (uvx)
+    • ✗ awslabs.well-architected-security-mcp-server → uvx exited with code 127
+    • ✓ awslabs.billing-cost-management-mcp-server   → launched (uvx)
 [✓] Cache
     • ✓ /home/u/.assignee → 3.4 MB, 0 stale checkpoints, 14 log files
 [✓] Config
     • ✓ ./assignee.yaml → valid YAML
 [✓] Best practices
-    • ✓ manifest → 185 rules tracked, hash 636a1827cc85… matches
+    • ✓ manifest → <N> rules tracked, hash 636a1827cc85… matches
 
 ! 1 failures found.
 ```
@@ -662,13 +712,16 @@ assignee audit-verify [options]
 
 **Options:**
 
-| Flag     | Description             | Default |
-| -------- | ----------------------- | ------- |
-| `--json` | Emit the report as JSON | false   |
+| Flag                | Description                                                                    | Default                       |
+| ------------------- | ------------------------------------------------------------------------------ | ----------------------------- |
+| `--json`            | Emit the report as JSON                                                        | false                         |
+| `--from <date>`     | Verify only records on or after this ISO-8601 date                             | -                             |
+| `--to <date>`       | Verify only records on or before this ISO-8601 date                            | -                             |
+| `--log-file <path>` | Verify a specific audit-log file path instead of `~/.assignee/audit/audit.log` | `~/.assignee/audit/audit.log` |
 
 **Behavior:**
 
-Reads `~/.assignee/audit/` JSONL files in chronological order. Recomputes the HMAC chain and exits 0 if the chain is intact, exits 1 with a diagnostic line pointing to the first corrupt or missing record if not.
+Reads `~/.assignee/audit/audit.log` in chronological order. Recomputes the HMAC chain and exits 0 if the chain is intact, exits 1 with a diagnostic line pointing to the first corrupt or missing record if not.
 
 When `ASSIGNEE_AUDIT_KEY` is unset (which causes `assignee` to auto-generate a per-process key on start), the chain **cannot** be verified across process restarts. The command prints a warning in that case and exits 2.
 
@@ -685,7 +738,7 @@ assignee audit-verify --json
 
 ### restore-provisions
 
-Restore the local provision ledger from an exported or backed-up JSONL file. Useful after moving to a new machine or recovering from accidental deletion of `~/.assignee/memory/`.
+Restore `~/.assignee/memory/provisions.json` from a backup snapshot under `~/.assignee/backups/`. Useful after moving to a new machine or recovering from accidental deletion of the memory directory.
 
 ```
 assignee restore-provisions [options]
@@ -693,20 +746,47 @@ assignee restore-provisions [options]
 
 **Options:**
 
-| Flag            | Description                                           | Default |
-| --------------- | ----------------------------------------------------- | ------- |
-| `--from <date>` | Only restore records on or after this ISO-8601 date   | all     |
-| `-y, --yes`     | Skip the "N records will be merged — proceed?" prompt | false   |
-| `--dry-run`     | Print what would be restored without writing to disk  | false   |
+| Flag            | Description                                                                                                     | Default                                         |
+| --------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| `--from <date>` | Restore from the backup whose ISO-8601 date matches `<date>` (e.g. `2026-04-01` → `provisions-2026-04-01.json`) | latest backup file under `~/.assignee/backups/` |
+| `--json`        | Emit the restore result as JSON instead of formatted text                                                       | false                                           |
 
 **Behavior:**
 
-Reads provision records from stdin (JSONL) or a file path passed as a positional argument. Merges into `~/.assignee/memory/provisions.jsonl`, deduplicating by run ID. The `--from` flag limits the restore to records whose `timestamp` field is on or after the given date (ISO-8601, e.g., `2026-01-01`), which is useful when a partial ledger is available.
+1. Looks under `~/.assignee/backups/` for `provisions-<date>.json` files. With `--from <date>` it picks the file matching that date; otherwise it picks the most recent.
+2. Before overwriting, the existing `~/.assignee/memory/provisions.json` is moved aside as `provisions.json.bak-<timestamp>` (safety copy — never silently destructive).
+3. Replaces `~/.assignee/memory/provisions.json` with the chosen backup file (overwrite-with-safety-copy semantics).
+
+The command does **not** read JSONL from stdin and does not accept a positional path argument — the backup location is canonical (`~/.assignee/backups/`). After restoration, run `assignee drift` to verify the restored baseline is consistent with live state.
 
 **Examples:**
 
 ```bash
-cat backup.jsonl | assignee restore-provisions
-assignee restore-provisions backup.jsonl --from 2026-01-01
-assignee restore-provisions backup.jsonl --dry-run
+assignee restore-provisions
+assignee restore-provisions --from 2026-04-01
+assignee restore-provisions --json
 ```
+
+---
+
+## Self-Describe
+
+### version
+
+Print the CLI's version string. Registered at `apps/cli/src/index.ts:147-150`.
+
+```
+assignee version
+```
+
+Outputs the package version of the `assignee` CLI on a single line. No flags. Use `assignee doctor --short` for a richer self-describe blob (account, region, role, redact mode, config path).
+
+### describe
+
+Self-describe blob — prints a compact JSON / text snapshot suitable for bug reports (CLI version, Node version, platform, arch, AWS region, audit-key source). Registered at `apps/cli/src/index.ts:147-150` alongside `version`.
+
+```
+assignee describe
+```
+
+The describe output is the canonical artefact to attach to a bug report — it captures every detail the maintainer needs to reproduce environment-specific issues without having to ask follow-up questions.

@@ -12,26 +12,21 @@
 This page is the reference entry for `AWS::EC2::SubnetRouteTableAssociation` as supported by Assignee.ai.
 It is auto-generated from the supported-types registry — edit
 `packages/core/src/config/resource-types/supported.ts` or the plugin at
-`packages/core/src/plugins/` to update the authoritative source.
+`packages/core/src/resource-plugins/plugins/` to update the authoritative source.
 
 ## Assignee.ai support
 
 Assignee.ai provisions `AWS::EC2::SubnetRouteTableAssociation` resources via the AWS CloudControl API.
-A dedicated plugin handles schema elicitation, default injection, and
-best-practice rule evaluation for this type.
+This type has no dedicated plugin; it is handled inline by the parent resource (or by the generic plugin) during compound provisioning. It is not directly elicited from a top-level intent.
 
 ### Typical intent examples
 
-```bash
-assignee plan "Create a SubnetRouteTableAssociation"
-assignee apply "Create a SubnetRouteTableAssociation named my-ec2-subnetroutetableassociation"
-```
+> [!NOTE]
+> Compound-only — provisioned via the `vpc-networking` pattern, not by direct intent. See [`../resource-types.md`](../resource-types.md#vpc-networking) for the parent compound.
 
 ### Best-practice rules
 
-Best-practice rules for this type are defined in
-`packages/best-practices/rules/`. Run `assignee plan` to see which rules
-apply to your specific configuration.
+Best-practice rules for this type live under `packages/best-practices/ec2/` (per-service subdirectories). Run `assignee plan` to see which rules apply to your specific configuration.
 
 ### Pricing
 

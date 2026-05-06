@@ -31,7 +31,8 @@ to silence a flaky test hides a real bug behind a passing CI badge. The
 | Maximum retries to pass   | 1 (a test that needs 2+ retries is unreliable by definition) |
 | Quarantine resolution SLA | Before the epic that owns the test closes                    |
 
-With ~9 500 tests a 0.1 % rate means ≤ 10 flakes per full run on average.
+With the current full suite (run `pnpm -r test:coverage` for the live
+count) a 0.1 % rate means a handful of flakes per full run on average.
 Above that threshold the flake inventory is an incident, not background noise.
 
 ---
@@ -79,9 +80,16 @@ more than once in 10 runs):
    Do not use `it.skip` unconditionally — that silences the test forever and
    loses the failure signal in local runs.
 
+   > **Cache-key caveat.** `SKIP_FLAKY` is **not** declared in `turbo.json`'s
+   > `tasks.test.env` (or `tasks.test:coverage.env`). Operators flipping this
+   > gate locally should clear the turbo cache manually (`pnpm turbo run test
+--force` or `rm -rf node_modules/.cache/turbo`); otherwise turbo will
+   > replay the previous cached result and the gate flip will appear to do
+   > nothing. Promoting `SKIP_FLAKY` into the cache keys is a follow-up.
+
 4. **Resolve before epic-close.** The `flaky-test` label is a block on
-   epic-close. A quarantined test is a candidate for the next Epic 99+
-   quality iteration, not a permanent state. The resolution is either a
+   epic-close. A quarantined test is a candidate for the next quality
+   iteration, not a permanent state. The resolution is either a
    root-cause fix or a deliberate deletion of the test with a comment
    explaining why the coverage gap is acceptable.
 

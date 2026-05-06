@@ -1,14 +1,21 @@
-# Domain Ownership and MX Verification
+# Domain Ownership and MX Verification — design reference
 
-<!-- W9-03 (P060 → L1-F37 + L2-F18 + L4-S24) -->
+> **Status for this build.** This document describes a verification pattern
+> for future productisation. It is **not active for this course-submission
+> build** — the `assignee.ai` and `app.assignee.ai` domains are not
+> registered, no DNS records exist, no `security@assignee.ai` mailbox is
+> reachable, and no domain-transfer process is in flight. The verification
+> scripts and step-by-step flow below are kept as a design reference for
+> the day a real domain is registered; treat the prose as a sketch, not as
+> live operations documentation.
 
-This document describes the domain ownership and mail-exchange verification
-process for `assignee.ai` and `app.assignee.ai`. These verifications are
-pre-signing acquirer tasks — run them before transfer documents are signed to
-confirm the domain is under the expected team's control and that
+This document describes a domain ownership and mail-exchange verification
+pattern for `assignee.ai` and `app.assignee.ai`. If the project later
+registers those domains, these scripts would be re-runnable to confirm
+the domain is under the expected team's control and that
 `security@assignee.ai` is reachable.
 
-## Domains in scope
+## Domains in scope (hypothetical)
 
 | Domain                 | Purpose                                    |
 | ---------------------- | ------------------------------------------ |
@@ -36,19 +43,22 @@ Both scripts emit structured JSON to `stdout` and a human-readable status
 line to `stderr`. Exit 0 on success; non-zero with actionable message on
 failure.
 
+> The scripts are wired up but produce `ENOTFOUND`/`ESERVFAIL` against the
+> unregistered `assignee.ai` domain today. They are documented here as
+> design reference, not as live operational tooling.
+
 ## Ownership proof string
 
-The ownership proof is a TXT record placed in DNS by the current domain
-owner. The format is:
+The ownership proof would be a TXT record placed in DNS by the current
+domain owner. The format is:
 
 ```
 assignee-verification=<opaque-token>
 ```
 
 The `<opaque-token>` is a secret string generated at registration time and
-stored in the 1Password vault entry `assignee.ai DNS verification`. The
-acquirer team lead receives access to this vault entry as part of the KT
-(knowledge transfer) process.
+held by the current maintainer. There is no shared credential vault for
+this course-submission build.
 
 ### Where the TXT record lives
 
@@ -64,7 +74,7 @@ nslookup -type=TXT assignee.ai
 ## Step-by-step verification flow
 
 1. **Obtain the proof token.** The current owner provides the opaque token
-   from the `assignee.ai DNS verification` 1Password entry.
+   from a secure store (the specifics depend on the owning team's tooling).
 
 2. **Verify MX records** (confirms email is operational):
 
@@ -110,12 +120,11 @@ verify-domain-mx: FAIL — no MX records for assignee.ai
 
 Steps:
 
-1. Log in to the DNS provider (currently Cloudflare — credentials in 1Password).
+1. Log in to the DNS provider used by the domain.
 2. Confirm the MX records are present under the `assignee.ai` zone.
-3. Standard Cloudflare settings: `assignee.ai MX 10 mx1.example.com`
-4. Wait for DNS propagation (up to 48 hours for global propagation; usually
+3. Wait for DNS propagation (up to 48 hours for global propagation; usually
    minutes within the same region).
-5. Re-run the script.
+4. Re-run the script.
 
 ### Ownership proof not found
 
@@ -132,7 +141,10 @@ Steps:
 
 ### DNS error (ENOTFOUND / ESERVFAIL)
 
-This indicates a network issue or the domain does not resolve at all.
+This is the expected response in the current build because the domain is
+not registered. If the project later registers the domain and a real
+verification still returns this error, it indicates a network issue or a
+genuinely missing DNS record:
 
 1. Confirm the domain is registered and not expired:
    ```sh
@@ -142,13 +154,13 @@ This indicates a network issue or the domain does not resolve at all.
    ```sh
    dig NS assignee.ai +short
    ```
-3. If the domain is expired, renew immediately through the registrar.
+3. If the domain is expired, renew through the registrar.
 
 ## Running in CI
 
-These scripts are intended as manual acquirer-run verification tools, not as
-automated CI checks. They make real DNS calls which are non-deterministic and
-slow — they would be flaky in CI.
+These scripts are intended as manual verification tools, not as automated
+CI checks. They make real DNS calls which are non-deterministic and slow —
+they would be flaky in CI.
 
 For unit tests, the scripts export their core logic (`extractDomain`,
 `resolveMxRecords`, `verifyOwnership`) with injectable resolver dependencies

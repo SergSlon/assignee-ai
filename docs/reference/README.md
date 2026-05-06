@@ -9,47 +9,39 @@ here in 30 seconds or less.
 
 ---
 
-## Current reference docs
+## What lives where
 
-This quadrant is scaffolded as of Epic 99 Wave 3. The docs listed below
-currently live at `docs/` root; they will be migrated here in a dedicated
-Epic 100+ subwave with per-move citation-lint gates to avoid breaking
-inbound links.
+The auto-generated **per-resource pages** live here in `docs/reference/`
+— one page per supported AWS resource type, regenerated from the
+resource-type registry by `scripts/generate-reference-pages.ts`. Open
+this directory's `*.md` files for the type-specific entry; see
+[`../resource-types.md`](../resource-types.md) for the cross-type catalog.
 
-### Commands (pending move from `docs/` root)
+The **canonical reference docs** live one level up at `docs/`:
 
-- [`../commands.md`](../commands.md) — CLI command reference: `plan`,
-  `apply`, `destroy`, `list`, `status`, `drift`, `reconcile`, `init`,
-  `doctor`, `optimize`, `setup`, `completions`, `version`. Covers every
+- [`../commands.md`](../commands.md) — CLI command reference: every
   flag, option, and exit code.
-
-### Configuration (pending move from `docs/` root)
-
 - [`../configuration.md`](../configuration.md) — Environment variables,
-  config files, `ASSIGNEE_*` namespace, and the 6-level precedence chain.
+  config files, `ASSIGNEE_*` namespace, and the precedence chain.
+- [`../resource-types.md`](../resource-types.md) — Supported AWS
+  resource types, non-taggable list, compound architecture patterns,
+  and the CloudControl API fallback set.
+- [`../mcp-servers.md`](../mcp-servers.md) — AWS MCP servers consumed
+  by the pipeline (Pricing, Documentation, IAM, Security, Billing):
+  endpoint pins, available tools, and configuration.
+- [`../troubleshooting.md`](../troubleshooting.md) — Exit codes and
+  error-class playbook.
+- [`../best-practices.md`](../best-practices.md) — Best-practice rule
+  engine and shipped rules.
 
-### Resource types (pending move from `docs/` root)
+These canonical docs deliberately stay at `docs/` root rather than
+moving into `docs/reference/` so existing inbound links from external
+sources remain stable.
 
-- [`../resource-types.md`](../resource-types.md) — 38 first-class AWS
-  resource types, non-taggable list, compound architecture patterns, and
-  the CloudControl API fallback set.
-
-### Architecture reference (pending move from `docs/` root)
-
-- [`../integration-architecture.md`](../integration-architecture.md) —
-  How CLI, MCP server, and `@assignee/core` fit together; doc-lint-guarded
-  live counts.
-
-### MCP servers (pending move from `docs/` root)
-
-- [`../mcp-servers.md`](../mcp-servers.md) — AWS MCP servers consumed by
-  the pipeline (Pricing, Documentation, IAM, Security, Billing): endpoint
-  pins, available tools, and configuration.
-
-### Exit codes / error envelopes (pending extraction)
-
-_(Extract from `commands.md` §Exit codes into a dedicated file once
-`commands.md` has moved here.)_
+The **architecture reference** at
+[`../integration-architecture.md`](../integration-architecture.md)
+documents how CLI, MCP server, and `@assignee/core` fit together. It
+sits at `docs/` root for the same inbound-link reason.
 
 ---
 

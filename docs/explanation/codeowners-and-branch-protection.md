@@ -1,31 +1,32 @@
 # CODEOWNERS and Branch Protection Policy
 
-<!-- W9-02 (P020 + P065 → L4-S07 + L1-F14 + L6-F19) -->
-<!-- SOC 2 CC8.1 / ISO 27001 A.6.3 control baseline -->
+This document describes the code-ownership pattern used by the `assignee.ai`
+repository and the GitHub branch-protection settings that would enforce it
+once the project has multiple maintainers.
 
-This document describes the code-ownership policy for the `assignee.ai`
-repository and the GitHub branch-protection settings required to enforce it.
+> **Status for this build.** This is a single-engineer course-submission
+> repository. Branch protection is **not** configured on the GitHub side
+> today — there is one maintainer and no review pool. The settings and
+> tables below document the design intent for future productisation; the
+> CODEOWNERS lint check (`scripts/audit-codeowners.ts`) still runs in CI
+> so the file stays well-formed.
 
 ## Overview
 
 The `CODEOWNERS` file at the repository root assigns review requirements per
-path. GitHub enforces these requirements when branch protection is enabled on
-`main`. Every pull request must receive at least one approved review from the
-code owner for the files it touches before merging.
+path. Once branch protection is enabled on `main`, GitHub enforces these
+requirements: every pull request must receive at least one approved review
+from the code owner for the files it touches before merging.
 
 ## Ownership model
 
-### Pre-KT (current state)
+All files are currently owned by the single maintainer via the
+`* @<maintainer>` catch-all at the top of `CODEOWNERS`. One approved review
+from the maintainer is required for every PR (subject to the build-status
+caveat above — branch protection is unenforced today).
 
-All files are owned by `@founder`. This is the `* @founder` catch-all at the
-top of `CODEOWNERS`. One approved review from `@founder` is required for every
-PR.
-
-### Post-KT (knowledge transfer to acquiring team, out of scope for W9)
-
-After knowledge transfer, per-area ownership lines in `CODEOWNERS` should be
-uncommented and updated with the acquiring team's GitHub handles. The
-recommended minimum is:
+If the project grows to multiple maintainers, the recommended per-area
+ownership baseline is:
 
 | Area                        | Minimum reviewers |
 | --------------------------- | ----------------- |
@@ -38,33 +39,79 @@ recommended minimum is:
 | `homebrew/assignee.rb`      | 1 security owner  |
 | `CODEOWNERS`                | 1 security owner  |
 
-**Target post-KT**: ≥ 2 required reviewers on `main` for high-sensitivity
-paths (workflows, audit scripts, release manifest, CODEOWNERS itself).
-
 ## Required status checks
 
-The following CI checks must be configured as **required status checks** in
-branch protection before any merge to `main` is allowed:
+The following CI **jobs** would be configured as required status checks in
+branch protection before any merge to `main` is allowed. GitHub
+branch-protection's required-status-checks API operates on **job names**
+(not step names): a single failed step inside a job marks the job red,
+and the job-name is what is configured as the required check. Step
+names are not enforceable identifiers in GitHub branch protection.
 
-| Check               | Workflow / script                         |
-| ------------------- | ----------------------------------------- |
-| `build`             | `ci.yml` → turbo build                    |
-| `test`              | `ci.yml` → turbo test                     |
-| `coverage`          | `ci-core.yml` → test:coverage             |
-| `lint`              | `ci.yml` → turbo lint                     |
-| `citation-lint`     | `ci.yml` → `pnpm citation-lint`           |
-| `audit-action-pins` | `ci.yml` → `scripts/audit-action-pins.ts` |
-| `audit-no-suppress` | `ci.yml` → `scripts/audit-no-suppress.ts` |
+| Required job (status-check name) | Workflow file     | Notable steps inside the job                                                                 |
+| -------------------------------- | ----------------- | -------------------------------------------------------------------------------------------- |
+| `ci (ubuntu-latest / node 20)`   | `ci.yml`          | Delegates to `ci-core.yml` (lint, format, type-check, build, tests with coverage, doc lints) |
+| `ci (ubuntu-latest / node 22)`   | `ci.yml`          | Same as above on Node 22                                                                     |
+| `audit-scripts (security lints)` | `ci-security.yml` | All eight audit scripts (see "Audit scripts inventory" below)                                |
+
+The `ci` jobs in `ci.yml` reuse the `ci-core.yml` workflow, so all
+`ci-core.yml` steps (lint, format, type-check, build, citation-lint,
+doc-lint, action-pin audit, secrets-inherit audit, overrides
+rationale audit, `pnpm audit`, NOTICE freshness, build, BP-rule
+validation, tests with coverage, coverage merge) run inside the `ci`
+job. Failure of any step turns the parent job red and blocks the
+merge.
+
+### Audit scripts inventory (inside `audit-scripts` job)
+
+The `audit-scripts (security lints)` job in `ci-security.yml:35-105`
+runs the following steps in sequence; any one of them failing turns
+the whole job red:
+
+1. `audit-codeowners` — lints repo-root `CODEOWNERS` for syntactic
+   validity and a global catch-all (`scripts/audit-codeowners.ts`).
+2. `audit-homebrew-pin (--check-template)` — validates
+   `homebrew/assignee.rb` uses `${SHA_*}` envsubst placeholders and
+   contains no hardcoded SHA256 values.
+3. `audit-iam-policies` — cross-checks generated operator/reader/
+   auditor policies against `getRequiredIamActions()` for every
+   supported resource type.
+4. `audit-no-suppress` — scans `.github/actions/*/action.yml` for
+   `|| true` masking immediately after `assignee` invocations.
+5. `audit-placeholder-account-ids` — scans
+   `packages/core/src/resource-plugins/plugins/**/*.ts` for the
+   AWS-docs denylisted placeholder account ID `123456789012` so
+   wizard hints stay aligned with the placeholder-ARN preflight
+   guard.
+6. `audit-patterns-cleartext` — scans
+   `~/.assignee/memory/patterns.json` (when present) for
+   credential-like strings using the `SENSITIVE_KEY_NAMES`
+   allowlist.
+
+Two further audit lints run inside the parallel `ci-core.yml`
+workflow rather than inside `audit-scripts` itself:
+
+7. `audit-action-pins` — verifies every `uses:` line in
+   `.github/workflows/*.yml` is pinned to a 40-character commit SHA
+   (`scripts/audit-action-pins.ts`).
+8. `audit-secrets-inherit` — verifies reusable workflows that need
+   `secrets:` declare them via `secrets: inherit` rather than
+   leaking the parent context implicitly.
+
+In aggregate the `audit-scripts (security lints)` job + the audit
+steps in `ci (ubuntu-latest / node 22)` cover the eight repository-
+hardening lints listed above.
 
 ## Branch protection settings
 
-The following settings must be enabled on the `main` branch via the GitHub
-repository settings UI (Settings → Branches → Branch protection rules):
+Once the project has multiple maintainers, the following settings should be
+enabled on the `main` branch via the GitHub repository settings UI
+(Settings → Branches → Branch protection rules):
 
 ```
 Branch name pattern: main
   [x] Require a pull request before merging
-      [x] Require approvals: 1 (pre-KT) / 2 (post-KT)
+      [x] Require approvals: 1 (single-maintainer) / 2 (multi-maintainer)
       [x] Dismiss stale pull request approvals when new commits are pushed
       [x] Require review from Code Owners
   [x] Require status checks to pass before merging
@@ -79,8 +126,7 @@ Branch name pattern: main
 ## Manual enable steps
 
 Branch protection cannot be set by code in this repository — it requires
-admin access to the GitHub org. Perform these steps once after the repo
-is transferred to the acquiring org:
+admin access to the GitHub org. Once a multi-maintainer setup is in place:
 
 1. Go to `Settings → Branches` in the GitHub repository.
 2. Click **Add rule** (or edit the existing rule for `main`).
@@ -94,23 +140,20 @@ To verify via the GitHub API (requires a personal access token with
 `repo` scope):
 
 ```sh
-gh api repos/SergSlon/assignee-ai/branches/main/protection \
+gh api repos/<owner>/<repo>/branches/main/protection \
   --jq '{required_reviewers: .required_pull_request_reviews.required_approving_review_count, required_checks: [.required_status_checks.contexts[]]}'
 ```
 
-Expected output pre-KT:
+Expected output once configured for a single-maintainer project
+(the `required_checks` strings are GitHub job names, not step names):
 
 ```json
 {
   "required_reviewers": 1,
   "required_checks": [
-    "build",
-    "test",
-    "coverage",
-    "lint",
-    "citation-lint",
-    "audit-action-pins",
-    "audit-no-suppress"
+    "ci (ubuntu-latest / node 20)",
+    "ci (ubuntu-latest / node 22)",
+    "audit-scripts (security lints)"
   ]
 }
 ```
@@ -125,12 +168,12 @@ Expected output pre-KT:
 
 This check fires in CI but does NOT verify the GitHub-side branch-protection
 configuration (that requires API access with admin tokens, which CI does not
-hold). The branch-protection setup is an acquirer-side ops task documented in
-the section above.
+hold). The branch-protection setup is an ops task documented in the section
+above and is not active for this course-submission build.
 
-## Compliance references
+## Industry context
 
-- **SOC 2 CC8.1** — Change management: all production changes require peer
-  review before deployment.
-- **ISO 27001 A.6.3** — Awareness, education and training: code owners are
-  responsible parties for their areas.
+Required-review and required-status-checks are an industry-standard practice
+for production codebases. They are documented here as design intent for any
+future productisation; they are not active controls in the current
+course-submission build.

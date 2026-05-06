@@ -3,11 +3,11 @@ diataxis: reference
 canonical: true
 ---
 
-> **Diátaxis: Reference** — This is the canonical root page for this topic. Reference for the 5 AWS MCP servers that assignee.ai consumes internally (Pricing, Documentation, IAM, Security, Billing).
+> **Diátaxis: Reference** — This is the canonical root page for this topic. Reference for the five AWS MCP servers that assignee.ai consumes internally (Pricing, Documentation, IAM, WA Security, Billing).
 
 # MCP Servers Reference
 
-Assignee.ai uses 5 AWS MCP servers (+ 1 optional remote knowledge server) to enrich the pipeline with live AWS data. All servers are from the [AWS Labs MCP project](https://awslabs.github.io/mcp/).
+Assignee.ai uses 5 AWS MCP servers to enrich the pipeline with live AWS data. All servers are from the [AWS Labs MCP project](https://awslabs.github.io/mcp/).
 
 ## Server Inventory
 
@@ -18,11 +18,10 @@ Assignee.ai uses 5 AWS MCP servers (+ 1 optional remote knowledge server) to enr
 | IAM           | `awslabs.iam-mcp-server`                       | `1.0.17` | auditor    | status                | IAM permission simulation      |
 | WA Security   | `awslabs.well-architected-security-mcp-server` | `0.1.7`  | auditor    | status                | SecurityHub/GuardDuty findings |
 | Billing       | `awslabs.billing-cost-management-mcp-server`   | `0.0.17` | reader     | status                | Live billing, cost forecast    |
-| Knowledge     | `knowledge-mcp.global.api.aws`                 | remote   | reader     | plan, apply           | Optional remote AWS knowledge  |
 
-**Pin location:** `apps/cli/src/config/mcp-servers.ts` → `MCP_PINS`
+**Pin location:** `packages/core/src/config/mcp-servers.ts` → `MCP_PINS` (the `apps/cli/src/config/mcp-servers.ts` path is a re-export shim that delegates to the canonical owner in `@assignee/core`).
 
-**Lazy loading:** Each CLI command only starts the servers it needs (see `apps/cli/src/mcp/server-map.ts`). `list`, `destroy`, `clean`, `init`, `setup`, `drift` start zero servers.
+**Lazy loading:** Each CLI command only starts the servers it needs (see `apps/cli/src/mcp/server-map.ts`). `list`, `destroy`, `init`, `setup`, `drift`, `reconcile`, `optimize` (Pricing only), `audit-verify`, `restore-provisions`, `completions`, `version`, `describe` start zero servers (the rest start the minimal set required for that command).
 
 ## Tools by Server
 
@@ -94,27 +93,12 @@ MCP subprocesses receive credentials via env var injection — never via shared 
 - **Subprocess isolation:** Each MCP server runs as a separate `uvx` subprocess with its own credential scope.
 - **Graceful degradation:** Optional servers (IAM, WA Security, Billing) fail silently — core pipeline continues.
 - **Timeouts:** 3s per MCP call in advice pipeline, 6s for pricing lookups, 5s for doctor probes.
-- **Remote server gated:** Knowledge MCP (`knowledge-mcp.global.api.aws`) is OFF by default, requires explicit `ASSIGNEE_ENABLE_REMOTE_MCP=1`.
-
-## MCP Version Drift Monitoring (Story 45.6)
-
-`assignee doctor` includes an **MCP version drift** section that checks each pinned MCP server against the latest stable version on PyPI. For each of the 5 servers, the doctor reports one of three statuses:
-
-| Status         | Meaning                                                  |
-| -------------- | -------------------------------------------------------- |
-| `up-to-date`   | Pinned version matches (or exceeds) PyPI latest          |
-| `behind`       | Pinned version is older than PyPI latest — review needed |
-| `fetch-failed` | PyPI unreachable or timed out (5s per fetch)             |
-
-The check runs in parallel across all servers via `Promise.all` with per-server `AbortController` timeouts, so a single slow PyPI response never blocks the other rows. Network failures are isolated — they produce `fetch-failed` rows, not exceptions.
-
-The drift check can be skipped via `assignee doctor --skip-version-check` for offline or fast-path usage.
 
 ## Updating Pins
 
 1. Check latest versions: `pip index versions awslabs.aws-pricing-mcp-server` (or visit PyPI)
 2. Review upstream release notes at [github.com/awslabs/mcp/releases](https://github.com/awslabs/mcp/releases)
-3. Update `MCP_PINS` in `apps/cli/src/config/mcp-servers.ts`
+3. Update `MCP_PINS` in `packages/core/src/config/mcp-servers.ts`
 4. Run `pnpm build && pnpm test` — the pin tests in `mcp-servers.test.ts` verify format
 5. Update this doc's version table
 

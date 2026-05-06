@@ -1,6 +1,6 @@
 # Audit Trail Threat Model
 
-**Last updated**: 2026-04-29 (SEC-A-4, Wave SEC-A)
+**Last updated**: 2026-04-29
 
 This document describes what the Assignee.ai HMAC-chained audit log **does**
 and **does not** defend against. It is the authoritative source for the
@@ -16,9 +16,15 @@ The audit trail is a NDJSON append-only log where each record is wrapped with:
 { index, timestamp, role, record, prevHmac, hmac }
 ```
 
-`hmac` is computed as `HMAC-SHA-256(canonicalJson({ prevHmac, record }), key)`
+`hmac` is computed as `HMAC-SHA-256(prevHmac + "|" + canonicalJson(record), key)`
 where `key` is loaded from `~/.assignee/audit-key` (mode 0o600, owner-only)
-or from the `ASSIGNEE_AUDIT_KEY` environment variable.
+or from the `ASSIGNEE_AUDIT_KEY` environment variable. The literal pipe (`|`)
+separator between `prevHmac` and the canonical-JSON record blocks length-extension
+ambiguity at GENESIS, where `prevHmac` is a fixed sentinel string —
+without the separator, an attacker could forge an entry that prepends a
+crafted prefix to the canonical-JSON record and the HMAC input would still
+parse as `prevHmac || record` with no boundary marker. Verified at
+`packages/core/src/audit/hmac-chain.ts:451`.
 
 The chain property: every entry links to its predecessor's HMAC value
 (`prevHmac`). The verifier (`audit-verifier.ts`) walks the chain from genesis
@@ -29,13 +35,13 @@ HMAC forgery, entry deletion, and index gaps.
 
 ## What the audit chain defends against
 
-| Threat                                  | Defended? | Mechanism                                                                         |
-| --------------------------------------- | --------- | --------------------------------------------------------------------------------- |
-| External attacker modifying log entries | Yes       | HMAC mismatch detected by verifier                                                |
-| Entry deletion / reordering             | Yes       | Index gap or prevHmac linkage break detected                                      |
-| Accidental log rotation / truncation    | Yes       | `guardAuditLogTruncation` enforces retention floor                                |
-| Partial write / filesystem corruption   | Yes       | Index-gap + prevHmac check catches truncated tail                                 |
-| Legacy HMAC downgrade by outsider       | Yes       | `legacyVerifyChainLink` requires `ASSIGNEE_AUDIT_ALLOW_LEGACY=1` opt-in (SEC-035) |
+| Threat                                                     | Defended? | Mechanism                                                                                                                           |
+| ---------------------------------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| External attacker modifying log entries                    | Yes       | HMAC mismatch detected by verifier                                                                                                  |
+| Entry deletion / reordering                                | Yes       | Index gap or prevHmac linkage break detected                                                                                        |
+| Accidental log rotation / truncation                       | Yes       | `guardAuditLogTruncation` enforces retention floor                                                                                  |
+| Partial write / filesystem corruption                      | Yes       | Index-gap + prevHmac check catches truncated tail                                                                                   |
+| Legacy-HMAC silent acceptance during chain re-verification | Yes       | `legacyVerifyChainLink` requires `ASSIGNEE_AUDIT_ALLOW_LEGACY=1` opt-in (insider with key, since legacy verify still needs the key) |
 
 ---
 
@@ -66,9 +72,10 @@ truncation by a key-knowing insider.
 
 **Deferred fix**: a periodic out-of-band anchor — signed digest of
 `(maxIndex, maxHmac)` pushed to S3 Object Lock or a remote append-only sink
-— will close this gap. Deferred to Epic 101.
+— would close this gap. Deferred to future work; out of scope for this
+course-submission build.
 
-**Until Epic 101 ships**: treat the audit chain as tamper-evident against
+**Until that ships**: treat the audit chain as tamper-evident against
 attackers who do **not** have read access to the key file. Insider threats
 in the same uid-space require the external anchor to be fully addressed.
 
@@ -85,8 +92,10 @@ fails canonical verification is rejected with
 `{ ok: false, reason: "legacy-hmac-not-allowed" }`.
 
 Set `ASSIGNEE_AUDIT_ALLOW_LEGACY=1` only during active migration
-windows when pre-W7 chain segments must be re-verified before re-signing.
-Remove legacy support after 2027-04-29 once all chains have been re-signed.
+windows when pre-canonical chain segments must be re-verified before
+re-signing. Expected sunset by 2027-04-29 once chain re-signing is
+complete; a future CI-enforced legacy-removal probe would assert that
+no chain still depends on the legacy verifier.
 
 ---
 
@@ -96,9 +105,9 @@ The key file (`~/.assignee/audit-key`) is the root of trust for the audit
 chain. Its security properties:
 
 - Mode 0o600 — only the owning user can read or write it.
-- Loaded once per process and cached (cleared on SIGHUP or `rotateAuditKey()`
-  call — see SEC-A-1 story).
-- No KMS backing yet — key management defers to Epic 101.
+- Loaded once per process and cached (cleared on SIGHUP or `rotateAuditKey()`).
+- No KMS backing yet — key management is deferred to future productisation
+  work, out of scope for this course-submission build.
 
 **Consequence**: if the key file is compromised, the entire audit chain's
 tamper-evidence guarantee is void. Protect `~/.assignee/` with filesystem-
@@ -106,7 +115,10 @@ level access controls appropriate to your deployment environment.
 
 ---
 
-## Future work (Epic 101)
+## Future work
+
+These items are deferred to future productisation work; they are out of
+scope for this course-submission build.
 
 - KMS-backed key management (key never touches disk in plaintext).
 - Periodic out-of-band anchor: signed digest of `(maxIndex, maxHmac)` pushed
@@ -122,5 +134,5 @@ level access controls appropriate to your deployment environment.
 - `packages/core/src/audit/audit-verifier.ts` — chain verifier implementation
 - `packages/core/src/audit/audit-log.ts` — write path and retention guard
 - `packages/core/src/audit/hmac-chain.ts` — HMAC computation and key management
-- Security audit finding SEC-002 (Critical) and SEC-035 (High/Medium):
-  `.agents/reviews/full-audit-2026-04-29-SECURITY.md`
+- Security audit findings SEC-002 (Critical) and SEC-035 (High/Medium) are
+  recorded in workspace-internal review notes outside this repo.

@@ -11,6 +11,22 @@ How to read assignee.ai failures and fix them fast. Organized by exit
 code, then by error class. If your symptom is here, the cited fix is
 the canonical one — the CLI's `howToFix` hint mirrors this page.
 
+## Contents
+
+Jump to the section for the failure mode you're seeing.
+
+- [Exit codes](#exit-codes) — the contract
+- [Exit 12 — not implemented](#exit-12--not-implemented)
+- [Exit 1 — generic failure (and the drift exception)](#exit-1--generic-failure-and-the-drift-exception)
+- [Exit 10 — policy / safety aborts](#exit-10--policy--safety-aborts)
+- [AWS / CloudControl error classes](#aws--cloudcontrol-error-classes) — covers throttling, expired credentials, IAM-list gap (these surface as exit 1)
+- [Bedrock / LLM error classes](#bedrock--llm-error-classes) — region availability, model EOL (typically exit 1)
+- [MCP server error classes](#mcp-server-error-classes) — exit 11 startup failures, CFN MCP unavailability
+- [Checkpoint error classes](#checkpoint-error-classes) — checkpoint not found / expired (exit 1)
+- [Audit log error classes](#audit-log-error-classes) — chain broken, append failures, CI lint
+- [Destroy registry recovery](#destroy-registry-recovery) — restore-provisions
+- [Getting more detail](#getting-more-detail) — debug flags and bug-report blob
+
 ---
 
 ## Exit codes
@@ -25,6 +41,7 @@ The CLI follows a stable exit-code contract — scripts can branch on it.
 | `10`  | Policy / safety abort — state guard, preflight rejection, typed-confirm mismatch, IAM safety allowlist, drift threshold, best-practice block                                          |
 | `11`  | MCP server startup failure — the spawned MCP server (cfn-mcp, aws-pricing, etc.) failed to start; check pin freshness and Python/uv install                                           |
 | `12`  | Not implemented — feature is recognised but not yet wired (e.g. `--target-account` cross-account provisioning); upgrade to a newer release or omit the flag                           |
+| `73`  | Usage error — invalid CLI flags / arguments (e.g. unrecognised option, mutually exclusive flags). Surfaces as `USAGE_ERROR` from `packages/core/src/constants/errors.ts:27`           |
 | `130` | Interrupted via `SIGINT` (Ctrl-C)                                                                                                                                                     |
 | `143` | Terminated via `SIGTERM`                                                                                                                                                              |
 
@@ -40,13 +57,14 @@ when filing a bug.
 with the same flag) exits immediately with code 12 and prints to stderr:
 
 ```
-[plan] Epic 101: cross-account assume-role not yet implemented for <ID>
+[plan] cross-account assume-role not yet implemented for <ID>
 ```
 
 (Replace `[plan]` with `[apply]` or `[destroy]` for those commands.)
 
 **Cause.** The `--target-account` flag is accepted by the CLI to reserve
-the interface, but the cross-account assume-role wiring lands in Epic 101.
+the interface, but the cross-account assume-role wiring is not yet
+implemented.
 
 **Fix.** Omit `--target-account` and ensure your operator credentials
 already target the intended account. Track the issue in the project
@@ -83,7 +101,7 @@ If you only want the "something actually broke" codes, branch on
 `>= 2 && != 1` — or prefer `assignee drift --json` and parse the
 structured output for a deterministic view of which resources drifted.
 
-**Fix.** Inspect the drift report (`--verbose` shows all fields, not
+**Fix.** Inspect the drift report (`--detailed` shows all fields, not
 just diverging ones), then either (a) `assignee apply` to reconcile
 live → desired, (b) update your intent so desired matches the new
 reality, or (c) mark the drift as accepted in state. Exit 1 from
@@ -204,7 +222,7 @@ sync your system clock.
 using SSO` at startup, before any AWS call.
 
 **Cause.** `ASSIGNEE_OPERATOR_SESSION_TOKEN` is set but has fewer than
-16 characters — this is the minimum length validation that catches
+100 characters — this is the minimum length validation that catches
 truncated or placeholder values.
 
 **Fix.** Either clear `ASSIGNEE_OPERATOR_SESSION_TOKEN` (if you are not
@@ -405,10 +423,11 @@ log file was truncated after the fact. This is a security-relevant
 signal.
 
 **Fix.** Examine the records around the reported index in
-`~/.assignee/logs/audit-*.jsonl`. Determine whether the break was
-caused by a crash (partial write) or by external modification. If
-external, treat as a potential security incident and review CloudTrail
-for activity in the corresponding time window.
+`~/.assignee/audit/audit.log` (single canonical file — no `.jsonl` glob,
+no rotation suffix). Determine whether the break was caused by a crash
+(partial write) or by external modification. If external, treat as a
+potential security incident and review CloudTrail for activity in the
+corresponding time window.
 
 ### `audit-no-suppress` CI lint failure
 
@@ -431,10 +450,11 @@ code (see the drift exit-code example in the "Exit 1" section above).
 `mcpLogError`).
 
 **Cause.** The MCP server could not append to the audit log — typically
-a permissions issue or a full disk on `~/.assignee/logs/`.
+a permissions issue or a full disk on `~/.assignee/audit/`.
 
 **Fix.** Check disk space (`df -h ~/.assignee`) and permissions
-(`ls -la ~/.assignee/logs/`). The MCP server continues operating after
+(`ls -la ~/.assignee/audit/`). The audit log lives in a single file at
+`~/.assignee/audit/audit.log`. The MCP server continues operating after
 an append failure, but the affected operation will not appear in
 `assignee audit-verify` output.
 
@@ -444,21 +464,23 @@ an append failure, but the affected operation will not appear in
 
 ### Restoring from local backup
 
-If the provision registry (`~/.assignee/memory/`) is corrupted or
-accidentally deleted, you can restore from the last local backup:
+If the provision registry (`~/.assignee/memory/provisions.json`) is
+corrupted or accidentally deleted, restore it from the last snapshot
+under `~/.assignee/backups/`:
 
 ```bash
-# Restore all provisions from the default backup location
+# Restore from the most recent backup file in ~/.assignee/backups/
 assignee restore-provisions
 
-# Restore provisions recorded on or after a specific date
+# Restore from a specific dated backup (e.g. ~/.assignee/backups/provisions-2026-04-01.json)
 assignee restore-provisions --from 2026-04-01
 ```
 
-The command replays backup records into the registry. Resources that are
-no longer live in AWS (as seen by CloudControl) are skipped. After
-restoration, run `assignee drift` to verify the restored baseline is
-consistent with live state.
+The command uses overwrite-with-safety-copy semantics: the existing
+`~/.assignee/memory/provisions.json` is moved aside as
+`provisions.json.bak-<timestamp>` before the chosen backup file
+replaces it. After restoration, run `assignee drift` to verify the
+restored baseline is consistent with live state.
 
 ---
 

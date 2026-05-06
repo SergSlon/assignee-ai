@@ -42,15 +42,25 @@ assignee audit-verify
 ```
 
 - Exit 0 → chain intact from the first record.
-- Exit 1 → chain broken. The output names the first corrupt index. Treat as SEV1/SEV2: preserve artefacts before any remediation (see §3).
-- Exit 2 → `ASSIGNEE_AUDIT_KEY` not set persistently; chain cannot be verified across restarts. Set the key and re-verify.
+- Exit 1 → chain broken (or any other generic verifier error). The output names the first corrupt index. Treat as SEV1/SEV2: preserve artefacts before any remediation (see §3).
 
-> **Background:** Every audit event is HMAC-signed. `assignee audit-verify` re-derives the chain from record 0 and halts at the first mismatch. Implemented in Story `100-W3-01-audit-log-hmac-chain.md` (Wave W3). See [`packages/core/src/audit/audit-verifier.ts`](../../packages/core/src/audit/audit-verifier.ts).
+> **Note on persistence:** `audit-verify` returns only exit 0 (success) or
+> exit 1 (any error). When `ASSIGNEE_AUDIT_KEY` is unset, key-persistence
+> fall-through surfaces as a `WARNING: cannot persist audit key …` line on
+> stderr (emitted from `packages/core/src/audit/hmac-chain.ts`); the
+> verifier itself still exits 1 if the chain cannot be re-derived. Set
+> `ASSIGNEE_AUDIT_KEY` persistently in the operator environment and
+> re-run `audit-verify`.
+
+> **Background:** Every audit event is HMAC-signed. `assignee audit-verify` re-derives the chain from record 0 and halts at the first mismatch. See [`packages/core/src/audit/audit-verifier.ts`](../../packages/core/src/audit/audit-verifier.ts).
 
 ### Step 3 — Managed-resource inventory
 
 ```bash
-assignee list --json | jq 'length'
+# `assignee list --json` returns an envelope: { ok, resources, count, region }.
+# Use `.count` (or `.resources | length`) — `jq 'length'` returns 4 (the
+# envelope key count), not the resource count.
+assignee list --json | jq '.count'
 ```
 
 Compare the count against the last-known baseline. Unexpected drops (resources missing) → SEV1/SEV2. An increase when no apply was intended → investigate who ran it.
@@ -80,11 +90,29 @@ ls -lt ~/.assignee/logs/
 
 Events at `error` level indicate hard failures. Events at `warn` level indicate recoverable conditions (throttling, stale checkpoints). Capture the full file before any remediation.
 
-### Step 6 — CloudFormation console check
+### Step 6 — CloudControl request inspection
 
-Open the [AWS CloudFormation console](https://console.aws.amazon.com/cloudformation) for each region you operate in.
+Assignee provisions through the AWS CloudControl API (CCAPI), not
+CloudFormation stacks. There are no stacks to inspect — instead, look up
+the most recent CloudControl request for any resource that did not reach a
+clean terminal state:
 
-Filter stacks by status: `CREATE_FAILED`, `UPDATE_ROLLBACK_FAILED`, `DELETE_FAILED`. A stack in one of these states means a previous apply or destroy did not complete cleanly. Capture the "Events" tab output before taking action.
+```bash
+# List recent CCAPI requests (most recent first):
+aws cloudcontrol list-resource-requests \
+  --resource-request-status-filter Operations=CREATE,UPDATE,DELETE \
+  --query 'ResourceRequestStatusSummaries[?OperationStatus!=`SUCCESS`]' \
+  --output table
+
+# Inspect a specific request by RequestToken:
+aws cloudcontrol get-resource-request-status \
+  --request-token <request-token>
+```
+
+A request stuck in `IN_PROGRESS` past the configured ceiling, or terminal in
+`FAILED` / `CANCEL_COMPLETE`, means a previous apply or destroy did not
+complete cleanly. Capture the full `get-resource-request-status` payload
+(including `StatusMessage` and `ErrorCode`) before taking action.
 
 ---
 
@@ -109,11 +137,12 @@ cp ~/.assignee/memory/provisions.json /tmp/incident-${INCIDENT_DATE}-provisions.
 
 # If the ledger appears corrupt or empty, restore from the most recent backup:
 ls -lt ~/.assignee/backups/provisions-*.json | head -3
-# Then restore (dry-run first):
-assignee restore-provisions --from YYYY-MM-DD --dry-run
+# Then restore from the chosen backup date (no --dry-run flag exists; the
+# command is idempotent and merges by run ID):
+assignee restore-provisions --from YYYY-MM-DD
 ```
 
-The nightly backup primitive (`pnpm backup-provisions`) rotates backups under `~/.assignee/backups/` with 7-day retention. Implemented in Story `100-W4-04-provisions-bcpdr-primitive.md` (Wave W4). See [`scripts/backup-provisions.ts`](../../scripts/backup-provisions.ts).
+The nightly backup primitive (`pnpm backup-provisions`) rotates backups under `~/.assignee/backups/` with 7-day retention. See [`scripts/backup-provisions.ts`](../../scripts/backup-provisions.ts).
 
 ### 3c — Log bundle
 
@@ -124,15 +153,22 @@ tar -czf /tmp/incident-${INCIDENT_DATE}-logs.tar.gz ~/.assignee/logs/
 
 Log files are at `~/.assignee/logs/cli-YYYY-MM-DD.jsonl`. Both `warn` and `error` events are written here regardless of `--verbose` level.
 
-### 3d — CloudFormation events
+### 3d — CloudControl request snapshots
 
-In the AWS console, navigate to each affected stack → Events tab → copy the full events table. Alternatively via CLI:
+Assignee provisions via the CloudControl API (CCAPI), not CloudFormation
+stacks. Capture the full status payload for any non-`SUCCESS` request from
+the incident window:
 
 ```bash
-aws cloudformation describe-stack-events \
-  --stack-name <stack-name> \
-  --query 'StackEvents[*].{Time:Timestamp,Status:ResourceStatus,Reason:ResourceStatusReason}' \
-  --output table > /tmp/incident-${INCIDENT_DATE}-cfn-events.txt
+# Snapshot the recent failed/in-flight request list:
+aws cloudcontrol list-resource-requests \
+  --resource-request-status-filter Operations=CREATE,UPDATE,DELETE \
+  > /tmp/incident-${INCIDENT_DATE}-ccapi-requests.json
+
+# Then for each interesting RequestToken capture the full payload:
+aws cloudcontrol get-resource-request-status \
+  --request-token <request-token> \
+  > /tmp/incident-${INCIDENT_DATE}-ccapi-${request-token}.json
 ```
 
 ### 3e — Bedrock invocation logs (if Guardrail audit-mode active)
@@ -152,7 +188,8 @@ If `BEDROCK_GUARDRAIL_ID` is set and `assignee setup --enable-llm-logging` was r
 **Symptom:** `assignee drift` exits 1 with one or more `DRIFTED` rows.
 
 ```bash
-# 1. Identify the drifted resource (note its ARN):
+# 1. Identify the drifted resource (note its ARN). The drift report is an
+#    array of per-resource entries; each entry's status is `.status`.
 assignee drift --json | jq '.[] | select(.status == "DRIFTED") | .resourceArn'
 
 # 2. Preview what reconcile would do:
@@ -161,8 +198,8 @@ assignee reconcile --resource <type-filter> --dry-run
 # 3. Reconcile (interactive — presents choices per resource):
 assignee reconcile
 
-# 4. Non-interactive (CI/CD mode — reconciles all drifted resources):
-assignee reconcile --yes
+# 4. Non-interactive (CI/CD mode — auto-reconciles all drifted resources):
+assignee reconcile --auto-reconcile --yes
 ```
 
 After reconcile, re-run `assignee drift` to confirm exit 0.
@@ -180,10 +217,10 @@ See [`docs/drift-detection.md`](../drift-detection.md) for the full drift workfl
 ls -lt ~/.assignee/checkpoint-*.json
 
 # 2. Inspect which checkpoint would be auto-selected:
-assignee apply --dry-run   # or plan and inspect output
+#    Re-run plan and read the output (apply does not have a --dry-run flag).
+assignee plan "<original intent>"
 
-# 3. Restore ledger from a known-good backup date:
-assignee restore-provisions --from YYYY-MM-DD --dry-run
+# 3. Restore ledger from a known-good backup date if needed:
 assignee restore-provisions --from YYYY-MM-DD
 
 # 4. Re-plan from scratch once checkpoint is cleared:
@@ -200,7 +237,7 @@ See [`docs/commands.md`](../commands.md#restore-provisions) for `restore-provisi
 
 **Action:**
 
-Do **not** issue manual retries — `status-poller.ts` already implements exponential backoff with jitter (Story W10-05, P042). See [`packages/core/src/graph/nodes/status-poller.ts`](../../packages/core/src/graph/nodes/status-poller.ts) lines 22–42 for the backoff constants (base: 2 s, cap: 60 s).
+Do **not** issue manual retries — the status-poller already implements exponential backoff with jitter (base: 2 s, cap: 60 s). See [`packages/core/src/graph/nodes/status-poller.ts`](../../packages/core/src/graph/nodes/status-poller.ts) for the backoff constants.
 
 ```bash
 # 1. Confirm throttling is the cause — look for ThrottlingException in logs:
@@ -237,7 +274,11 @@ assignee doctor
 
 # 5. Review recent audit log for unexpected operations:
 assignee audit-verify
-grep '"level":"error"' ~/.assignee/audit/*.jsonl | tail -50
+# The audit log itself has no `level` field (entries are
+# {index, timestamp, role, record, prevHmac, hmac} — see
+# packages/core/src/audit/audit-log.ts). For error-level events,
+# inspect the CLI log file instead:
+grep '"level":"error"' ~/.assignee/logs/cli-$(date +%Y-%m-%d).jsonl | tail -50
 
 # 6. Check current security posture:
 assignee status --bp-coverage
@@ -245,7 +286,7 @@ assignee status --bp-coverage
 # 7. Review CloudTrail for unauthorized API calls in the incident window.
 ```
 
-> **Safety:** The IAM safety allowlist (see [`docs/explanation/invariants.md`](../explanation/invariants.md)) unconditionally excludes `AssigneeOperator`, `AssigneeReader`, `AssigneeAuditor`, and `AssigneeBedrock*` roles from bulk-destroy sweeps to prevent self-lockout.
+> **Safety:** The IAM safety allowlist (see [`docs/explanation/invariants.md`](../explanation/invariants.md)) is preserved in the codebase as a guard against any future bulk-sweep feature that might be revived; today the CLI exposes no `--all` / `--include-iam` flags, so the operator-side risk is hand-rolled `while read arn; assignee destroy` loops over `assignee list`. The allowlist unconditionally excludes `AssigneeOperator`, `AssigneeReader`, `AssigneeAuditor`, and `AssigneeBedrock*` roles to prevent self-lockout.
 
 ---
 
@@ -282,12 +323,13 @@ BEDROCK_GUARDRAIL_ID="" assignee plan "<intent>"
 
 ```bash
 # 1. Check what the advice-generator received from the MCP server.
-#    The sanitizer strips boundary tags before interpolation (P013/R8-02):
+#    The sanitizer strips boundary tags before interpolation:
 grep -i "mcp\|advice\|snippet\|boundary" ~/.assignee/logs/cli-$(date +%Y-%m-%d).jsonl | tail -30
 
 # 2. Inspect advice-generator source to confirm sanitizer is active:
-#    packages/core/src/graph/nodes/advice-generator.ts line 188-190
-#    stripPromptBoundaryTags() runs on every MCP snippet before interpolation.
+#    packages/core/src/graph/nodes/advice-generator.ts — see the
+#    stripPromptBoundaryTags() helper, which runs on every MCP snippet
+#    before interpolation.
 
 # 3. If a MCP server is suspected compromised, pin it to a known-good version:
 #    Edit the pin in mcp-servers.md / package.json config, restart.
@@ -308,7 +350,7 @@ See [`packages/core/src/graph/nodes/advice-generator.ts`](../../packages/core/sr
 
 ```bash
 # 1. The guard rejects pre-write (CWE-22 guard in safe-output-path.ts):
-#    apps/cli/src/utils/safe-output-path.ts:77
+#    apps/cli/src/utils/safe-output-path.ts
 #    Any path that resolves outside the CWD is rejected with exit 10.
 
 # 2. Review CLI invocation logs for the rejected call:
@@ -328,7 +370,7 @@ See [`apps/cli/src/utils/safe-output-path.ts`](../../apps/cli/src/utils/safe-out
 
 **Symptom:** `assignee plan` returns no cost estimates or cost fields show `n/a`; `assignee doctor` reports MCP servers started but Pricing-MCP tools fail at runtime with credential or 403 errors. Four of five MCP servers appear healthy; only the Pricing MCP is silently degraded.
 
-**Background:** `feedback_lazy_credential_resolution_in_mcp` — MCP credential builders resolve credentials lazily per-server with `try/catch`. A missing or expired `ASSIGNEE_PRICING_*` credential does not prevent the other MCP servers from starting; it surfaces only when the Pricing tool is first invoked. `assignee doctor` shows MCP _startup_ status; a credential-only-partial failure may appear downstream as "no pricing data" rather than an explicit MCP error.
+**Background:** MCP credential builders resolve credentials lazily per-server with `try/catch`. A missing or expired `ASSIGNEE_OPERATOR_*` / `ASSIGNEE_READER_*` / `ASSIGNEE_AUDITOR_*` credential does not prevent the other MCP servers from starting; it surfaces only when the affected MCP tool is first invoked. `assignee doctor` shows MCP _startup_ status; a credential-only-partial failure may appear downstream as "no pricing data" rather than an explicit MCP error.
 
 **Diagnosis:**
 
@@ -393,7 +435,7 @@ See [`docs/mcp-server.md`](../mcp-server.md) § Troubleshooting for per-server c
 
 # 2. Switch ASSIGNEE_LLM_DEFAULT to Anthropic direct for the outage duration:
 export ANTHROPIC_API_KEY="<your-anthropic-api-key>"
-export ASSIGNEE_LLM_DEFAULT="anthropic/claude-opus-4-5"
+export ASSIGNEE_LLM_DEFAULT="anthropic/claude-opus-4-7"
 
 # 3. Verify the switch took effect:
 assignee doctor
@@ -412,7 +454,7 @@ unset ANTHROPIC_API_KEY
 assignee doctor  # confirm Bedrock green
 ```
 
-> **Note on `ASSIGNEE_AUDIT_KEY` and chain re-anchor:** If this outage coincided with a container restart or machine wipe that deleted `~/.assignee/audit-key`, `assignee audit-verify` will report "chain broken" because a _new_ key was auto-generated — not because of tampering. To distinguish key-loss from tampering: look for `WARNING: cannot persist audit key` in recent log output. If key-loss is confirmed, archive `~/.assignee/audit/`, delete it, and re-run `assignee audit-verify` to establish a new genesis record. Set `ASSIGNEE_AUDIT_KEY=<secret>` persistently in your environment as the durable production pattern to survive restarts.
+> **Note on `ASSIGNEE_AUDIT_KEY` and chain re-anchor:** If this outage coincided with a container restart or machine wipe that deleted `~/.assignee/audit-key`, `assignee audit-verify` will report "chain broken" because a _new_ key was auto-generated — not because of tampering. To distinguish key-loss from tampering: look for `WARNING: cannot persist audit key` in recent log output. If key-loss is confirmed, archive (don't delete) the broken chain — `mv ~/.assignee/audit ~/.assignee/audit.broken-$(date +%s)` — and re-run `assignee audit-verify` to establish a new genesis record. Set `ASSIGNEE_AUDIT_KEY=<secret>` persistently in your environment as the durable production pattern to survive restarts.
 
 **Reference links:**
 
@@ -433,10 +475,13 @@ assignee destroy <resource-arn>
 assignee destroy --yes <resource-arn>
 ```
 
-> **Note:** Bulk destroy (`--all` / `--include-iam`) was **removed** in Story 50-3. Destroy one resource at a time. For scripted sweeps:
+> **Note:** Bulk destroy (`--all` / `--include-iam`) was removed; the CLI no longer exposes those flags. Destroy one resource at a time. For scripted sweeps:
 
 ```bash
-assignee list --json | jq -r '.[].ResourceARN' | while read arn; do
+# `assignee list --json` envelopes resources under `.resources[]`; each
+# element exposes the ARN at `.arn` (see
+# packages/core/src/list-resources/types.ts).
+assignee list --json | jq -r '.resources[].arn' | while read arn; do
   assignee destroy --yes "$arn"
 done
 ```
@@ -453,7 +498,7 @@ assignee reconcile --dry-run
 assignee reconcile
 
 # Apply all without prompting (CI/CD mode):
-assignee reconcile --yes
+assignee reconcile --auto-reconcile --yes
 ```
 
 Reconcile re-applies the checkpointed desired state via CloudControl `UpdateResource`. It does **not** re-run the plan pipeline. If the checkpoint is missing or stale, re-plan first.
@@ -463,9 +508,6 @@ Reconcile re-applies the checkpointed desired state via CloudControl `UpdateReso
 ```bash
 # List available backups (7-day retention by default):
 ls -lt ~/.assignee/backups/provisions-*.json
-
-# Dry-run to preview what would be restored:
-assignee restore-provisions --from YYYY-MM-DD --dry-run
 
 # Restore from a specific date (merges by run ID, deduplicates):
 assignee restore-provisions --from YYYY-MM-DD
@@ -551,7 +593,7 @@ stale backup not tested, etc.
 - [ ] Audit-log files copied to `/tmp/incident-<id>-audit/`
 - [ ] `provisions.json` snapshot at `/tmp/incident-<id>-provisions.json`
 - [ ] Log bundle at `/tmp/incident-<id>-logs.tar.gz`
-- [ ] CFN events captured
+- [ ] CCAPI request snapshots captured
 - [ ] Bedrock invocation logs exported (if applicable)
 
 ---
