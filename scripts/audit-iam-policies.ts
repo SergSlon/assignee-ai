@@ -73,6 +73,59 @@ export function collectActions(doc: PolicyDocument): Set<string> {
 }
 
 /**
+ * Whether `requiredAction` is granted by `grantedActions`, with awareness
+ * of the IAM action-glob shorthand (`ec2:Describe*`, `s3:Get*`, `ec2:*`).
+ *
+ * 2026-05-06: previously the per-resource-type coverage check did literal
+ * `Set.has()` matching, which always returned `false` for any action that
+ * had been collapsed to a wildcard by `wildcard-collapser.ts` (Wave 19 —
+ * the policy generator collapses `ec2:DescribeInstances`,
+ * `ec2:DescribeSubnets`, etc. into `ec2:Describe*` to fit inside the AWS
+ * 6144-byte managed-policy limit). The audit reported 60+ "missing"
+ * actions that were genuinely granted via wildcards, exited 1, and
+ * blocked the CI Security pipeline on every push.
+ *
+ * Matching rule (mirrors AWS IAM):
+ *   1. Exact match — `s3:GetObject` matches `s3:GetObject` literally.
+ *   2. Service-level wildcard — `s3:*` matches every `s3:<X>`.
+ *   3. Action-prefix glob — `ec2:Describe*` matches `ec2:DescribeInstances`,
+ *      `ec2:DescribeSubnets`, etc. The `*` is anchored at the end of the
+ *      action token after the colon; we don't try to match arbitrary
+ *      mid-string globs (IAM grammar doesn't permit them in practice).
+ *
+ * Returns `true` iff any action in `grantedActions` matches
+ * `requiredAction` per the rules above.
+ */
+export function isActionGranted(
+  requiredAction: string,
+  grantedActions: ReadonlySet<string>,
+): boolean {
+  // Fast path: exact match.
+  if (grantedActions.has(requiredAction)) return true;
+
+  // Slow path: scan for wildcard grants that cover this action.
+  const colonIdx = requiredAction.indexOf(":");
+  if (colonIdx < 0) return false;
+  const service = requiredAction.slice(0, colonIdx);
+  const action = requiredAction.slice(colonIdx + 1);
+
+  for (const granted of grantedActions) {
+    if (!granted.endsWith("*")) continue;
+    const gColon = granted.indexOf(":");
+    if (gColon < 0) continue;
+    const gService = granted.slice(0, gColon);
+    if (gService !== service) continue;
+    const gAction = granted.slice(gColon + 1);
+    // `service:*` covers every action under that service.
+    if (gAction === "*") return true;
+    // `service:Prefix*` covers any action starting with `Prefix`.
+    const prefix = gAction.slice(0, -1);
+    if (action.startsWith(prefix)) return true;
+  }
+  return false;
+}
+
+/**
  * Checks whether a statement grants unscoped access:
  *   - Resource is "*" (or contains "*")
  *   - No Condition block
@@ -250,7 +303,13 @@ if (isMainModule) {
     const required = getRequiredIamActions(type);
     const missing: string[] = [];
     for (const act of required) {
-      if (!opAllActions.has(act)) missing.push(act);
+      // 2026-05-06: wildcard-aware coverage check. The operator policy
+      // collapses `ec2:Describe*` / `s3:Get*` / etc. via
+      // wildcard-collapser.ts to fit AWS's 6144-byte managed-policy
+      // limit; literal `opAllActions.has(act)` reported 60+ false
+      // positives. `isActionGranted` understands `service:*` and
+      // `service:Prefix*` per the IAM action-glob grammar.
+      if (!isActionGranted(act, opAllActions)) missing.push(act);
     }
     if (missing.length > 0) {
       console.log(`  ❌ ${type}: MISSING ${missing.length}`);
