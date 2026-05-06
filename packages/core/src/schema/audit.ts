@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from "zod";
 
 export const AuditEventSchema = z.object({
   eventId: z.string().uuid(),
@@ -10,6 +10,6 @@ export const AuditEventSchema = z.object({
   policyResult: z.string().optional(),
   executionStatus: z.string(),
   timestamp: z.string().datetime(),
-})
+});
 
-export type AuditEvent = z.infer<typeof AuditEventSchema>
+export type AuditEvent = z.infer<typeof AuditEventSchema>;
