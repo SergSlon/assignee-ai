@@ -18,12 +18,29 @@ const {
   mockEc2Destroy,
   mockTryGetAmiDefaultUser,
   mockRenderError,
+  mockExistsSync,
 } = vi.hoisted(() => ({
   mockEc2Send: vi.fn(),
   mockEc2Destroy: vi.fn(),
   mockTryGetAmiDefaultUser: vi.fn(),
   mockRenderError: vi.fn(),
+  // Pre-demo audit M1: `describe-resource.ts` gates the Connect-line
+  // keyName overlay on existsSync of the local
+  // `~/.assignee/keys/<name>.pem`. Default to TRUE so the existing
+  // happy-path assertions (`state.keyName === KEY_NAME`,
+  // `Connect: ...` rendering) keep passing on CI's fresh runners
+  // (which never have the .pem file). The describe-resource
+  // unit-test owns the suppression-branch coverage.
+  mockExistsSync: vi.fn(() => true),
 }));
+
+vi.mock("node:fs", async () => {
+  const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
+  return {
+    ...actual,
+    existsSync: mockExistsSync,
+  };
+});
 
 vi.mock("@aws-sdk/client-ec2", () => {
   function DescribeInstancesCommand(input: unknown) {
