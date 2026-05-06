@@ -18,113 +18,23 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { parse } from "yaml";
-import { z } from "zod";
 
-// Import the schema — build path-safe
-const BP_SEVERITY = ["CRITICAL", "HIGH", "MEDIUM", "INFO"] as const;
-const BP_CATEGORY = [
-  "security",
-  "cost",
-  "cost_optimization",
-  "reliability",
-  "performance",
-  "compliance",
-] as const;
-const BP_CHECK_TYPE = [
-  "equals",
-  "not_equals",
-  "exists",
-  "not_exists",
-  "greater_than",
-  "less_than",
-  "contains",
-  "not_contains",
-  "conditional_forbidden",
-  "cross_resource_count",
-  "cross_resource_reference",
-  "awareness",
-] as const;
-const BP_FIX_TYPE = ["auto", "interactive", "info"] as const;
-
-const bestPracticeSchema = z
-  .object({
-    id: z
-      .string()
-      .regex(
-        /^BP-[A-Z0-9]+-\d{3}$/,
-        "BP ID must match format BP-{SERVICE}-{NNN}",
-      ),
-    title: z.string().min(1),
-    severity: z.enum(BP_SEVERITY),
-    resource_type: z.string().min(1),
-    property_path: z.string().min(1),
-    check_type: z.enum(BP_CHECK_TYPE),
-    expected_value: z.unknown(),
-    source: z.string().min(1),
-    source_id: z.string().optional(),
-    description: z.string().optional(),
-    remediation: z.string().optional(),
-    category: z.enum(BP_CATEGORY),
-    version: z.string().optional(),
-    lastVerified: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    triggers: z
-      .array(
-        z
-          .object({
-            resourceType: z.string().optional(),
-            fieldCondition: z.string().optional(),
-            patternId: z.string().optional(),
-            intentKeywords: z.array(z.string()).optional(),
-            always: z.boolean().optional(),
-          })
-          .strict(),
-      )
-      .optional(),
-    autoFixable: z.boolean().optional(),
-    desiredStatePatch: z.record(z.unknown()).optional(),
-    blocking: z.boolean().optional().default(false),
-    condition: z.record(z.unknown()).optional(),
-    fixType: z.enum(BP_FIX_TYPE).optional(),
-    interactiveOptions: z
-      .array(
-        z.object({
-          label: z.string(),
-          action: z.enum([
-            "prompt_value",
-            "set_value",
-            "remove_property",
-            "skip",
-          ]),
-          targetField: z.string().optional(),
-          targetValue: z.unknown().optional(),
-        }),
-      )
-      .optional(),
-  })
-  .strict()
-  .refine(
-    (bp) => {
-      if (bp.fixType === "auto") {
-        return bp.autoFixable === true && bp.desiredStatePatch != null;
-      }
-      return true;
-    },
-    {
-      message:
-        "fixType 'auto' requires autoFixable=true and a desiredStatePatch",
-    },
-  )
-  .refine(
-    (bp) => {
-      if (bp.fixType === "interactive") {
-        return (
-          bp.interactiveOptions != null && bp.interactiveOptions.length > 0
-        );
-      }
-      return true;
-    },
-    { message: "fixType 'interactive' requires non-empty interactiveOptions" },
-  );
+// 2026-05-06: import the canonical schema from the built
+// `@assignee/best-practices` dist instead of redefining it here. The
+// previous duplicated copy drifted as the production schema gained
+// new fields (`consequence`, `fix_hint`, `excludePatterns`) and new
+// `check_type` enum values (`policy_antipattern`,
+// `nested_array_predicate`, `not_contains_pattern`,
+// `sg_high_risk_public_exposure`); CI's W7-S1 gate started failing
+// on dozens of YAML files that the production loader accepts. Reusing
+// the canonical schema keeps the validator in lockstep with the
+// loader by construction — no second source of truth to maintain.
+//
+// CI invokes this script AFTER `npx turbo build` (see ci-core.yml),
+// so the dist bundle is guaranteed present at runtime. tsx resolves
+// the ESM import via the relative path; no tsconfig path alias
+// needed.
+import { bestPracticeSchema } from "../packages/best-practices/dist/schema.js";
 
 /** @see packages/best-practices/src/loader.ts SKIP_DIRS — keep in sync */
 const SKIP_DIRS = new Set(["src", "dist", "node_modules", "__tests__"]);
@@ -157,10 +67,29 @@ export function findYamlFiles(baseDir: string): string[] {
 }
 
 /**
+ * Result of `validateBPRules`. Errors block the build; warnings are
+ * printed but do not change the exit code.
+ *
+ * 2026-05-06: separated from a single `ValidationError[]` return so the
+ * "Potential duplicate" advisory (multiple BPs sharing a
+ * `resource_type::property_path` with different check criteria) renders
+ * as a warning instead of an exit-1 error. The previous shape pushed
+ * "potential duplicate" entries into `errors` while documenting the
+ * intent as "warn but don't hard-fail" — the implementation contradicted
+ * the comment, and CI's W7-S1 step exited 1 on every push despite all
+ * the rules being valid.
+ */
+export interface BPValidationResult {
+  errors: ValidationError[];
+  warnings: ValidationError[];
+}
+
+/**
  * Validate all BP YAML files.
  */
-export function validateBPRules(baseDir: string): ValidationError[] {
+export function validateBPRules(baseDir: string): BPValidationResult {
   const errors: ValidationError[] = [];
+  const warnings: ValidationError[] = [];
   const files = findYamlFiles(baseDir);
   const idMap = new Map<string, string>(); // id -> filePath
   const dedupMap = new Map<string, string>(); // resource_type::property_path -> ruleId
@@ -223,8 +152,12 @@ export function validateBPRules(baseDir: string): ValidationError[] {
     const dedupKey = `${data.resource_type}::${data.property_path}`;
     const existingRule = dedupMap.get(dedupKey);
     if (existingRule) {
-      // Warn but don't hard-fail — some duplicates may be intentional (different check_types)
-      errors.push({
+      // Warn but don't hard-fail — some duplicates ARE intentional (e.g.
+      // BP-S3-018/019/020 + BP-S3BP-001 all check
+      // AWS::S3::BucketPolicy::PolicyDocument but with different
+      // check_types or different policy_antipattern names). The dedup
+      // signal is still useful for review, so we print it as a warning.
+      warnings.push({
         filePath: relPath,
         ruleId,
         message: `Potential duplicate: ${dedupKey} also checked by ${existingRule}`,
@@ -234,7 +167,7 @@ export function validateBPRules(baseDir: string): ValidationError[] {
     }
   }
 
-  return errors;
+  return { errors, warnings };
 }
 
 // ── CLI entry point ──────────────────────────────────────────────────────────
@@ -242,7 +175,19 @@ const isDirectRun = process.argv[1]?.includes("validate-bp-rules");
 
 if (isDirectRun) {
   const baseDir = path.resolve(__dirname, "../packages/best-practices");
-  const errors = validateBPRules(baseDir);
+  const { errors, warnings } = validateBPRules(baseDir);
+
+  // Print warnings first (non-fatal advisories — duplicate dedup keys etc.).
+  // They land on stderr alongside errors so CI log scrapers see both, but
+  // they don't change the exit code.
+  if (warnings.length > 0) {
+    console.error(
+      `\nValidation found ${warnings.length} advisory warning(s) (non-blocking):\n`,
+    );
+    for (const w of warnings) {
+      console.error(`  ⚠ ${w.filePath} [${w.ruleId}]: ${w.message}`);
+    }
+  }
 
   if (errors.length > 0) {
     console.error(`\nValidation found ${errors.length} issue(s):\n`);
