@@ -150,8 +150,16 @@ describe("extractFirstTierPrice — contract tests for AwsPricingResponse shape"
     };
 
     const filters = [
-      { Field: "productFamily", Value: "API Request", Type: "TERM_MATCH" as const },
-      { Field: "usagetype", Value: "Requests-Tier1", Type: "TERM_MATCH" as const },
+      {
+        Field: "productFamily",
+        Value: "API Request",
+        Type: "TERM_MATCH" as const,
+      },
+      {
+        Field: "usagetype",
+        Value: "Requests-Tier1",
+        Type: "TERM_MATCH" as const,
+      },
     ];
 
     const result = extractFirstTierPrice(data, "/1k requests", 1000, filters);
@@ -184,8 +192,16 @@ describe("extractFirstTierPrice — contract tests for AwsPricingResponse shape"
 
     // Querying for PUT requests but only storage items exist
     const filters = [
-      { Field: "productFamily", Value: "API Request", Type: "TERM_MATCH" as const },
-      { Field: "usagetype", Value: "Requests-Tier1", Type: "TERM_MATCH" as const },
+      {
+        Field: "productFamily",
+        Value: "API Request",
+        Type: "TERM_MATCH" as const,
+      },
+      {
+        Field: "usagetype",
+        Value: "Requests-Tier1",
+        Type: "TERM_MATCH" as const,
+      },
     ];
 
     const result = extractFirstTierPrice(data, "/1k requests", 1000, filters);
@@ -215,7 +231,11 @@ describe("extractFirstTierPrice — contract tests for AwsPricingResponse shape"
     };
 
     const filters = [
-      { Field: "productFamily", Value: "API Request", Type: "TERM_MATCH" as const },
+      {
+        Field: "productFamily",
+        Value: "API Request",
+        Type: "TERM_MATCH" as const,
+      },
     ];
 
     const result = extractFirstTierPrice(data, "/1k requests", 1, filters);

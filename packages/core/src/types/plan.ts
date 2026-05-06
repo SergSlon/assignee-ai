@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from "zod";
 
 /**
  * PlanSchema — placeholder for the Signed Intent contract.
@@ -11,6 +11,6 @@ export const PlanSchema = z.object({
   desiredState: z.record(z.unknown()),
   estimatedMonthlyCost: z.string().optional(),
   createdAt: z.string().datetime(),
-})
+});
 
-export type Plan = z.infer<typeof PlanSchema>
+export type Plan = z.infer<typeof PlanSchema>;
