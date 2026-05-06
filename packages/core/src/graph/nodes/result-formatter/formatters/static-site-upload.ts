@@ -4,8 +4,8 @@
  * - uploadStaticSiteFiles: uploads a local source directory to S3 after the
  *   bucket is provisioned. Non-blocking — upload failures warn but never
  *   mark the provision as failed.
- * - printStaticWebsiteCloudFrontUrl: synthesizes the CloudFront domain from
- *   the distribution id present in completedResources.
+ * - printStaticWebsiteCloudFrontUrl: prints the CloudFront URL using the real
+ *   DNS-resolvable hostname from ResourceResult.metadata.cloudFrontDomainName.
  */
 
 import * as clack from "@clack/prompts";
@@ -39,7 +39,7 @@ export async function uploadStaticSiteFiles(
 
   if (result.failed > 0) {
     process.stderr.write(
-      chalk.yellow(`\u26A0 ${result.failed} files failed to upload\n`),
+      chalk.yellow(`⚠ ${result.failed} files failed to upload\n`),
     );
     for (const err of result.errors) {
       process.stderr.write(chalk.dim(`  ${err.file}: ${err.error}\n`));
@@ -60,8 +60,19 @@ export function parseBucketName(resourceArn: string): string {
 
 /**
  * Print the CloudFront URL for a completed static-website compound.
- * The distribution's domain `<id>.cloudfront.net` is deterministic at
- * create time — no GetResource call needed.
+ *
+ * The distribution hostname is sourced from `ResourceResult.metadata.cloudFrontDomainName`,
+ * which is populated by the status_poller from `ProgressEvent.ResourceModel.DomainName`
+ * returned by GetResourceRequestStatus when the CREATE operation succeeds.
+ *
+ * IMPORTANT: CloudFront distribution IDs (e.g. "E3B1MIRNBPH9JG") are NOT hostnames.
+ * The real DNS-resolvable hostname (e.g. "d1eka2i9dtl8tu.cloudfront.net") is an
+ * AWS-assigned value that bears no relationship to the distribution ID. Using the
+ * distribution ID as a hostname produces a broken URL that NXDOMAIN-fails in DNS.
+ *
+ * If `DomainName` is unavailable (e.g. provisioned by an older version or CCAPI did
+ * not return ResourceModel), a fallback hint is printed with the manual
+ * `aws cloudfront get-distribution` command instead of a broken URL.
  */
 export function printStaticWebsiteCloudFrontUrl(
   completedResources: readonly ResourceResult[],
@@ -73,17 +84,38 @@ export function printStaticWebsiteCloudFrontUrl(
   );
   if (!distribution?.resourceArn) return;
   const distributionId = distribution.resourceArn;
-  const cfUrl = `https://${distributionId}.cloudfront.net`;
-  process.stdout.write(
-    chalk.cyan(`\n\u2601 CloudFront distribution created: ${cfUrl}\n`),
-  );
-  process.stdout.write(chalk.dim(`  Distribution ID: ${distributionId}\n`));
-  process.stdout.write(
-    chalk.dim(
-      "  Status: propagating (may take 5-15 minutes before traffic flows)\n",
-    ),
-  );
-  process.stdout.write(chalk.green(`  Recommended URL: ${cfUrl}\n`));
+  const domainName = distribution.metadata?.cloudFrontDomainName;
+
+  if (domainName) {
+    const cfUrl = `https://${domainName}`;
+    process.stdout.write(
+      chalk.cyan(`\n☁ CloudFront distribution created: ${cfUrl}\n`),
+    );
+    process.stdout.write(chalk.dim(`  Distribution ID: ${distributionId}\n`));
+    process.stdout.write(
+      chalk.dim(
+        "  Status: propagating (may take 5-15 minutes before traffic flows)\n",
+      ),
+    );
+    process.stdout.write(chalk.green(`  Recommended URL: ${cfUrl}\n`));
+  } else {
+    // Fallback: DomainName not captured (CCAPI did not return ResourceModel).
+    // Print a clear diagnostic instead of a broken <id>.cloudfront.net URL.
+    process.stdout.write(
+      chalk.cyan(`\n☁ CloudFront distribution created: ${distributionId}\n`),
+    );
+    process.stdout.write(chalk.dim(`  Distribution ID: ${distributionId}\n`));
+    process.stdout.write(
+      chalk.dim(
+        "  Status: propagating (may take 5-15 minutes before traffic flows)\n",
+      ),
+    );
+    process.stdout.write(
+      chalk.yellow(
+        `  URL unavailable — run: aws cloudfront get-distribution --id ${distributionId} --query Distribution.DomainName --output text\n`,
+      ),
+    );
+  }
 }
 
 /**
@@ -98,9 +130,7 @@ export async function runStaticSiteUploadFor(
   const bucketName = parseBucketName(resourceArn);
   if (!bucketName) {
     process.stderr.write(
-      chalk.yellow(
-        `\u26A0 Could not parse bucket name from ARN: ${resourceArn}\n`,
-      ),
+      chalk.yellow(`⚠ Could not parse bucket name from ARN: ${resourceArn}\n`),
     );
     return;
   }
@@ -109,7 +139,7 @@ export async function runStaticSiteUploadFor(
   } catch (err) {
     process.stderr.write(
       chalk.yellow(
-        `\u26A0 File upload failed: ${err instanceof Error ? err.message : String(err)}\n`,
+        `⚠ File upload failed: ${err instanceof Error ? err.message : String(err)}\n`,
       ),
     );
     process.stderr.write(

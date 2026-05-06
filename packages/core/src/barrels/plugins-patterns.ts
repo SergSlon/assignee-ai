@@ -31,6 +31,7 @@ export type {
   ArchitecturePattern,
   ResourceSpec,
   ResourceResult,
+  ResourceResultMetadata,
 } from "../pattern-templates/types.js";
 export type {
   ResourcePlugin,

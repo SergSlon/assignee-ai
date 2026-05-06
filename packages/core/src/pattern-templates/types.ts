@@ -1,6 +1,22 @@
 import type { ExecutionStatusType } from "../schema/graph-state.js";
 
 /**
+ * Resource-type-specific metadata attached to a completed provisioning result.
+ * Extended per resource type as new metadata surfaces from the CCAPI poll response
+ * (ProgressEvent.ResourceModel) without requiring additional GetResource calls.
+ */
+export interface ResourceResultMetadata {
+  /**
+   * The AWS-assigned CloudFront distribution hostname, e.g. "d1eka2i9dtl8tu.cloudfront.net".
+   * Set only for AWS::CloudFront::Distribution resources.
+   * Sourced from ProgressEvent.ResourceModel.DomainName returned by GetResourceRequestStatus
+   * when the operation reaches SUCCESS — no extra GetDistribution call needed.
+   * Use this field (not the distribution ID) to build the canonical HTTPS URL.
+   */
+  cloudFrontDomainName?: string;
+}
+
+/**
  * Outcome of provisioning a single resource within a compound provisioning loop.
  * Accumulated in `state.completedResources` as each resource completes or fails.
  */
@@ -13,6 +29,11 @@ export interface ResourceResult {
   resourceArn?: string;
   /** Final execution status for this resource */
   executionStatus: ExecutionStatusType;
+  /**
+   * Optional resource-type-specific metadata propagated from the CCAPI poll response.
+   * See {@link ResourceResultMetadata} for per-type documentation.
+   */
+  metadata?: ResourceResultMetadata;
 }
 
 /**

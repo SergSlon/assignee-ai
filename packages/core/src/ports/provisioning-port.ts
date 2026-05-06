@@ -36,6 +36,14 @@ export interface GetRequestStatusResult {
   statusMessage: string | undefined;
   /** CloudControl HandlerErrorCode (e.g. "NotFound", "AlreadyExists"). */
   errorCode: string | undefined;
+  /**
+   * JSON string containing all resource properties at the time the operation
+   * reached SUCCESS. Sourced from ProgressEvent.ResourceModel returned by
+   * GetResourceRequestStatus. Parse to extract read-only attributes such as
+   * CloudFront Distribution.DomainName without an extra GetResource call.
+   * Undefined for in-progress, failed, or non-CREATE operations.
+   */
+  resourceModel?: string;
 }
 
 export interface UpdateResourceResult {

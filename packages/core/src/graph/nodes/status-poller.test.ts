@@ -315,6 +315,128 @@ describe("statusPollerNode", () => {
     expect(result.executionStatus).toBe(ExecutionStatus.SUCCESS);
     expect(result.resourceArn).toBe("/app/config/env");
   });
+
+  // ── CloudFront DomainName extraction from ResourceModel ───────────────────
+  // Bug fix: the formatter was constructing a broken URL from the distribution
+  // ID. The status poller now extracts DomainName from ProgressEvent.ResourceModel
+  // so the formatter can use the real DNS-resolvable hostname.
+
+  it("extracts cloudFrontDomainName from ResourceModel on CloudFront Distribution SUCCESS", async () => {
+    const resourceModel = JSON.stringify({
+      Id: "E1234567890ABC",
+      DomainName: "d1abcdef.cloudfront.net",
+      Status: "Deployed",
+      ARN: "arn:aws:cloudfront::123456789012:distribution/E1234567890ABC",
+    });
+
+    mockProvisioner.getRequestStatus.mockResolvedValueOnce([
+      null,
+      {
+        operationStatus: "SUCCESS",
+        identifier: "E1234567890ABC",
+        statusMessage: undefined,
+        resourceModel,
+      },
+    ]);
+
+    const result = await runPoller(
+      makeState({
+        requestToken: "tok-cf-001",
+        resourceType: "AWS::CloudFront::Distribution",
+      }),
+      mockProvisioner,
+    );
+
+    expect(result.executionStatus).toBe(ExecutionStatus.SUCCESS);
+    expect(result.resourceArn).toBe("E1234567890ABC");
+    expect((result as Record<string, unknown>)["cloudFrontDomainName"]).toBe(
+      "d1abcdef.cloudfront.net",
+    );
+  });
+
+  it("does NOT set cloudFrontDomainName for non-CloudFront resource types", async () => {
+    const resourceModel = JSON.stringify({
+      BucketName: "my-bucket",
+      DomainName: "my-bucket.s3.amazonaws.com",
+    });
+
+    mockProvisioner.getRequestStatus.mockResolvedValueOnce([
+      null,
+      {
+        operationStatus: "SUCCESS",
+        identifier: "my-bucket",
+        statusMessage: undefined,
+        resourceModel,
+      },
+    ]);
+
+    const result = await runPoller(
+      makeState({
+        requestToken: "tok-s3-001",
+        resourceType: "AWS::S3::Bucket",
+      }),
+      mockProvisioner,
+    );
+
+    expect(result.executionStatus).toBe(ExecutionStatus.SUCCESS);
+    // cloudFrontDomainName must NOT be set for S3 (would shadow wrong field)
+    expect(
+      (result as Record<string, unknown>)["cloudFrontDomainName"],
+    ).toBeUndefined();
+  });
+
+  it("does NOT set cloudFrontDomainName when ResourceModel is absent on CloudFront SUCCESS", async () => {
+    mockProvisioner.getRequestStatus.mockResolvedValueOnce([
+      null,
+      {
+        operationStatus: "SUCCESS",
+        identifier: "E1234567890ABC",
+        statusMessage: undefined,
+        resourceModel: undefined,
+      },
+    ]);
+
+    const result = await runPoller(
+      makeState({
+        requestToken: "tok-cf-002",
+        resourceType: "AWS::CloudFront::Distribution",
+      }),
+      mockProvisioner,
+    );
+
+    expect(result.executionStatus).toBe(ExecutionStatus.SUCCESS);
+    expect(result.resourceArn).toBe("E1234567890ABC");
+    expect(
+      (result as Record<string, unknown>)["cloudFrontDomainName"],
+    ).toBeUndefined();
+  });
+
+  it("continues gracefully when CloudFront ResourceModel is invalid JSON", async () => {
+    mockProvisioner.getRequestStatus.mockResolvedValueOnce([
+      null,
+      {
+        operationStatus: "SUCCESS",
+        identifier: "E1234567890ABC",
+        statusMessage: undefined,
+        resourceModel: "not-valid-json{",
+      },
+    ]);
+
+    const result = await runPoller(
+      makeState({
+        requestToken: "tok-cf-003",
+        resourceType: "AWS::CloudFront::Distribution",
+      }),
+      mockProvisioner,
+    );
+
+    // Must not throw — graceful parse failure
+    expect(result.executionStatus).toBe(ExecutionStatus.SUCCESS);
+    expect(result.resourceArn).toBe("E1234567890ABC");
+    expect(
+      (result as Record<string, unknown>)["cloudFrontDomainName"],
+    ).toBeUndefined();
+  });
 });
 
 // ── isRetryableCloudFrontS3Error helper ───────────────────────────────────

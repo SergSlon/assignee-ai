@@ -328,10 +328,45 @@ export async function statusPollerNode(
   }
 
   if (status === ProvisioningStatus.SUCCESS) {
-    return {
+    const successPartial: Partial<AgentState> = {
       executionStatus: ExecutionStatus.SUCCESS,
       resourceArn: result.identifier,
     };
+
+    // Extract CloudFront DomainName from the ResourceModel JSON returned by
+    // GetResourceRequestStatus on SUCCESS. This avoids a separate GetResource
+    // call and surfaces the real DNS-resolvable hostname (e.g.
+    // "d1eka2i9dtl8tu.cloudfront.net") for use in the static-website URL printer.
+    if (
+      state.resourceType === RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION &&
+      result.resourceModel
+    ) {
+      try {
+        const model = JSON.parse(result.resourceModel) as Record<
+          string,
+          unknown
+        >;
+        const domainName = model["DomainName"];
+        if (typeof domainName === "string" && domainName) {
+          successPartial.cloudFrontDomainName = domainName;
+        }
+      } catch {
+        // ResourceModel parsing is best-effort; log and continue without it.
+        log({
+          ts: new Date().toISOString(),
+          runId: state.runId,
+          level: "warn",
+          action: LOG_ACTIONS.PROVISIONING_STATUS_CHECKED,
+          extras: {
+            phase: "cloudfront_domain_parse_failed",
+            message:
+              "Failed to parse CloudFront DomainName from ResourceModel — URL will show fallback hint",
+          },
+        });
+      }
+    }
+
+    return successPartial;
   }
 
   // Still IN_PROGRESS — LangGraph self-loop will re-invoke this node
