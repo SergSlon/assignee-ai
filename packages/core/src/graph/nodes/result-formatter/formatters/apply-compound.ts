@@ -67,6 +67,13 @@ export async function formatApplyCompoundSuccess(
     // compound marker resolver substitutes this value into VpcId/SubnetId/IgwId.
     resourceArn: state.resourceArn,
     executionStatus: ExecutionStatus.SUCCESS,
+    // Propagate CloudFront DomainName from graph state into metadata so the
+    // static-website URL printer can use the real DNS-resolvable hostname
+    // instead of constructing a broken <id>.cloudfront.net URL.
+    ...(currentResource.resourceType ===
+      RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION && state.cloudFrontDomainName
+      ? { metadata: { cloudFrontDomainName: state.cloudFrontDomainName } }
+      : {}),
   };
   const updatedCompleted = [
     ...(state.completedResources ?? []),

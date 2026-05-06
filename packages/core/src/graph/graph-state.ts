@@ -195,6 +195,18 @@ export const graphAnnotation = Annotation.Root({
     reducer: (_, b) => b,
     default: () => undefined,
   }),
+  /**
+   * CloudFront distribution hostname (e.g. "d1eka2i9dtl8tu.cloudfront.net") surfaced
+   * from ProgressEvent.ResourceModel.DomainName when the status_poller polls a
+   * successful AWS::CloudFront::Distribution creation. Propagated into
+   * ResourceResult.metadata.cloudFrontDomainName by the compound apply formatter
+   * so the static-website URL printer can use the real DNS-resolvable hostname
+   * instead of constructing a broken `<id>.cloudfront.net` URL.
+   */
+  cloudFrontDomainName: Annotation<string | undefined>({
+    reducer: (_, b) => b,
+    default: () => undefined,
+  }),
   sourceFileCount: Annotation<number | undefined>({
     reducer: (_, b) => b,
     default: () => undefined,
