@@ -102,13 +102,13 @@ jobs:
           fi
           echo "All 6 nightly credentials are present."
 
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+      - uses: pnpm/action-setup@8912a9102ac27614460f54aedde9e1e7f9aec20d # v6.0.5
         with:
           version: 10.32.1
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -193,7 +193,7 @@ jobs:
         # window so the consumer workflow always has the full window
         # available even if it runs a few days late.
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: nightly-cost-ledger-${{ github.run_number }}
           # Glob matches the per-day JSONL files emitted by the CLI to
@@ -218,7 +218,7 @@ jobs:
 
       - name: Upload test logs on failure
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: nightly-e2e-logs-${{ github.run_number }}
           # The CLI persists structured logs to $HOME/.assignee/logs — capture
@@ -245,7 +245,7 @@ jobs:
         env:
           ASSIGNEE_NIGHTLY_ALERT_WEBHOOK: ${{ secrets.ASSIGNEE_NIGHTLY_ALERT_WEBHOOK }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             // Fetch the last 3 completed runs of this workflow (excluding the current one).
