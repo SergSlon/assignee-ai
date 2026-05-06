@@ -17,11 +17,20 @@
  * graph and the graph's node calls
  * `requireAssigneeCredentials("operator")` / `createCloudControlClient()` on-demand.
  *
+ * BLOCKER 2 fix (feature-query-intent-classifier): wire the MCP server's
+ * existing `fetchManagedResources` implementation as the `resourceFetcher`
+ * injected into `createGraph`. Without this, every MCP query intent hits
+ * `if (!resourceFetcher)` in query-handler.ts and returns "not available in
+ * this context" rather than resolving live AWS resources. The MCP service
+ * at `apps/mcp-server/src/services/list-resources.ts` already has the same
+ * RGTA pagination loop as the CLI — reused here, not duplicated.
+ *
  * @see Epic 20, Story 20.1, Story 20.2
  * @see Story 50-4 Wave 5 Pass I handoff
  */
 
 import { createGraph } from "@assignee/core/graph";
+import { fetchManagedResources } from "./list-resources.js";
 
 /**
  * Compiled LangGraph graph interface — minimal surface needed by tool handlers.
@@ -53,9 +62,21 @@ export interface GraphContext {
 /**
  * Create a GraphContext by compiling the LangGraph agent graph.
  * Called once at MCP server boot; the context is shared across all tool invocations.
+ *
+ * BLOCKER 2 fix: injects `fetchManagedResources` from the MCP server's
+ * existing list-resources service as the `resourceFetcher` option.
+ * Credential resolution stays LAZY — `fetchManagedResources` calls
+ * `requireAssigneeCredentials` per invocation, not at graph-construction time.
  */
 export async function createGraphContext(): Promise<GraphContext> {
-  const graph = createGraph() as unknown as CompiledGraph;
+  const graph = createGraph([], {
+    // Wire the MCP-side RGTA fetcher so kind=query intents resolve live AWS
+    // resources in the query_handler node. The service accepts an optional
+    // region (first arg) which we leave undefined to fall back to the
+    // per-invocation region resolution in resolveDefaultRegion().
+    resourceFetcher: (resourceTypeFilter) =>
+      fetchManagedResources(undefined, resourceTypeFilter),
+  }) as unknown as CompiledGraph;
   return {
     graph,
     cleanup: async () => {

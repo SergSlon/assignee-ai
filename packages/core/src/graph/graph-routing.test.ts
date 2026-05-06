@@ -14,6 +14,7 @@ import { GraphNode } from "../constants/graph-node.js";
 import type { AgentState } from "./graph-state.js";
 import {
   routeCheckpointEntry,
+  routeIntentParser,
   routePreflightGuard,
   routeResourceProvisioner,
   routeStatusPoller,
@@ -57,6 +58,55 @@ function makeState(overrides: Partial<AgentState> = {}): AgentState {
     ...overrides,
   } as AgentState;
 }
+
+// ── routeIntentParser ──────────────────────────────────────────────────────
+// MED 4 fix: FAILED / UNSUPPORTED_RESOURCE must route to RESULT_FORMATTER
+// (not SCHEMA_FETCHER) so destroy-redirect and hallucinated-type errors don't
+// produce confusing downstream schema-fetch / wizard output.
+
+describe("routeIntentParser", () => {
+  it("QUERY_INTENT → QUERY_HANDLER (bypasses creation pipeline)", () => {
+    expect(
+      routeIntentParser(
+        makeState({ executionStatus: ExecutionStatus.QUERY_INTENT }),
+      ),
+    ).toBe(GraphNode.QUERY_HANDLER);
+  });
+
+  it("FAILED → RESULT_FORMATTER (short-circuits creation pipeline)", () => {
+    // MED 4: before the fix this returned SCHEMA_FETCHER for FAILED status.
+    expect(
+      routeIntentParser(makeState({ executionStatus: ExecutionStatus.FAILED })),
+    ).toBe(GraphNode.RESULT_FORMATTER);
+  });
+
+  it("UNSUPPORTED_RESOURCE → RESULT_FORMATTER (destroy-redirect + hallucinated type)", () => {
+    // MED 4: BLOCKER 1 (destroy-redirect) and HIGH 5 (hallucinated type) both
+    // set UNSUPPORTED_RESOURCE — must go to RESULT_FORMATTER, not SCHEMA_FETCHER.
+    expect(
+      routeIntentParser(
+        makeState({ executionStatus: ExecutionStatus.UNSUPPORTED_RESOURCE }),
+      ),
+    ).toBe(GraphNode.RESULT_FORMATTER);
+  });
+
+  it("PENDING → SCHEMA_FETCHER (normal creation path)", () => {
+    expect(
+      routeIntentParser(
+        makeState({ executionStatus: ExecutionStatus.PENDING }),
+      ),
+    ).toBe(GraphNode.SCHEMA_FETCHER);
+  });
+
+  it("undefined status → SCHEMA_FETCHER (safe default)", () => {
+    // Any unrecognised status falls through to creation.
+    expect(
+      routeIntentParser(
+        makeState({ executionStatus: undefined as unknown as never }),
+      ),
+    ).toBe(GraphNode.SCHEMA_FETCHER);
+  });
+});
 
 // ── routeCheckpointEntry ────────────────────────────────────────────────────
 

@@ -20,6 +20,7 @@ import { GraphNode } from "../constants/graph-node.js";
 import { graphAnnotation } from "./graph-state.js";
 import {
   routeCheckpointEntry,
+  routeIntentParser,
   routePreflightGuard,
   routeResourceProvisioner,
   routeStatusPoller,
@@ -28,6 +29,10 @@ import {
 } from "./graph-routing.js";
 
 import { createIntentParserNode } from "./nodes/intent-parser.js";
+import {
+  createQueryHandlerNode,
+  type ManagedResourceFetcher,
+} from "./nodes/query-handler.js";
 import { createSchemaFetcherNode } from "./nodes/schema-fetcher.js";
 import { optionElicitorNode } from "./nodes/option-elicitor.js";
 import { compoundDispatcherNode } from "./nodes/compound-dispatcher.js";
@@ -88,6 +93,17 @@ export interface CreateGraphOptions {
    * the factory will fall back to a fresh `ProcessEnvConfigAdapter`.
    */
   config?: ConfigPort;
+  /**
+   * Optional injected fetcher for the query_handler node. When supplied,
+   * `kind=query` intents resolve against live AWS managed resources.
+   * CLI wires `apps/cli/src/services/list-resources.ts`'s implementation;
+   * MCP wires its own RGTA wrapper; tests pass a mock.
+   * When absent (default), the query_handler returns a helpful message
+   * pointing the user to `assignee list`.
+   *
+   * Story: feature-query-intent-classifier
+   */
+  resourceFetcher?: ManagedResourceFetcher;
 }
 
 // W4-05 telemetry node wrapper
@@ -224,6 +240,7 @@ export function createGraph(
     });
 
   const intentParserNode = createIntentParserNode({ llmClient: llmAdapter });
+  const queryHandlerNode = createQueryHandlerNode(options.resourceFetcher);
   const planGeneratorNode = createPlanGeneratorNode({ llmClient: llmAdapter });
   const adviceGeneratorNode = createAdviceGeneratorNode({
     llmClient: llmAdapter,
@@ -349,11 +366,30 @@ export function createGraph(
         withConfig(state, effectiveConfig),
       ),
     )
+    .addNode(GraphNode.QUERY_HANDLER, (state) =>
+      withTelemetry(
+        GraphNode.QUERY_HANDLER,
+        tel,
+        queryHandlerNode,
+        withConfig(state, effectiveConfig),
+      ),
+    )
     .addConditionalEdges(START, routeCheckpointEntry, {
       [GraphNode.INTENT_PARSER]: GraphNode.INTENT_PARSER,
       [GraphNode.HUMAN_APPROVAL]: GraphNode.HUMAN_APPROVAL,
     })
-    .addEdge(GraphNode.INTENT_PARSER, GraphNode.SCHEMA_FETCHER)
+    // Story feature-query-intent-classifier: changed from hard edge to
+    // conditional so query intents bypass the creation pipeline entirely.
+    // MED 4 fix: also short-circuit FAILED/UNSUPPORTED_RESOURCE directly to
+    // RESULT_FORMATTER so terminal states from intent-parser (destroy-redirect,
+    // hallucinated type) don't pass through schema_fetcher.
+    .addConditionalEdges(GraphNode.INTENT_PARSER, routeIntentParser, {
+      [GraphNode.SCHEMA_FETCHER]: GraphNode.SCHEMA_FETCHER,
+      [GraphNode.QUERY_HANDLER]: GraphNode.QUERY_HANDLER,
+      [GraphNode.RESULT_FORMATTER]: GraphNode.RESULT_FORMATTER,
+    })
+    // query_handler → result_formatter directly (no HITL, no provisioning)
+    .addEdge(GraphNode.QUERY_HANDLER, GraphNode.RESULT_FORMATTER)
     .addEdge(GraphNode.SCHEMA_FETCHER, GraphNode.OPTION_ELICITOR)
     .addEdge(GraphNode.OPTION_ELICITOR, GraphNode.COMPOUND_DISPATCHER)
     .addEdge(GraphNode.COMPOUND_DISPATCHER, GraphNode.PLAN_GENERATOR)

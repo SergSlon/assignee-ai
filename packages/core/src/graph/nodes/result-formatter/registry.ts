@@ -19,6 +19,7 @@ import { formatApplyCompoundSuccess } from "./formatters/apply-compound.js";
 import { formatApplySingleSuccess } from "./formatters/apply-single.js";
 import { formatErrorResult } from "./formatters/error.js";
 import { formatPlanResult } from "./formatters/plan.js";
+import { formatQueryResult } from "./formatters/query.js";
 
 function isCompoundShape(state: AgentState): boolean {
   return Boolean(
@@ -46,6 +47,10 @@ export async function dispatchFormatter(
     case ExecutionStatus.POLICY_BLOCKED:
     case ExecutionStatus.UNSUPPORTED_RESOURCE:
       return formatErrorResult(state);
+
+    case ExecutionStatus.QUERY_INTENT:
+      // Read-only query — render managed resources or a helpful message.
+      return formatQueryResult(state);
 
     default:
       return formatPlanResult(state);

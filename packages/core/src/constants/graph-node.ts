@@ -21,6 +21,13 @@ export const GraphNode = {
   BP_EVALUATOR: "bp_evaluator",
   FIX_APPLICATOR: "fix_applicator",
   RESULT_FORMATTER: "result_formatter",
+  /**
+   * Query handler node — dispatched when intentKind="query".
+   * Resolves the user's read-only question against managed resources
+   * and populates queryResult for the result-formatter to render.
+   * Bypasses the heavy creation pipeline (zero AWS writes).
+   */
+  QUERY_HANDLER: "query_handler",
 } as const;
 
 export type GraphNodeType = (typeof GraphNode)[keyof typeof GraphNode];

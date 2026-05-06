@@ -44,10 +44,30 @@ export interface ClarifierInput {
  * clarify". If the LLM surfaced an `errorMessage`, we quote it back; if
  * not, we fall back to the intent text and ask the user to name the AWS
  * resource type explicitly.
+ *
+ * Story feature-query-intent-classifier: when the intent-kind was `query`
+ * or is ambiguous, we ask a broader question that acknowledges the user may
+ * want to create, list, describe, or destroy — not just create. This avoids
+ * trapping query users in a creation-only loop.
  */
 export function buildClarifyingQuestion(state: AgentState): string {
   const intent = (state.userIntent ?? "").trim();
   const err = (state.errorMessage ?? "").trim();
+  const kind = state.intentKind;
+
+  // Story feature-query-intent-classifier: if the kind was classified as
+  // "query" (or we know the user was asking a question) but the pipeline
+  // failed, give a broader prompt that doesn't assume creation intent.
+  if (
+    kind === "query" ||
+    (intent && /^(what|show|list|find|how|where|describe)/i.test(intent))
+  ) {
+    return (
+      `I recognised "${intent}" as a question about your AWS resources, but couldn't fully resolve it. ` +
+      "What would you like to do? (e.g. 'list my S3 buckets', 'show my CloudFront URLs', " +
+      "'create an S3 bucket', or 'destroy my old bucket')"
+    );
+  }
 
   // Story 56-it2-04 L3-L3: beginner example list is rendered from the
   // help-hints SSO module instead of duplicating a literal inline —
@@ -67,8 +87,16 @@ export function buildClarifyingQuestion(state: AgentState): string {
  * (the case the clarifier can actually help with). We skip for everything
  * else — credential failures, region mismatches, policy blocks, etc.
  * should surface the existing error immediately.
+ *
+ * Story feature-query-intent-classifier: QUERY_INTENT is NOT a failure and
+ * must NEVER trigger the clarifier. Query intents that resolve successfully
+ * exit via QUERY_INTENT → result_formatter; only truly ambiguous queries
+ * (where the query-handler returned FAILED) would reach here, and those are
+ * a connectivity problem, not an intent problem.
  */
 export function isClarifiableFailure(state: AgentState): boolean {
+  // QUERY_INTENT is a successful read-only resolution — not an error.
+  if (state.executionStatus === ExecutionStatus.QUERY_INTENT) return false;
   if (state.executionStatus === ExecutionStatus.UNSUPPORTED_RESOURCE)
     return true;
   if (state.executionStatus !== ExecutionStatus.FAILED) return false;

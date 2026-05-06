@@ -8,6 +8,7 @@
  * (Story 58-it1-02 split).
  */
 
+import * as clack from "@clack/prompts";
 import { ExecutionStatus } from "@assignee/core";
 import type { AgentState } from "../../services/graph.js";
 import type { Phase1Context, Phase1Deps } from "./phase1-planner.js";
@@ -41,6 +42,24 @@ export async function handlePhase1Outcome(
 
   if (phase1State.executionStatus === ExecutionStatus.CANCELLED) {
     logApplyComplete(ctx, ExecutionStatus.CANCELLED);
+    return { kind: "done", result: { success: true } };
+  }
+
+  // Story feature-query-intent-classifier: query intents complete inside
+  // the graph (query_handler → result_formatter → END). By the time
+  // phase1State returns, the output is already printed. Return success
+  // without attempting Phase 2 provisioning (reads don't need HITL / writes).
+  if (phase1State.executionStatus === ExecutionStatus.QUERY_INTENT) {
+    // MED 3: warn when the user passed --source with a query intent.
+    // --source only makes sense for creation (static-website pattern). It is
+    // silently ignored for reads; we surface a warning so the user understands.
+    if (deps.resolvedSourceDir) {
+      clack.log.warn(
+        "--source is ignored for query intents. " +
+          "Use --source only when creating or updating resources.",
+      );
+    }
+    logApplyComplete(ctx, ExecutionStatus.QUERY_INTENT);
     return { kind: "done", result: { success: true } };
   }
 
