@@ -104,6 +104,7 @@ when you want to understand how assignee.ai thinks. See
 | [explanation/domain-ownership.md](explanation/domain-ownership.md)                                 | How code ownership is sliced across the monorepo                                                                                          |
 | [explanation/sbom.md](explanation/sbom.md)                                                         | Software Bill of Materials — generation, format, and published artifact location                                                          |
 | [explanation/supply-chain-provenance.md](explanation/supply-chain-provenance.md)                   | Artifact signing, provenance attestation, and supply-chain security model                                                                 |
+| [explanation/competitors/](explanation/competitors/)                                               | One-pager analyses of 8 adjacent tools (CDK + Amazon Q, Pulumi Neo, Terraform AI, kagent, SST Ion, Nitric, Wing obit) — snapshot Apr 2026 |
 
 **Canonical root explanations** (explanation quadrant, no subdirectory counterpart):
 

@@ -260,6 +260,19 @@ Docs follow the [Diátaxis](https://diataxis.fr/) framework. Top-level entry poi
 | Testing strategy + how to run the suites                                               | [docs/testing-guide.md](docs/testing-guide.md)                                           |
 | Audit log HMAC chain (verify, key rotation)                                            | [docs/how-to/audit-trail.md](docs/how-to/audit-trail.md)                                 |
 | Operator runbook (incident response patterns)                                          | [docs/runbooks/incident-response.md](docs/runbooks/incident-response.md)                 |
+| Competitor analyses (CDK + Q, Pulumi Neo, Terraform AI, kagent, SST, Nitric, Wing)     | [docs/explanation/competitors/](docs/explanation/competitors/)                           |
+
+---
+
+## Presentation
+
+The course-submission pitch deck for this project (10 slides, dark tech-talk theme):
+
+- **Live**: <https://d1eka2i9dtl8tu.cloudfront.net/> — provisioned by Assignee.ai itself via the static-website compound pattern (S3 + CloudFront + OAC + uploads).
+- **Source in repo**: [presentation/index.html](presentation/index.html) — single self-contained HTML file (~94 KB, no external assets except Google Fonts).
+- **Demo script**: [presentation/DEMO.md](presentation/DEMO.md) — pre-demo setup, 5-minute live script, backup plans, cleanup.
+
+Navigation: ← / → / Space. Text is selectable.
 
 ---
 
