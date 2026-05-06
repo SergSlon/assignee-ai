@@ -80,6 +80,21 @@ jobs:
         # SHA pin verified against `gh api repos/github/codeql-action/git/refs/tags/v3.27.1`
         # (tag dereferences to commit 4f3212b61783c3c68e8309a0f18a699764811cda).
         # Dependabot will bump to v3 latest weekly; re-verify when the comment-tag changes.
+        #
+        # `upload: never` — the repo is currently PRIVATE and does not have
+        # GitHub Advanced Security enabled, so the SARIF upload to the
+        # Security tab fails with HTTP 403 "Code scanning is not enabled
+        # for this repository" (verified 2026-05-06 via
+        # `gh api repos/SergSlon/assignee-ai/code-scanning/default-setup`).
+        # CodeQL analysis still runs in full; results land in the runner's
+        # workspace under `/home/runner/work/<repo>/results/<lang>.sarif`
+        # for ad-hoc download. Switch back to the default upload behaviour
+        # by removing this line either when (a) the repo flips to PUBLIC
+        # (code scanning is free for public repos), or (b) the org enables
+        # GitHub Advanced Security on this private repo. See
+        # `.github/workflows/codeql.yml` history + the customer-demo
+        # 2026-05-06 audit closure for context.
         uses: github/codeql-action/analyze@4f3212b61783c3c68e8309a0f18a699764811cda # v3.27.1
         with:
           category: "/language:${{ matrix.language }}"
+          upload: never

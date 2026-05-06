@@ -129,7 +129,14 @@ jobs:
         run: npx tsx scripts/audit-overrides.ts
 
       - name: pnpm security audit
-        # W7-07: Fail on moderate+ vulnerabilities in production deps
+        # W7-07: Fail on moderate+ vulnerabilities in production deps.
+        # Per-CVE suppressions live in `package.json` under
+        # `pnpm.auditConfig.ignoreCves`, each backed by a rationale
+        # section in `package.json.overrides-rationale.md`. Adding a
+        # new entry to `ignoreCves` REQUIRES a matching rationale
+        # entry — `audit-overrides.ts` (the previous step) enforces
+        # this for `pnpm.overrides` keys, and the rationale file's
+        # convention is one section per CVE/override.
         run: pnpm audit --audit-level=moderate --prod
 
       - name: NOTICE freshness check

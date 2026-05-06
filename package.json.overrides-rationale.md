@@ -59,16 +59,69 @@ the vulnerability class entirely.
 
 ## fast-xml-parser
 
-**Covers overrides**: `fast-xml-parser@>=4.0.0-beta.3 <5.7.0`
+**Covers overrides**: `fast-xml-parser` (universal pin to `5.5.8`)
 
-**CVE**: GHSA-6hjj-gq77-j4qg (prototype pollution via fast-xml-parser < 4.4.0).
-Bumped to 5.7.0+ to include all subsequent hardening commits.
+**Pre-CVE history (2026-04)**: GHSA-6hjj-gq77-j4qg (prototype pollution via
+`fast-xml-parser < 4.4.0`) was originally remediated by a `<5.7.0` →
+`^5.7.0` range override.
 
-**Mitigation**: Pin to 5.7.0+. Transitive dependency introduced by AWS SDK XML
-response parsing. The AWS SDK does not expose parsed XML objects to caller-
-controlled input, reducing exploitability, but the pin eliminates the class.
+**Regression (2026-05-05, commit `1fedcdf4`)**: bumping to 5.7.x broke
+`@aws-sdk/xml-builder`, which calls `parser.addEntity("#xD", "\r")` at
+module load. fast-xml-parser 5.7.x rejects entity names starting with
+`#`, so every Bedrock / STS / IAM / CCAPI parse died with
+`[EntityReplacer] Invalid character '#' in entity name: "#xD"`. The
+SDK-tested version is 5.5.8 (post the 4.4.0 prototype-pollution fix
+class) — pinned universally to keep the AWS SDK functional. Removing
+this pin silently breaks every AWS API call.
 
-**Reviewed**: 2026-04 — Klaus Weber
+**Open CVE accepted**: `CVE-2026-41650` / `GHSA-gh4j-gqv2-49f6` —
+"XMLBuilder: Comment and CDATA Injection via Unescaped Delimiters"
+(moderate, fixed in 5.7.0). Suppressed via
+`pnpm.auditConfig.ignoreCves` in `package.json` so every
+invocation of `pnpm audit --prod --audit-level=moderate` (CI and
+local) honours the suppression in lockstep.
+
+**Mitigation**: This codebase only uses fast-xml-parser via
+`@aws-sdk/xml-builder` to PARSE AWS API responses; we never call
+`XMLBuilder.build()` with caller-controlled input. The advisory is
+about XML injection through user-supplied comment/CDATA content
+written to XMLBuilder — a code path that does not exist in our
+dependency graph. Re-evaluate when the AWS SDK ships a newer
+`@aws-sdk/xml-builder` that no longer relies on `#`-prefixed entity
+names; at that point, drop the 5.5.8 pin and remove the CVE
+suppression in lockstep.
+
+**Reviewed**: 2026-04 — Klaus Weber. Re-reviewed 2026-05-06 after
+the 5.7.0/AWS-SDK incompatibility surfaced + the
+`CVE-2026-41650` / `GHSA-gh4j-gqv2-49f6` advisory landed.
+
+---
+
+## ip-address
+
+**Covers overrides**: `ip-address@<10.1.1`
+
+**CVE**: `CVE-2026-42338` / `GHSA-v2v4-37r5-5v8g` — "ip-address has
+XSS in Address6 HTML-emitting methods" (moderate, fixed in 10.1.1).
+Vulnerable code: `Address6.group()` / `Address6.link()` /
+`v6.helpers.spanAll()` / `AddressError.parseMessage` do not
+HTML-escape attacker-controlled content before embedding it in the
+HTML strings they return.
+
+**Path**: Transitive via
+`apps/cli` &rarr; `@langchain/mcp-adapters` &rarr;
+`@modelcontextprotocol/sdk` &rarr; `express-rate-limit` &rarr;
+`ip-address`.
+
+**Mitigation**: Pin to 10.1.1+. We don't render `Address6` HTML
+output anywhere — the dependency surfaces solely because
+`@modelcontextprotocol/sdk` ships a server-side `express-rate-limit`
+that uses `ip-address` for IP-range parsing (the parsing API surface
+is not affected by the advisory). The bump is therefore a
+defence-in-depth tightening rather than a fix for an exploitable
+path, but it eliminates the advisory from the audit report.
+
+**Reviewed**: 2026-05-06 — pre-demo audit closure (commit follows).
 
 ---
 
