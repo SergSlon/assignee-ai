@@ -34,6 +34,37 @@ import { withTimeout } from "@/utils/timeout.js";
 import { getCachedPrice, setCachedPrice } from "@/services/price-cache.js";
 
 /**
+ * Service codes that price data transfer GLOBALLY (not per-region) and
+ * therefore require an explicit `fromRegionCode` filter to scope the
+ * Pricing API response to the operator's region. Without this filter,
+ * AWS returns rows for every region simultaneously and the tier-ladder
+ * resolver cannot reduce them to one bucket → "unavailable".
+ */
+const DATA_TRANSFER_SERVICE_CODES: ReadonlySet<string> = new Set([
+  "AWSDataTransfer",
+]);
+
+function isDataTransferService(serviceCode: string): boolean {
+  return DATA_TRANSFER_SERVICE_CODES.has(serviceCode);
+}
+
+/**
+ * Append `fromRegionCode=<region>` to the filter list if not already
+ * present. Idempotent: returns the input unchanged when the filter is
+ * already there.
+ */
+function ensureFromRegionCodeFilter(
+  filters: ReadonlyArray<{ Field: string; Value: string; Type: string }>,
+  region: string,
+): ReadonlyArray<{ Field: string; Value: string; Type: string }> {
+  if (filters.some((f) => f.Field === "fromRegionCode")) return filters;
+  return [
+    ...filters,
+    { Field: "fromRegionCode", Value: region, Type: "TERM_MATCH" },
+  ];
+}
+
+/**
  * Maximum number of concurrent `get_pricing` MCP calls issued at once.
  * Matches the schema-warmer concurrency cap in CloudFormationSchemaService.
  * Export allows tests to assert the cap and future tuning in one place.
@@ -129,11 +160,24 @@ export async function queryLineItemPrices(
             hasCacheHits = true;
           } else {
             const timeoutMs = item.timeoutMs ?? PRICING_TIMEOUT_MS;
+
+            // AWS Data Transfer pricing is keyed by `fromRegionCode`, not
+            // by the global `region` MCP parameter. Without this filter
+            // the API returns rows for every region (Ohio, Frankfurt,
+            // Tokyo, …) and the tier-ladder resolver gives up because
+            // it sees N products instead of one per region. Inject the
+            // region filter for any AWSDataTransfer request that doesn't
+            // already specify it. Other services (S3, Lambda, KMS, etc.)
+            // are correctly scoped via the MCP tool's `region` parameter.
+            const filters = isDataTransferService(item.serviceCode)
+              ? ensureFromRegionCodeFilter(item.filters, AWS_REGION)
+              : item.filters;
+
             const result = await withTimeout(
               pricingTool.invoke({
                 service_code: item.serviceCode,
                 region: AWS_REGION,
-                filters: item.filters,
+                filters,
                 output_options: { pricing_terms: [PricingTerm.ON_DEMAND] },
               }),
               timeoutMs,

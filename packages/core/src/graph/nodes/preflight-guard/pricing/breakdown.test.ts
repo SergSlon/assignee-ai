@@ -241,3 +241,131 @@ describe("queryLineItemPrices — edge cases", () => {
     ).toBe(true);
   });
 });
+
+describe("queryLineItemPrices — AWSDataTransfer fromRegionCode injection", () => {
+  // Bug: S3 / EC2 / API Gateway data-transfer-out lines were rendering as
+  // `unavailable` because the AWSDataTransfer service code returns rows
+  // for EVERY region (us-east-1, us-east-2, eu-west-1, …) when the
+  // request doesn't filter by `fromRegionCode`. The MCP tool's `region`
+  // parameter does NOT scope the filter for AWSDataTransfer (it does
+  // for service-specific codes like AmazonS3 / AmazonEC2). This block
+  // verifies breakdown.ts injects `fromRegionCode=<AWS_REGION>` into
+  // any AWSDataTransfer request that doesn't already specify it.
+  it("injects fromRegionCode=<region> for AWSDataTransfer requests", async () => {
+    const captured: Array<{
+      filters: ReadonlyArray<{ Field: string; Value: string; Type: string }>;
+    }> = [];
+    const tool = makePricingTool(async (input) => {
+      captured.push(
+        input as {
+          filters: ReadonlyArray<{
+            Field: string;
+            Value: string;
+            Type: string;
+          }>;
+        },
+      );
+      return mcpPricingText("0.0900000000");
+    });
+
+    const dataTransferItem: PricingLineItem = {
+      label: "Data transfer out",
+      quantity: 0,
+      unit: "GB",
+      serviceCode: "AWSDataTransfer",
+      filters: [
+        { Field: "productFamily", Value: "Data Transfer", Type: "TERM_MATCH" },
+        { Field: "transferType", Value: "AWS Outbound", Type: "TERM_MATCH" },
+      ],
+      kind: "usage_based",
+      description: "per GB",
+      priceUnit: "per GB",
+    };
+
+    await queryLineItemPrices([dataTransferItem], [tool], "run-dtx");
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0]!.filters.some((f) => f.Field === "fromRegionCode")).toBe(
+      true,
+    );
+  });
+
+  it("does NOT mutate filters for non-AWSDataTransfer service codes", async () => {
+    const captured: Array<{
+      filters: ReadonlyArray<{ Field: string; Value: string; Type: string }>;
+    }> = [];
+    const tool = makePricingTool(async (input) => {
+      captured.push(
+        input as {
+          filters: ReadonlyArray<{
+            Field: string;
+            Value: string;
+            Type: string;
+          }>;
+        },
+      );
+      return mcpPricingText("0.0230000000");
+    });
+
+    const s3StorageItem: PricingLineItem = {
+      label: "Storage",
+      quantity: 0,
+      unit: "GB",
+      serviceCode: "AmazonS3",
+      filters: [
+        { Field: "productFamily", Value: "Storage", Type: "TERM_MATCH" },
+      ],
+      kind: "usage_based",
+      description: "per GB-month",
+      priceUnit: "per GB-month",
+    };
+
+    await queryLineItemPrices([s3StorageItem], [tool], "run-s3");
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0]!.filters.some((f) => f.Field === "fromRegionCode")).toBe(
+      false,
+    );
+  });
+
+  it("preserves an existing fromRegionCode filter (idempotent)", async () => {
+    const captured: Array<{
+      filters: ReadonlyArray<{ Field: string; Value: string; Type: string }>;
+    }> = [];
+    const tool = makePricingTool(async (input) => {
+      captured.push(
+        input as {
+          filters: ReadonlyArray<{
+            Field: string;
+            Value: string;
+            Type: string;
+          }>;
+        },
+      );
+      return mcpPricingText("0.0900000000");
+    });
+
+    const dataTransferItem: PricingLineItem = {
+      label: "Data transfer out",
+      quantity: 0,
+      unit: "GB",
+      serviceCode: "AWSDataTransfer",
+      filters: [
+        { Field: "fromRegionCode", Value: "eu-west-1", Type: "TERM_MATCH" },
+      ],
+      kind: "usage_based",
+      description: "per GB",
+      priceUnit: "per GB",
+    };
+
+    await queryLineItemPrices([dataTransferItem], [tool], "run-dtx-prefilled");
+
+    expect(captured).toHaveLength(1);
+    const fromRegion = captured[0]!.filters.filter(
+      (f) => f.Field === "fromRegionCode",
+    );
+    expect(fromRegion).toHaveLength(1);
+    // Pre-existing value preserved, not overwritten with AWS_REGION
+    expect(fromRegion[0]!.Value).toBe("eu-west-1");
+  });
+});
