@@ -127,8 +127,15 @@ export const TAG_SCOPED_SECRETS_ACTIONS = new Set<string>([
  *   sqs:DeleteQueue        → deletes SQS queue; tags on queue
  *   sns:DeleteTopic        → deletes SNS topic; tags on topic
  *   rds:DeleteDBInstance   → deletes RDS instance; tags on DBInstance
- *   s3:DeleteBucket        → deletes S3 bucket; tags on bucket
- *   s3:DeleteBucketPolicy  → removes bucket policy; same bucket-level tag scope
+ *
+ * NOTE: s3:DeleteBucket and s3:DeleteBucketPolicy are intentionally ABSENT
+ * from this set. AWS does NOT auto-populate `aws:ResourceTag` into the
+ * IAM evaluation context for S3 bucket-level destructive operations, so a
+ * tag-scoped Allow for those actions always evaluates to implicitDeny
+ * (MissingContextValues: ["aws:ResourceTag/managed-by", ...]). They live
+ * instead in `S3_BUCKET_DESTRUCTIVE_ACTIONS` / the dedicated
+ * `S3BucketDestructiveResourcePrefixScoped` statement with no Condition.
+ * See docs/explanation/security-model.md §S3 bucket-level IAM limitation.
  */
 export const DESTRUCTIVE_SERVICE_ACTIONS = new Set<string>([
   "lambda:DeleteFunction",
@@ -137,8 +144,6 @@ export const DESTRUCTIVE_SERVICE_ACTIONS = new Set<string>([
   "sqs:DeleteQueue",
   "sns:DeleteTopic",
   "rds:DeleteDBInstance",
-  "s3:DeleteBucket",
-  "s3:DeleteBucketPolicy",
   // Pre-delete empty sweep actions: the destroy-service.ts s3BucketStrategy
   // calls DeleteObjects (requires s3:DeleteObject) and DeleteObjects with
   // VersionId (requires s3:DeleteObjectVersion) to empty the bucket before
@@ -146,8 +151,62 @@ export const DESTRUCTIVE_SERVICE_ACTIONS = new Set<string>([
   // operator credential could delete objects from ANY S3 bucket in the
   // account. Scoped via aws:ResourceTag/managed-by=assignee-ai so the
   // operator can only empty assignee-managed buckets.
+  // NOTE: object-level S3 operations (DeleteObject / DeleteObjectVersion)
+  // DO get aws:ResourceTag auto-populated by AWS (different code path from
+  // bucket-level operations). These correctly remain tag-scoped.
   "s3:DeleteObject",
   "s3:DeleteObjectVersion",
+]);
+
+/**
+ * S3 BUCKET-LEVEL destructive actions that CANNOT be tag-scoped via
+ * `aws:ResourceTag` at the IAM identity-policy level.
+ *
+ * AWS LIMITATION (confirmed 2026-05-07):
+ * AWS does NOT auto-populate `aws:ResourceTag` into the IAM request
+ * evaluation context for `s3:DeleteBucket` and `s3:DeleteBucketPolicy`.
+ * When the Allow statement has `Condition: { StringEquals: { "aws:ResourceTag/
+ * managed-by": "assignee-ai" } }`, the StringEquals comparison receives
+ * `<missing>` for the tag value and returns false — the Allow never
+ * matches — implicit deny — generic "no identity-based policy allows this
+ * action" error even though the bucket carries the correct tag.
+ *
+ * Empirical evidence:
+ *   1. `aws iam simulate-principal-policy ... --action-names s3:DeleteBucket
+ *      --resource-arns arn:aws:s3:::genai-demo-logs` (no explicit context)
+ *      → EvalDecision: implicitDeny, MissingContextValues includes
+ *      "aws:ResourceTag/managed-by".
+ *   2. Same call WITH --context-entries for the tag → EvalDecision: allowed.
+ *   3. Live test: s3:DeleteBucket with the tag-scoped policy → AccessDenied.
+ *   4. Temp inline policy with s3:DeleteBucket + Resource:"*" + no Condition
+ *      → DeleteBucket succeeded immediately.
+ *
+ * Contrast: Lambda / EC2 / ECS / SQS / SNS / RDS all correctly propagate
+ * resource tags into the IAM context — those services remain tag-scoped in
+ * DESTRUCTIVE_SERVICE_ACTIONS. Object-level S3 operations (DeleteObject /
+ * DeleteObjectVersion) also propagate correctly (different AWS code path).
+ *
+ * Security tradeoff: `s3:DeleteBucket` and `s3:DeleteBucketPolicy` are
+ * now scoped only by `Resource: "arn:aws:s3:::*"` (no tag Condition).
+ * The operator can technically issue s3:DeleteBucket against any S3 bucket
+ * in the account. Mitigations:
+ *   - Every other action (Lambda / EC2 / etc.) remains tag-scoped.
+ *   - Bucket-policy attached at `assignee apply` time (see Part 2 of the
+ *     bug story) restores per-bucket scoping for assignee-managed buckets.
+ *   - Non-assignee buckets are protected by their own bucket policies
+ *     (unless they explicitly grant the operator, which only assignee-managed
+ *     buckets do via the compensating control).
+ *
+ * References:
+ *   - AWS re:Post: https://repost.aws/questions/QUyMnHQq6oTdyx76CMRhZ4yA
+ *   - docs/explanation/security-model.md §S3 bucket-level IAM limitation
+ *   - Bug story: bug-s3-destructive-tag-condition-aws-limitation.md
+ *
+ * Keep in sync with `S3BucketDestructiveResourcePrefixScoped` in operator.ts.
+ */
+export const S3_BUCKET_DESTRUCTIVE_ACTIONS = new Set<string>([
+  "s3:DeleteBucket",
+  "s3:DeleteBucketPolicy",
 ]);
 
 export function collectServiceActions(): {
@@ -200,6 +259,18 @@ export function collectServiceActions(): {
       // with aws:ResourceTag/managed-by = assignee-ai. Leaving
       // destructive actions in the unscoped sweep would allow
       // deleting/terminating any resource in the account.
+      continue;
+    } else if (S3_BUCKET_DESTRUCTIVE_ACTIONS.has(action)) {
+      // Bug S3-001 (2026-05-07): AWS does NOT auto-populate
+      // aws:ResourceTag for s3:DeleteBucket / s3:DeleteBucketPolicy
+      // (bucket-level destructive ops). These actions are emitted
+      // separately in operatorPolicy() via the dedicated
+      // S3BucketDestructiveResourcePrefixScoped statement with
+      // Resource: "arn:aws:s3:::*" and NO Condition. Leaving them
+      // in the unscoped sweep would be harmless (same effective
+      // permission) but confusing — keeping them out maintains the
+      // invariant that ALL potentially-harmful actions are excluded
+      // from ServiceSpecificActionsA/B.
       continue;
     } else {
       serviceActionsRaw.push(action);
