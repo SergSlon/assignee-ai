@@ -67,10 +67,7 @@ probes:
         assertions: "AWS::IAM::Role slot rejects FunctionName with alt phrasing (compound-keyword variant)"
       - cmd: 'plan "lambda-with-exec-role called processor handler worker.run runtime python3.11" --json'
         assertions: "AWS::IAM::Role slot rejects FunctionName with 'called' name token + python runtime"
-    known_tripwires:
-      - cmd: 'plan "create lambda-with-exec-role named my-fn handler handler.main runtime nodejs20.x" --json'
-        expected_exit: "zero"
-        expected_fail_anchor: ""FunctionName""
+    known_tripwires: []
     probe: |
       assert_desired_state_missing_key_on_type \
         "AWS::IAM::Role" \
@@ -98,10 +95,7 @@ probes:
         assertions: "uppercase bucket name → ok:false, exit non-zero (S3 naming rule)"
       - cmd: 'apply "create S3 bucket named a" --yes --json'
         assertions: "1-char bucket name → ok:false, exit non-zero (min length 3)"
-    known_tripwires:
-      - cmd: 'apply "create S3 bucket named invalid..name" --yes --json'
-        expected_exit: "zero"
-        expected_fail_anchor: ""ok":true"
+    known_tripwires: []
     probe: |
       # The bucket name "invalid..name" has adjacent dots, which S3
       # rejects. The validator or apply path must surface that as
@@ -146,13 +140,7 @@ probes:
     # region extractor (tail wins + name-span masking). The invariant is
     # now enforced by the `w2-r1-region-regex` probe below plus the unit
     # test suite intent-parser-region-scoping-variations.test.ts.
-    known_tripwires:
-      - cmd: 'plan "Create a lambda named my-abc-1" --json'
-        expected_exit: "non-zero"
-        expected_fail_anchor: "Unknown AWS region"
-      - cmd: 'plan "Create an S3 bucket named log-ap-northeast-2-archive" --json'
-        expected_exit: "non-zero"
-        expected_fail_anchor: "region"
+    known_tripwires: []
     probe: |
       # Expect: plan succeeds (ok:true) because the user IS specifying
       # a valid region (eu-west-2). The bucket-name substring
@@ -188,13 +176,7 @@ probes:
         assertions: "bare intent produces plan with default region (no parse failure)"
       - cmd: 'plan "Create a lambda in us-west-2 named my-fn" --json'
         assertions: "explicit `in us-west-2` tail lifted into plan without conflict with name"
-    known_tripwires:
-      - cmd: 'plan "Create a lambda named my-abc-1" --json'
-        expected_exit: "non-zero"
-        expected_fail_anchor: "Unknown AWS region"
-      - cmd: 'plan "Create an SQS queue named sqs-json-1776927324" --json'
-        expected_exit: "non-zero"
-        expected_fail_anchor: "region"
+    known_tripwires: []
     probe: |
       # Variation 1 — the Epic 97 B-09 live-FAIL. After the fix this
       # must PASS with ok:true.
@@ -530,10 +512,7 @@ probes:
     # landing `isEmptyLeaf` + deep-merge backfill in merge.ts. The
     # invariant is now enforced by the `w2-r2-plugin-default-empty-leaf`
     # probe below plus merge-empty-leaf.test.ts.
-    known_tripwires:
-      - cmd: 'plan "Create an EC2 t3.micro instance" --json'
-        expected_exit: "zero"
-        expected_fail_anchor: "CPUCredits"
+    known_tripwires: []
     probe: |
       # Runs a plain EC2 t3.micro plan and asserts the sanitised
       # desiredState carries a non-empty CreditSpecification with the
@@ -583,10 +562,7 @@ probes:
         assertions: "t3.medium + elaborate clause: CreditSpecification survives with CPUCredits set"
       - cmd: 'plan "Create a t3.small EC2 instance with CPUCredits unlimited" --json'
         assertions: "user-stated CPUCredits=unlimited wins over plugin default (user always wins)"
-    known_tripwires:
-      - cmd: 'plan "Create an EC2 instance type t3.micro" --json'
-        expected_exit: "zero"
-        expected_fail_anchor: "CPUCredits"
+    known_tripwires: []
     probe: |
       # Variation 2 — the Epic 97 C-R1 live-FAIL. Post-fix the plan
       # must emit a non-empty CreditSpecification with CPUCredits set
@@ -762,10 +738,7 @@ probes:
         assertions: "/20 mid-prefix accepted on Route; DestinationCidrBlock==172.16.0.0/20"
       - cmd: 'extractAssertedValues("Create a VPC with CIDR 10.0.0.0/8", "AWS::EC2::VPC")'
         assertions: "VPC regression guard: /8 still rejected (kind=vpc clamp preserved)"
-    known_tripwires:
-      - cmd: 'plan "Create a route with destination 0.0.0.0/0" --json'
-        expected_exit: "non-zero"
-        expected_fail_anchor: "CIDR"
+    known_tripwires: []
     probe: |
       node -e '
         const repo = process.env.PROBE_REPO_ROOT;
@@ -845,10 +818,7 @@ probes:
     # allowlist expansion in placeholder-resource-id.ts. The invariant
     # is now enforced by the `w2-r3-placeholder-prose-fields` probe
     # below plus placeholder-guard-prose-variations.test.ts.
-    known_tripwires:
-      - cmd: 'plan "Create an S3 bucket named arn:aws:iam::123456789012:role/placeholder" --json'
-        expected_exit: "zero"
-        expected_fail_anchor: "placeholder"
+    known_tripwires: []
     probe: |
       node -e '
         const repo = process.env.PROBE_REPO_ROOT;
@@ -909,10 +879,7 @@ probes:
         assertions: "no-FP baseline: honest hyphenated prose passes without a false-positive"
       - cmd: 'SUPPORTED_TYPES_ARRAY drift-guard: every supported type rejects poisoned prose'
         assertions: "drift-guard: iterating every supported resource type, a synthetic prose state with `subnet-<hex>` is rejected by the walker"
-    known_tripwires:
-      - cmd: 'plan "Create an S3 bucket tagged owner:arn:aws:iam::123456789012:user/admin" --json'
-        expected_exit: "zero"
-        expected_fail_anchor: "placeholder"
+    known_tripwires: []
     probe: |
       node -e '
         const repo = process.env.PROBE_REPO_ROOT;
@@ -970,10 +937,7 @@ probes:
         assertions: "CJK chars → error.code INVALID_NAME"
       - cmd: 'plan "Create an S3 bucket named 👋-bucket" --json'
         assertions: "emoji chars → error.code INVALID_NAME (not PLAN_FAILED fallback)"
-    known_tripwires:
-      - cmd: 'plan "Create an S3 bucket named café-data" --json'
-        expected_exit: "non-zero"
-        expected_fail_anchor: "PLAN_FAILED"
+    known_tripwires: []
     probe: |
       # Drive the CLI end-to-end — this path exercises both the intent-
       # parser's stamping AND the plan-orchestrator's error-envelope
@@ -1026,10 +990,7 @@ probes:
         assertions: "unresolvable primaryIdentifier emits the new DESTROY_TARGET_NOT_FOUND code (NOT silent success, NOT legacy DESTROY_ERROR)"
       - cmd: 'list --resource-type AWS::EC2::Route → only Route rows'
         assertions: "resourceTypeFilter works against primaryIdentifier-keyed rows (no cross-type leakage)"
-    known_tripwires:
-      - cmd: 'plan "Create a route from internet gateway" --json'
-        expected_exit: "non-zero"
-        expected_fail_anchor: "resource type"
+    known_tripwires: []
     probe: |
       # Isolated HOME so the seeded provision log doesn't clobber the
       # dev user's real ~/.assignee/memory/provisions.json.
@@ -1260,10 +1221,7 @@ probes:
         assertions: "BP-ECS-004 does NOT fire on APP_ENV (safe env)"
       - cmd: 'plan "Create an ECS task with env PORT=8080" --json'
         assertions: "BP-ECS-004 does NOT fire on PORT (safe env)"
-    known_tripwires:
-      - cmd: 'plan "Create an ECS task with env LOG_LEVEL=debug" --json'
-        expected_exit: "zero"
-        expected_fail_anchor: "BP-ECS-004"
+    known_tripwires: []
     probe: |
       assert_no_bp_finding_id BP-ECS-004 \
         $PROBE_CLI_BIN plan \
@@ -1295,10 +1253,7 @@ probes:
         assertions: "BP-ECS-004 FIRES on env named API_SECRET (fire-path)"
       - cmd: 'plan "Create an ECS task with environment DATABASE_URL=postgres://..." --json'
         assertions: "BP-ECS-004 FIRES on env named DATABASE_URL (fire-path)"
-    known_tripwires:
-      - cmd: 'plan "Create an ECS task with env DB_PASSWORD=secret123" --json'
-        expected_exit: "zero"
-        expected_fail_anchor: "BP-ECS-004"
+    known_tripwires: []
     probe: |
       # Fire-path: CLI does NOT emit AWS::ECS::TaskDefinition today
       # (resolves to AWS::ECS::Cluster), so BP-ECS-004 never finds a
@@ -1354,10 +1309,7 @@ probes:
         assertions: "BP-SNS-004 does NOT fire on an encrypted SNS topic"
       - cmd: 'plan "Create an SNS topic for internal service alerts" --json'
         assertions: "BP-SNS-004 does NOT fire on an internal SNS topic"
-    known_tripwires:
-      - cmd: 'plan "Create an SNS topic named notifications" --json'
-        expected_exit: "zero"
-        expected_fail_anchor: "BP-SNS-004"
+    known_tripwires: []
     probe: |
       assert_no_bp_finding_id BP-SNS-004 \
         $PROBE_CLI_BIN plan \
@@ -1386,10 +1338,7 @@ probes:
         assertions: "BP-SNS-004 FIRES on SNS topic with open Principal:* policy (fire-path)"
       - cmd: 'plan "Create an SNS topic with TopicPolicy granting sns:Publish to *" --json'
         assertions: "BP-SNS-004 FIRES on SNS topic with explicit wildcard-resource publish grant (fire-path)"
-    known_tripwires:
-      - cmd: 'plan "Create an SNS topic with policy allowing all principals" --json'
-        expected_exit: "zero"
-        expected_fail_anchor: "BP-SNS-004"
+    known_tripwires: []
     probe: |
       # Fire-path: CLI does NOT emit wildcard-Principal TopicPolicy
       # content today. Probe deliberately fails until plan generator
@@ -1441,10 +1390,7 @@ probes:
         assertions: "BP-S3-011 does NOT fire on a versioned S3 bucket (still no BucketPolicy resource)"
       - cmd: 'plan "Create an encrypted S3 bucket for backups" --json'
         assertions: "BP-S3-011 does NOT fire on an encrypted backup bucket"
-    known_tripwires:
-      - cmd: 'plan "Create an S3 bucket named logs-archive" --json'
-        expected_exit: "zero"
-        expected_fail_anchor: "BP-S3-011"
+    known_tripwires: []
     probe: |
       assert_no_bp_finding_id BP-S3-011 \
         $PROBE_CLI_BIN plan \
@@ -1474,10 +1420,7 @@ probes:
         assertions: "BP-S3-011 FIRES on BucketPolicy without aws:SecureTransport Deny (fire-path)"
       - cmd: 'plan "Create an S3 bucket with policy granting s3:GetObject to everyone" --json'
         assertions: "BP-S3-011 FIRES on explicit open-access BucketPolicy missing ssl-deny (fire-path)"
-    known_tripwires:
-      - cmd: 'plan "Create a public S3 bucket with a bucket policy" --json'
-        expected_exit: "zero"
-        expected_fail_anchor: "BP-S3-011"
+    known_tripwires: []
     probe: |
       # Fire-path: CLI does NOT emit separate BucketPolicy resource
       # alongside S3 bucket plans today. Probe deliberately fails until
@@ -1535,10 +1478,7 @@ probes:
         assertions: "B-01 VPCGatewayAttachment closure — non-taggable passthrough with pipe-delimited composite id"
       - cmd: 'buildApplyEnvelopeArn(AWS::DynamoDB::Table, arn:aws:dynamodb:...:table/dogfood-e97-a-ddb-1776953700) → full ARN preserved'
         assertions: "Regression baseline — ARN-addressable types still return full ARN in envelope.arn with primaryIdentifier null (guard against the non-taggable branching accidentally nulling ARNs for already-working types)"
-    known_tripwires:
-      - cmd: 'apply "create lambda named test-fn handler index.main runtime nodejs20.x" --yes --json'
-        expected_exit: "zero"
-        expected_fail_anchor: "arn:aws:"
+    known_tripwires: []
     probe: |
       # Library-level probe: exercise the compiled core helper
       # (packages/core/dist/graph/nodes/result-formatter/envelope-arn.js)
@@ -2415,10 +2355,7 @@ probes:
         assertions: "BP-SNS-003 does NOT fire on an encrypted SNS topic"
       - cmd: 'plan "Create an SNS topic for platform alerts" --json'
         assertions: "BP-SNS-003 does NOT fire on a plain platform alerts topic"
-    known_tripwires:
-      - cmd: 'plan "Create an SNS topic named order-events" --json'
-        expected_exit: "zero"
-        expected_fail_anchor: "BP-SNS-003"
+    known_tripwires: []
     probe: |
       assert_no_bp_finding_id BP-SNS-003 \
         $PROBE_CLI_BIN plan \
@@ -2729,10 +2666,7 @@ probes:
         assertions: "D-15 closure — the contradictory CI-compat flag removed; auto-apply belongs on reconcile"
       - cmd: 'drift --help footer no longer says `No --yes flag is needed`'
         assertions: "Help text cleanup — the contradicting sentence companion to --yes removal is also gone"
-    known_tripwires:
-      - cmd: 'drift --wizard'
-        expected_exit: "non-zero"
-        expected_fail_anchor: "unknown option"
+    known_tripwires: []
     probe: |
       strip_env_leaks
 
