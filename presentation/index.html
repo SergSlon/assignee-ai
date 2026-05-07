@@ -1813,6 +1813,221 @@
     .deck { padding-bottom: 72px; }
   }
 
+  /* ============================================================
+     Mobile content fixes — ≤768px (portrait phones + small tablets)
+     These rules only add / override within this breakpoint.
+     Desktop rendering is unchanged.
+     ============================================================ */
+  @media (max-width: 768px) {
+
+    /* ── Global layout adjustments ── */
+    :root {
+      --pad-x: 18px;
+      --pad-y: 52px; /* extra top pad so topbar doesn't clip */
+    }
+
+    /* Ensure nothing bleeds past viewport width */
+    .slide {
+      overflow-x: hidden;
+    }
+
+    /* ── Slide 1 (Title) ─────────────────────────────────────── */
+    /* Wordmark name can be huge on small phones — cap it */
+    .s1 .wordmark .name {
+      font-size: clamp(40px, 12vw, 80px);
+    }
+    /* Numstrip: wrap items and reduce gap so they stack neatly */
+    .s1 .numstrip {
+      gap: 8px 10px;
+      padding: 10px 14px;
+    }
+    /* Footer row: stack author / course vertically */
+    .s1 .footline {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    .s1 .footline .course {
+      text-align: left;
+    }
+
+    /* ── Slide 2 (Problem & Market) ─────────────────────────── */
+    /* Head: already 2-col at desktop — collapse to 1-col */
+    .s2 .head {
+      grid-template-columns: 1fr;
+      gap: 14px;
+    }
+    /* Nums: 3-col big numbers — stack vertically */
+    .s2 .nums {
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+    /* Lower: Mara persona + market — stack vertically */
+    .s2 .lower {
+      grid-template-columns: 1fr;
+      gap: 14px;
+    }
+    /* Mara traits: 2-col list — collapse to 1 */
+    .mara .traits {
+      grid-template-columns: 1fr;
+    }
+    /* Market tier rows: auto 1fr auto is fine but tier-name min-width
+       can squeeze on very narrow screens */
+    .tier .key.tier-name {
+      min-width: 80px;
+    }
+
+    /* ── Slide 4 (Solution) ──────────────────────────────────── */
+    /* Already collapsed at 1100px via .s3 .grid but codeblock needs care */
+    /* Code block: allow horizontal scroll so long lines don't break layout */
+    .s3 .codeblock {
+      overflow-x: auto;
+      white-space: pre;
+      font-size: 11px;
+    }
+    /* diff-grid: 2-col → 1-col */
+    .s3 .diff-grid {
+      grid-template-columns: 1fr;
+    }
+
+    /* ── Slide 5 (Architecture) ──────────────────────────────── */
+    /* SVG pipeline diagram: already width:100% but becomes very short.
+       Add min-height so it remains legible, and allow x-scroll if needed. */
+    .pipeline {
+      overflow-x: auto;
+    }
+    .pipeline svg {
+      min-width: 560px; /* half of 1180 — readable but scrollable */
+    }
+
+    /* dag-table: 4-column table — wrap in scrollable container.
+       We can't add a wrapper div without touching HTML, so we apply
+       display:block + overflow-x:auto on the .dag container and
+       give the table a min-width so the columns don't collapse. */
+    .dag {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .dag-table {
+      min-width: 560px;
+    }
+    /* .col-step has white-space:nowrap — reduce font so step names fit */
+    .dag-table .col-step {
+      font-size: 10px;
+    }
+
+    /* stack: 3-col tech stack → 1-col */
+    .stack {
+      grid-template-columns: 1fr !important;
+    }
+    /* lowergrid: 2fr 1fr → 1-col */
+    .s4 .lowergrid {
+      grid-template-columns: 1fr;
+    }
+    /* sandwich layers: the .x label (right-aligned) can be hidden to save
+       horizontal space — it's decorative metadata */
+    .sandwich .layer .x {
+      display: none;
+    }
+
+    /* ── Slide 6 (Safety Sandwich) ──────────────────────────── */
+    /* guard: auto 1fr auto layout — hide the stage label on mobile to
+       prevent overflow on narrow screens; guard body is the priority */
+    .guard .stage {
+      display: none;
+    }
+    /* guard grid: collapse the idx + body-col only */
+    .guard {
+      grid-template-columns: auto 1fr;
+    }
+
+    /* ── Slide 7 (Business Model) ────────────────────────────── */
+    /* kpis: 5-col → 2-col at 768px, 1-col at 480px (see below) */
+    .kpis {
+      grid-template-columns: repeat(2, 1fr) !important;
+    }
+    /* future-tiers: 3-col → 1-col */
+    .future-tiers {
+      grid-template-columns: 1fr !important;
+    }
+    /* s5 .grid already collapses at 1100px */
+
+    /* ── Slide 8 (Roadmap) ───────────────────────────────────── */
+    /* gates: 4-col → 2-col */
+    .gates {
+      grid-template-columns: repeat(2, 1fr) !important;
+    }
+    /* timeline already collapses at 1100px */
+
+    /* ── Slide 9 (Live Demo) ─────────────────────────────────── */
+    /* demo-card term blocks: long code lines need horizontal scroll */
+    .demo-card .term {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      white-space: pre;
+      font-size: 11px;
+    }
+    /* s-demo .grid already collapses at 1100px */
+
+    /* ── Slide 10 (Questions) ────────────────────────────────── */
+    /* "Questions." heading: 96px minimum is too big on phones */
+    .s-close .questions {
+      font-size: clamp(52px, 14vw, 96px);
+    }
+    /* contact grid: auto 1fr cols fine but on very narrow phones
+       the k/v rows need word-break assistance */
+    .s-close .contact .v {
+      word-break: break-word;
+    }
+    /* contact card: reduce padding and max-width to fit viewport */
+    .s-close .contact {
+      max-width: 100%;
+      padding: 14px 16px;
+      gap: 8px 14px;
+    }
+
+    /* ── mara-test (appears on slide 3) ─────────────────────── */
+    /* flex row with verdict + long question — stack vertically */
+    .mara-test {
+      flex-direction: column;
+      gap: 10px;
+    }
+  }
+
+  /* ── Very narrow phones: 480px breakpoint ─────────────────────
+     Only addresses issues that don't fully resolve at 768px.
+     ──────────────────────────────────────────────────────────── */
+  @media (max-width: 480px) {
+
+    :root {
+      --pad-x: 14px;
+    }
+
+    /* kpis: collapse to 1-col at 480px — 2-col at 375px is cramped */
+    .kpis {
+      grid-template-columns: 1fr !important;
+    }
+
+    /* gates: 2-col → 1-col on very small screens */
+    .gates {
+      grid-template-columns: 1fr !important;
+    }
+
+    /* num-block big numbers: reduce so they don't dominate single-col layout */
+    .num-block .big {
+      font-size: clamp(40px, 10vw, 72px);
+    }
+
+    /* topbar: hide the centre title on very small screens (brand + counter enough) */
+    .topbar .title {
+      display: none;
+    }
+
+    /* Questions heading: further reduce */
+    .s-close .questions {
+      font-size: clamp(44px, 12vw, 72px);
+    }
+  }
+
 </style>
 </head>
 <body>
