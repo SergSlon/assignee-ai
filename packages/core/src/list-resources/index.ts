@@ -21,4 +21,11 @@ export {
   type RgtaTag,
   type ManagedIamRole,
   type BillingEnricher,
+  type PricingEnricher,
+  type CreatedDateEnricher,
 } from "./fetch-managed-resources.js";
+export {
+  createListCreatedDateEnricher,
+  type CreatedDateEnricherCredentials,
+} from "./created-date-enricher.js";
+export { createListPricingEnricher } from "./pricing-enricher.js";
