@@ -1,11 +1,34 @@
 #!/usr/bin/env node
 
-// Load .env from repo root before any other imports read process.env.
-// Silent no-op in CI where env vars are injected directly.
-try {
-  process.loadEnvFile();
-} catch {
-  // .env not present — rely on shell environment
+// Load .env from cwd before any other imports read process.env.
+// Assignee-specific access-key triples (ASSIGNEE_*_ACCESS_KEY_ID/SECRET/TOKEN)
+// are ALWAYS overridden by .env values so post-rotation commands pick up the
+// new keys automatically without the operator running `source .env`.
+// Silent no-op in CI where .env is absent and env vars are injected directly.
+import { loadDotEnv } from "./utils/dotenv-loader.js";
+
+const _dotenvResult = loadDotEnv();
+
+// Emit a single stderr notice when fresh assignee credentials were loaded
+// from .env — tells the operator that post-setup key rotation was picked up
+// automatically. Suppressed in --json / --output json mode (raw argv scan
+// because Commander hasn't parsed yet).
+if (_dotenvResult.assigneeKeysLoaded) {
+  const _argv = process.argv;
+  const _jsonMode =
+    _argv.includes("--json") ||
+    (() => {
+      const idx = _argv.indexOf("--output");
+      if (idx >= 0 && _argv[idx + 1] === "json") return true;
+      const short = _argv.indexOf("-o");
+      if (short >= 0 && _argv[short + 1] === "json") return true;
+      return false;
+    })();
+  if (!_jsonMode) {
+    process.stderr.write(
+      "[assignee] Loaded fresh credentials from ./.env (post-setup rotation pickup)\n",
+    );
+  }
 }
 
 import { readFileSync } from "node:fs";
