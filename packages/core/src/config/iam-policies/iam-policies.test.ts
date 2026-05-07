@@ -712,19 +712,27 @@ describe("IAM Policy Generators", () => {
     // Bug S3-001 (2026-05-07): s3:DeleteObject and s3:DeleteObjectVersion
     // were previously in the unscoped service sweep (ServiceSpecificActionsA/B).
     // A leaked operator credential could delete objects from ANY S3 bucket
-    // in the account. They are now tag-scoped alongside s3:DeleteBucket.
+    // in the account. They are now tag-scoped alongside the other destructive
+    // actions.
+    //
+    // Bug S3-002 (2026-05-07): s3:DeleteBucket and s3:DeleteBucketPolicy
+    // CANNOT be tag-scoped at the IAM identity-policy level — AWS does NOT
+    // auto-populate aws:ResourceTag into the IAM request context for S3
+    // bucket-level destructive operations. They live in the separate
+    // S3BucketDestructiveResourcePrefixScoped statement (no Condition).
     describe("ServiceDestructiveResourceTagScoped statement (SEC-011)", () => {
-      const DESTRUCTIVE = [
+      // Actions that MUST be in this tag-scoped statement.
+      // Note: s3:DeleteBucket and s3:DeleteBucketPolicy are intentionally
+      // ABSENT — they live in S3BucketDestructiveResourcePrefixScoped.
+      const TAG_SCOPED_DESTRUCTIVE = [
         "lambda:DeleteFunction",
         "ec2:TerminateInstances",
         "ecs:DeleteCluster",
         "sqs:DeleteQueue",
         "sns:DeleteTopic",
         "rds:DeleteDBInstance",
-        "s3:DeleteBucket",
-        "s3:DeleteBucketPolicy",
-        // Bug S3-001: pre-delete sweep actions must also be tag-scoped
-        // so a leaked credential cannot wipe objects from unmanaged buckets.
+        // Bug S3-001: object-level S3 operations correctly receive
+        // aws:ResourceTag context (different AWS code path from bucket-level).
         "s3:DeleteObject",
         "s3:DeleteObjectVersion",
       ];
@@ -751,13 +759,13 @@ describe("IAM Policy Generators", () => {
         ).toBe("assignee-ai");
       });
 
-      it("covers all SEC-011 destructive actions", () => {
+      it("covers all tag-scoped destructive actions (incl. object-level S3)", () => {
         const policy = operatorPolicy();
         const stmt = policy.Statement.find(
           (s) => s.Sid === "ServiceDestructiveResourceTagScoped",
         )!;
         const actions = new Set(stmt.Action);
-        for (const a of DESTRUCTIVE) {
+        for (const a of TAG_SCOPED_DESTRUCTIVE) {
           expect(
             actions.has(a),
             `${a} must be in ServiceDestructiveResourceTagScoped`,
@@ -765,8 +773,48 @@ describe("IAM Policy Generators", () => {
         }
       });
 
-      it("all SEC-011 destructive actions are absent from ServiceSpecificActionsA and ServiceSpecificActionsB", () => {
-        const destructiveSet = new Set(DESTRUCTIVE);
+      // Regression guard: s3:DeleteObject and s3:DeleteObjectVersion must
+      // stay tag-scoped — object-level S3 operations work correctly with
+      // aws:ResourceTag (unlike bucket-level ops). Moving them out would
+      // weaken the security posture unnecessarily.
+      it("still contains s3:DeleteObject and s3:DeleteObjectVersion (object-level ops remain tag-scoped)", () => {
+        const policy = operatorPolicy();
+        const stmt = policy.Statement.find(
+          (s) => s.Sid === "ServiceDestructiveResourceTagScoped",
+        )!;
+        const actions = new Set(stmt.Action);
+        expect(
+          actions.has("s3:DeleteObject"),
+          "s3:DeleteObject must remain in ServiceDestructiveResourceTagScoped",
+        ).toBe(true);
+        expect(
+          actions.has("s3:DeleteObjectVersion"),
+          "s3:DeleteObjectVersion must remain in ServiceDestructiveResourceTagScoped",
+        ).toBe(true);
+      });
+
+      // Bug S3-002: s3:DeleteBucket and s3:DeleteBucketPolicy must NOT
+      // be in this tag-scoped statement — AWS doesn't populate the tag
+      // context for bucket-level destructive ops, so the Allow would
+      // always evaluate to implicitDeny (MissingContextValues).
+      it("does NOT contain s3:DeleteBucket or s3:DeleteBucketPolicy (Bug S3-002: AWS limitation)", () => {
+        const policy = operatorPolicy();
+        const stmt = policy.Statement.find(
+          (s) => s.Sid === "ServiceDestructiveResourceTagScoped",
+        )!;
+        const actions = new Set(stmt.Action);
+        expect(
+          actions.has("s3:DeleteBucket"),
+          "s3:DeleteBucket must NOT be in ServiceDestructiveResourceTagScoped (AWS doesn't auto-populate ResourceTag for bucket-level ops)",
+        ).toBe(false);
+        expect(
+          actions.has("s3:DeleteBucketPolicy"),
+          "s3:DeleteBucketPolicy must NOT be in ServiceDestructiveResourceTagScoped (same AWS limitation)",
+        ).toBe(false);
+      });
+
+      it("all tag-scoped destructive actions are absent from ServiceSpecificActionsA and ServiceSpecificActionsB", () => {
+        const destructiveSet = new Set(TAG_SCOPED_DESTRUCTIVE);
         for (const policyFn of [
           operatorServicesAPolicy,
           operatorServicesBPolicy,
@@ -779,6 +827,101 @@ describe("IAM Policy Generators", () => {
             for (const action of stmtActions) {
               expect(
                 destructiveSet.has(action),
+                `${action} must NOT appear in unscoped service sweep (${statement.Sid})`,
+              ).toBe(false);
+            }
+          }
+        }
+      });
+    });
+
+    // Bug S3-002 (2026-05-07) — S3 bucket-level destructive actions cannot be
+    // tag-scoped at the IAM identity-policy level due to an AWS limitation.
+    // They live in a separate statement with Resource: "arn:aws:s3:::*" and
+    // no Condition. See docs/explanation/security-model.md for full analysis.
+    describe("S3BucketDestructiveResourcePrefixScoped statement (Bug S3-002)", () => {
+      const S3_BUCKET_DESTRUCTIVE = [
+        "s3:DeleteBucket",
+        "s3:DeleteBucketPolicy",
+      ];
+
+      it("exists as a dedicated statement in the core operator policy", () => {
+        const policy = operatorPolicy();
+        const stmt = policy.Statement.find(
+          (s) => s.Sid === "S3BucketDestructiveResourcePrefixScoped",
+        );
+        expect(stmt).toBeDefined();
+        expect(stmt!.Effect).toBe("Allow");
+      });
+
+      it("scopes Resource to arn:aws:s3:::* (all S3 bucket ARNs, no account-ID slot)", () => {
+        const policy = operatorPolicy();
+        const stmt = policy.Statement.find(
+          (s) => s.Sid === "S3BucketDestructiveResourcePrefixScoped",
+        )!;
+        // S3 bucket ARNs have no account-ID slot: arn:aws:s3:::<bucket-name>
+        // This is the narrowest resource specification possible for bucket-level ops.
+        expect(stmt.Resource).toBe("arn:aws:s3:::*");
+        expect(stmt.Resource).not.toBe("*");
+      });
+
+      it("has NO Condition (intentional — AWS limitation prevents tag-scoping here)", () => {
+        // CRITICAL: do NOT add aws:ResourceTag here. AWS does not auto-populate
+        // the tag context for s3:DeleteBucket / s3:DeleteBucketPolicy at the
+        // IAM identity-policy level. Adding a tag Condition would cause
+        // implicitDeny (MissingContextValues) — the exact bug this statement
+        // was created to work around.
+        // See: https://repost.aws/questions/QUyMnHQq6oTdyx76CMRhZ4yA
+        const policy = operatorPolicy();
+        const stmt = policy.Statement.find(
+          (s) => s.Sid === "S3BucketDestructiveResourcePrefixScoped",
+        )!;
+        // Condition must be absent (undefined or empty object)
+        const hasCondition =
+          stmt.Condition !== undefined &&
+          Object.keys(stmt.Condition).length > 0;
+        expect(
+          hasCondition,
+          "S3BucketDestructiveResourcePrefixScoped must have NO Condition — adding aws:ResourceTag would cause implicitDeny due to AWS S3 bucket-level limitation",
+        ).toBe(false);
+      });
+
+      it("covers s3:DeleteBucket and s3:DeleteBucketPolicy (and no other actions)", () => {
+        const policy = operatorPolicy();
+        const stmt = policy.Statement.find(
+          (s) => s.Sid === "S3BucketDestructiveResourcePrefixScoped",
+        )!;
+        const actions = new Set(stmt.Action);
+        for (const a of S3_BUCKET_DESTRUCTIVE) {
+          expect(
+            actions.has(a),
+            `${a} must be in S3BucketDestructiveResourcePrefixScoped`,
+          ).toBe(true);
+        }
+        // Exactly the two S3 bucket-level destructive actions — no extras
+        expect(actions.size).toBe(S3_BUCKET_DESTRUCTIVE.length);
+        // Regression guard: object-level ops must NOT drift here
+        expect(actions.has("s3:DeleteObject")).toBe(false);
+        expect(actions.has("s3:DeleteObjectVersion")).toBe(false);
+      });
+
+      it("s3:DeleteBucket and s3:DeleteBucketPolicy are absent from ServiceSpecificActionsA and ServiceSpecificActionsB", () => {
+        // All scoped S3 bucket-level actions must be absent from the
+        // unscoped service sweep (IAM union semantics would make it moot,
+        // but absence keeps the policy consistent).
+        const s3BucketSet = new Set(S3_BUCKET_DESTRUCTIVE);
+        for (const policyFn of [
+          operatorServicesAPolicy,
+          operatorServicesBPolicy,
+        ]) {
+          const doc = policyFn();
+          for (const statement of doc.Statement) {
+            const stmtActions = Array.isArray(statement.Action)
+              ? statement.Action
+              : [statement.Action];
+            for (const action of stmtActions) {
+              expect(
+                s3BucketSet.has(action),
                 `${action} must NOT appear in unscoped service sweep (${statement.Sid})`,
               ).toBe(false);
             }

@@ -47,6 +47,7 @@ import {
   REQUEST_TAG_SCOPED_SNAPSHOT_ACTIONS,
   TAG_SCOPED_SECRETS_ACTIONS,
   DESTRUCTIVE_SERVICE_ACTIONS,
+  S3_BUCKET_DESTRUCTIVE_ACTIONS,
   IAM_INSTANCE_PROFILE_SCOPED_ACTIONS,
 } from "./action-collector.js";
 
@@ -408,8 +409,14 @@ export function operatorPolicy(
         //
         // Resource: "*" is intentional — the ARN format differs across
         // services (Lambda functions, EC2 instances, ECS clusters, SQS
-        // queues, SNS topics, RDS instances, S3 buckets). The
-        // aws:ResourceTag condition provides the effective scope.
+        // queues, SNS topics, RDS instances). The aws:ResourceTag
+        // condition provides the effective scope.
+        //
+        // NOTE: s3:DeleteBucket and s3:DeleteBucketPolicy are intentionally
+        // ABSENT from this statement — see S3BucketDestructiveResourcePrefixScoped
+        // below for the AWS limitation that requires a separate approach.
+        // s3:DeleteObject and s3:DeleteObjectVersion ARE included here because
+        // object-level S3 operations correctly receive aws:ResourceTag context.
         Sid: "ServiceDestructiveResourceTagScoped",
         Effect: IamEffect.ALLOW,
         Action: [...DESTRUCTIVE_SERVICE_ACTIONS].sort(),
@@ -419,6 +426,53 @@ export function operatorPolicy(
             "aws:ResourceTag/managed-by": "assignee-ai",
           },
         },
+      },
+      {
+        // Bug S3-001 (2026-05-07) — AWS S3 BUCKET-LEVEL IAM LIMITATION.
+        //
+        // AWS does NOT auto-populate `aws:ResourceTag` into the IAM
+        // request-evaluation context for `s3:DeleteBucket` and
+        // `s3:DeleteBucketPolicy`. This is an AWS-side limitation confirmed
+        // via `aws iam simulate-principal-policy` (returns implicitDeny with
+        // MissingContextValues: ["aws:ResourceTag/managed-by"]) and via a
+        // live DeleteBucket call that succeeded only after a temporary inline
+        // policy with Resource:"*" and NO Condition was applied.
+        //
+        // The same aws:ResourceTag pattern works correctly for all other
+        // supported service types (Lambda / EC2 / ECS / SQS / SNS / RDS)
+        // and for object-level S3 operations (DeleteObject / DeleteObjectVersion)
+        // — those remain in ServiceDestructiveResourceTagScoped above.
+        //
+        // SECURITY TRADEOFF: without a Condition, the operator can technically
+        // issue s3:DeleteBucket against any S3 bucket in the account.
+        // Mitigations:
+        //   1. Resource: "arn:aws:s3:::*" narrows to S3 bucket ARNs only
+        //      (no account-ID slot in S3 ARNs — this is the narrowest
+        //      resource specification possible for bucket-level operations).
+        //   2. Every non-S3 destructive action remains tag-scoped (blast
+        //      radius of a leaked operator credential is limited to S3).
+        //   3. Bucket policy attached at `assignee apply` time (compensating
+        //      control) re-establishes per-bucket tagging enforcement at the
+        //      resource-policy boundary (resource-based policies DO evaluate
+        //      bucket tags correctly for bucket-level operations).
+        //   4. Non-assignee buckets are protected by their own bucket policies'
+        //      default-deny unless those policies explicitly grant this operator
+        //      (which only assignee-managed buckets do via the compensating
+        //      control attached at create time).
+        //
+        // References:
+        //   AWS re:Post: https://repost.aws/questions/QUyMnHQq6oTdyx76CMRhZ4yA
+        //   Full analysis: docs/explanation/security-model.md
+        //                  §S3 bucket-level IAM limitation
+        //   Bug story: bug-s3-destructive-tag-condition-aws-limitation.md
+        //
+        // NO Condition is intentional — adding aws:ResourceTag here
+        // causes the exact same implicitDeny failure this statement exists
+        // to work around.
+        Sid: "S3BucketDestructiveResourcePrefixScoped",
+        Effect: IamEffect.ALLOW,
+        Action: [...S3_BUCKET_DESTRUCTIVE_ACTIONS].sort(),
+        Resource: "arn:aws:s3:::*",
       },
     ],
   };

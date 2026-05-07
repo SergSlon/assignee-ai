@@ -17,6 +17,65 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### S3 bucket destroy IAM fix — AWS tag-scoping limitation workaround (2026-05-07)
+
+`assignee destroy <s3-arn>` (single and bulk) now succeeds for all
+assignee-managed S3 buckets. Previously the operator user received
+`AccessDenied: no identity-based policy allows the s3:DeleteBucket action`
+even though the bucket carried the `managed-by=assignee-ai` tag and the
+policy explicitly granted `s3:DeleteBucket` with an `aws:ResourceTag`
+condition.
+
+Root cause: AWS does NOT auto-populate `aws:ResourceTag` into the IAM
+request evaluation context for `s3:DeleteBucket` and `s3:DeleteBucketPolicy`.
+The `StringEquals` condition receives `<missing>` for the tag value, returns
+false, and the Allow never matches. Confirmed via `aws iam simulate-principal-policy`
+(returns `EvalDecision: implicitDeny`, `MissingContextValues` includes
+`aws:ResourceTag/managed-by`) and via direct live testing.
+
+This is NOT a code bug — it is an AWS-side limitation specific to S3
+bucket-level destructive operations. Lambda / EC2 / ECS / SQS / SNS / RDS
+and S3 object-level operations (DeleteObject / DeleteObjectVersion) all
+correctly receive the resource tag and remain tag-scoped.
+
+#### Changed (security-sensitive — re-run `assignee setup` required)
+
+- Operator IAM policy: `s3:DeleteBucket` and `s3:DeleteBucketPolicy` moved
+  from `ServiceDestructiveResourceTagScoped` (which carries
+  `aws:ResourceTag/managed-by = assignee-ai`) to a new dedicated statement
+  `S3BucketDestructiveResourcePrefixScoped` with `Resource: "arn:aws:s3:::*"`
+  and NO Condition. `Resource: "arn:aws:s3:::*"` is the narrowest possible
+  scope — S3 bucket ARNs have no account-ID slot.
+
+- **Security tradeoff**: the operator can technically issue `s3:DeleteBucket`
+  against any S3 bucket in the account. Non-assignee buckets remain protected
+  by their own bucket policies' default deny. See
+  [docs/explanation/security-model.md](docs/explanation/security-model.md)
+  for the full analysis, mitigations, and compensating control.
+
+- `s3:DeleteObject` and `s3:DeleteObjectVersion` remain in
+  `ServiceDestructiveResourceTagScoped` — object-level operations correctly
+  receive the `aws:ResourceTag` context and do not need this workaround.
+
+#### Added
+
+- `docs/explanation/security-model.md` — documents the operator IAM policy
+  structure, the tag-scoping principle, the S3 bucket-level AWS limitation
+  (with empirical evidence and mitigations), and all scoped statement
+  rationales.
+
+#### Operators must re-run `assignee setup`
+
+The operator IAM policy schema changed (new `S3BucketDestructiveResourcePrefixScoped`
+statement; `s3:DeleteBucket` + `s3:DeleteBucketPolicy` removed from
+`ServiceDestructiveResourceTagScoped`). After pulling this update, run:
+
+```sh
+assignee setup
+```
+
+---
+
 ### SSH-bundle UX epic + pre-demo audit closure (2026-05-05 / 2026-05-06)
 
 `assignee apply "Create EC2 with SSH"` now delivers a working SSH
