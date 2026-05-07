@@ -1758,6 +1758,61 @@
     .s-safety .grid6 { grid-template-columns: 1fr; grid-template-rows: auto; }
   }
 
+  /* ─── Mobile navigation (no keyboard available) ──────────────────
+     The desktop deck navigates via ArrowLeft / ArrowRight / Space —
+     keyboard-only by deliberate design so click/touch surfaces don't
+     interfere with text selection. On mobile that leaves users stuck
+     on the first slide. Surface explicit Prev / Next buttons at
+     ≤768px and bind a swipe-gesture handler. Both routes coexist
+     with text selection: buttons are tappable targets in fixed
+     bottom corners; swipe is detected only at >40px horizontal
+     travel with <30px vertical drift, which is well outside the
+     normal long-press / tap-to-select gesture envelope.
+     ─────────────────────────────────────────────────────────────── */
+  .mobile-nav {
+    display: none;
+    position: fixed;
+    bottom: 18px;
+    left: 0;
+    right: 0;
+    justify-content: space-between;
+    padding: 0 18px;
+    z-index: 50;
+    pointer-events: none;
+  }
+  .mobile-nav button {
+    pointer-events: auto;
+    background: rgba(13, 18, 32, 0.92);
+    border: 1px solid var(--hairline-strong);
+    color: var(--ink);
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 14px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 12px 18px;
+    border-radius: 10px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    cursor: pointer;
+    min-width: 92px;
+    transition: background 120ms, border-color 120ms;
+  }
+  .mobile-nav button:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+  .mobile-nav button:not(:disabled):active {
+    background: rgba(59, 130, 246, 0.18);
+    border-color: var(--blue);
+  }
+  @media (max-width: 768px) {
+    .mobile-nav { display: flex; }
+    /* Reserve bottom space so the last line of slide content isn't
+       hidden behind the floating buttons. */
+    .deck { padding-bottom: 72px; }
+  }
+
 </style>
 </head>
 <body>
@@ -2705,6 +2760,12 @@
 <!-- Progress bar -->
 <div class="progress" aria-hidden="true"><div id="progressFill" style="width: 10%"></div></div>
 
+<!-- Mobile navigation: visible at ≤768px viewport (no keyboard surface). -->
+<nav class="mobile-nav" aria-label="Slide navigation">
+  <button id="mobilePrev" type="button" aria-label="Previous slide">← Prev</button>
+  <button id="mobileNext" type="button" aria-label="Next slide">Next →</button>
+</nav>
+
 <script>
   (function () {
     'use strict';
@@ -2740,17 +2801,28 @@
         url.hash = '#' + (idx + 1);
         history.replaceState(null, '', url.toString());
       } catch (_) { /* ignore */ }
+
+      // Mobile-nav bounds — disable Prev on slide 0, Next on the last.
+      const _mPrev = document.getElementById('mobilePrev');
+      const _mNext = document.getElementById('mobileNext');
+      if (_mPrev) _mPrev.disabled = idx === 0;
+      if (_mNext) _mNext.disabled = idx === total - 1;
     }
 
     function next() { render(current + 1); }
     function prev() { render(current - 1); }
 
-    // Navigation surface, by deliberate design:
-    //   ArrowLeft  → previous slide
+    // Navigation surface:
+    //   ArrowLeft  → previous slide   (desktop, deliberate keyboard-first)
     //   ArrowRight → next slide
     //   Space      → next slide
-    // Nothing else changes slides. Click/touch/swipe are NOT bound,
-    // so users can freely select and copy slide text.
+    //   Tap on visible Prev/Next buttons → mobile-only (≤768px viewport)
+    //   Horizontal swipe ≥ 40px with < 30px vertical drift → next/prev
+    //
+    // The desktop deck still avoids generic click handlers so users can
+    // freely select and copy slide text. The mobile additions live only
+    // on touch and on dedicated buttons; they do NOT consume taps inside
+    // selectable text.
     document.addEventListener('keydown', (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === 'ArrowRight' || e.key === ' ') {
@@ -2759,6 +2831,39 @@
         e.preventDefault(); prev();
       }
     });
+
+    // Mobile nav buttons. The disabled-state for these is set inside
+    // render() so each slide change keeps the bounds honest.
+    const mPrev = document.getElementById('mobilePrev');
+    const mNext = document.getElementById('mobileNext');
+    if (mPrev) mPrev.addEventListener('click', () => prev());
+    if (mNext) mNext.addEventListener('click', () => next());
+
+    // Touch swipe — listens on the deck container so taps inside slides
+    // (e.g. selecting code spans) are not consumed. Detection threshold
+    // is set so swipe is unambiguous vs scroll/tap.
+    const SWIPE_MIN_X = 40;   // pixels horizontal travel to register
+    const SWIPE_MAX_Y = 30;   // pixels vertical drift max — beyond this it's a scroll
+    const deck = document.getElementById('deck');
+    if (deck) {
+      let startX = 0, startY = 0, tracking = false;
+      deck.addEventListener('touchstart', (e) => {
+        if (e.touches.length !== 1) { tracking = false; return; }
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        tracking = true;
+      }, { passive: true });
+      deck.addEventListener('touchend', (e) => {
+        if (!tracking) return;
+        tracking = false;
+        const t = e.changedTouches[0];
+        const dx = t.clientX - startX;
+        const dy = t.clientY - startY;
+        if (Math.abs(dx) >= SWIPE_MIN_X && Math.abs(dy) <= SWIPE_MAX_Y) {
+          if (dx < 0) next(); else prev();
+        }
+      }, { passive: true });
+    }
 
     // Honour deep-link on load: #3 → slide 3
     const hash = parseInt((window.location.hash || '').replace('#', ''), 10);
