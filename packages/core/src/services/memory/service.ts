@@ -27,6 +27,49 @@ import {
   type PatternRecord,
 } from "../../schema/memory.js";
 import type { ZodTypeAny } from "zod";
+import { safeTry } from "../../types/result.js";
+import { FileStore } from "./file-store.js";
+import { rotateRecords, type RotationPreserveFilter } from "./rotation.js";
+
+/**
+ * Tracks which FileName values have already emitted a schema-drop notice
+ * in this process lifetime. Ensures the notice fires AT MOST ONCE per
+ * file per process, even when the write-back fails (lock contention) and
+ * subsequent reads would normally re-trigger the drop path.
+ */
+const _alreadyWarnedFiles = new Set<string>();
+
+/**
+ * Reset the once-per-process warning tracker.
+ * FOR TESTING ONLY — do not call in production code.
+ * @internal
+ */
+export function _resetAlreadyWarnedFilesForTesting(): void {
+  _alreadyWarnedFiles.clear();
+}
+
+/**
+ * Returns true when the current CLI invocation is in JSON output mode.
+ * Checks `process.argv` for `--json` (boolean shorthand) or
+ * `--output json` / `-o json` (explicit enum). Mirrors the argv-based
+ * detection used elsewhere in the CLI layer (e.g. logger.ts).
+ *
+ * The memory service lives in core (no CLI imports allowed), so we inspect
+ * argv directly rather than importing resolveJsonMode from apps/cli.
+ */
+function isJsonMode(): boolean {
+  const argv = process.argv;
+  if (argv.includes("--json")) return true;
+  for (let i = 0; i < argv.length - 1; i++) {
+    if (
+      (argv[i] === "--output" || argv[i] === "-o") &&
+      argv[i + 1] === "json"
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /**
  * Drop schema-failing records instead of nuking the whole array.
@@ -52,15 +95,35 @@ function filterValidRecords<T>(
   }
   return { valid, dropped };
 }
-import { safeTry } from "../../types/result.js";
-import { FileStore } from "./file-store.js";
-import { rotateRecords, type RotationPreserveFilter } from "./rotation.js";
 
 const MEMORY_DIR = path.join(os.homedir(), ASSIGNEE_DIR, "memory");
 
 export class MemoryService extends FileStore {
   constructor(dir: string = MEMORY_DIR) {
     super(dir);
+  }
+
+  /**
+   * After a filter dropped ≥ 1 stale record, write the cleaned set back
+   * to disk so the next read takes the schema fast-path and the warning
+   * never repeats. Best-effort: lock-contention or write failures don't
+   * propagate — the in-memory filter result is what callers see, and the
+   * next run will retry.
+   */
+  private async rewriteFilteredFile<T>(
+    fileName: string,
+    validRecords: T[],
+  ): Promise<void> {
+    const target = this.filePath(fileName);
+    const acquired = await this.acquireLock(target);
+    if (!acquired) return;
+    try {
+      await this.atomicWrite(target, JSON.stringify(validRecords, null, 2));
+    } catch {
+      // Best-effort; subsequent reads will retry.
+    } finally {
+      await this.releaseLock(target);
+    }
   }
 
   // --- Provisions (append-only) ---
@@ -79,9 +142,15 @@ export class MemoryService extends FileStore {
         ProvisionRecordSchema,
       );
       if (dropped > 0) {
-        process.stderr.write(
-          `WARNING: ${FileName.PROVISIONS}: dropped ${dropped} schema-failing record(s); ${valid.length} valid record(s) preserved.\n`,
-        );
+        if (!_alreadyWarnedFiles.has(FileName.PROVISIONS)) {
+          _alreadyWarnedFiles.add(FileName.PROVISIONS);
+          if (!isJsonMode()) {
+            process.stderr.write(
+              `[assignee] Cleaned ${dropped} stale record(s) from ${FileName.PROVISIONS} (schema migration; one-time notice).\n`,
+            );
+          }
+        }
+        await this.rewriteFilteredFile(FileName.PROVISIONS, valid);
       }
       return valid;
     } catch {
@@ -169,9 +238,15 @@ export class MemoryService extends FileStore {
         FailureRecordSchema,
       );
       if (dropped > 0) {
-        process.stderr.write(
-          `WARNING: ${FileName.FAILURES}: dropped ${dropped} schema-failing record(s); ${valid.length} valid record(s) preserved.\n`,
-        );
+        if (!_alreadyWarnedFiles.has(FileName.FAILURES)) {
+          _alreadyWarnedFiles.add(FileName.FAILURES);
+          if (!isJsonMode()) {
+            process.stderr.write(
+              `[assignee] Cleaned ${dropped} stale record(s) from ${FileName.FAILURES} (schema migration; one-time notice).\n`,
+            );
+          }
+        }
+        await this.rewriteFilteredFile(FileName.FAILURES, valid);
       }
       return valid;
     } catch {
@@ -239,9 +314,15 @@ export class MemoryService extends FileStore {
         PatternRecordSchema,
       );
       if (dropped > 0) {
-        process.stderr.write(
-          `WARNING: ${FileName.PATTERNS}: dropped ${dropped} schema-failing record(s); ${valid.length} valid record(s) preserved.\n`,
-        );
+        if (!_alreadyWarnedFiles.has(FileName.PATTERNS)) {
+          _alreadyWarnedFiles.add(FileName.PATTERNS);
+          if (!isJsonMode()) {
+            process.stderr.write(
+              `[assignee] Cleaned ${dropped} stale record(s) from ${FileName.PATTERNS} (schema migration; one-time notice).\n`,
+            );
+          }
+        }
+        await this.rewriteFilteredFile(FileName.PATTERNS, valid);
       }
       return valid;
     } catch {
