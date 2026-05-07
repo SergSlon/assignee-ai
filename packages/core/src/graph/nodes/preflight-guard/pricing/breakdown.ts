@@ -145,9 +145,30 @@ export async function queryLineItemPrices(
           item.kind === "fixed" && item.priceUnit === "/hr"
             ? "compute"
             : "storage";
+
+        // AWS Data Transfer pricing is keyed by `fromRegionCode`, not
+        // by the global `region` MCP parameter. Without this filter
+        // the API returns rows for every region (Ohio, Frankfurt,
+        // Tokyo, …) and the tier-ladder resolver gives up because
+        // it sees N products instead of one per region. Inject the
+        // region filter for any AWSDataTransfer request that doesn't
+        // already specify it. Other services (S3, Lambda, KMS, etc.)
+        // are correctly scoped via the MCP tool's `region` parameter.
+        //
+        // CRITICAL: this injection MUST happen BEFORE the cache lookup.
+        // Otherwise a pre-fix cache entry (keyed by the original filter
+        // shape, with the wrong/missing region filter) would intercept
+        // and return the stale "unavailable" response. By computing the
+        // cache key from the post-injection filter shape, fresh fetches
+        // are properly differentiated from any legacy cache entries and
+        // future lookups round-trip correctly.
+        const effectiveFilters = isDataTransferService(item.serviceCode)
+          ? ensureFromRegionCodeFilter(item.filters, AWS_REGION)
+          : item.filters;
+
         const cached = getCachedPrice(
           item.serviceCode,
-          item.filters,
+          [...effectiveFilters],
           category,
           projectDir,
         );
@@ -161,23 +182,11 @@ export async function queryLineItemPrices(
           } else {
             const timeoutMs = item.timeoutMs ?? PRICING_TIMEOUT_MS;
 
-            // AWS Data Transfer pricing is keyed by `fromRegionCode`, not
-            // by the global `region` MCP parameter. Without this filter
-            // the API returns rows for every region (Ohio, Frankfurt,
-            // Tokyo, …) and the tier-ladder resolver gives up because
-            // it sees N products instead of one per region. Inject the
-            // region filter for any AWSDataTransfer request that doesn't
-            // already specify it. Other services (S3, Lambda, KMS, etc.)
-            // are correctly scoped via the MCP tool's `region` parameter.
-            const filters = isDataTransferService(item.serviceCode)
-              ? ensureFromRegionCodeFilter(item.filters, AWS_REGION)
-              : item.filters;
-
             const result = await withTimeout(
               pricingTool.invoke({
                 service_code: item.serviceCode,
                 region: AWS_REGION,
-                filters,
+                filters: effectiveFilters,
                 output_options: { pricing_terms: [PricingTerm.ON_DEMAND] },
               }),
               timeoutMs,
@@ -194,7 +203,7 @@ export async function queryLineItemPrices(
             }
 
             data = JSON.parse(unwrapMcpText(result)) as AwsPricingResponse;
-            setCachedPrice(item.serviceCode, item.filters, data);
+            setCachedPrice(item.serviceCode, [...effectiveFilters], data);
           }
 
           // ── Tiered-rate path (e.g. S3 data-transfer-out) ──────────────
