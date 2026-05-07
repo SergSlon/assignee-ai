@@ -12,12 +12,13 @@
  * MemoryService instance (injected via the constructor) to assert on the
  * actual on-disk content after each write.
  */
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as fs from "node:fs/promises";
 import { MemoryService } from "../services/memory/service.js";
 import { upsertPatternRecord, writeFailureRecord } from "./memory-recorder.js";
+import { FileAdvisoryLockAdapter } from "../locks/file-advisory-lock.js";
 import type { ProvisionRecord } from "../schema/memory.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -247,5 +248,127 @@ describe("MemoryService.appendProvision — publicIpAddressAtApply round-trip (S
     const records = await service.readProvisions();
     expect(records).toHaveLength(1);
     expect(records[0]!.publicIpAddressAtApply).toBeUndefined();
+  });
+});
+
+// ── AC#4: Concurrency regression — 10 parallel writeProvisionRecord-style calls ───────────
+//
+// Reproduces the double-lock bug scenario end-to-end using the same pattern
+// as production: outer FileAdvisoryLockAdapter.withLock wraps a direct
+// MemoryService.appendProvision call (no inner lock). All 10 invocations
+// must land; no records may be silently dropped or overwritten.
+//
+// This replicates what writeProvisionRecord does in memory-recorder.ts:
+//   await defaultFileAdvisoryLock.withLock(PROVISIONS_LOCK_NAME, async () => {
+//     await defaultMemoryService.appendProvision(record);
+//   });
+// but against a test-isolated temp dir instead of ~/.assignee/memory/.
+
+describe("writeProvisionRecord concurrency — 10 parallel writes all land (AC#4)", () => {
+  let tmpDir: string;
+  let memService: MemoryService;
+  let lock: FileAdvisoryLockAdapter;
+  let provisionsLockName: string;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "assignee-concurrent-test-"),
+    );
+    memService = new MemoryService(tmpDir);
+    lock = new FileAdvisoryLockAdapter({
+      staleLockTimeoutMs: 10_000,
+      maxRetries: 50,
+      retryDelayMs: 20,
+    });
+    provisionsLockName = path.join(tmpDir, "provisions.json");
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("10 concurrent outer-lock+appendProvision invocations all land within 2s; no records lost", async () => {
+    const N = 10;
+
+    const makeRecord = (i: number): ProvisionRecord => ({
+      runId: `550e8400-e29b-41d4-a716-4466554400${String(i).padStart(2, "0")}`,
+      resourceType: "AWS::S3::Bucket",
+      resourceArn: `arn:aws:s3:::test-bucket-${i}`,
+      region: "us-east-1",
+      desiredStateHash: `hash-${i}`,
+      estimatedMonthlyCost: "$0.023/GB-month",
+      timestamp: new Date(Date.now() + i).toISOString(),
+    });
+
+    // This is exactly the production pattern in writeProvisionRecord:
+    //   defaultFileAdvisoryLock.withLock(PROVISIONS_LOCK_NAME, async () => {
+    //     await defaultMemoryService.appendProvision(record);
+    //   });
+    const writers = Array.from({ length: N }, (_, i) =>
+      lock.withLock(provisionsLockName, async () => {
+        await memService.appendProvision(makeRecord(i));
+      }),
+    );
+
+    const start = Date.now();
+    await Promise.all(writers);
+    const elapsed = Date.now() - start;
+
+    // All 10 writes must complete within 2 seconds (AC#4 requirement).
+    expect(elapsed).toBeLessThan(2000);
+
+    const final = await memService.readProvisions();
+
+    // All 10 records must be present — no silent drops.
+    expect(final).toHaveLength(N);
+
+    // Every runId must appear exactly once (no overwrites).
+    for (let i = 0; i < N; i++) {
+      const expectedRunId = `550e8400-e29b-41d4-a716-4466554400${String(i).padStart(2, "0")}`;
+      const matches = final.filter((r) => r.runId === expectedRunId);
+      expect(matches).toHaveLength(1);
+    }
+  });
+
+  it("double-lock regression: appendProvision called inside withLock does NOT emit lock-contention warning", async () => {
+    // Before the fix, appendProvision acquired its own inner lock after
+    // withLock already held the outer lock — the inner acquire always saw
+    // the outer lock file and emitted:
+    //   "WARNING: Could not acquire lock for provisions.json — skipping write"
+    // With the fix, appendProvision has no inner lock → no warning.
+    const stderrChunks: string[] = [];
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((chunk: unknown) => {
+        stderrChunks.push(String(chunk));
+        return true;
+      });
+
+    try {
+      await lock.withLock(provisionsLockName, async () => {
+        await memService.appendProvision({
+          runId: "550e8400-e29b-41d4-a716-446655440000",
+          resourceType: "AWS::S3::Bucket",
+          resourceArn: "arn:aws:s3:::no-warning-bucket",
+          region: "us-east-1",
+          desiredStateHash: "abc123",
+          estimatedMonthlyCost: "$0.023/GB-month",
+          timestamp: new Date().toISOString(),
+        });
+      });
+    } finally {
+      stderrSpy.mockRestore();
+    }
+
+    // The old warning must NEVER appear.
+    const warningFound = stderrChunks.some((c) =>
+      c.includes("Could not acquire lock for provisions.json"),
+    );
+    expect(warningFound).toBe(false);
+
+    // The record must have landed.
+    const records = await memService.readProvisions();
+    expect(records).toHaveLength(1);
+    expect(records[0]!.resourceArn).toBe("arn:aws:s3:::no-warning-bucket");
   });
 });

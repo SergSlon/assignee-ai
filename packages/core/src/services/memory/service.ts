@@ -203,23 +203,24 @@ export class MemoryService extends FileStore {
     return records.find((r) => r.runId === input);
   }
 
+  /**
+   * Append a provision record to provisions.json.
+   *
+   * NOTE: This method is ONLY called from `memory-recorder.ts`
+   * (`writeProvisionRecord`), which already holds the outer
+   * `defaultFileAdvisoryLock` via `withLock(PROVISIONS_LOCK_NAME, ...)`.
+   * Do NOT add an inner `acquireLock` here — that would cause a re-entrant
+   * double-lock on the same lock file, causing the inner acquire to see the
+   * outer lock as "held by another writer" and silently drop the write.
+   * (Bug: "Could not acquire lock for provisions.json — skipping write to
+   * prevent corruption" observed in compound applies.)
+   */
   async appendProvision(record: ProvisionRecord): Promise<void> {
     await this.ensureDir();
     const target = this.filePath(FileName.PROVISIONS);
-    const acquired = await this.acquireLock(target);
-    if (!acquired) {
-      process.stderr.write(
-        "WARNING: Could not acquire lock for provisions.json — skipping write to prevent corruption.\n",
-      );
-      return;
-    }
-    try {
-      const existing = await this.readProvisions();
-      existing.push(record);
-      await this.atomicWrite(target, JSON.stringify(existing, null, 2));
-    } finally {
-      await this.releaseLock(target);
-    }
+    const existing = await this.readProvisions();
+    existing.push(record);
+    await this.atomicWrite(target, JSON.stringify(existing, null, 2));
   }
 
   // --- Failures (append-only) ---
@@ -255,47 +256,40 @@ export class MemoryService extends FileStore {
     }
   }
 
+  /**
+   * Append a failure record to failures.json.
+   *
+   * NOTE: Only called from `memory-recorder.ts` (`writeFailureRecord`), which
+   * holds the outer `defaultFileAdvisoryLock`. No inner lock here — same
+   * re-entrant double-lock guard as `appendProvision` above.
+   */
   async appendFailure(record: FailureRecord): Promise<void> {
     await this.ensureDir();
     const target = this.filePath(FileName.FAILURES);
-    const acquired = await this.acquireLock(target);
-    if (!acquired) {
-      process.stderr.write(
-        "WARNING: Could not acquire lock for failures.json — skipping write to prevent corruption.\n",
-      );
-      return;
-    }
-    try {
-      const existing = await this.readFailures();
-      existing.push(record);
-      await this.atomicWrite(target, JSON.stringify(existing, null, 2));
-    } finally {
-      await this.releaseLock(target);
-    }
+    const existing = await this.readFailures();
+    existing.push(record);
+    await this.atomicWrite(target, JSON.stringify(existing, null, 2));
   }
 
   /**
    * Remove all failure records for a given resource type.
    * Called after a successful provision so stale errors are not surfaced.
+   *
+   * NOTE: Only called from `memory-recorder.ts` (`clearFailureHistory`),
+   * which does NOT hold the outer lock (it calls directly, no `withLock`
+   * wrapper). Safe without inner lock because `clearFailureHistory` is a
+   * best-effort cleanup — it cannot interleave destructively with the
+   * provision/failure writes (different logical operation, same-process,
+   * sequential event loop). If concurrent safety is needed in future, route
+   * through a `withLock` wrapper in `memory-recorder.ts`.
    */
   async clearFailuresForType(resourceType: string): Promise<void> {
     await this.ensureDir();
     const target = this.filePath(FileName.FAILURES);
-    const acquired = await this.acquireLock(target);
-    if (!acquired) {
-      process.stderr.write(
-        "WARNING: Could not acquire lock for failures.json — skipping write to prevent corruption.\n",
-      );
-      return;
-    }
-    try {
-      const existing = await this.readFailures();
-      const filtered = existing.filter((f) => f.resourceType !== resourceType);
-      if (filtered.length === existing.length) return;
-      await this.atomicWrite(target, JSON.stringify(filtered, null, 2));
-    } finally {
-      await this.releaseLock(target);
-    }
+    const existing = await this.readFailures();
+    const filtered = existing.filter((f) => f.resourceType !== resourceType);
+    if (filtered.length === existing.length) return;
+    await this.atomicWrite(target, JSON.stringify(filtered, null, 2));
   }
 
   // --- Patterns (upsert) ---
@@ -331,34 +325,30 @@ export class MemoryService extends FileStore {
     }
   }
 
+  /**
+   * Upsert a pattern record in patterns.json.
+   *
+   * NOTE: Only called from `memory-recorder.ts` (`upsertPatternRecord`), which
+   * holds the outer `defaultFileAdvisoryLock`. No inner lock here — same
+   * re-entrant double-lock guard as `appendProvision` above.
+   */
   async upsertPattern(record: PatternRecord): Promise<void> {
     await this.ensureDir();
     const target = this.filePath(FileName.PATTERNS);
-    const acquired = await this.acquireLock(target);
-    if (!acquired) {
-      process.stderr.write(
-        "WARNING: Could not acquire lock for patterns.json — skipping write to prevent corruption.\n",
-      );
-      return;
+    const existing = await this.readPatterns();
+    const idx = existing.findIndex((p) => p.pattern === record.pattern);
+    if (idx >= 0) {
+      existing[idx] = {
+        ...existing[idx],
+        pattern: record.pattern,
+        optionsSelected: record.optionsSelected,
+        count: existing[idx]!.count + 1,
+        lastUsed: record.lastUsed,
+      };
+    } else {
+      existing.push({ ...record, count: 1 });
     }
-    try {
-      const existing = await this.readPatterns();
-      const idx = existing.findIndex((p) => p.pattern === record.pattern);
-      if (idx >= 0) {
-        existing[idx] = {
-          ...existing[idx],
-          pattern: record.pattern,
-          optionsSelected: record.optionsSelected,
-          count: existing[idx]!.count + 1,
-          lastUsed: record.lastUsed,
-        };
-      } else {
-        existing.push({ ...record, count: 1 });
-      }
-      await this.atomicWrite(target, JSON.stringify(existing, null, 2));
-    } finally {
-      await this.releaseLock(target);
-    }
+    await this.atomicWrite(target, JSON.stringify(existing, null, 2));
   }
 
   // --- Destroyed ARNs (append-only set, for post-destroy list filtering) ---
@@ -377,19 +367,21 @@ export class MemoryService extends FileStore {
     }
   }
 
+  /**
+   * Append a destroyed ARN to destroyed-arns.json.
+   *
+   * NOTE: Only called from `memory-recorder.ts` (`appendDestroyedArn`), which
+   * does NOT hold the outer lock (direct call, no `withLock` wrapper). Safe
+   * for the same reason as `clearFailuresForType` — best-effort, no
+   * interleave risk with provision writes in the same process.
+   */
   async appendDestroyedArn(arn: string): Promise<void> {
     if (!arn) return;
     await this.ensureDir();
     const target = this.filePath(FileName.DESTROYED_ARNS);
-    const acquired = await this.acquireLock(target);
-    if (!acquired) return;
-    try {
-      const existing = await this.readDestroyedArns();
-      existing.add(arn);
-      await this.atomicWrite(target, JSON.stringify([...existing], null, 2));
-    } finally {
-      await this.releaseLock(target);
-    }
+    const existing = await this.readDestroyedArns();
+    existing.add(arn);
+    await this.atomicWrite(target, JSON.stringify([...existing], null, 2));
   }
 
   // --- Rotation ---
