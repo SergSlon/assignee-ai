@@ -15,7 +15,7 @@ import {
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
-import { MemoryService } from "./memory.js";
+import { MemoryService, _resetAlreadyWarnedFilesForTesting } from "./memory.js";
 import type {
   ProvisionRecord,
   PatternRecord,
@@ -43,6 +43,8 @@ let service: MemoryService;
 beforeEach(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "assignee-memory-test-"));
   service = new MemoryService(tmpDir);
+  // Reset the once-per-process warning tracker so each test starts clean.
+  _resetAlreadyWarnedFilesForTesting();
 });
 
 afterEach(async () => {
@@ -1048,6 +1050,276 @@ describe("MemoryService — file permissions (L-A2)", () => {
       expect(mode).toBeGreaterThanOrEqual(0);
     } else {
       expect(mode).toBe(0o600);
+    }
+  });
+});
+
+// ── Schema write-back + once-per-process warning (bug fix) ────────────────────
+
+/**
+ * Valid failure record for write-back tests. Matches FailureRecordSchema:
+ * runId is UUID, timestamp is ISO-8601 datetime.
+ */
+const VALID_FAILURE: FailureRecord = {
+  runId: "9baab789-7ffd-48a0-a6f9-77139a3c18a0",
+  resourceType: "AWS::S3::Bucket",
+  errorCode: "AlreadyExists",
+  errorMessage: "Bucket already exists",
+  suggestedFix: "Use a different bucket name",
+  timestamp: "2026-05-07T00:00:00.000Z",
+};
+
+const VALID_PROVISION: ProvisionRecord = {
+  runId: "9baab789-7ffd-48a0-a6f9-77139a3c18a0",
+  resourceType: "AWS::S3::Bucket",
+  resourceArn: "arn:aws:s3:::my-bucket",
+  region: "us-east-1",
+  desiredStateHash: "abc123def456",
+  estimatedMonthlyCost: "$0.023/GB-month",
+  timestamp: "2026-05-07T00:00:00.000Z",
+};
+
+const VALID_PATTERN: PatternRecord = {
+  pattern: "serverless-api",
+  optionsSelected: { runtime: "nodejs22.x" },
+  count: 1,
+  lastUsed: "2026-05-07T00:00:00.000Z",
+};
+
+describe("MemoryService — schema write-back (bug fix)", () => {
+  let stderrSpy: MockInstance<typeof process.stderr.write>;
+
+  beforeEach(() => {
+    stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(
+        (() => true) as unknown as typeof process.stderr.write,
+      );
+  });
+
+  afterEach(() => {
+    stderrSpy.mockRestore();
+  });
+
+  // T1: stale record write-back — failures.json
+  it("readFailures: first read rewrites cleaned file; second read takes fast-path (no warning)", async () => {
+    // Seed: one bad + one valid record.
+    await fs.writeFile(
+      path.join(tmpDir, "failures.json"),
+      JSON.stringify([{ stale: true }, VALID_FAILURE]),
+      "utf-8",
+    );
+
+    // First read: drops the bad record, emits notice, rewrites file.
+    const first = await service.readFailures();
+    expect(first).toHaveLength(1);
+    expect(first[0]!.runId).toBe(VALID_FAILURE.runId);
+
+    // Notice was emitted exactly once.
+    expect(stderrSpy).toHaveBeenCalledTimes(1);
+    expect(stderrSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Cleaned 1 stale record(s) from failures.json"),
+    );
+
+    // File on disk now has only the valid record.
+    const onDisk = JSON.parse(
+      await fs.readFile(path.join(tmpDir, "failures.json"), "utf-8"),
+    ) as unknown[];
+    expect(onDisk).toHaveLength(1);
+
+    // Second read: file is clean → fast-path succeeds, no new warning.
+    stderrSpy.mockClear();
+    const second = await service.readFailures();
+    expect(second).toHaveLength(1);
+    expect(stderrSpy).not.toHaveBeenCalled();
+  });
+
+  // T2: once-per-process warning — two consecutive reads in the same process
+  it("readFailures: notice fires only on first drop even when file is not yet rewritten", async () => {
+    // Inject stale record.
+    const staleContent = JSON.stringify([{ stale: true }, VALID_FAILURE]);
+    await fs.writeFile(
+      path.join(tmpDir, "failures.json"),
+      staleContent,
+      "utf-8",
+    );
+
+    // First read triggers notice + rewrite.
+    await service.readFailures();
+    expect(stderrSpy).toHaveBeenCalledTimes(1);
+
+    // Inject the stale record again to simulate a write from another process.
+    await fs.writeFile(
+      path.join(tmpDir, "failures.json"),
+      staleContent,
+      "utf-8",
+    );
+
+    // Second read in the same process — notice suppressed by _alreadyWarnedFiles.
+    stderrSpy.mockClear();
+    const second = await service.readFailures();
+    expect(second).toHaveLength(1);
+    expect(stderrSpy).not.toHaveBeenCalled();
+  });
+
+  // T3: JSON-mode suppression — no notice on stderr, but file IS still rewritten
+  it("readFailures: notice suppressed in --json mode; file is still rewritten", async () => {
+    const originalArgv = process.argv;
+    process.argv = [...originalArgv, "--json"];
+
+    await fs.writeFile(
+      path.join(tmpDir, "failures.json"),
+      JSON.stringify([{ stale: true }, VALID_FAILURE]),
+      "utf-8",
+    );
+
+    try {
+      const records = await service.readFailures();
+      expect(records).toHaveLength(1);
+
+      // No notice emitted.
+      expect(stderrSpy).not.toHaveBeenCalled();
+
+      // But file WAS rewritten (clean-up still happens).
+      const onDisk = JSON.parse(
+        await fs.readFile(path.join(tmpDir, "failures.json"), "utf-8"),
+      ) as unknown[];
+      expect(onDisk).toHaveLength(1);
+    } finally {
+      process.argv = originalArgv;
+    }
+  });
+
+  // T4: lock-acquisition failure — in-memory drop works, file unchanged, no exception
+  it("readFailures: lock-acquisition failure leaves file unchanged, no exception thrown", async () => {
+    const staleContent = JSON.stringify([{ stale: true }, VALID_FAILURE]);
+    await fs.writeFile(
+      path.join(tmpDir, "failures.json"),
+      staleContent,
+      "utf-8",
+    );
+
+    // Mock acquireLock to always return false (simulates contention).
+    const acquireSpy = vi
+      // @ts-expect-error -- private method on FileStore
+      .spyOn(service as unknown as Record<string, unknown>, "acquireLock")
+      .mockResolvedValue(false);
+
+    let records: FailureRecord[] = [];
+    try {
+      records = await service.readFailures();
+    } finally {
+      acquireSpy.mockRestore();
+    }
+
+    // In-memory drop still works.
+    expect(records).toHaveLength(1);
+    expect(records[0]!.runId).toBe(VALID_FAILURE.runId);
+
+    // File on disk is unchanged (lock prevented write-back).
+    const onDisk = JSON.parse(
+      await fs.readFile(path.join(tmpDir, "failures.json"), "utf-8"),
+    ) as unknown[];
+    expect(onDisk).toHaveLength(2);
+  });
+
+  // T5: regression — provisions.json gets same treatment
+  it("readProvisions: stale record is dropped, file rewritten, second read is clean", async () => {
+    await fs.writeFile(
+      path.join(tmpDir, "provisions.json"),
+      JSON.stringify([{ stale: true }, VALID_PROVISION]),
+      "utf-8",
+    );
+
+    const first = await service.readProvisions();
+    expect(first).toHaveLength(1);
+    expect(first[0]!.runId).toBe(VALID_PROVISION.runId);
+
+    // Notice emitted for provisions.json.
+    expect(stderrSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Cleaned 1 stale record(s) from provisions.json"),
+    );
+
+    // File cleaned.
+    const onDisk = JSON.parse(
+      await fs.readFile(path.join(tmpDir, "provisions.json"), "utf-8"),
+    ) as unknown[];
+    expect(onDisk).toHaveLength(1);
+
+    // Second read — no warning, fast-path.
+    stderrSpy.mockClear();
+    const second = await service.readProvisions();
+    expect(second).toHaveLength(1);
+    expect(stderrSpy).not.toHaveBeenCalled();
+  });
+
+  // T5b: regression — patterns.json gets same treatment
+  it("readPatterns: stale record is dropped, file rewritten, second read is clean", async () => {
+    await fs.writeFile(
+      path.join(tmpDir, "patterns.json"),
+      JSON.stringify([{ stale: true }, VALID_PATTERN]),
+      "utf-8",
+    );
+
+    const first = await service.readPatterns();
+    expect(first).toHaveLength(1);
+    expect(first[0]!.pattern).toBe(VALID_PATTERN.pattern);
+
+    // Notice emitted for patterns.json.
+    expect(stderrSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Cleaned 1 stale record(s) from patterns.json"),
+    );
+
+    // File cleaned.
+    const onDisk = JSON.parse(
+      await fs.readFile(path.join(tmpDir, "patterns.json"), "utf-8"),
+    ) as unknown[];
+    expect(onDisk).toHaveLength(1);
+
+    // Second read — no warning, fast-path.
+    stderrSpy.mockClear();
+    const second = await service.readPatterns();
+    expect(second).toHaveLength(1);
+    expect(stderrSpy).not.toHaveBeenCalled();
+  });
+
+  // T6: existing fast-path — all-valid records, no warning, no rewrite
+  it("readFailures: all-valid records → fast-path taken, no notice, no rewrite (file mode preserved)", async () => {
+    // Write a file where ALL records are valid (fast-path succeeds).
+    await fs.writeFile(
+      path.join(tmpDir, "failures.json"),
+      JSON.stringify([VALID_FAILURE]),
+      { encoding: "utf-8", mode: 0o600 },
+    );
+    // Set known mode.
+    await fs.chmod(path.join(tmpDir, "failures.json"), 0o600);
+
+    const records = await service.readFailures();
+    expect(records).toHaveLength(1);
+
+    // No notice emitted.
+    expect(stderrSpy).not.toHaveBeenCalled();
+
+    // File mode unchanged — we didn't rewrite it.
+    const stat = await fs.stat(path.join(tmpDir, "failures.json"));
+    if (process.platform !== "win32") {
+      expect(stat.mode & 0o777).toBe(0o600);
+    }
+  });
+
+  // T7: rewritten file has 0o600 mode (atomicWrite enforces it)
+  it("rewritten write-back file has mode 0o600", async () => {
+    await fs.writeFile(
+      path.join(tmpDir, "failures.json"),
+      JSON.stringify([{ stale: true }, VALID_FAILURE]),
+      "utf-8",
+    );
+
+    await service.readFailures();
+
+    const stat = await fs.stat(path.join(tmpDir, "failures.json"));
+    if (process.platform !== "win32") {
+      expect(stat.mode & 0o777).toBe(0o600);
     }
   });
 });

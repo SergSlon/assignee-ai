@@ -14,7 +14,10 @@
  * - Writes are fire-and-forget — callers should catch and log, never throw.
  * - Constructor-injected directory for test isolation.
  */
-export { MemoryService } from "./memory/service.js";
+export {
+  MemoryService,
+  _resetAlreadyWarnedFilesForTesting,
+} from "./memory/service.js";
 import { MemoryService } from "./memory/service.js";
 
 /** Default singleton instance for production use. Tests can instantiate with a temp dir. */
