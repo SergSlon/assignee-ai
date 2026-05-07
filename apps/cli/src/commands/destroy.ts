@@ -80,9 +80,20 @@ import {
   createSecretsManagerClient,
   createEventBridgeClient,
 } from "../services/cloudcontrol-client.js";
-import { ScheduleKeyDeletionCommand } from "@aws-sdk/client-kms";
-import { DeleteSecretCommand } from "@aws-sdk/client-secrets-manager";
-import { DeleteEventBusCommand } from "@aws-sdk/client-eventbridge";
+import {
+  ScheduleKeyDeletionCommand,
+  KMSInvalidStateException,
+  NotFoundException as KmsNotFoundException,
+} from "@aws-sdk/client-kms";
+import {
+  DeleteSecretCommand,
+  InvalidRequestException as SecretsInvalidRequestException,
+  ResourceNotFoundException as SecretsResourceNotFoundException,
+} from "@aws-sdk/client-secrets-manager";
+import {
+  DeleteEventBusCommand,
+  ResourceNotFoundException as EventBridgeResourceNotFoundException,
+} from "@aws-sdk/client-eventbridge";
 import { getCostSavingsEstimate } from "../services/billing.js";
 import { getBillingMcpToolsAsync } from "../services/mcp-client.js";
 import {
@@ -188,7 +199,7 @@ const SECRETS_ARN_RE = /^arn:aws[\w-]*:secretsmanager:[\w-]*:\d*:secret:/;
 export async function destroyAction(
   resource: string | undefined,
   opts: DestroyOptions,
-): Promise<void> {
+): Promise<"already_pending" | void> {
   if (!resource) {
     throw new AssigneeError(
       "Destroy needs to know what to destroy. Pass a resource ARN or name as the positional argument, e.g. `assignee destroy my-bucket` or `assignee destroy arn:aws:s3:::my-bucket`.",
@@ -271,7 +282,9 @@ export async function destroyAction(
   // still prints so CI logs capture the effective window.
   if (isKms && pendingWindow === undefined) {
     process.stderr.write(
-      `[destroy] KMS key will be scheduled for deletion in ${DEFAULT_WINDOW_DAYS} days (default; pass --pending-window-in-days <7-30> to override).\n`,
+      `[destroy] KMS key scheduled NOW for deletion ${DEFAULT_WINDOW_DAYS} days from now` +
+        ` (default minimum window; pass --pending-window-in-days <7-30> to extend up to 30 days).` +
+        ` AWS does not allow shorter than 7 days for CMK deletion.\n`,
     );
   }
   if (
@@ -280,7 +293,9 @@ export async function destroyAction(
     recoveryWindow === undefined
   ) {
     process.stderr.write(
-      `[destroy] Secret will be scheduled for deletion in ${DEFAULT_WINDOW_DAYS} days (default; pass --recovery-window-in-days <7-30> to override, or --force-delete-without-recovery to skip the window).\n`,
+      `[destroy] Secret scheduled NOW for deletion ${DEFAULT_WINDOW_DAYS} days from now` +
+        ` (default minimum window; pass --recovery-window-in-days <7-30> to extend up to 30 days,` +
+        ` or --force-delete-without-recovery to delete immediately).\n`,
     );
   }
 
@@ -307,20 +322,46 @@ export async function destroyAction(
 
   if (isKms) {
     const window = pendingWindow ?? DEFAULT_WINDOW_DAYS;
-    const scheduledAt = await scheduleKmsKeyDeletion(resolved, window);
+    const { scheduledAt, outcome } = await scheduleKmsKeyDeletion(
+      resolved,
+      window,
+    );
+    if (outcome === "already_pending") {
+      process.stderr.write(
+        `[destroy] KMS key already scheduled for deletion (pending-delete window in progress).\n`,
+      );
+      renderDestroyScheduled(scheduledAt, estimatedMonthlyCost);
+      return "already_pending";
+    }
     renderDestroyScheduled(scheduledAt, estimatedMonthlyCost);
     return;
   }
 
   if (isSecret) {
     if (opts.forceDeleteWithoutRecovery) {
-      await deleteSecret(resolved, { force: true });
+      const { outcome } = await deleteSecret(resolved, { force: true });
+      if (outcome === "already_pending") {
+        process.stderr.write(
+          `[destroy] Secret already deleted or scheduled for deletion (idempotent success).\n`,
+        );
+        renderDestroySuccess(estimatedMonthlyCost);
+        return "already_pending";
+      }
       renderDestroySuccess(estimatedMonthlyCost);
       return;
     }
     const window = recoveryWindow ?? DEFAULT_WINDOW_DAYS;
-    const scheduledAt = await deleteSecret(resolved, { recoveryDays: window });
-    // deleteSecret returns a Date for the scheduled path.
+    const { scheduledAt, outcome } = await deleteSecret(resolved, {
+      recoveryDays: window,
+    });
+    if (outcome === "already_pending") {
+      process.stderr.write(
+        `[destroy] Secret already deleted or scheduled for deletion (idempotent success).\n`,
+      );
+      renderDestroySuccess(estimatedMonthlyCost);
+      return "already_pending";
+    }
+    // scheduled path — deleteSecret returns a Date for the scheduled path.
     renderDestroyScheduled(scheduledAt!, estimatedMonthlyCost);
     return;
   }
@@ -423,15 +464,28 @@ async function confirmDestroy(
 }
 
 /**
+ * Outcome of the KMS schedule-key-deletion call.
+ * `scheduled` — key was freshly scheduled for deletion now.
+ * `already_pending` — key was already in pending-deletion state (idempotent success).
+ */
+export type KmsDestroyOutcome = "scheduled" | "already_pending";
+
+/**
  * Call `kms:ScheduleKeyDeletion` with the requested pending window.
  * Returns the scheduled-deletion Date that AWS replies with — used by
  * `renderDestroyScheduled` to tell the user exactly when the key
  * will become non-recoverable.
+ *
+ * Idempotent-success classification (per feedback_cloudcontrol_notfound_short_circuit):
+ * - `KMSInvalidStateException` with message containing "pending deletion"
+ *   → key was already scheduled; treat as success, return a far-future sentinel date.
+ * - `NotFoundException` → key was already deleted and purged; treat as success.
+ * All other errors re-throw as AssigneeError (genuine failures).
  */
 async function scheduleKmsKeyDeletion(
   resolved: ResolvedResource,
   pendingWindowInDays: number,
-): Promise<Date> {
+): Promise<{ scheduledAt: Date; outcome: KmsDestroyOutcome }> {
   const awsCreds = tryAssigneeCredentials("operator");
   const region = resolved.region || AWS_REGION;
   const kms = createKmsClient(awsCreds ? { ...awsCreds, region } : { region });
@@ -450,8 +504,33 @@ async function scheduleKmsKeyDeletion(
       response.DeletionDate instanceof Date
         ? response.DeletionDate
         : new Date(Date.now() + pendingWindowInDays * 24 * 60 * 60 * 1000);
-    return scheduledAt;
+    return { scheduledAt, outcome: "scheduled" };
   } catch (err) {
+    // KMSInvalidStateException with "pending deletion" body: the key was
+    // already scheduled in a prior run — idempotent success.
+    // Match on error name (code) first; message substring is a secondary
+    // guard to avoid treating Disabled/BiYok states the same way.
+    if (
+      err instanceof KMSInvalidStateException &&
+      /pending.?deletion/i.test(err.message)
+    ) {
+      // We don't know the exact deletion date without a DescribeKey call;
+      // return a sentinel date so the renderer can still print something
+      // meaningful. The key is already on the path to deletion.
+      return {
+        scheduledAt: new Date(
+          Date.now() + pendingWindowInDays * 24 * 60 * 60 * 1000,
+        ),
+        outcome: "already_pending",
+      };
+    }
+    // NotFoundException: key was deleted-and-purged in a prior run.
+    if (err instanceof KmsNotFoundException) {
+      return {
+        scheduledAt: new Date(Date.now()),
+        outcome: "already_pending",
+      };
+    }
     const message = err instanceof Error ? err.message : String(err);
     throw new AssigneeError(
       `Failed to schedule KMS key for deletion: ${message}`,
@@ -464,15 +543,31 @@ async function scheduleKmsKeyDeletion(
 }
 
 /**
+ * Outcome of the SecretsManager delete call.
+ * `scheduled` — secret was freshly scheduled for deletion.
+ * `force_deleted` — secret was force-deleted immediately.
+ * `already_pending` — secret was already deleted/scheduled (idempotent success).
+ */
+export type SecretDestroyOutcome =
+  | "scheduled"
+  | "force_deleted"
+  | "already_pending";
+
+/**
  * Call `secretsmanager:DeleteSecret` with EITHER a recovery window OR
  * force-delete. Returns the ScheduledDeletionDate for the recovery-
  * window path; returns undefined when `force=true` (the secret is
  * gone, not scheduled).
+ *
+ * Idempotent-success classification:
+ * - `InvalidRequestException` with "was deleted" in message → secret already destroyed.
+ * - `ResourceNotFoundException` → secret no longer exists.
+ * Both are treated as success so re-runs of destroy --all report correctly.
  */
 async function deleteSecret(
   resolved: ResolvedResource,
   opts: { force?: boolean; recoveryDays?: number },
-): Promise<Date | undefined> {
+): Promise<{ scheduledAt: Date | undefined; outcome: SecretDestroyOutcome }> {
   const awsCreds = tryAssigneeCredentials("operator");
   const region = resolved.region || AWS_REGION;
   const client = createSecretsManagerClient(
@@ -493,7 +588,7 @@ async function deleteSecret(
           : { RecoveryWindowInDays: opts.recoveryDays }),
       }),
     );
-    if (opts.force) return undefined;
+    if (opts.force) return { scheduledAt: undefined, outcome: "force_deleted" };
     const scheduledAt =
       response.DeletionDate instanceof Date
         ? response.DeletionDate
@@ -501,8 +596,20 @@ async function deleteSecret(
             Date.now() +
               (opts.recoveryDays ?? DEFAULT_WINDOW_DAYS) * 24 * 60 * 60 * 1000,
           );
-    return scheduledAt;
+    return { scheduledAt, outcome: "scheduled" };
   } catch (err) {
+    // InvalidRequestException with "was deleted" → secret is already destroyed
+    // (either force-deleted previously or currently in scheduled-deletion window).
+    if (
+      err instanceof SecretsInvalidRequestException &&
+      /was deleted|scheduled for deletion/i.test(err.message)
+    ) {
+      return { scheduledAt: undefined, outcome: "already_pending" };
+    }
+    // ResourceNotFoundException → secret no longer exists at all.
+    if (err instanceof SecretsResourceNotFoundException) {
+      return { scheduledAt: undefined, outcome: "already_pending" };
+    }
     const message = err instanceof Error ? err.message : String(err);
     throw new AssigneeError(
       `Failed to delete secret: ${message}`,
@@ -543,6 +650,11 @@ async function deleteEventBus(resolved: ResolvedResource): Promise<void> {
   try {
     await client.send(new DeleteEventBusCommand({ Name: busName }));
   } catch (err) {
+    // ResourceNotFoundException → the bus was already deleted (idempotent success).
+    // Return normally; the caller will render "Resource destroyed".
+    if (err instanceof EventBridgeResourceNotFoundException) {
+      return;
+    }
     const message = err instanceof Error ? err.message : String(err);
     throw new AssigneeError(
       `Failed to delete event bus: ${message}`,

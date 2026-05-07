@@ -31,6 +31,11 @@ describe("getRequiredIamActions", () => {
     // warning even though the operation succeeds against unversioned buckets.
     expect(actions).toContain("s3:ListBucketVersions");
     expect(actions).toContain("s3:DeleteObjectVersion");
+    // Bug S3-001 (2026-05-07): s3:ListBucket is required for ListObjectsV2
+    // (non-versioned object enumeration). The s3BucketStrategy pre-delete
+    // sweep needs this permission to list all objects in a non-versioned
+    // bucket before calling DeleteObjects.
+    expect(actions).toContain("s3:ListBucket");
   });
 
   it("returns CloudControl base actions + Lambda-specific actions for AWS::Lambda::Function", () => {

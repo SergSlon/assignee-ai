@@ -23,6 +23,11 @@ export const S3_ACTIONS: Record<string, string[]> = {
     "s3:PutObject",
     "s3:GetObject",
     "s3:DeleteObject",
+    // Required by destroy-service.ts to enumerate ALL objects in the bucket
+    // (both versioned and non-versioned) before bulk-deleting. s3:ListBucket
+    // is the permission for ListObjectsV2 (non-versioned listing); without it
+    // the pre-delete sweep cannot see unversioned objects.
+    "s3:ListBucket",
     // Required by destroy-service.ts to enumerate and delete versioned
     // objects and delete markers before bulk-deleting a versioned bucket.
     "s3:ListBucketVersions",

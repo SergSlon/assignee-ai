@@ -62,7 +62,7 @@ import { singleDestroyAction } from "./single-flow.js";
 async function destroyOneFallback(
   resource: string,
   opts: { yes?: boolean },
-): Promise<void> {
+): Promise<"already_pending" | void> {
   return singleDestroyAction(resource, { yes: opts.yes ?? true });
 }
 import { tryAssigneeCredentials } from "../../config/aws-credentials.js";
@@ -392,6 +392,8 @@ interface BulkDestroyJsonEnvelope {
     arn: string;
     resourceType: string;
     success: boolean;
+    /** Detailed outcome: "destroyed" | "already_pending" | "failed". */
+    outcome: string;
     error?: string;
   }>;
   excluded: Array<{ arn: string; resourceType: string; reason: string }>;
@@ -416,6 +418,11 @@ export interface BulkDestroyOptions {
    * `destroy.ts` so per-type flags (KMS pending-window /
    * SecretsManager recovery-window / force-delete) reach the CCAPI-bypass
    * dispatcher.
+   *
+   * May return `"already_pending"` when the resource was already scheduled
+   * for deletion (KMS / SecretsManager idempotent-success paths). Returning
+   * `void` / `undefined` is treated as `"destroyed"`. This allows the bulk
+   * summary to distinguish new destroys from pre-existing scheduled states.
    */
   destroyOne?: (
     resource: string,
@@ -425,7 +432,7 @@ export interface BulkDestroyOptions {
       forceDeleteWithoutRecovery?: boolean;
       recoveryWindowInDays?: string;
     },
-  ) => Promise<void>;
+  ) => Promise<"already_pending" | void>;
 }
 
 // ── Hard cap ──────────────────────────────────────────────────────────
@@ -597,9 +604,18 @@ export async function runBulkDestroyAction(
     );
   }
 
+  /**
+   * Per-resource outcome for the final summary.
+   * - `"destroyed"` — resource was freshly destroyed in this run.
+   * - `"already_pending"` — resource was already scheduled for deletion (idempotent success).
+   * - `"failed"` — destroy threw an error.
+   */
+  type ResourceOutcome = "destroyed" | "already_pending" | "failed";
+
   const executionResults: Array<{
     resource: ManagedResource;
     success: boolean;
+    outcome: ResourceOutcome;
     error?: string;
   }> = [];
 
@@ -610,6 +626,7 @@ export async function runBulkDestroyAction(
     }
 
     let success = false;
+    let outcome: ResourceOutcome = "failed";
     let errorMessage: string | undefined;
 
     try {
@@ -653,18 +670,38 @@ export async function runBulkDestroyAction(
       // single-flow path doesn't honour per-type flags, but tests pin the
       // expectation by mocking destroyOne directly.
       const destroyer = opts.destroyOne ?? destroyOneFallback;
-      await destroyer(identifier, perResourceOpts);
+      const result = await destroyer(identifier, perResourceOpts);
       success = true;
+      outcome = result === "already_pending" ? "already_pending" : "destroyed";
     } catch (err) {
       errorMessage = err instanceof Error ? err.message : String(err);
+      outcome = "failed";
       process.exitCode = 1;
     }
 
-    executionResults.push({ resource: r, success, error: errorMessage });
+    executionResults.push({
+      resource: r,
+      success,
+      outcome,
+      error: errorMessage,
+    });
     if (!jsonMode) {
       renderResourceDone(i, orderedPlan.length, r, success, errorMessage);
     }
   }
+
+  // ── Compute outcome counts (used in both audit + summary) ────────────
+  const destroyedCount = executionResults.filter(
+    (r) => r.outcome === "destroyed",
+  ).length;
+  const alreadyPendingCount = executionResults.filter(
+    (r) => r.outcome === "already_pending",
+  ).length;
+  const failCount = executionResults.filter(
+    (r) => r.outcome === "failed",
+  ).length;
+  // Legacy field: any non-failed result counts as succeeded (for JSON compat).
+  const successCount = destroyedCount + alreadyPendingCount;
 
   // ── 9. Audit log: one batch event per invocation ─────────────────────
   await writeAuditEvent({
@@ -672,11 +709,11 @@ export async function runBulkDestroyAction(
     executed: executionResults,
     excluded: excludedResources,
     totalCostSaved,
+    destroyedCount,
+    alreadyPendingCount,
   });
 
   // ── 10. Final summary ─────────────────────────────────────────────────
-  const successCount = executionResults.filter((r) => r.success).length;
-  const failCount = executionResults.length - successCount;
 
   if (jsonMode) {
     const envelope: BulkDestroyJsonEnvelope = {
@@ -691,6 +728,7 @@ export async function runBulkDestroyAction(
         arn: r.resource.arn,
         resourceType: r.resource.resourceType,
         success: r.success,
+        outcome: r.outcome,
         ...(r.error ? { error: r.error } : {}),
       })),
       excluded: excludedResources.map((e) => ({
@@ -702,14 +740,21 @@ export async function runBulkDestroyAction(
     };
     process.stdout.write(JSON.stringify(envelope, null, 2) + "\n");
   } else {
+    // Three-bucket summary line. When already_pending > 0, show it explicitly.
+    // When failed == 0, exit 0 (process.exitCode is only set to 1 on failures).
+    const summaryParts: string[] = [`${destroyedCount} destroyed`];
+    if (alreadyPendingCount > 0) {
+      summaryParts.push(`${alreadyPendingCount} already pending`);
+    }
+    summaryParts.push(`${failCount} failed`);
     process.stdout.write(
-      `\nBulk destroy complete: ${successCount} succeeded, ${failCount} failed.\n`,
+      `\nBulk destroy complete: ${summaryParts.join(", ")}.\n`,
     );
     if (failCount > 0) {
       process.stdout.write(
         `\nFailed resources (manual remediation required):\n`,
       );
-      for (const r of executionResults.filter((x) => !x.success)) {
+      for (const r of executionResults.filter((x) => x.outcome === "failed")) {
         const id = r.resource.arn || r.resource.primaryIdentifier || "(no id)";
         process.stdout.write(`  • ${r.resource.resourceType} — ${id}\n`);
         process.stdout.write(`    Error: ${r.error}\n`);
@@ -734,16 +779,25 @@ async function writeAuditEvent(ctx: {
   executed: Array<{
     resource: ManagedResource;
     success: boolean;
+    outcome: string;
     error?: string;
   }>;
   excluded: Array<{ resource: ManagedResource; reason: string }>;
   totalCostSaved: string;
+  destroyedCount?: number;
+  alreadyPendingCount?: number;
 }): Promise<void> {
   try {
     await appendAuditRecord({
       action: "bulk_destroy_executed",
       planCount: ctx.plan.length,
       successCount: ctx.executed.filter((r) => r.success).length,
+      destroyedCount:
+        ctx.destroyedCount ??
+        ctx.executed.filter((r) => r.outcome === "destroyed").length,
+      alreadyPendingCount:
+        ctx.alreadyPendingCount ??
+        ctx.executed.filter((r) => r.outcome === "already_pending").length,
       failCount: ctx.executed.filter((r) => !r.success).length,
       excludedCount: ctx.excluded.length,
       totalCostSaved: ctx.totalCostSaved,
@@ -752,6 +806,7 @@ async function writeAuditEvent(ctx: {
         arn: r.resource.arn,
         resourceType: r.resource.resourceType,
         success: r.success,
+        outcome: r.outcome,
         ...(r.error ? { error: r.error } : {}),
       })),
       excluded: ctx.excluded.map((e) => ({
