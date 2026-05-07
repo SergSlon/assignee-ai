@@ -203,7 +203,11 @@ describe("logger", () => {
   });
 
   it("persists error events to file even without --verbose (H19)", async () => {
-    // No verbose flag — stderr should NOT be called but the file SHOULD exist.
+    // No verbose flag — stderr should NOT be called for non-allowlisted error
+    // actions; the file SHOULD still receive the event. Uses
+    // MEMORY_WRITE_FAILED because APPLY_FAILED is on STDERR_ALWAYS_ALLOWLIST
+    // (terminal-beacon contract — see persist.ts) and would write stderr
+    // unconditionally.
     delete process.env["ASSIGNEE_VERBOSITY"];
     delete process.env["ASSIGNEE_LOG_LEVEL"];
 
@@ -211,13 +215,13 @@ describe("logger", () => {
       ts: "2026-04-06T12:00:00.000Z",
       runId: "550e8400-e29b-41d4-a716-446655440000",
       level: "error",
-      action: LOG_ACTIONS.APPLY_FAILED,
+      action: LOG_ACTIONS.MEMORY_WRITE_FAILED,
       extras: { awsAccountId: "123456789012", resourceType: "AWS::S3::Bucket" },
     };
 
     log(event);
 
-    // stderr not touched — no verbose
+    // stderr not touched — no verbose, action not on stderr-always allowlist
     expect(stderrSpy).not.toHaveBeenCalled();
 
     // File contains exactly one JSON line with our event
@@ -225,11 +229,45 @@ describe("logger", () => {
     expect(lines).toHaveLength(1);
     const parsed = JSON.parse(lines[0]!) as LogEvent;
     expect(parsed.level).toBe("error");
-    expect(parsed.action).toBe("apply_failed");
+    expect(parsed.action).toBe("memory_write_failed");
     expect(parsed.runId).toBe("550e8400-e29b-41d4-a716-446655440000");
     expect((parsed.extras as Record<string, unknown>)["awsAccountId"]).toBe(
       "123456789012",
     );
+  });
+
+  it("STDERR_ALWAYS_ALLOWLIST: terminal-beacon actions write stderr without --verbose", async () => {
+    // probe e96.W3.N4 contract: `assignee apply ... --json` MUST emit at
+    // least one structured `^{` line on stderr regardless of verbose mode.
+    // Validates that APPLY_FAILED / APPLY_COMPLETE / PLAN_COMPLETE /
+    // APPLY_SUCCEEDED bypass the verbose gate. See persist.ts
+    // STDERR_ALWAYS_ALLOWLIST.
+    delete process.env["ASSIGNEE_VERBOSITY"];
+    delete process.env["ASSIGNEE_LOG_LEVEL"];
+
+    log({
+      ts: "2026-04-20T12:00:00.000Z",
+      runId: "550e8400-e29b-41d4-a716-446655442001",
+      level: "error",
+      action: LOG_ACTIONS.APPLY_FAILED,
+      extras: { errorMessage: "intent unsupported" },
+    });
+
+    expect(stderrSpy).toHaveBeenCalled();
+    const written = stderrSpy.mock.calls[0]?.[0] as string;
+    expect(written).toMatch(/^\{/);
+    expect(written).toContain("apply_failed");
+
+    log({
+      ts: "2026-04-20T12:00:01.000Z",
+      runId: "550e8400-e29b-41d4-a716-446655442001",
+      level: "info",
+      action: LOG_ACTIONS.APPLY_COMPLETE,
+      extras: { result: "FAILED" },
+    });
+
+    const allWrites = stderrSpy.mock.calls.map((c) => String(c[0] ?? ""));
+    expect(allWrites.some((s) => s.includes("apply_complete"))).toBe(true);
   });
 
   it("persists warn events to file even without --verbose", async () => {
@@ -440,16 +478,19 @@ describe("logger", () => {
         ts: "2026-04-06T12:00:00.000Z",
         runId: "550e8400-e29b-41d4-a716-446655440099",
         level: "error",
-        action: LOG_ACTIONS.APPLY_FAILED,
+        action: LOG_ACTIONS.MEMORY_WRITE_FAILED,
       }),
     ).not.toThrow();
 
-    // Fallback should have written the event to stderr
+    // Fallback should have written the event to stderr. Use MEMORY_WRITE_FAILED
+    // (not on STDERR_ALWAYS_ALLOWLIST) so the only stderr call is the
+    // disk-fallback write — keeps this assertion focused on the fallback
+    // path without the terminal-beacon write interleaving.
     expect(stderrSpy).toHaveBeenCalled();
     const written = stderrSpy.mock.calls[
       stderrSpy.mock.calls.length - 1
     ]?.[0] as string;
-    expect(written).toContain("apply_failed");
+    expect(written).toContain("memory_write_failed");
     expect(written).toContain("persistentLogFallback");
   });
 
@@ -914,12 +955,14 @@ describe("logger", () => {
         ts: "2026-04-20T00:00:00.000Z",
         runId: "550e8400-e29b-41d4-a716-446655441001",
         level: "error",
-        action: LOG_ACTIONS.APPLY_FAILED,
-        extras: { awsAccountId: "210987654321" },
+        action: LOG_ACTIONS.MEMORY_WRITE_FAILED,
+        extras: { awsAccountId: "112233445566" },
       });
 
       expect(stdoutSpy).not.toHaveBeenCalled();
-      // Persisted file path — no stderr either in non-verbose.
+      // Non-allowlisted error action: persisted to file, NOT to stderr in
+      // non-verbose mode. (Allowlisted actions like APPLY_FAILED have a
+      // dedicated test under "STDERR_ALWAYS_ALLOWLIST" — see above.)
       expect(stderrSpy).not.toHaveBeenCalled();
     });
 
