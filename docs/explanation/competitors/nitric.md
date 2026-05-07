@@ -25,7 +25,7 @@ Nitric is an open-source **infrastructure-from-code** framework (nitrictech/nitr
 - **Different category.** Nitric is app-framework + IfC for _building new cloud apps_. Assignee is a provisioning CLI for _any AWS resource_, not just the IfC primitives (`api`, `bucket`, `queue`). Nitric has no path to "create me a VPC with 3 public + 3 private subnets in 3 AZs"; Assignee does.
 - **Zero code artifact.** Nitric still produces Pulumi/Terraform under the hood, and the app code itself is the IaC source of truth — users own both. Assignee produces **only the deployed resource**, tagged with run-id.
 - **HITL + cost preview + BP gates.** Nitric's deploy is CLI-invoke → it just runs. No English plan review, no cost gate, no 185 BP rules. Assignee's confirm step is central.
-- **Not a multi-cloud play.** Assignee is AWS-native (Bedrock + CCAPI + MCP). Nitric's multi-cloud story is a moat Assignee chooses not to chase in v1.
+- **Not a multi-cloud play.** Assignee is AWS-native (Bedrock + CCAPI + MCP). Nitric's multi-cloud story is a structural advantage Assignee chooses not to chase in v1.
 
 ## Source URLs
 
