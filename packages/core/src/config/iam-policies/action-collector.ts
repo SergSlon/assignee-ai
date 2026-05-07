@@ -139,6 +139,15 @@ export const DESTRUCTIVE_SERVICE_ACTIONS = new Set<string>([
   "rds:DeleteDBInstance",
   "s3:DeleteBucket",
   "s3:DeleteBucketPolicy",
+  // Pre-delete empty sweep actions: the destroy-service.ts s3BucketStrategy
+  // calls DeleteObjects (requires s3:DeleteObject) and DeleteObjects with
+  // VersionId (requires s3:DeleteObjectVersion) to empty the bucket before
+  // CloudControl DeleteBucket runs. Without tag-scoping these, a leaked
+  // operator credential could delete objects from ANY S3 bucket in the
+  // account. Scoped via aws:ResourceTag/managed-by=assignee-ai so the
+  // operator can only empty assignee-managed buckets.
+  "s3:DeleteObject",
+  "s3:DeleteObjectVersion",
 ]);
 
 export function collectServiceActions(): {

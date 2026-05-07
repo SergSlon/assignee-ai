@@ -90,23 +90,47 @@ describe("IAM Policy Generators", () => {
       ).toBeUndefined();
     });
 
-    it("includes S3 versioned-object cleanup actions used by destroy-service (across A+B)", () => {
+    it("includes S3 versioned-object cleanup actions used by destroy-service", () => {
       // destroy-service.ts calls ListObjectVersions + DeleteObjects(VersionId)
       // to empty versioned buckets before CloudControl DeleteResource runs.
-      // Tier C: strengthened — also tolerate the wildcard-collapsed form
-      // (`s3:Get*` etc) introduced in Wave 20's collapseToWildcards. The
-      // assertion is "the destroy-service grant is reachable", which is
-      // satisfied by either the literal action or a covering wildcard,
-      // AND by the grant landing in either half of the A/B split.
-      const actions = servicesUnionStatement().Action;
+      //
+      // s3:ListBucketVersions stays in the unscoped service sweep (A/B) —
+      // listing versions is a read action that cannot cause harm by itself.
+      //
+      // Bug S3-001 (2026-05-07): s3:DeleteObjectVersion and s3:DeleteObject
+      // MOVED from the unscoped service sweep to ServiceDestructiveResourceTagScoped
+      // so a leaked credential cannot delete objects from unmanaged buckets.
+      // The grant is now in the core operator policy's scoped statement, not
+      // in servicesUnionStatement() (A+B).
+      const serviceActions = servicesUnionStatement().Action;
       const hasListVersions =
-        actions.includes("s3:ListBucketVersions") ||
-        actions.includes("s3:List*");
-      const hasDeleteVersion =
-        actions.includes("s3:DeleteObjectVersion") ||
-        actions.includes("s3:Delete*");
+        serviceActions.includes("s3:ListBucketVersions") ||
+        serviceActions.includes("s3:List*");
       expect(hasListVersions).toBe(true);
-      expect(hasDeleteVersion).toBe(true);
+
+      // Verify delete actions are in the tag-scoped statement, NOT in A/B
+      const corePolicy = operatorPolicy();
+      const destructiveStmt = corePolicy.Statement.find(
+        (s) => s.Sid === "ServiceDestructiveResourceTagScoped",
+      )!;
+      const destructiveActions = new Set(destructiveStmt.Action);
+      expect(
+        destructiveActions.has("s3:DeleteObjectVersion"),
+        "s3:DeleteObjectVersion must be in ServiceDestructiveResourceTagScoped",
+      ).toBe(true);
+      expect(
+        destructiveActions.has("s3:DeleteObject"),
+        "s3:DeleteObject must be in ServiceDestructiveResourceTagScoped",
+      ).toBe(true);
+      // Must NOT be in the unscoped sweep (would bypass the tag condition)
+      expect(
+        serviceActions.includes("s3:DeleteObjectVersion"),
+        "s3:DeleteObjectVersion must NOT be in unscoped service sweep",
+      ).toBe(false);
+      expect(
+        serviceActions.includes("s3:DeleteObject"),
+        "s3:DeleteObject must NOT be in unscoped service sweep (but s3:Delete* wildcard is absent)",
+      ).toBe(false);
     });
 
     // (f) 2026-04-09 — lock in the A/B split invariants independently
@@ -684,6 +708,11 @@ describe("IAM Policy Generators", () => {
     // ServiceSpecificActionsA/B with Resource:"*" and no Condition.
     // They are now in ServiceDestructiveResourceTagScoped, scoped to
     // aws:ResourceTag/managed-by=assignee-ai.
+    //
+    // Bug S3-001 (2026-05-07): s3:DeleteObject and s3:DeleteObjectVersion
+    // were previously in the unscoped service sweep (ServiceSpecificActionsA/B).
+    // A leaked operator credential could delete objects from ANY S3 bucket
+    // in the account. They are now tag-scoped alongside s3:DeleteBucket.
     describe("ServiceDestructiveResourceTagScoped statement (SEC-011)", () => {
       const DESTRUCTIVE = [
         "lambda:DeleteFunction",
@@ -694,6 +723,10 @@ describe("IAM Policy Generators", () => {
         "rds:DeleteDBInstance",
         "s3:DeleteBucket",
         "s3:DeleteBucketPolicy",
+        // Bug S3-001: pre-delete sweep actions must also be tag-scoped
+        // so a leaked credential cannot wipe objects from unmanaged buckets.
+        "s3:DeleteObject",
+        "s3:DeleteObjectVersion",
       ];
 
       it("exists as a dedicated statement in the core operator policy", () => {

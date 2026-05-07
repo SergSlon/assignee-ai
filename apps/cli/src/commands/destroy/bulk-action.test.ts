@@ -756,4 +756,131 @@ describe("runBulkDestroyAction", () => {
       expect(process.exitCode).toBe(1);
     });
   });
+
+  // ── Three-bucket summary (destroyed / already_pending / failed) ───────
+
+  describe("three-bucket summary (idempotent-success categorisation)", () => {
+    /**
+     * Build 5 ManagedResource fixtures with unique ARNs so we can
+     * control which resources return "already_pending" via destroyOne.
+     */
+    const makeResources = (n: number): ManagedResource[] =>
+      Array.from({ length: n }, (_, i) => ({
+        resourceType: "AWS::KMS::Key",
+        arn: `arn:aws:kms:us-east-1:112233445566:key/key-${i}`,
+        region: "us-east-1",
+        createdDate: "2026-05-07",
+        estimatedMonthlyCost: "N/A",
+      }));
+
+    it("2 destroyed + 3 already_pending + 0 failed → summary and exit 0", async () => {
+      const resources = makeResources(5);
+      mockFetchManagedResources.mockResolvedValue(resources);
+
+      // destroyOne returns "already_pending" for the last 3, void for the first 2
+      const alreadyPendingDestroyOne = vi
+        .fn()
+        .mockResolvedValueOnce(undefined) // resource 0 → destroyed
+        .mockResolvedValueOnce(undefined) // resource 1 → destroyed
+        .mockResolvedValue("already_pending"); // resources 2,3,4 → already_pending
+
+      const runBulkDestroyAction = await getSubject();
+      process.exitCode = 0;
+
+      await runBulkDestroyAction({
+        yes: true,
+        noConfirm: true,
+        destroyOne: alreadyPendingDestroyOne,
+      });
+
+      const out = stdoutCapture.output();
+      // Summary must show three buckets
+      expect(out).toContain("2 destroyed");
+      expect(out).toContain("3 already pending");
+      expect(out).toContain("0 failed");
+      // Exit 0 — already_pending is success
+      expect(process.exitCode).toBe(0);
+    });
+
+    it("0 destroyed + 15 already_pending + 0 failed → exit 0 (the bug-report scenario)", async () => {
+      const resources = makeResources(15);
+      mockFetchManagedResources.mockResolvedValue(resources);
+
+      const alreadyPendingDestroyOne = vi
+        .fn()
+        .mockResolvedValue("already_pending");
+
+      const runBulkDestroyAction = await getSubject();
+      process.exitCode = 0;
+
+      await runBulkDestroyAction({
+        yes: true,
+        noConfirm: true,
+        destroyOne: alreadyPendingDestroyOne,
+      });
+
+      const out = stdoutCapture.output();
+      expect(out).toContain("0 destroyed");
+      expect(out).toContain("15 already pending");
+      expect(out).toContain("0 failed");
+      // All resources are in a scheduled-deletion state — that's success
+      expect(process.exitCode).toBe(0);
+    });
+
+    it("1 destroyed + 0 already_pending + 1 failed → exit 1 (failed still non-zero)", async () => {
+      const resources = makeResources(2);
+      mockFetchManagedResources.mockResolvedValue(resources);
+
+      const mixedDestroyOne = vi
+        .fn()
+        .mockResolvedValueOnce(undefined) // resource 0 → destroyed
+        .mockRejectedValueOnce(new Error("Throttling")); // resource 1 → failed
+
+      const runBulkDestroyAction = await getSubject();
+      process.exitCode = 0;
+
+      await runBulkDestroyAction({
+        yes: true,
+        noConfirm: true,
+        destroyOne: mixedDestroyOne,
+      });
+
+      const out = stdoutCapture.output();
+      expect(out).toContain("1 destroyed");
+      // "already pending" bucket omitted when count is 0
+      expect(out).not.toContain("already pending");
+      expect(out).toContain("1 failed");
+      // Non-zero exit because there's a real failure
+      expect(process.exitCode).toBe(1);
+    });
+
+    it("JSON envelope includes 'outcome' per executed entry", async () => {
+      const resources = makeResources(2);
+      mockFetchManagedResources.mockResolvedValue(resources);
+
+      const mixedDestroyOne = vi
+        .fn()
+        .mockResolvedValueOnce(undefined) // destroyed
+        .mockResolvedValueOnce("already_pending"); // already_pending
+
+      const runBulkDestroyAction = await getSubject();
+
+      await runBulkDestroyAction({
+        yes: true,
+        noConfirm: true,
+        json: true,
+        destroyOne: mixedDestroyOne,
+      });
+
+      const out = stdoutCapture.output();
+      const envelope = JSON.parse(out) as {
+        ok: boolean;
+        executed: Array<{ outcome: string; success: boolean }>;
+      };
+      expect(envelope.ok).toBe(true);
+      const outcomes = envelope.executed.map((e) => e.outcome);
+      expect(outcomes).toContain("destroyed");
+      expect(outcomes).toContain("already_pending");
+    });
+  });
 });

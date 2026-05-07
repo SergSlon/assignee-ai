@@ -156,26 +156,72 @@ vi.mock("@aws-sdk/client-sns", () => {
 // only for the Command classes (ScheduleKeyDeletionCommand etc.) that
 // destroy.ts imports statically.  The mock clients are wired up via the
 // cloudcontrol-client.js factory mock below.
-vi.mock("@aws-sdk/client-kms", () => ({
-  ScheduleKeyDeletionCommand: vi.fn((input: unknown) => ({
-    _type: "ScheduleKeyDeletion",
-    input,
-  })),
-}));
+vi.mock("@aws-sdk/client-kms", () => {
+  class KMSInvalidStateException extends Error {
+    readonly $fault = "client";
+    constructor(m: string) {
+      super(m);
+      this.name = "KMSInvalidStateException";
+    }
+  }
+  class NotFoundException extends Error {
+    readonly $fault = "client";
+    constructor(m: string) {
+      super(m);
+      this.name = "NotFoundException";
+    }
+  }
+  return {
+    ScheduleKeyDeletionCommand: vi.fn((input: unknown) => ({
+      _type: "ScheduleKeyDeletion",
+      input,
+    })),
+    KMSInvalidStateException,
+    NotFoundException,
+  };
+});
 
-vi.mock("@aws-sdk/client-secrets-manager", () => ({
-  DeleteSecretCommand: vi.fn((input: unknown) => ({
-    _type: "DeleteSecret",
-    input,
-  })),
-}));
+vi.mock("@aws-sdk/client-secrets-manager", () => {
+  class InvalidRequestException extends Error {
+    readonly $fault = "client";
+    constructor(m: string) {
+      super(m);
+      this.name = "InvalidRequestException";
+    }
+  }
+  class ResourceNotFoundException extends Error {
+    readonly $fault = "client";
+    constructor(m: string) {
+      super(m);
+      this.name = "ResourceNotFoundException";
+    }
+  }
+  return {
+    DeleteSecretCommand: vi.fn((input: unknown) => ({
+      _type: "DeleteSecret",
+      input,
+    })),
+    InvalidRequestException,
+    ResourceNotFoundException,
+  };
+});
 
-vi.mock("@aws-sdk/client-eventbridge", () => ({
-  DeleteEventBusCommand: vi.fn((input: unknown) => ({
-    _type: "DeleteEventBus",
-    input,
-  })),
-}));
+vi.mock("@aws-sdk/client-eventbridge", () => {
+  class ResourceNotFoundException extends Error {
+    readonly $fault = "client";
+    constructor(m: string) {
+      super(m);
+      this.name = "ResourceNotFoundException";
+    }
+  }
+  return {
+    DeleteEventBusCommand: vi.fn((input: unknown) => ({
+      _type: "DeleteEventBus",
+      input,
+    })),
+    ResourceNotFoundException,
+  };
+});
 
 // ── Mock modules ────────────────────────────────────────────────────────────
 vi.mock("../services/resource-resolver.js", () => ({
@@ -263,6 +309,12 @@ beforeEach(() => {
     send: mockEventBridgeSend,
     destroy: vi.fn(),
   }));
+
+  // Re-arm mockIsCancel to return false. vi.clearAllMocks() does NOT reset
+  // mockReturnValue() implementations; tests that call
+  // `mockIsCancel.mockReturnValue(true)` would otherwise bleed into
+  // subsequent tests (the "cancelled prompt" test sets true persistently).
+  mockIsCancel.mockReturnValue(false);
 
   stderrOutput = "";
   stdoutOutput = "";
@@ -991,6 +1043,147 @@ describe("Epic 92 Wave 1 — destroy scheduled-deletion paths", () => {
     expect(mockKmsSend).not.toHaveBeenCalled();
     expect(mockSecretsSend).not.toHaveBeenCalled();
     expect(mockEventBridgeSend).not.toHaveBeenCalled();
+  });
+});
+
+// ── Idempotent-success paths (KMSInvalidStateException / NotFoundException / etc.) ─────
+//
+// Covers the bug: `assignee destroy --all` reports 15 KMS keys FAILED when they're
+// already in pending-deletion state. These tests mock the SDK to throw the typed
+// exception and assert the destroy returns "already_pending" (success), not throws.
+
+describe("Idempotent-success error classification", () => {
+  const kmsResource = {
+    arn: "arn:aws:kms:us-east-1:210987654321:key/ba48550a-3f14-446e-8f0c-1473f345c62d",
+    resourceType: "AWS::KMS::Key",
+    region: "us-east-1",
+    tags: { "managed-by": "assignee-ai" },
+    identifier: "ba48550a-3f14-446e-8f0c-1473f345c62d",
+  };
+  const secretResource = {
+    arn: "arn:aws:secretsmanager:us-east-1:210987654321:secret:my-app/prod/db-password-AbCdEf",
+    resourceType: "AWS::SecretsManager::Secret",
+    region: "us-east-1",
+    tags: { "managed-by": "assignee-ai" },
+    identifier: "my-app/prod/db-password",
+  };
+  const eventBusResource = {
+    arn: "arn:aws:events:us-east-1:210987654321:event-bus/e92d-bus-1776801116",
+    resourceType: "AWS::Events::Rule", // intentionally wrong class (real-world classifier bug)
+    region: "us-east-1",
+    tags: { "managed-by": "assignee-ai" },
+    identifier: "e92d-bus-1776801116",
+  };
+
+  it("KMS: KMSInvalidStateException with 'pending deletion' message → returns 'already_pending' (no throw)", async () => {
+    mockResolveResource.mockResolvedValue(kmsResource);
+    // Import the class as constructed by the vi.mock factory above
+    const { KMSInvalidStateException } = await import("@aws-sdk/client-kms");
+    mockKmsSend.mockRejectedValue(
+      new (KMSInvalidStateException as unknown as new (m: string) => Error)(
+        "arn:aws:kms:us-east-1:210987654321:key/ba48550a is pending deletion.",
+      ),
+    );
+
+    const result = await destroyAction(kmsResource.arn, { yes: true });
+
+    // Must not throw — returns "already_pending" for bulk categorisation
+    expect(result).toBe("already_pending");
+    // Informs the user on stderr
+    expect(stderrOutput).toContain("already scheduled for deletion");
+    // Still renders the scheduled-deletion box on stdout (shows a date)
+    expect(stdoutOutput).toContain("Scheduled for deletion");
+  });
+
+  it("KMS: KMSInvalidStateException with non-pending-deletion message (e.g. Disabled) → throws (genuine failure)", async () => {
+    mockResolveResource.mockResolvedValue(kmsResource);
+    const { KMSInvalidStateException } = await import("@aws-sdk/client-kms");
+    mockKmsSend.mockRejectedValue(
+      new (KMSInvalidStateException as unknown as new (m: string) => Error)(
+        "arn:aws:kms:us-east-1:210987654321:key/ba48550a is disabled.",
+      ),
+    );
+
+    await expect(destroyAction(kmsResource.arn, { yes: true })).rejects.toThrow(
+      /Failed to schedule KMS key for deletion/,
+    );
+  });
+
+  it("KMS: NotFoundException → returns 'already_pending' (key purged)", async () => {
+    mockResolveResource.mockResolvedValue(kmsResource);
+    const { NotFoundException } = await import("@aws-sdk/client-kms");
+    mockKmsSend.mockRejectedValue(
+      new (NotFoundException as unknown as new (m: string) => Error)(
+        "Key 'ba48550a' does not exist.",
+      ),
+    );
+
+    const result = await destroyAction(kmsResource.arn, { yes: true });
+
+    expect(result).toBe("already_pending");
+    expect(stderrOutput).toContain("already scheduled for deletion");
+  });
+
+  it("SecretsManager: InvalidRequestException with 'was deleted' → returns 'already_pending'", async () => {
+    mockResolveResource.mockResolvedValue(secretResource);
+    const { InvalidRequestException } =
+      await import("@aws-sdk/client-secrets-manager");
+    mockSecretsSend.mockRejectedValue(
+      new (InvalidRequestException as unknown as new (m: string) => Error)(
+        "You can't perform this operation on the secret because it was deleted.",
+      ),
+    );
+
+    const result = await destroyAction(secretResource.arn, { yes: true });
+
+    expect(result).toBe("already_pending");
+    expect(stderrOutput).toContain("already deleted or scheduled");
+    // renderDestroySuccess fires for already-deleted paths
+    expect(stdoutOutput).toContain("Resource destroyed");
+  });
+
+  it("SecretsManager: ResourceNotFoundException → returns 'already_pending'", async () => {
+    mockResolveResource.mockResolvedValue(secretResource);
+    const { ResourceNotFoundException } =
+      await import("@aws-sdk/client-secrets-manager");
+    mockSecretsSend.mockRejectedValue(
+      new (ResourceNotFoundException as unknown as new (m: string) => Error)(
+        "Secrets Manager can't find the specified secret.",
+      ),
+    );
+
+    const result = await destroyAction(secretResource.arn, { yes: true });
+
+    expect(result).toBe("already_pending");
+    expect(stderrOutput).toContain("already deleted or scheduled");
+  });
+
+  it("EventBus: ResourceNotFoundException → success (no throw, 'Resource destroyed')", async () => {
+    mockResolveResource.mockResolvedValue(eventBusResource);
+    const { ResourceNotFoundException } =
+      await import("@aws-sdk/client-eventbridge");
+    mockEventBridgeSend.mockRejectedValue(
+      new (ResourceNotFoundException as unknown as new (m: string) => Error)(
+        "Event bus 'e92d-bus-1776801116' does not exist.",
+      ),
+    );
+
+    // EventBus not-found is idempotent success — must NOT throw
+    await expect(
+      destroyAction(eventBusResource.arn, { yes: true }),
+    ).resolves.not.toThrow();
+    expect(stdoutOutput).toContain("Resource destroyed");
+  });
+
+  it("KMS: real genuine failures (throttling) still throw", async () => {
+    mockResolveResource.mockResolvedValue(kmsResource);
+    const throttleErr = new Error("ThrottlingException: Rate exceeded");
+    throttleErr.name = "ThrottlingException";
+    mockKmsSend.mockRejectedValue(throttleErr);
+
+    await expect(destroyAction(kmsResource.arn, { yes: true })).rejects.toThrow(
+      /Failed to schedule KMS key for deletion/,
+    );
   });
 });
 
