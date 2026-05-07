@@ -19,7 +19,7 @@ import { IAMClient } from "@aws-sdk/client-iam";
 import { AssigneeError } from "@assignee/core";
 import { CommandName, CommandDescription } from "../constants/commands.js";
 import { ErrorCode, ProcessExitCode } from "../constants/errors.js";
-import { UserMessage } from "../config/constants.js";
+import { UserMessage, AWS_REGION } from "../config/constants.js";
 import { resolveIntroContext, formatIntroContext } from "./init.js";
 import { printSetupIntro } from "./setup/intro.js";
 import {
@@ -35,6 +35,8 @@ import { collectRotationDecisions } from "./setup/rotation-prompts.js";
 import { provisionUsers } from "./setup/provision-users.js";
 import { setupBedrockLogging } from "./setup/bedrock-logging.js";
 import { printInteractivePlan, writeEnvAndSummary } from "./setup/summary.js";
+import { ROLES } from "./setup/constants.js";
+import { waitForCredentialPropagation } from "./setup/credentials-propagation.js";
 
 // Re-export intro context helpers so any caller that used to import them
 // from "./setup.js" continues to work without code changes.
@@ -176,6 +178,59 @@ Examples:
         clack.outro("Setup aborted: operator role is required.");
         process.exitCode = ProcessExitCode.GENERIC_ERROR;
         return;
+      }
+
+      // ── Propagation wait: verify new keys are usable before continuing ─
+      // Run in parallel — each user's propagation is independent.
+      const usersWithNewKeys = ROLES.filter(
+        (role) => envUpdates[role.envKeyId] !== undefined,
+      );
+      if (usersWithNewKeys.length > 0) {
+        const propagationResults = await Promise.all(
+          usersWithNewKeys.map((role) =>
+            waitForCredentialPropagation({
+              accessKeyId: envUpdates[role.envKeyId]!,
+              secretAccessKey: envUpdates[role.envSecretKey]!,
+              region: AWS_REGION,
+              userLabel: role.userName,
+            }),
+          ),
+        );
+
+        for (let i = 0; i < usersWithNewKeys.length; i++) {
+          const role = usersWithNewKeys[i]!;
+          const result = propagationResults[i]!;
+
+          if (!result.succeeded && result.lastError) {
+            // Use the same eventual-consistency markers the helper uses internally.
+            const isEventualConsistency =
+              result.lastError.includes("InvalidClientTokenId") ||
+              result.lastError.toLowerCase().includes("security token") ||
+              result.lastError
+                .toLowerCase()
+                .includes("not authorized to perform: sts:getcalleridentity") ||
+              result.lastError.includes("InvalidAccessKeyId");
+
+            if (isEventualConsistency) {
+              // Timeout after exhausting retries — warn but continue.
+              clack.log.warn(
+                `⚠ Keys for ${role.userName} created but AWS hasn't confirmed propagation\n` +
+                  `  after ~30s. This is rare but legal — try \`assignee plan\` in\n` +
+                  `  another minute if your next command fails.`,
+              );
+            } else {
+              // Real non-transient error — abort setup.
+              clack.log.error(
+                `Credential verification failed for ${role.userName}: ${result.lastError}\n` +
+                  `  Keys were created but could not be verified with AWS STS.\n` +
+                  `  Re-run \`assignee setup\` or check IAM/STS connectivity.`,
+              );
+              clack.outro("Setup aborted: credential verification failed.");
+              process.exitCode = ProcessExitCode.GENERIC_ERROR;
+              return;
+            }
+          }
+        }
       }
 
       // ── Bedrock invocation logging (Tasks 1–4 from aws-bootstrap.md) ──
