@@ -25,7 +25,7 @@ The net product: "Describe infra in English in your IDE → Amazon Q emits CDK �
 - **Official AWS support** — never going away, always current on AWS service launches.
 - **Console-to-Code** is a genuinely unique ClickOps-to-IaC path.
 - **CDK's L2/L3 construct library** — mature patterns for VPCs, ECS, pipelines.
-- **Distribution moat** — every AWS developer already has an AWS account.
+- **Distribution advantage** — every AWS developer already has an AWS account.
 
 ## Where Assignee.ai differentiates
 

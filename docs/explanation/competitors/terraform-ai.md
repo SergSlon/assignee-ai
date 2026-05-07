@@ -15,7 +15,7 @@
 ## Scope
 
 - All produce **HCL code**; provisioning is still `terraform plan` + `terraform apply` with state backend (local / S3 / HCP / Spacelift).
-- Provider coverage = Terraform's 4,800+ providers (the category-defining moat).
+- Provider coverage = Terraform's 4,800+ providers (the category-defining advantage).
 - Policy/safety via Sentinel (HCP), OPA/Conftest, Checkov, or Spacelift stacks.
 - Pricing: HCP Terraform per-resource-per-month under IBM (rising 18% YoY post-acquisition); Spacelift Intent free/OSS core + SaaS; Workik per-seat.
 
