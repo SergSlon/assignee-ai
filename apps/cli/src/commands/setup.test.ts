@@ -160,6 +160,15 @@ vi.mock("../utils/env-writer.js", () => ({
   mergeEnvFile: (...args: unknown[]) => mockMergeEnvFile(...args),
 }));
 
+// Mock credentials-propagation — default: always succeeds immediately.
+// Tests that need different behaviour override mockWaitForCredentialPropagation
+// in their own mockImplementation call.
+const mockWaitForCredentialPropagation = vi.fn();
+vi.mock("./setup/credentials-propagation.js", () => ({
+  waitForCredentialPropagation: (...args: unknown[]) =>
+    mockWaitForCredentialPropagation(...args),
+}));
+
 // process.exit spy is installed in beforeEach so restoreMocks doesn't bring
 // the real exit back between tests.
 
@@ -212,6 +221,13 @@ describe("setup command", () => {
     mockStsSend.mockResolvedValue({
       Account: "123456789012",
       Arn: "arn:aws:iam::123456789012:root",
+    });
+
+    // Default: propagation wait always succeeds immediately.
+    mockWaitForCredentialPropagation.mockResolvedValue({
+      succeeded: true,
+      attemptsUsed: 1,
+      totalWaitMs: 2000,
     });
 
     // Default: Bedrock client send resolves successfully (mockReset clears it)
@@ -982,5 +998,100 @@ describe("setup command", () => {
     const bedrockStops = stopCalls.filter((m) => m.includes("Bedrock logging"));
     expect(bedrockStops.length).toBeGreaterThanOrEqual(1);
     expect(bedrockStops.some((m) => m.includes("failed"))).toBe(true);
+  });
+
+  // ── Propagation wait integration ──────────────────────────────────────────
+
+  it("propagation wait: all 3 users succeed → setup completes (happy path)", async () => {
+    // Default mockWaitForCredentialPropagation resolves succeeded:true for all
+    await resetSetupCommandOptions();
+    const { setupCommand } = await import("./setup.js");
+    await setupCommand.parseAsync(["node", "setup"]);
+
+    // waitForCredentialPropagation called once per user with new keys (3)
+    expect(mockWaitForCredentialPropagation).toHaveBeenCalledTimes(3);
+
+    // Each call must receive the correct accessKeyId from envUpdates
+    const calls = mockWaitForCredentialPropagation.mock.calls;
+    const receivedKeyIds = calls.map(
+      (c) => (c[0] as { accessKeyId: string }).accessKeyId,
+    );
+    // Keys are AKIA_TEST_1, AKIA_TEST_2, AKIA_TEST_3 from the IAM mock counter
+    expect(receivedKeyIds).toContain("AKIA_TEST_1");
+    expect(receivedKeyIds).toContain("AKIA_TEST_2");
+    expect(receivedKeyIds).toContain("AKIA_TEST_3");
+
+    // .env was written with all 3 key pairs
+    expect(mockMergeEnvFile).toHaveBeenCalledTimes(1);
+  });
+
+  it("propagation wait: timeout for one user → emits warn, writes .env, exits 0", async () => {
+    // First call (operator): times out with an eventual-consistency error
+    // Second + third calls (reader, auditor): succeed
+    mockWaitForCredentialPropagation
+      .mockResolvedValueOnce({
+        succeeded: false,
+        attemptsUsed: 6,
+        totalWaitMs: 44000,
+        lastError: "The security token included in the request is invalid.",
+      })
+      .mockResolvedValue({
+        succeeded: true,
+        attemptsUsed: 2,
+        totalWaitMs: 5000,
+      });
+
+    await resetSetupCommandOptions();
+    const { setupCommand } = await import("./setup.js");
+    await setupCommand.parseAsync(["node", "setup"]);
+
+    // A warning was emitted for the timed-out user
+    const clack = await import("@clack/prompts");
+    const warnMock = clack.log.warn as ReturnType<typeof vi.fn>;
+    expect(warnMock).toHaveBeenCalled();
+    const warnText = warnMock.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(warnText).toContain("hasn't confirmed propagation");
+    expect(warnText).toContain("assignee plan");
+
+    // Despite the timeout warning, .env is still written
+    expect(mockMergeEnvFile).toHaveBeenCalledTimes(1);
+
+    // No error logged, exitCode unchanged (0)
+    const errorMock = clack.log.error as ReturnType<typeof vi.fn>;
+    const errorTexts = errorMock.mock.calls.map((c) => String(c[0])).join("\n");
+    // Only the IAM provisioning errors are acceptable — not a propagation abort
+    expect(errorTexts).not.toContain("credential verification failed");
+    expect(process.exitCode).not.toBe(1);
+  });
+
+  it("propagation wait: non-transient STS error → aborts setup, does NOT write .env", async () => {
+    // Operator propagation fails with a real (non-eventual-consistency) error
+    mockWaitForCredentialPropagation.mockResolvedValueOnce({
+      succeeded: false,
+      attemptsUsed: 1,
+      totalWaitMs: 2000,
+      lastError: "connect ETIMEDOUT 52.95.0.1:443",
+    });
+
+    const prevExitCode = process.exitCode;
+    process.exitCode = undefined;
+
+    await resetSetupCommandOptions();
+    const { setupCommand } = await import("./setup.js");
+    await setupCommand.parseAsync(["node", "setup"]);
+
+    // setup aborted with GENERIC_ERROR
+    expect(process.exitCode).toBe(1);
+    process.exitCode = prevExitCode;
+
+    // .env was NOT written — abort happened before writeEnvAndSummary
+    expect(mockMergeEnvFile).not.toHaveBeenCalled();
+
+    // Error message names the failing user and the underlying error
+    const clack = await import("@clack/prompts");
+    const errorMock = clack.log.error as ReturnType<typeof vi.fn>;
+    const allErrors = errorMock.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(allErrors).toContain("Credential verification failed");
+    expect(allErrors).toContain("ETIMEDOUT");
   });
 });
