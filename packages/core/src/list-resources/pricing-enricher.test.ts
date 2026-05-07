@@ -434,4 +434,28 @@ describe("createListPricingEnricher — edge cases", () => {
     expect(result.get(kmsArn)).toBe("$1.00/mo");
     expect(result.size).toBe(1);
   });
+
+  // Regression: AWS::KMS::Key contains "::" inside the resource type name.
+  // The TupleKey is built as "<resourceType>::<region>" → "AWS::KMS::Key::us-east-1".
+  // A naive split("::")[1] returns "KMS" not "us-east-1", causing the MCP
+  // to receive "KMS" as the region and return empty_results for every KMS key.
+  // This test verifies the MCP call carries the correct region in its request.
+  it("passes correct region to Pricing MCP for resource types containing '::' in their name (KMS regression)", async () => {
+    const kmsArn = "arn:aws:kms:us-east-1:112233445566:key/region-extraction";
+    mockToolInvoke.mockResolvedValue(wrapMcpText(KMS_PRICING_RESPONSE));
+
+    const enricher = createListPricingEnricher();
+    const result = await enricher([
+      makeResource(kmsArn, "AWS::KMS::Key", "us-east-1"),
+    ]);
+
+    // If region extraction was wrong (e.g. "KMS"), the MCP mock would still
+    // return a response (it doesn't validate region in the mock), so we verify
+    // the correct call argument was passed.
+    expect(mockToolInvoke).toHaveBeenCalledWith(
+      expect.objectContaining({ region: "us-east-1" }),
+    );
+    // And the cost resolves correctly
+    expect(result.get(kmsArn)).toBe("$1.00/mo");
+  });
 });

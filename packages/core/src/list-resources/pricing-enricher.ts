@@ -276,7 +276,12 @@ export function createListPricingEnricher(): PricingEnricher {
         for (const [key, group] of grouped) {
           try {
             const resourceType = group[0]!.resourceType;
-            const effectiveRegion = key.split("::")[1]!;
+            // The TupleKey is "<resourceType>::<region>". Resource types
+            // contain "::" themselves (e.g. "AWS::KMS::Key"), so split("::")[1]
+            // would return "KMS" instead of the region. Use .pop() (last
+            // segment) to correctly extract the region component.
+            const keyParts = key.split("::");
+            const effectiveRegion = keyParts[keyParts.length - 1]!;
 
             // Synthesise minimal desiredState for the decomposer
             const desiredState: Record<string, unknown> =
@@ -315,6 +320,7 @@ export function createListPricingEnricher(): PricingEnricher {
             let tupleHadAnyFailure = false;
             for (const item of fixedItems) {
               try {
+                // F#4: retry on 429/throttle with exponential back-off
                 // F#4: retry on 429/throttle with exponential back-off
                 const rawResult = await withRetry(() =>
                   withTimeout(
