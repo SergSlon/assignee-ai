@@ -226,6 +226,9 @@ const PROBE_WHITELIST_FLAGS = new Set<string>([
   "--to", // audit-verify (W3-01) — end-date filter; tested in audit-verify.test.ts
   "--log-file", // audit-verify (W3-01) — override audit log path; tested in audit-verify.test.ts
   "--target-account", // plan/apply/destroy (W3-04) — multi-account surface flag; Epic 101 wires STS assume-role; tested in account-id-validator.test.ts + plan/apply/destroy *.test.ts
+  "--all", // destroy --all (bulk-destroy re-introduction) — tested in bulk-action.test.ts + cli-flow-commands.test.ts
+  "--no-confirm", // destroy --all --no-confirm (skip typed-confirmation, CI/CD) — tested in bulk-action.test.ts
+  "--allow-large-sweep", // destroy --all --allow-large-sweep (> 100 resource opt-in) — tested in bulk-action.test.ts
 ]);
 
 /** Extract every `<long-flag>` from Commander `.option("...")` calls. */

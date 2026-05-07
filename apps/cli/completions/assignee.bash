@@ -33,7 +33,7 @@ _assignee_completions() {
       COMPREPLY=( $(compgen -W "--output --json" -- "${cur}") )
       ;;
     destroy)
-      COMPREPLY=( $(compgen -W "--yes --pending-window-in-days --recovery-window-in-days --force-delete-without-recovery --output --json --target-account" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--yes --pending-window-in-days --recovery-window-in-days --force-delete-without-recovery --output --json --target-account --all --no-confirm --allow-large-sweep" -- "${cur}") )
       ;;
     drift)
       COMPREPLY=( $(compgen -W "--resource --region --status --exclude --baseline --output --json --output-file --concurrency --detailed --wizard" -- "${cur}") )

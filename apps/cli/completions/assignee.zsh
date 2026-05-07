@@ -83,7 +83,10 @@ _assignee() {
             '--force-delete-without-recovery[SecretsManager secrets only\: skip the recovery window and destroy the secret immediately. Mutually exclusive with --recovery-window-in-days.]' \
             '--output[Output format (json|text)]:format:' \
             '--json[Shorthand for --output json (emit machine-readable envelope)]' \
-            '--target-account[Target AWS account ID (12 digits). Validates format; cross-account assume-role is not yet supported.]:id:'
+            '--target-account[Target AWS account ID (12 digits). Validates format; cross-account assume-role is not yet supported.]:id:' \
+            '--all[Bulk-destroy every managed resource (default\: dry-run plan). Use --yes to execute.]' \
+            '--no-confirm[Skip the typed-account-ID confirmation gate when used with --all --yes (CI/CD escape hatch).]' \
+            '--allow-large-sweep[Allow bulk-destroy of more than 100 resources (explicit opt-in to override the safety threshold).]'
           ;;
         drift)
           _arguments \

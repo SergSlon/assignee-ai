@@ -198,19 +198,32 @@ describe("destroy command definition", () => {
     });
   });
 
-  it("has required <resource> argument (Story 50-3 made it mandatory)", async () => {
+  it("has optional [resource] argument (bulk-destroy story made it optional for --all mode)", async () => {
+    // Story 50-3 made `resource` required; the bulk-destroy story (feature-bulk-destroy-with-allowlist)
+    // re-introduces --all and makes the positional optional so `assignee destroy --all` works.
     const { destroyCommand } = await import("../commands/destroy.js");
     expect(destroyCommand.registeredArguments.length).toBeGreaterThanOrEqual(1);
     expect(destroyCommand.registeredArguments[0]!.name()).toBe("resource");
-    expect(destroyCommand.registeredArguments[0]!.required).toBe(true);
+    // Resource is OPTIONAL now — bulk-destroy omits it; single-resource requires it.
+    expect(destroyCommand.registeredArguments[0]!.required).toBe(false);
   });
 
-  it("no longer exposes bulk-destroy flags (--all / --include-iam / --dry-run)", async () => {
+  it("exposes --all for guarded bulk-destroy (re-introduced with safety allowlist)", async () => {
+    // Story 50-3 removed --all; the bulk-destroy story re-introduces it with safety guards:
+    // dry-run default, exclusion allowlist, typed-confirmation gate, 100-resource cap.
     const { destroyCommand } = await import("../commands/destroy.js");
     const longs = destroyCommand.options.map((o) => o.long);
-    expect(longs).not.toContain("--all");
+    expect(longs).toContain("--all");
+    // --include-iam and --dry-run remain removed (not re-introduced by this story).
     expect(longs).not.toContain("--include-iam");
     expect(longs).not.toContain("--dry-run");
+  });
+
+  it("exposes --no-confirm and --allow-large-sweep for bulk-destroy", async () => {
+    const { destroyCommand } = await import("../commands/destroy.js");
+    const longs = destroyCommand.options.map((o) => o.long);
+    expect(longs).toContain("--no-confirm");
+    expect(longs).toContain("--allow-large-sweep");
   });
 });
 
