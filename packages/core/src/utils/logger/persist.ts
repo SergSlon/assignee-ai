@@ -95,6 +95,33 @@ const PERSIST_INFO_ALLOWLIST: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Terminal-outcome actions that MUST emit a structured JSON line to stderr
+ * regardless of verbose mode. These mark process-lifecycle endpoints
+ * (apply/plan complete or failed) — operators tailing CI logs and tooling
+ * scraping `assignee … --json` need exactly one machine-readable beacon
+ * per command run, even when --verbose is off.
+ *
+ * Probe `e96.W3.N4` (`apps/cli/scripts/PROBE_MANIFEST.yaml:375`) asserts
+ * stderr contains at least one `^{` line on `apply --json` / `plan --json`
+ * failure. Without this allowlist that probe would only pass with
+ * --verbose, which is a contract mismatch the probe was written to catch.
+ *
+ * The JSON-stderr filter (`apps/cli/src/commands/json-stderr-filter.ts`)
+ * passes through any line starting with `{` — these allowlisted lines
+ * are NOT filtered.
+ *
+ * Keep the set tight: every entry is a terminal beacon, not a per-step
+ * progress event. Adding a high-volume action here would spam stderr in
+ * non-verbose mode.
+ */
+const STDERR_ALWAYS_ALLOWLIST: ReadonlySet<string> = new Set([
+  LOG_ACTIONS.APPLY_FAILED,
+  LOG_ACTIONS.APPLY_SUCCEEDED,
+  LOG_ACTIONS.APPLY_COMPLETE,
+  LOG_ACTIONS.PLAN_COMPLETE,
+]);
+
+/**
  * Writes a structured JSON log event.
  *
  * Behaviour by level:
@@ -102,6 +129,9 @@ const PERSIST_INFO_ALLOWLIST: ReadonlySet<string> = new Set([
  *     emitted to stderr when verbose mode is enabled.
  *   - info: emitted to stderr only when verbose mode is enabled. Persisted
  *     to disk only when `event.action` is in PERSIST_INFO_ALLOWLIST.
+ *   - terminal beacons (action in STDERR_ALWAYS_ALLOWLIST): emitted to
+ *     stderr regardless of verbose mode so JSON-mode consumers and the
+ *     `e96.W3.N4` probe see at least one `^{` line per command run.
  */
 export function log(event: LogEvent): void {
   const verbose = isVerbose();
@@ -109,12 +139,13 @@ export function log(event: LogEvent): void {
     event.level === LogLevel.ERROR || event.level === LogLevel.WARN;
   const isPersistInfo =
     event.level === LogLevel.INFO && PERSIST_INFO_ALLOWLIST.has(event.action);
+  const isTerminalBeacon = STDERR_ALWAYS_ALLOWLIST.has(event.action);
 
   if (isWarnOrError || isPersistInfo) {
     appendPersistent(event);
   }
 
-  if (verbose) {
+  if (verbose || isTerminalBeacon) {
     process.stderr.write(JSON.stringify(event) + "\n");
   }
 
