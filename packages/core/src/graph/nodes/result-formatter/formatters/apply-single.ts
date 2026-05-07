@@ -28,6 +28,8 @@ import { requireAssigneeCredentials } from "@/config/aws-credentials.js";
 import { createEC2Client } from "@/aws/ec2-client-factory.js";
 import { tryGetAmiDefaultUser } from "@/utils/aws-resource-discovery/ami-default-user.js";
 import { sanitizeKeyName } from "@/graph/nodes/resource-provisioner/util.js";
+import { getOperatorCallerArn } from "@/utils/resolve-arn.js";
+import { attachCompensatingBucketPolicy } from "@/services/s3-compensating-bucket-policy.js";
 import { resolveDisplayArn } from "../arn-display.js";
 import { runStaticSiteUploadFor } from "./static-site-upload.js";
 
@@ -219,6 +221,62 @@ export async function formatApplySingleSuccess(
     action: LOG_ACTIONS.APPLY_SUCCEEDED,
     extras: { resourceArn: displayArn },
   });
+
+  // Bug S3-001 Part 2 — compensating bucket policy for tag-scoped destructive
+  // access. AWS does NOT auto-populate `aws:ResourceTag` for S3 bucket-level
+  // IAM evaluations (DeleteBucket / DeleteBucketPolicy), so the identity-policy
+  // `S3BucketDestructiveResourcePrefixScoped` statement grants those actions
+  // unscoped. Attaching a resource-based bucket policy here restores per-bucket
+  // tag scoping at the bucket-policy enforcement layer.
+  //
+  // Non-blocking: if PutBucketPolicy fails (throttle, IAM gap), warn loudly
+  // but do NOT roll back the bucket creation — the bucket exists and the user
+  // can re-run `assignee setup` to re-attach. The identity policy already
+  // allows destructive operations so the bucket is fully functional.
+  if (state.resourceType === RESOURCE_TYPES.S3_BUCKET && state.resourceArn) {
+    const operatorArn = await getOperatorCallerArn();
+    if (operatorArn) {
+      const policyResult = await attachCompensatingBucketPolicy({
+        bucketName: state.resourceArn,
+        operatorArn,
+        region: AWS_REGION,
+      });
+      if (!policyResult.attached) {
+        process.stderr.write(
+          chalk.yellow(
+            `⚠ Compensating bucket policy could not be attached to ${state.resourceArn}: ${policyResult.reason ?? "unknown error"}\n` +
+              `  The bucket was created successfully but per-bucket tag-scoped destructive access is NOT in effect.\n` +
+              `  Re-run \`assignee setup\` to retry the policy attachment.\n`,
+          ),
+        );
+        log({
+          ts: new Date().toISOString(),
+          runId: state.runId,
+          level: "warn",
+          action: LOG_ACTIONS.APPLY_SUCCEEDED,
+          extras: {
+            compensatingBucketPolicyFailed: true,
+            bucketName: state.resourceArn,
+            reason: policyResult.reason,
+          },
+        });
+      }
+    } else {
+      // Operator ARN unavailable (STS not yet called, or preflight skipped).
+      // Log but do not block the apply — the bucket creation already succeeded.
+      log({
+        ts: new Date().toISOString(),
+        runId: state.runId,
+        level: "warn",
+        action: LOG_ACTIONS.APPLY_SUCCEEDED,
+        extras: {
+          compensatingBucketPolicySkipped: true,
+          bucketName: state.resourceArn,
+          reason: "operator ARN unavailable — STS not called yet",
+        },
+      });
+    }
+  }
 
   // Story 37.4 — static-site upload when --source is set and the resource is S3.
   if (

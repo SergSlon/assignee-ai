@@ -64,6 +64,22 @@ correctly receive the resource tag and remain tag-scoped.
   (with empirical evidence and mitigations), and all scoped statement
   rationales.
 
+- **Compensating bucket policy at `assignee apply` time (Part 2)**: every
+  `assignee apply` that creates an S3 bucket now also calls
+  `PutBucketPolicy` to attach a resource-based bucket policy granting the
+  operator the 6 destructive actions (`DeleteBucket`, `DeleteBucketPolicy`,
+  `DeleteObject`, `DeleteObjectVersion`, `ListBucket`, `ListBucketVersions`)
+  conditional on `aws:ResourceTag/managed-by = assignee-ai`. Bucket policies
+  (resource-based policies) DO evaluate `aws:ResourceTag` correctly for
+  bucket-level operations, restoring the per-bucket tag boundary that the
+  identity-policy limitation prevents.
+  - Non-blocking: if `PutBucketPolicy` fails (throttling, IAM gap), a
+    loud warning is printed to stderr and logged, but the bucket
+    creation is NOT rolled back. The identity policy already allows
+    destructive operations so the bucket remains fully functional.
+  - Applies to both single-resource and compound-pattern apply paths
+    (e.g. static-website pattern).
+
 #### Operators must re-run `assignee setup`
 
 The operator IAM policy schema changed (new `S3BucketDestructiveResourcePrefixScoped`

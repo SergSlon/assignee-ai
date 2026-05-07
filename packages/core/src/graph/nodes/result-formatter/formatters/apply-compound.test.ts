@@ -17,6 +17,25 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ExecutionMode, ExecutionStatus } from "@/index.js";
 import type { AgentState } from "@/graph/graph-state.js";
 
+// ── Hoisted mocks for compensating policy ────────────────────────────────────
+const { mockAttachCompensatingBucketPolicy, mockGetOperatorCallerArn } =
+  vi.hoisted(() => ({
+    mockAttachCompensatingBucketPolicy: vi
+      .fn()
+      .mockResolvedValue({ attached: true }),
+    mockGetOperatorCallerArn: vi
+      .fn()
+      .mockResolvedValue("arn:aws:iam::112233445566:user/assignee-operator"),
+  }));
+
+vi.mock("@/services/s3-compensating-bucket-policy.js", () => ({
+  attachCompensatingBucketPolicy: mockAttachCompensatingBucketPolicy,
+}));
+
+vi.mock("@/utils/resolve-arn.js", () => ({
+  getOperatorCallerArn: mockGetOperatorCallerArn,
+}));
+
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
 vi.mock("@/utils/display.js", () => ({
@@ -197,5 +216,168 @@ describe("formatApplyCompoundSuccess — W11-S0 throttleRetryCount reset", () =>
     expect(
       Object.prototype.hasOwnProperty.call(result, "throttleRetryCount"),
     ).toBe(false);
+  });
+});
+
+// ── Bug S3-001 Part 2 — compensating bucket policy in compound terminal SUCCESS
+//
+// When the terminal compound formatter runs, it must call
+// attachCompensatingBucketPolicy for every S3 bucket in the completed set.
+// The mid-compound advance branch (non-terminal) must NOT call it.
+// Non-blocking: policy-attachment failures warn+log but do not fail the apply.
+describe("formatApplyCompoundSuccess — S3 compensating bucket policy", () => {
+  const S3_BUCKET_NAME = "assignee-static-site-2026";
+  const OPERATOR_ARN = "arn:aws:iam::112233445566:user/assignee-operator";
+
+  // A 2-resource queue ending with an S3 bucket.
+  const s3Queue = [
+    {
+      resourceId: "cloudfront-dist",
+      resourceType: "AWS::CloudFront::Distribution",
+      displayName: "CDN Distribution",
+    },
+    {
+      resourceId: "s3-bucket",
+      resourceType: "AWS::S3::Bucket",
+      displayName: "Static Site Bucket",
+    },
+  ];
+
+  const s3Pattern = {
+    patternId: "static-website",
+    displayName: "Static Website",
+    keywords: ["static"],
+    resourceList: s3Queue,
+    dependencyOrder: [["cloudfront-dist"], ["s3-bucket"]],
+    defaultOptions: {},
+  };
+
+  beforeEach(() => {
+    mockGetOperatorCallerArn.mockResolvedValue(OPERATOR_ARN);
+    mockAttachCompensatingBucketPolicy.mockResolvedValue({ attached: true });
+  });
+
+  it("calls attachCompensatingBucketPolicy for the S3 bucket in terminal compound SUCCESS", async () => {
+    const { formatApplyCompoundSuccess } = await import("./apply-compound.js");
+
+    // Terminal success: currentResourceIndex points at the last resource.
+    const state = makeState({
+      currentResourceIndex: 1,
+      resourceType: "AWS::S3::Bucket",
+      resourceArn: S3_BUCKET_NAME,
+      resourceQueue: s3Queue as unknown as AgentState["resourceQueue"],
+      resourcePattern: s3Pattern as unknown as AgentState["resourcePattern"],
+      completedResources: [
+        {
+          resourceId: "cloudfront-dist",
+          resourceType: "AWS::CloudFront::Distribution",
+          resourceArn: "E1ABCDEF123456",
+          executionStatus: ExecutionStatus.SUCCESS,
+        },
+      ],
+    });
+
+    await formatApplyCompoundSuccess(state);
+
+    expect(mockAttachCompensatingBucketPolicy).toHaveBeenCalledTimes(1);
+    expect(mockAttachCompensatingBucketPolicy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bucketName: S3_BUCKET_NAME,
+        operatorArn: OPERATOR_ARN,
+      }),
+    );
+  });
+
+  it("does NOT call attachCompensatingBucketPolicy on mid-compound advance (non-terminal)", async () => {
+    const { formatApplyCompoundSuccess } = await import("./apply-compound.js");
+
+    // Mid-compound: currentResourceIndex 0 → advancing to 1.
+    const state = makeState({
+      currentResourceIndex: 0,
+      resourceType: "AWS::CloudFront::Distribution",
+      resourceArn: "E1ABCDEF123456",
+      resourceQueue: s3Queue as unknown as AgentState["resourceQueue"],
+      resourcePattern: s3Pattern as unknown as AgentState["resourcePattern"],
+      completedResources: [],
+    });
+
+    const result = await formatApplyCompoundSuccess(state);
+
+    // Mid-compound: advances to next resource.
+    expect(result.currentResourceIndex).toBe(1);
+    // Compensating policy hook NOT called — bucket not yet created.
+    expect(mockAttachCompensatingBucketPolicy).not.toHaveBeenCalled();
+  });
+
+  it("warns to stderr + logs when attachCompensatingBucketPolicy fails in compound — does NOT fail the apply", async () => {
+    const { formatApplyCompoundSuccess } = await import("./apply-compound.js");
+    mockAttachCompensatingBucketPolicy.mockResolvedValueOnce({
+      attached: false,
+      reason: "ThrottlingException",
+    });
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+
+    const state = makeState({
+      currentResourceIndex: 1,
+      resourceType: "AWS::S3::Bucket",
+      resourceArn: S3_BUCKET_NAME,
+      resourceQueue: s3Queue as unknown as AgentState["resourceQueue"],
+      resourcePattern: s3Pattern as unknown as AgentState["resourcePattern"],
+      completedResources: [
+        {
+          resourceId: "cloudfront-dist",
+          resourceType: "AWS::CloudFront::Distribution",
+          resourceArn: "E1ABCDEF123456",
+          executionStatus: ExecutionStatus.SUCCESS,
+        },
+      ],
+    });
+
+    const result = await formatApplyCompoundSuccess(state);
+
+    // Apply still completes.
+    expect(result.completedResources).toHaveLength(2);
+    expect(stderrSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "Compensating bucket policy could not be attached",
+      ),
+    );
+
+    stderrSpy.mockRestore();
+  });
+
+  it("skips policy attachment when operator ARN is unavailable and logs the skip", async () => {
+    const { formatApplyCompoundSuccess } = await import("./apply-compound.js");
+    mockGetOperatorCallerArn.mockResolvedValueOnce(undefined);
+    const { log } = await import("@/utils/logger/index.js");
+
+    const state = makeState({
+      currentResourceIndex: 1,
+      resourceType: "AWS::S3::Bucket",
+      resourceArn: S3_BUCKET_NAME,
+      resourceQueue: s3Queue as unknown as AgentState["resourceQueue"],
+      resourcePattern: s3Pattern as unknown as AgentState["resourcePattern"],
+      completedResources: [
+        {
+          resourceId: "cloudfront-dist",
+          resourceType: "AWS::CloudFront::Distribution",
+          resourceArn: "E1ABCDEF123456",
+          executionStatus: ExecutionStatus.SUCCESS,
+        },
+      ],
+    });
+
+    await formatApplyCompoundSuccess(state);
+
+    expect(mockAttachCompensatingBucketPolicy).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        extras: expect.objectContaining({
+          compensatingBucketPolicySkipped: true,
+        }),
+      }),
+    );
   });
 });

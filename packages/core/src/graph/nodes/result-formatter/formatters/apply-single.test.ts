@@ -27,7 +27,13 @@ import { ProcessEnvConfigAdapter } from "@/config/config-port.js";
 
 // ── Hoisted mocks ────────────────────────────────────────────────────────────
 
-const { mockEc2Send, mockEc2Destroy, mockExistsSync } = vi.hoisted(() => ({
+const {
+  mockEc2Send,
+  mockEc2Destroy,
+  mockExistsSync,
+  mockAttachCompensatingBucketPolicy,
+  mockGetOperatorCallerArn,
+} = vi.hoisted(() => ({
   mockEc2Send: vi.fn(),
   mockEc2Destroy: vi.fn(),
   // Story iii reviewer fix HIGH #2: apply-single now stat-checks the
@@ -36,6 +42,15 @@ const { mockEc2Send, mockEc2Destroy, mockExistsSync } = vi.hoisted(() => ({
   // flow assumed it did pre-fix). Per-test overrides use
   // mockExistsSync.mockReturnValueOnce(false) for the missing-file case.
   mockExistsSync: vi.fn().mockReturnValue(true),
+  // Bug S3-001 Part 2: compensating bucket policy attachment.
+  // Default: succeeds. Per-test overrides for failure/skip cases.
+  mockAttachCompensatingBucketPolicy: vi
+    .fn()
+    .mockResolvedValue({ attached: true }),
+  // Default: returns a realistic operator ARN.
+  mockGetOperatorCallerArn: vi
+    .fn()
+    .mockResolvedValue("arn:aws:iam::112233445566:user/assignee-operator"),
 }));
 
 vi.mock("@aws-sdk/client-ec2", () => {
@@ -84,6 +99,14 @@ vi.mock("./static-site-upload.js", () => ({
 
 vi.mock("@/utils/aws-resource-discovery/ami-default-user.js", () => ({
   tryGetAmiDefaultUser: vi.fn(),
+}));
+
+vi.mock("@/services/s3-compensating-bucket-policy.js", () => ({
+  attachCompensatingBucketPolicy: mockAttachCompensatingBucketPolicy,
+}));
+
+vi.mock("@/utils/resolve-arn.js", () => ({
+  getOperatorCallerArn: mockGetOperatorCallerArn,
 }));
 
 import { formatApplySingleSuccess } from "./apply-single.js";
@@ -684,5 +707,121 @@ describe("formatApplySingleSuccess — Story iii reviewer fixes (file-existence 
     const [statedPath] = mockExistsSync.mock.calls[0] as [string];
     expect(statedPath).toMatch(/\.assignee[/\\]keys[/\\]my_key_test\.pem$/);
     expect(statedPath).not.toContain(";");
+  });
+});
+
+// ── Bug S3-001 Part 2 — compensating bucket policy wiring ────────────────────
+//
+// apply-single.ts should call attachCompensatingBucketPolicy for S3 buckets
+// immediately after the bucket creation succeeds. Failure is non-blocking:
+// the apply result is still a success, but a warning is printed to stderr and
+// logged.
+describe("formatApplySingleSuccess — S3 compensating bucket policy", () => {
+  const S3_BUCKET_NAME = "assignee-assets-bucket-2026";
+  const S3_DISPLAY_ARN = `arn:aws:s3:::${S3_BUCKET_NAME}`;
+  const OPERATOR_ARN = "arn:aws:iam::112233445566:user/assignee-operator";
+
+  beforeEach(() => {
+    vi.mocked(resolveDisplayArn).mockResolvedValue(S3_DISPLAY_ARN);
+    mockGetOperatorCallerArn.mockResolvedValue(OPERATOR_ARN);
+    mockAttachCompensatingBucketPolicy.mockResolvedValue({ attached: true });
+  });
+
+  it("calls attachCompensatingBucketPolicy with the bucket name and operator ARN for S3 buckets", async () => {
+    const state = makeState({
+      resourceType: "AWS::S3::Bucket",
+      resourceArn: S3_BUCKET_NAME,
+    });
+    await formatApplySingleSuccess(state);
+
+    expect(mockAttachCompensatingBucketPolicy).toHaveBeenCalledTimes(1);
+    expect(mockAttachCompensatingBucketPolicy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bucketName: S3_BUCKET_NAME,
+        operatorArn: OPERATOR_ARN,
+      }),
+    );
+    // Apply still succeeds.
+    expect(renderApplySuccess).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT call attachCompensatingBucketPolicy for non-S3 resources (EC2)", async () => {
+    mockEc2Send.mockResolvedValueOnce({ Reservations: [] });
+    vi.mocked(resolveDisplayArn).mockResolvedValueOnce(
+      `arn:aws:ec2:us-east-1:112233445566:instance/${EC2_INSTANCE_ID}`,
+    );
+
+    const state = makeState({
+      resourceType: "AWS::EC2::Instance",
+      resourceArn: EC2_INSTANCE_ID,
+    });
+    await formatApplySingleSuccess(state);
+
+    expect(mockAttachCompensatingBucketPolicy).not.toHaveBeenCalled();
+  });
+
+  it("warns to stderr + logs when attachCompensatingBucketPolicy fails — does NOT fail the apply", async () => {
+    mockAttachCompensatingBucketPolicy.mockResolvedValueOnce({
+      attached: false,
+      reason: "Access Denied",
+    });
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+
+    const state = makeState({
+      resourceType: "AWS::S3::Bucket",
+      resourceArn: S3_BUCKET_NAME,
+    });
+    const result = await formatApplySingleSuccess(state);
+
+    // Apply still succeeds (non-blocking failure).
+    expect(renderApplySuccess).toHaveBeenCalledTimes(1);
+    // Warning written to stderr.
+    expect(stderrSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "Compensating bucket policy could not be attached",
+      ),
+    );
+    // No exception propagated.
+    expect(result).toBeDefined();
+
+    stderrSpy.mockRestore();
+  });
+
+  it("skips the policy attachment (logs warn) when operator ARN is unavailable", async () => {
+    mockGetOperatorCallerArn.mockResolvedValueOnce(undefined);
+    const { log } = await import("@/utils/logger/index.js");
+
+    const state = makeState({
+      resourceType: "AWS::S3::Bucket",
+      resourceArn: S3_BUCKET_NAME,
+    });
+    await formatApplySingleSuccess(state);
+
+    expect(mockAttachCompensatingBucketPolicy).not.toHaveBeenCalled();
+    // A structured log entry with the skip reason should be emitted.
+    expect(log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        extras: expect.objectContaining({
+          compensatingBucketPolicySkipped: true,
+        }),
+      }),
+    );
+    // Apply still succeeds.
+    expect(renderApplySuccess).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT call attachCompensatingBucketPolicy when S3 bucket has no resourceArn (degenerate)", async () => {
+    vi.mocked(resolveDisplayArn).mockResolvedValueOnce(undefined);
+
+    const state = makeState({
+      resourceType: "AWS::S3::Bucket",
+      resourceArn: undefined,
+    });
+    await formatApplySingleSuccess(state);
+
+    expect(mockAttachCompensatingBucketPolicy).not.toHaveBeenCalled();
+    expect(renderApplySuccess).toHaveBeenCalledTimes(1);
   });
 });
