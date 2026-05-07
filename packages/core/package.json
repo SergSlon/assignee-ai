@@ -35,6 +35,10 @@
     "./audit": {
       "import": "./dist/audit/index.js",
       "types": "./dist/audit/index.d.ts"
+    },
+    "./destroy": {
+      "import": "./dist/destroy/index.js",
+      "types": "./dist/destroy/index.d.ts"
     }
   },
   "files": [

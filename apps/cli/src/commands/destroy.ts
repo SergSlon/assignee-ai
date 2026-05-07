@@ -1,10 +1,14 @@
 /**
- * `assignee destroy` command — safely destroys a single managed AWS resource.
+ * `assignee destroy` command — safely destroys a single managed AWS resource
+ * or, with `--all`, bulk-destroys every managed resource with safety guards.
  *
- * Single-resource mode only: resolves by ARN or name, confirms, deletes.
- * Story 50-3 cut `--all` and `--include-iam` — bulk destroy was too
- * dangerous for v1 (the safety-allowlist was tacit admission of that).
- * Callers needing to remove many resources invoke destroy per-resource.
+ * Two modes:
+ *   1. Single-resource (default): resolve by ARN or name, confirm, delete.
+ *   2. Bulk (`--all`): enumerate → filter exclusion allowlist → ordered plan
+ *      → typed-account-ID confirmation → sequential destroy → audit event.
+ *      Story 50-3 cut `--all` as too dangerous; this re-introduction closes
+ *      the v1 safety gap via: dry-run default, unconditional exclusion
+ *      allowlist, typed-confirmation gate, and 100-resource hard cap.
  *
  * Wave-6c F2: decomposed into `destroy/` sub-modules. This file is the
  * Commander wrapper, the CCAPI-bypass dispatcher for AWS resource types
@@ -95,6 +99,7 @@ import { redactSensitive } from "../utils/error-messages.js";
 import { validateAccountId } from "../utils/account-id-validator.js";
 import { ProcessExitCode } from "../constants/errors.js";
 import { EnvVar } from "../constants/env-vars.js";
+import { runBulkDestroyAction } from "./destroy/bulk-action.js";
 
 // ── Re-exports for back-compat (tests + external callers) ─────────────
 export { resourceConfirmationToken } from "./destroy/typed-confirm.js";
@@ -120,6 +125,16 @@ export interface DestroyOptions {
   pendingWindowInDays?: string; // Commander string-typed; validated below.
   recoveryWindowInDays?: string;
   forceDeleteWithoutRecovery?: boolean;
+  /** Bulk-destroy mode: destroy every managed resource (with safety guards). */
+  all?: boolean;
+  /**
+   * Skip the typed-account-ID confirmation gate (CI/CD only).
+   * Commander maps `--no-confirm` to `confirm: false`; set to `false` to skip.
+   * Defaults to `true` (confirmation required) when the flag is absent.
+   */
+  confirm?: boolean;
+  /** Allow bulk-destroy of > 100 resources (explicit opt-in). */
+  allowLargeSweep?: boolean;
 }
 
 const MIN_WINDOW_DAYS = 7;
@@ -662,11 +677,13 @@ function installDemoModeStderrRedactor(): { restore: () => void } {
 type DestroyOptsWithJson = DestroyOptions & {
   json?: boolean;
   output?: string;
+  targetAccount?: string;
 };
 
 export const destroyCommand = new Command(CommandName.DESTROY)
   .description(CommandDescription.DESTROY)
-  .argument("<resource>", CommandArgs.RESOURCE.DESC)
+  // Resource positional is optional — omitted when --all is used.
+  .argument("[resource]", CommandArgs.RESOURCE.DESC)
   .option(
     "-y, --yes",
     "Auto-confirm destroy without interactive prompt (for CI/CD)",
@@ -697,6 +714,19 @@ export const destroyCommand = new Command(CommandName.DESTROY)
     "--target-account <id>",
     "Target AWS account ID (12 digits). Validates format; cross-account assume-role is not yet supported.",
   )
+  // ── Bulk-destroy flags (Story feature-bulk-destroy-with-allowlist) ──
+  .option(
+    "--all",
+    "Bulk-destroy every managed resource (default: dry-run plan). Use --yes to execute.",
+  )
+  .option(
+    "--no-confirm",
+    "Skip the typed-account-ID confirmation gate when used with --all --yes (CI/CD escape hatch).",
+  )
+  .option(
+    "--allow-large-sweep",
+    "Allow bulk-destroy of more than 100 resources (explicit opt-in to override the safety threshold).",
+  )
   .addHelpText(
     "after",
     `
@@ -713,10 +743,20 @@ Examples:
         SecretsManager: immediate delete, no recovery window
   $ assignee destroy my-bucket --yes --json
         Machine-readable envelope for CI scripts
+  $ assignee destroy --all
+        Dry-run: show what would be destroyed (no AWS writes)
+  $ assignee destroy --all --yes
+        Bulk-destroy all managed resources (typed-account-ID confirmation required)
+  $ assignee destroy --all --yes --no-confirm
+        Bulk-destroy without confirmation prompt (CI/CD only)
+  $ assignee destroy --all --json
+        Machine-readable dry-run plan envelope
 
 Safety: typed-name confirmation is required for single-resource
-destroys without --yes. Bulk destroy (--all) was removed in Story 50-3;
-run destroy per-resource instead.
+destroys without --yes. Bulk destroy (--all) defaults to dry-run;
+--yes executes with typed-account-ID confirmation.
+Assignee self-infrastructure (IAM policies/users/roles) is unconditionally
+excluded from bulk destroy — deletion would lock out all assignee commands.
 
 Scheduled-deletion types (KMS keys, SecretsManager secrets) display
 "Scheduled for deletion on <date>" rather than "Resource destroyed" —
@@ -726,12 +766,8 @@ the resource is still billing and recoverable during the window.
   .action(
     async (resource: string | undefined, rawOpts: DestroyOptsWithJson) => {
       // W3-04 (Epic 100 Round 5): validate --target-account early.
-      type DestroyOptsWithTarget = DestroyOptsWithJson & {
-        targetAccount?: string;
-      };
-      const rawOptsWithTarget = rawOpts as DestroyOptsWithTarget;
-      if (rawOptsWithTarget.targetAccount !== undefined) {
-        const validation = validateAccountId(rawOptsWithTarget.targetAccount);
+      if (rawOpts.targetAccount !== undefined) {
+        const validation = validateAccountId(rawOpts.targetAccount);
         if (!validation.valid) {
           process.stderr.write(
             `[destroy] ${validation.reason ?? "Invalid account ID"}\n`,
@@ -740,11 +776,73 @@ the resource is still billing and recoverable during the window.
           return;
         }
         process.stderr.write(
-          `[destroy] cross-account assume-role not yet available for ${rawOptsWithTarget.targetAccount}\n`,
+          `[destroy] cross-account assume-role not yet available for ${rawOpts.targetAccount}\n`,
         );
         process.exitCode = ProcessExitCode.NOT_IMPLEMENTED;
         return;
       }
+
+      // ── Bulk-destroy route ──────────────────────────────────────────
+      if (rawOpts.all) {
+        // Reject: user passed both --all AND a positional resource argument.
+        if (resource !== undefined) {
+          process.stderr.write(
+            `[destroy] ERROR: --all and a resource argument are mutually exclusive.\n` +
+              `  Use \`assignee destroy --all\` (no resource) to bulk-destroy,\n` +
+              `  or \`assignee destroy <arn>\` (no --all) to destroy a single resource.\n`,
+          );
+          process.exitCode = ProcessExitCode.GENERIC_ERROR;
+          return;
+        }
+
+        const json = rawOpts.json === true || rawOpts.output === "json";
+        const stderrFilter = installJsonStderrFilter(json);
+        const demoStderrRedactor = installDemoModeStderrRedactor();
+        try {
+          await runBulkDestroyAction({
+            yes: rawOpts.yes,
+            // Commander maps `--no-confirm` to `confirm: false`
+            noConfirm: rawOpts.confirm === false,
+            allowLargeSweep: rawOpts.allowLargeSweep,
+            json,
+            pendingWindowInDays: rawOpts.pendingWindowInDays,
+            forceDeleteWithoutRecovery: rawOpts.forceDeleteWithoutRecovery,
+            recoveryWindowInDays: rawOpts.recoveryWindowInDays,
+            // Inject the full destroyAction so per-resource invocations
+            // hit the CCAPI-bypass dispatcher (KMS::ScheduleKeyDeletion,
+            // SecretsManager::DeleteSecret with recovery flags, etc.).
+            // Without this injection the bulk loop falls back to the
+            // generic destroy path which silently drops per-type flags.
+            destroyOne: (resource, perResourceOpts) =>
+              destroyAction(resource, { ...perResourceOpts, yes: true }),
+          });
+        } catch (err) {
+          if (json) {
+            const isTyped = err instanceof AssigneeError;
+            const code = isTyped
+              ? (err as AssigneeError).code
+              : "UNKNOWN_ERROR";
+            const message = err instanceof Error ? err.message : String(err);
+            process.stdout.write(
+              JSON.stringify({
+                ok: false,
+                operation: "bulk_destroy",
+                error: message,
+                code,
+              }) + "\n",
+            );
+            process.exitCode = ProcessExitCode.GENERIC_ERROR;
+          } else {
+            throw err;
+          }
+        } finally {
+          stderrFilter.restore();
+          demoStderrRedactor.restore();
+        }
+        return;
+      }
+
+      // ── Single-resource route (unchanged) ──────────────────────────────
 
       // Normalise `--json` → `--output json`.
       const json = rawOpts.json === true || rawOpts.output === "json";

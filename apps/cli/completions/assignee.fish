@@ -64,6 +64,9 @@ complete -c assignee -n "__fish_seen_subcommand_from destroy" -l force-delete-wi
 complete -c assignee -n "__fish_seen_subcommand_from destroy" -l output -s o -r -d 'Output format (json|text)'
 complete -c assignee -n "__fish_seen_subcommand_from destroy" -l json -d 'Shorthand for --output json (emit machine-readable envelope)'
 complete -c assignee -n "__fish_seen_subcommand_from destroy" -l target-account -r -d 'Target AWS account ID (12 digits). Validates format; cross-account assume-role is not yet supported.'
+complete -c assignee -n "__fish_seen_subcommand_from destroy" -l all -d 'Bulk-destroy every managed resource (default: dry-run plan). Use --yes to execute.'
+complete -c assignee -n "__fish_seen_subcommand_from destroy" -l no-confirm -d 'Skip the typed-account-ID confirmation gate when used with --all --yes (CI/CD escape hatch).'
+complete -c assignee -n "__fish_seen_subcommand_from destroy" -l allow-large-sweep -d 'Allow bulk-destroy of more than 100 resources (explicit opt-in to override the safety threshold).'
 
 # Options for 'drift'
 complete -c assignee -n "__fish_seen_subcommand_from drift" -l resource -r -d 'Filter by resource type'
