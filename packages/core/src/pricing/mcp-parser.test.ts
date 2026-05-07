@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractFirstTierPrice } from "./mcp-parser.js";
+import { extractFirstTierPrice, extractTieredPrice } from "./mcp-parser.js";
 import type { AwsPricingResponse } from "./types.js";
 
 describe("extractFirstTierPrice — contract tests for AwsPricingResponse shape", () => {
@@ -266,5 +266,132 @@ describe("extractFirstTierPrice — contract tests for AwsPricingResponse shape"
 
     const result = extractFirstTierPrice(data, "/GB-month");
     expect(result).toBe("$0.0500/GB-month");
+  });
+});
+
+// ─── extractTieredPrice ───────────────────────────────────────────────────────
+
+describe("extractTieredPrice — tiered AWS Pricing response detection", () => {
+  it("returns a TierLadderRender for a response with multiple priceDimensions", () => {
+    const data: AwsPricingResponse = {
+      data: [
+        {
+          terms: {
+            OnDemand: {
+              "term-1": {
+                priceDimensions: {
+                  "dim-1": {
+                    beginRange: "0",
+                    endRange: "100",
+                    pricePerUnit: { USD: "0.0000000000" },
+                    unit: "GB",
+                  },
+                  "dim-2": {
+                    beginRange: "100",
+                    endRange: "10240",
+                    pricePerUnit: { USD: "0.0900000000" },
+                    unit: "GB",
+                  },
+                },
+              },
+            },
+          },
+        },
+      ],
+    };
+
+    const result = extractTieredPrice(data);
+    expect(result).toBeDefined();
+    expect(result!.tiers).toHaveLength(2);
+    expect(result!.text).toContain("free up to 100 GB");
+  });
+
+  it("returns undefined for a flat-rate response (single priceDimension)", () => {
+    const data: AwsPricingResponse = {
+      data: [
+        {
+          terms: {
+            OnDemand: {
+              "term-1": {
+                priceDimensions: {
+                  "dim-1": {
+                    beginRange: "0",
+                    endRange: "Inf",
+                    pricePerUnit: { USD: "0.0230" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      ],
+    };
+
+    // Single dimension — isTieredResponse returns false, so extractTieredPrice returns undefined
+    const result = extractTieredPrice(data);
+    expect(result).toBeUndefined();
+  });
+
+  it("respects expectedFilters: only matches the filtered item's tiered dims", () => {
+    const data: AwsPricingResponse = {
+      data: [
+        {
+          product: {
+            productFamily: "Storage",
+            attributes: { usagetype: "TimedStorage-ByteHrs" },
+          },
+          terms: {
+            OnDemand: {
+              "term-storage": {
+                priceDimensions: {
+                  "dim-1": {
+                    beginRange: "0",
+                    endRange: "Inf",
+                    pricePerUnit: { USD: "0.0230" },
+                  },
+                },
+              },
+            },
+          },
+        },
+        {
+          product: {
+            productFamily: "Data Transfer",
+          },
+          terms: {
+            OnDemand: {
+              "term-transfer": {
+                priceDimensions: {
+                  "dim-a": {
+                    beginRange: "0",
+                    endRange: "100",
+                    pricePerUnit: { USD: "0.0000000000" },
+                    unit: "GB",
+                  },
+                  "dim-b": {
+                    beginRange: "100",
+                    endRange: "Inf",
+                    pricePerUnit: { USD: "0.0900000000" },
+                    unit: "GB",
+                  },
+                },
+              },
+            },
+          },
+        },
+      ],
+    };
+
+    // Filter for Data Transfer only — should see the tiered dimensions
+    const filters = [
+      {
+        Field: "productFamily",
+        Value: "Data Transfer",
+        Type: "TERM_MATCH" as const,
+      },
+    ];
+    const result = extractTieredPrice(data, filters);
+    expect(result).toBeDefined();
+    expect(result!.tiers).toHaveLength(2);
   });
 });

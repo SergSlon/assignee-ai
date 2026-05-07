@@ -11,7 +11,9 @@ export { PriceUnit } from "../price-units.js";
 export { PricingUnit } from "../units.js";
 export { LineItemLabel, DecomposerDescription } from "../line-item-labels.js";
 export { PricingFilterValue } from "../pricing-filter-values.js";
-export { extractFirstTierPrice } from "../mcp-parser.js";
+export { extractFirstTierPrice, extractTieredPrice } from "../mcp-parser.js";
+export type { TierLadderRender } from "../mcp-parser.js";
+export type { PriceTier } from "../tier-ladder.js";
 export { formatLabelWithSource } from "../types.js";
 
 // Advisory price constants + enrichment registry IDs (Story 50-4 Wave 5 Pass G)

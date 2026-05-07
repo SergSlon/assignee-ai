@@ -9,6 +9,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   formatCostLine,
+  formatPricingBreakdown,
   parsePlanJsonStream,
   renderPlanBox,
   serializePlanEnvelope,
@@ -16,6 +17,7 @@ import {
 } from "./display-plan.js";
 import type { DataSource } from "../pricing/types.js";
 import type { RenderableState } from "./display-helpers/renderable-state.js";
+import type { PricingBreakdown } from "../pricing/decomposer-types.js";
 
 describe("formatCostLine — source suffix rendering (Story 46.2)", () => {
   it.each([
@@ -403,5 +405,157 @@ describe("serializeErrorEnvelope — failure path (D-29 / D-30)", () => {
     };
     expect(parsed.error.hint).toBe("hint");
     expect(parsed.error.detail.errorMessage).toBe("concrete cause");
+  });
+});
+
+// ─── formatPricingBreakdown — tiered line item rendering ─────────────────────
+
+describe("formatPricingBreakdown — tiered rate display (feature-pricing-tiered-rate-display)", () => {
+  /** Minimal flat-rate line item result */
+  function flatItem(label: string, displayPrice: string) {
+    return {
+      lineItem: {
+        label,
+        kind: "usage_based" as const,
+        description: "test",
+        priceUnit: "/GB",
+        quantity: 0,
+        unit: "GB",
+        serviceCode: "AmazonS3",
+        filters: [],
+      },
+      unitPrice: displayPrice,
+      monthlyCost: null,
+      displayPrice,
+    };
+  }
+
+  /** Tiered line item result (as produced by breakdown.ts when tiered path fires) */
+  function tieredItem(label: string, text: string) {
+    return {
+      lineItem: {
+        label,
+        kind: "usage_based" as const,
+        description: "test",
+        priceUnit: "/GB",
+        quantity: 0,
+        unit: "GB",
+        serviceCode: "AWSDataTransfer",
+        filters: [],
+      },
+      unitPrice: "tiered",
+      monthlyCost: null,
+      displayPrice: `${text} (tiered)`,
+      tiers: [
+        {
+          beginRange: 0,
+          endRange: 100,
+          rate: "0.0000000000",
+          currency: "USD",
+          unit: "GB",
+        },
+        { beginRange: 100, rate: "0.0900000000", currency: "USD", unit: "GB" },
+      ],
+    };
+  }
+
+  it("renders tiered S3 data-transfer-out line with the tier ladder string", () => {
+    const breakdown: PricingBreakdown = {
+      fixedItems: [],
+      usageBasedItems: [
+        flatItem("Storage", "$0.0230/GB-mo"),
+        tieredItem(
+          "Data transfer out",
+          "free up to 100 GB, $0.090/GB next 10 TB",
+        ),
+      ],
+      fixedSubtotal: 0,
+      fetchedAt: "2026-05-06",
+      hasPartialFailure: false,
+      hasCacheHits: false,
+    };
+
+    const output = formatPricingBreakdown(breakdown);
+    expect(output).toContain("Data transfer out");
+    expect(output).toContain("free up to 100 GB");
+    expect(output).toContain("(tiered)");
+  });
+
+  it("suppresses the ⚠ warning when all line items are resolved (no genuine failure)", () => {
+    const breakdown: PricingBreakdown = {
+      fixedItems: [],
+      usageBasedItems: [
+        flatItem("Storage", "$0.0230/GB-mo"),
+        tieredItem(
+          "Data transfer out",
+          "free up to 100 GB, $0.090/GB next 10 TB",
+        ),
+      ],
+      fixedSubtotal: 0,
+      fetchedAt: "2026-05-06",
+      hasPartialFailure: false,
+      hasCacheHits: false,
+    };
+
+    const output = formatPricingBreakdown(breakdown);
+    expect(output).not.toContain("⚠ Some prices unavailable");
+  });
+
+  it("emits the ⚠ warning when hasPartialFailure is true (genuine MCP failure)", () => {
+    const breakdown: PricingBreakdown = {
+      fixedItems: [],
+      usageBasedItems: [
+        flatItem("Storage", "$0.0230/GB-mo"),
+        flatItem("PUT requests", "unavailable"), // genuine failure
+      ],
+      fixedSubtotal: 0,
+      fetchedAt: "2026-05-06",
+      hasPartialFailure: true,
+      hasCacheHits: false,
+    };
+
+    const output = formatPricingBreakdown(breakdown);
+    expect(output).toContain("⚠ Some prices unavailable");
+  });
+
+  it("wraps long tier-ladder strings onto a second indented line", () => {
+    // A 4-tier string exceeds PRICE_COL_WIDTH (54 chars)
+    const longTierText =
+      "free up to 100 GB, $0.090/GB next 10 TB, $0.085/GB next 40 TB, …";
+    const breakdown: PricingBreakdown = {
+      fixedItems: [],
+      usageBasedItems: [
+        {
+          lineItem: {
+            label: "Data transfer out",
+            kind: "usage_based",
+            description: "",
+            priceUnit: "/GB",
+            quantity: 0,
+            unit: "GB",
+            serviceCode: "AWSDataTransfer",
+            filters: [],
+          },
+          unitPrice: "tiered",
+          monthlyCost: null,
+          displayPrice: `${longTierText} (tiered)`,
+          tiers: [],
+        },
+      ],
+      fixedSubtotal: 0,
+      fetchedAt: "2026-05-06",
+      hasPartialFailure: false,
+      hasCacheHits: false,
+    };
+
+    const output = formatPricingBreakdown(breakdown);
+    const lines = output.split("\n");
+    // Should span at least 2 lines for the data transfer entry
+    const transferLines = lines.filter(
+      (l) =>
+        l.includes("Data transfer out") ||
+        (l.includes("GB") && l.includes("TB") && l.includes("$")),
+    );
+    expect(transferLines.length).toBeGreaterThanOrEqual(2);
   });
 });

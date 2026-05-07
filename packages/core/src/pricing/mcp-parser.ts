@@ -1,10 +1,16 @@
 /**
- * Parses the `get_pricing` MCP server response to extract the first-tier (beginRange=0) price.
- * Returns a formatted price string like "$0.0230/GB-month", or null if no price found.
+ * Parses the `get_pricing` MCP server response to extract prices.
  *
- * When `expectedFilters` are provided, items whose `product.attributes` don't match the
- * filter values are skipped — this prevents returning a storage price when the query was
- * for API requests (common when the MCP response contains multiple product families).
+ * Two public functions:
+ *  - `extractFirstTierPrice`  — existing flat-rate path (single pricePerUnit string).
+ *  - `extractTieredPrice`     — new tiered path: returns a TierLadderRender when the
+ *                               response contains multiple priceDimensions forming a
+ *                               sequential range ladder (e.g. S3 data-transfer-out).
+ *
+ * When `expectedFilters` are provided, items whose `product.attributes` don't match
+ * the filter values are skipped — this prevents returning a storage price when the
+ * query was for API requests (common when the MCP response contains multiple product
+ * families).
  *
  * @param data   - Parsed JSON response object from the MCP pricing tool
  * @param unit   - Human-readable unit label appended to the price, e.g. "/GB-month"
@@ -13,6 +19,11 @@
  */
 import type { AwsPricingResponse, McpPricingFilter } from "./types.js";
 import { PricingField } from "./filter-constants.js";
+import {
+  isTieredResponse,
+  renderTierLadder,
+  type TierLadderRender,
+} from "./tier-ladder.js";
 
 /**
  * Check if a response item's product.attributes match the expected filters.
@@ -93,7 +104,7 @@ export function extractFirstTierPrice(
         );
         const lowestDim = sorted[0];
         if (lowestDim && parseFloat(lowestDim.beginRange ?? "0") <= 100) {
-          const usd = parseFloat(lowestDim.pricePerUnit?.USD ?? "0");
+          const usd = parseFloat(lowestDim.pricePerUnit?.["USD"] ?? "0");
           if (usd > 0) {
             const scaled = usd * scale;
             const decimals =
@@ -107,3 +118,54 @@ export function extractFirstTierPrice(
   }
   return null;
 }
+
+/**
+ * Attempt to extract a tiered-rate render from the MCP pricing response.
+ *
+ * Returns a `TierLadderRender` when:
+ *  - At least one candidate item's OnDemand term has > 1 priceDimension, AND
+ *  - The ranges are monotonically sequential (non-overlapping).
+ *
+ * Returns undefined when:
+ *  - No matching items, OR
+ *  - All matching items are flat-rate (single priceDimension), OR
+ *  - Ranges are non-monotonic (data error from AWS) — caller falls back to "unavailable".
+ *
+ * This function mirrors `extractFirstTierPrice`'s filter/fallback logic so the
+ * same MCP response is parsed consistently by both paths.
+ */
+export function extractTieredPrice(
+  data: AwsPricingResponse,
+  expectedFilters?: McpPricingFilter[],
+): TierLadderRender | undefined {
+  const items = data.data ?? [];
+
+  const filtered = expectedFilters
+    ? items.filter((item) => itemMatchesFilters(item, expectedFilters))
+    : items;
+  const singleItemNoMetadata =
+    expectedFilters &&
+    filtered.length === 0 &&
+    items.length === 1 &&
+    !items[0]?.product;
+  const candidates = singleItemNoMetadata ? items : filtered;
+
+  for (const item of candidates) {
+    const onDemandTerms = Object.values(item.terms?.OnDemand ?? {});
+    for (const term of onDemandTerms) {
+      const dims = term.priceDimensions ?? {};
+      if (isTieredResponse(dims)) {
+        const rendered = renderTierLadder(dims);
+        if (rendered !== undefined) {
+          return rendered;
+        }
+        // Non-monotonic — signal failure (return undefined)
+        return undefined;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+export type { TierLadderRender };

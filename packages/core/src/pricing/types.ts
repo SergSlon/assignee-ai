@@ -8,7 +8,12 @@ import type { PricingMatchType } from "./filter-constants.js";
 /** A single price dimension within an on-demand pricing term. */
 export interface AwsPriceDimension {
   beginRange?: string;
-  pricePerUnit?: { USD?: string };
+  /** End of this tier range. "Inf" or absent means no upper bound (top tier). */
+  endRange?: string;
+  /** Unit label for this dimension (e.g. "GB", "GB-Mo", "Hrs"). */
+  unit?: string;
+  /** Per-unit price by currency code. Typically { USD: "0.0900000000" }. */
+  pricePerUnit?: Record<string, string>;
 }
 
 /** A single on-demand pricing term containing one or more price dimensions. */
