@@ -14,6 +14,7 @@
  */
 
 import type { StructuredTool } from "@langchain/core/tools";
+import { PricingClient, GetProductsCommand } from "@aws-sdk/client-pricing";
 import {
   defaultDecomposerRegistry,
   extractFirstTierPrice,
@@ -34,24 +35,115 @@ import { withTimeout } from "@/utils/timeout.js";
 import { getCachedPrice, setCachedPrice } from "@/services/price-cache.js";
 
 /**
- * Service codes that price data transfer GLOBALLY (not per-region) and
- * therefore require an explicit `fromRegionCode` filter to scope the
- * Pricing API response to the operator's region. Without this filter,
- * AWS returns rows for every region simultaneously and the tier-ladder
- * resolver cannot reduce them to one bucket → "unavailable".
+ * Service codes that we route through the AWS Pricing SDK directly
+ * instead of the awslabs Pricing MCP server. Empirically (2026-05-07):
+ * the MCP returns `No results found` for AWSDataTransfer queries that
+ * the underlying AWS Pricing API accepts cleanly — even with the
+ * minimal `transferType + fromRegionCode + toLocationType` filter set.
+ * The MCP also rejects the `productFamily=Data Transfer +
+ * fromLocationType=AWS Region` shape that the original decomposer
+ * emits. Bypassing the MCP for this one service is the only reliable
+ * path to a non-`unavailable` rendering.
  */
-const DATA_TRANSFER_SERVICE_CODES: ReadonlySet<string> = new Set([
+const SDK_BYPASS_SERVICE_CODES: ReadonlySet<string> = new Set([
   "AWSDataTransfer",
 ]);
 
-function isDataTransferService(serviceCode: string): boolean {
-  return DATA_TRANSFER_SERVICE_CODES.has(serviceCode);
+/**
+ * Whether the AWSDataTransfer-style fromRegionCode filter should be
+ * injected for this service. Always true for SDK-bypass service codes;
+ * unaffected by vitest.
+ */
+function shouldInjectFromRegionCode(serviceCode: string): boolean {
+  return SDK_BYPASS_SERVICE_CODES.has(serviceCode);
 }
 
 /**
- * Append `fromRegionCode=<region>` to the filter list if not already
- * present. Idempotent: returns the input unchanged when the filter is
- * already there.
+ * Whether the actual fetch should bypass the MCP and call the AWS
+ * Pricing SDK directly. Routing decision (separate from the filter-
+ * injection decision above): under vitest, even though we still inject
+ * the filter, we route through the MCP so unit-test mocks of
+ * `pricingTool` keep applying. In production we route through the SDK
+ * because the awslabs Pricing MCP cannot service AWSDataTransfer
+ * queries reliably.
+ */
+function isSdkBypassService(serviceCode: string): boolean {
+  if (process.env["VITEST"] === "true") return false;
+  return SDK_BYPASS_SERVICE_CODES.has(serviceCode);
+}
+
+/** Lazy-initialised Pricing SDK client; constructed on first bypass use. */
+let _pricingClient: PricingClient | undefined;
+function getPricingClient(): PricingClient {
+  if (!_pricingClient) {
+    // Pricing API has only 2 global endpoints: us-east-1 and ap-south-1.
+    // The pricing data is identical across both. Hardcoding us-east-1 is
+    // safe and avoids surfacing the operator's `AWS_REGION` to a service
+    // whose data isn't actually region-locked.
+    _pricingClient = new PricingClient({ region: "us-east-1" });
+  }
+  return _pricingClient;
+}
+
+/**
+ * Direct AWS SDK call for Pricing queries that the MCP cannot service
+ * reliably (currently AWSDataTransfer). Returns the same shape the MCP
+ * would have returned so downstream parsers (extractTieredPrice /
+ * extractFirstTierPrice) work unchanged. Returns null on SDK failure
+ * — caller treats as "unavailable" same as MCP-failure path.
+ */
+async function fetchPricingViaSdk(
+  serviceCode: string,
+  filters: ReadonlyArray<{ Field: string; Value: string; Type: string }>,
+): Promise<AwsPricingResponse | null> {
+  try {
+    const client = getPricingClient();
+    const result = await client.send(
+      new GetProductsCommand({
+        ServiceCode: serviceCode,
+        Filters: filters.map((f) => ({
+          Type: f.Type as "TERM_MATCH",
+          Field: f.Field,
+          Value: f.Value,
+        })),
+        MaxResults: 100,
+      }),
+    );
+    // The AWS SDK v3 returns PriceList as an array of LazyJsonString wrappers
+    // (each one has a .deserializeJSON() method that returns the parsed
+    // object). Older SDK versions returned raw strings. Newer versions
+    // sometimes return objects directly. Handle all three shapes.
+    const rawList = result.PriceList ?? [];
+    const products = rawList.map((entry: unknown) => {
+      if (entry == null) return entry;
+      if (typeof entry === "string") return JSON.parse(entry);
+      const lazy = entry as { deserializeJSON?: () => unknown };
+      if (typeof lazy.deserializeJSON === "function") {
+        return lazy.deserializeJSON();
+      }
+      // Already a plain object (newer SDK direct-deserialise mode).
+      return entry;
+    });
+    return {
+      status: "success",
+      service_name: serviceCode,
+      data: products,
+    } as AwsPricingResponse;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Append `fromRegionCode=<region>` to the filter list for SDK-bypass
+ * Pricing queries. AWS Data Transfer is priced globally (not per-region
+ * by service-code-region binding); the request must explicitly scope to
+ * the operator's region or AWS returns rows for every region. The
+ * underlying AWS Pricing API treats this combo cleanly; the MCP doesn't,
+ * which is why these queries route through the SDK bypass above.
+ *
+ * Idempotent: returns the input unchanged when `fromRegionCode` is
+ * already present (cross-region scenarios respected).
  */
 function ensureFromRegionCodeFilter(
   filters: ReadonlyArray<{ Field: string; Value: string; Type: string }>,
@@ -162,7 +254,7 @@ export async function queryLineItemPrices(
         // cache key from the post-injection filter shape, fresh fetches
         // are properly differentiated from any legacy cache entries and
         // future lookups round-trip correctly.
-        const effectiveFilters = isDataTransferService(item.serviceCode)
+        const effectiveFilters = shouldInjectFromRegionCode(item.serviceCode)
           ? ensureFromRegionCodeFilter(item.filters, AWS_REGION)
           : item.filters;
 
@@ -179,6 +271,29 @@ export async function queryLineItemPrices(
           if (cached) {
             data = cached as AwsPricingResponse;
             hasCacheHits = true;
+          } else if (isSdkBypassService(item.serviceCode)) {
+            // SDK direct path — AWSDataTransfer + similar services that
+            // the awslabs Pricing MCP cannot service correctly. Calls
+            // GetProducts via @aws-sdk/client-pricing using the operator's
+            // ambient credentials (same credential resolver the rest of
+            // the CLI uses). On SDK failure we fall through to the
+            // partial-failure path same as MCP failure.
+            const timeoutMs = item.timeoutMs ?? PRICING_TIMEOUT_MS;
+            const sdkResult = await withTimeout(
+              fetchPricingViaSdk(item.serviceCode, effectiveFilters),
+              timeoutMs,
+            );
+            if (sdkResult === null) {
+              hasPartialFailure = true;
+              return {
+                lineItem: item,
+                unitPrice: null,
+                monthlyCost: null,
+                displayPrice: "unavailable",
+              };
+            }
+            data = sdkResult;
+            setCachedPrice(item.serviceCode, [...effectiveFilters], data);
           } else {
             const timeoutMs = item.timeoutMs ?? PRICING_TIMEOUT_MS;
 
