@@ -32,6 +32,9 @@ import {
   clearFailureHistory,
   upsertPatternRecord,
 } from "@/utils/memory-recorder.js";
+import { AWS_REGION } from "@/config/constants/aws.js";
+import { getOperatorCallerArn } from "@/utils/resolve-arn.js";
+import { attachCompensatingBucketPolicy } from "@/services/s3-compensating-bucket-policy.js";
 import { buildDisplayArnMap, resolveDisplayArn } from "../arn-display.js";
 import {
   printStaticWebsiteCloudFrontUrl,
@@ -171,6 +174,60 @@ export async function formatApplyCompoundSuccess(
         resource.resourceArn;
       if (arnForCheck) {
         await checkSecurityPosture(arnForCheck, tools, state.runId);
+      }
+    }
+  }
+
+  // Bug S3-001 Part 2 — compensating bucket policy for every S3 bucket in the
+  // completed set. Attaches a resource-based bucket policy that restores per-
+  // bucket tag-scoped destructive access (aws:ResourceTag IS honored in bucket
+  // policies, unlike in IAM identity policies for bucket-level operations).
+  // Non-blocking: if PutBucketPolicy fails, warn and continue.
+  const s3BucketResources = updatedCompleted.filter(
+    (r) => r.resourceType === RESOURCE_TYPES.S3_BUCKET && r.resourceArn,
+  );
+  if (s3BucketResources.length > 0) {
+    const operatorArn = await getOperatorCallerArn();
+    for (const s3Resource of s3BucketResources) {
+      if (!s3Resource.resourceArn) continue;
+      if (operatorArn) {
+        const policyResult = await attachCompensatingBucketPolicy({
+          bucketName: s3Resource.resourceArn,
+          operatorArn,
+          region: AWS_REGION,
+        });
+        if (!policyResult.attached) {
+          process.stderr.write(
+            chalk.yellow(
+              `⚠ Compensating bucket policy could not be attached to ${s3Resource.resourceArn}: ${policyResult.reason ?? "unknown error"}\n` +
+                `  The bucket was created successfully but per-bucket tag-scoped destructive access is NOT in effect.\n` +
+                `  Re-run \`assignee setup\` to retry the policy attachment.\n`,
+            ),
+          );
+          log({
+            ts: new Date().toISOString(),
+            runId: state.runId,
+            level: "warn",
+            action: LOG_ACTIONS.APPLY_SUCCEEDED,
+            extras: {
+              compensatingBucketPolicyFailed: true,
+              bucketName: s3Resource.resourceArn,
+              reason: policyResult.reason,
+            },
+          });
+        }
+      } else {
+        log({
+          ts: new Date().toISOString(),
+          runId: state.runId,
+          level: "warn",
+          action: LOG_ACTIONS.APPLY_SUCCEEDED,
+          extras: {
+            compensatingBucketPolicySkipped: true,
+            bucketName: s3Resource.resourceArn,
+            reason: "operator ARN unavailable — STS not called yet",
+          },
+        });
       }
     }
   }
