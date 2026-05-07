@@ -29,6 +29,8 @@ import {
   defaultMemoryService,
   fetchManagedResources as coreFetchManagedResources,
   requireAssigneeCredentials,
+  createListCreatedDateEnricher,
+  createListPricingEnricher,
   type ManagedIamRole,
   type ManagedResource,
   type RgtaMapping,
@@ -189,11 +191,43 @@ export async function fetchManagedResources(
       return all;
     };
 
+    // Build credentials for SDK-based enrichers (lazy — throws if unset,
+    // but that's caught at the tool-handler layer).
+    let sdkCredentials:
+      | {
+          accessKeyId: string;
+          secretAccessKey: string;
+          sessionToken?: string;
+        }
+      | undefined;
+    try {
+      const creds = requireAssigneeCredentials("operator");
+      sdkCredentials = {
+        accessKeyId: creds.accessKeyId,
+        secretAccessKey: creds.secretAccessKey,
+        ...(creds.sessionToken ? { sessionToken: creds.sessionToken } : {}),
+      };
+    } catch {
+      // Operator creds absent — skip SDK-based enrichers but still list.
+    }
+
     return await coreFetchManagedResources({
       region: resolvedRegion,
       fetchRgtaResources,
       enrichWithIamRoles: () => enumerateMcpIamRoles(resolvedRegion),
       ...(resourceType ? { resourceTypeFilter: resourceType } : {}),
+      // Pricing-MCP enrichment: resolves rate-card costs for N/A rows.
+      // Parity with CLI enrichWithPricing (feature-pricing-mcp-list-enrichment AC#5).
+      enrichWithPricing: createListPricingEnricher(),
+      // Created-date enrichment: resolves creation timestamps for N/A rows.
+      ...(sdkCredentials
+        ? {
+            enrichWithCreatedDate: createListCreatedDateEnricher(
+              sdkCredentials,
+              resolvedRegion,
+            ),
+          }
+        : {}),
       createdDateFallback: "run-id-tag",
       useFreeTierFallback: false,
       getDestroyedArns: () => defaultMemoryService.readDestroyedArns(),

@@ -277,7 +277,7 @@ describe("fetchManagedResources — global-service region display (Story e94.P2,
   it("stamps `region: global` on IAM ManagedPolicy ARN (D-06 fix)", async () => {
     const mappings: RgtaMapping[] = [
       {
-        ResourceARN: "arn:aws:iam::210987654321:policy/assignee-deny-public",
+        ResourceARN: "arn:aws:iam::112233445566:policy/assignee-deny-public",
         Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
       },
     ];
@@ -296,7 +296,7 @@ describe("fetchManagedResources — global-service region display (Story e94.P2,
   it("stamps `region: global` on IAM User ARN", async () => {
     const mappings: RgtaMapping[] = [
       {
-        ResourceARN: "arn:aws:iam::210987654321:user/assignee-operator",
+        ResourceARN: "arn:aws:iam::112233445566:user/assignee-operator",
         Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
       },
     ];
@@ -310,7 +310,7 @@ describe("fetchManagedResources — global-service region display (Story e94.P2,
   it("stamps `region: global` on IAM Group ARN", async () => {
     const mappings: RgtaMapping[] = [
       {
-        ResourceARN: "arn:aws:iam::210987654321:group/dev-team",
+        ResourceARN: "arn:aws:iam::112233445566:group/dev-team",
         Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
       },
     ];
@@ -324,7 +324,7 @@ describe("fetchManagedResources — global-service region display (Story e94.P2,
   it("stamps `region: global` on CloudFront Distribution ARN", async () => {
     const mappings: RgtaMapping[] = [
       {
-        ResourceARN: "arn:aws:cloudfront::210987654321:distribution/EABC123DEF",
+        ResourceARN: "arn:aws:cloudfront::112233445566:distribution/EABC123DEF",
         Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
       },
     ];
@@ -339,7 +339,7 @@ describe("fetchManagedResources — global-service region display (Story e94.P2,
     // Regression guard: the fix must not globalise regional ARNs.
     const mappings: RgtaMapping[] = [
       {
-        ResourceARN: "arn:aws:lambda:eu-west-1:210987654321:function:worker",
+        ResourceARN: "arn:aws:lambda:eu-west-1:112233445566:function:worker",
         Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
       },
       {
@@ -362,7 +362,7 @@ describe("fetchManagedResources — global-service region display (Story e94.P2,
   it("partition-agnostic: GovCloud IAM ARN also displays as global", async () => {
     const mappings: RgtaMapping[] = [
       {
-        ResourceARN: "arn:aws-us-gov:iam::210987654321:policy/gov-policy",
+        ResourceARN: "arn:aws-us-gov:iam::112233445566:policy/gov-policy",
         Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
       },
     ];
@@ -416,7 +416,7 @@ describe("fetchManagedResources — destroyed-ARN filter (BUG-9)", () => {
     vi.mocked(provisionLog.loadProvisionData).mockReturnValue(emptyLookup);
   });
 
-  const ecsArn = "arn:aws:ecs:us-east-1:210987654321:cluster/my-cluster";
+  const ecsArn = "arn:aws:ecs:us-east-1:112233445566:cluster/my-cluster";
   const s3Arn = "arn:aws:s3:::my-bucket";
 
   const mappings: RgtaMapping[] = [
@@ -466,5 +466,223 @@ describe("fetchManagedResources — destroyed-ARN filter (BUG-9)", () => {
       },
     });
     expect(result).toHaveLength(2);
+  });
+});
+
+// ── Pricing enrichment (feature-pricing-mcp-list-enrichment) ─────────────
+
+describe("fetchManagedResources — pricing enrichment", () => {
+  beforeEach(() => {
+    vi.mocked(provisionLog.loadProvisionData).mockReturnValue(emptyLookup);
+  });
+
+  const kmsArn = "arn:aws:kms:us-east-1:112233445566:key/b725bae0-1234";
+  const s3Arn = "arn:aws:s3:::my-bucket";
+
+  const mappings: RgtaMapping[] = [
+    {
+      ResourceARN: kmsArn,
+      Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+    },
+    {
+      ResourceARN: s3Arn,
+      Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+    },
+  ];
+
+  it("calls enrichWithPricing for rows with N/A cost and replaces estimatedMonthlyCost", async () => {
+    const enrichWithPricing = vi
+      .fn()
+      .mockResolvedValue(new Map([[kmsArn, "$1.00/mo"]]));
+
+    const result = await fetchManagedResources({
+      region: "us-east-1",
+      fetchRgtaResources: async () => mappings,
+      enrichWithPricing,
+    });
+
+    expect(enrichWithPricing).toHaveBeenCalledTimes(1);
+    const kmsRow = result.find((r) => r.arn === kmsArn);
+    expect(kmsRow!.estimatedMonthlyCost).toBe("$1.00/mo");
+  });
+
+  it("does not call enrichWithPricing when no rows have N/A cost", async () => {
+    vi.mocked(provisionLog.loadProvisionData).mockReturnValue({
+      costMap: new Map([
+        [kmsArn, "$0.99/mo"],
+        [s3Arn, "$0.50/mo"],
+      ]),
+      timestampMap: new Map(),
+    });
+    const enrichWithPricing = vi.fn().mockResolvedValue(new Map());
+
+    await fetchManagedResources({
+      region: "us-east-1",
+      fetchRgtaResources: async () => mappings,
+      enrichWithPricing,
+    });
+
+    expect(enrichWithPricing).not.toHaveBeenCalled();
+  });
+
+  it("leaves row as N/A when enrichWithPricing returns empty Map", async () => {
+    const enrichWithPricing = vi.fn().mockResolvedValue(new Map());
+
+    const result = await fetchManagedResources({
+      region: "us-east-1",
+      fetchRgtaResources: async () => mappings,
+      enrichWithPricing,
+    });
+
+    const kmsRow = result.find((r) => r.arn === kmsArn);
+    expect(kmsRow!.estimatedMonthlyCost).toBe("N/A");
+  });
+
+  it("does NOT crash when enrichWithPricing throws — output degrades gracefully", async () => {
+    const enrichWithPricing = vi.fn().mockRejectedValue(new Error("MCP down"));
+
+    const result = await fetchManagedResources({
+      region: "us-east-1",
+      fetchRgtaResources: async () => mappings,
+      enrichWithPricing,
+    });
+
+    // Should return 2 rows without throwing; cost stays N/A
+    expect(result).toHaveLength(2);
+    expect(result.every((r) => r.estimatedMonthlyCost === "N/A")).toBe(true);
+  });
+
+  it("preserves Free label for IAM rows (regression check)", async () => {
+    const iamArn = "arn:aws:iam::112233445566:policy/AssigneeAuditorPolicy";
+    const iamMappings: RgtaMapping[] = [
+      {
+        ResourceARN: iamArn,
+        Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+      },
+    ];
+
+    // useFreeTierFallback=true sets IAM rows to "Free" — pricing enricher
+    // should only target N/A rows, so Free must survive.
+    const enrichWithPricing = vi
+      .fn()
+      .mockResolvedValue(new Map([[iamArn, "$1.00/mo"]]));
+
+    const result = await fetchManagedResources({
+      region: "us-east-1",
+      fetchRgtaResources: async () => iamMappings,
+      enrichWithPricing,
+      useFreeTierFallback: true,
+    });
+
+    // The IAM policy row has a free-tier label — enrichWithPricing should
+    // not have been called (no N/A rows).
+    expect(enrichWithPricing).not.toHaveBeenCalled();
+    const iamRow = result.find((r) => r.arn === iamArn);
+    expect(iamRow!.estimatedMonthlyCost).not.toBe("$1.00/mo");
+  });
+
+  it("is a no-op when enrichWithPricing is undefined", async () => {
+    const result = await fetchManagedResources({
+      region: "us-east-1",
+      fetchRgtaResources: async () => mappings,
+    });
+    // No injector — rows stay N/A but function does not throw
+    expect(result).toHaveLength(2);
+    expect(result[0]!.estimatedMonthlyCost).toBe("N/A");
+  });
+});
+
+// ── Created-date enrichment (feature-list-created-date-enrichment) ────────
+
+describe("fetchManagedResources — createdDate enrichment", () => {
+  beforeEach(() => {
+    vi.mocked(provisionLog.loadProvisionData).mockReturnValue(emptyLookup);
+  });
+
+  const kmsArn = "arn:aws:kms:us-east-1:112233445566:key/c64c1b61-5678";
+  const s3Arn = "arn:aws:s3:::logs-bucket";
+
+  const mappings: RgtaMapping[] = [
+    {
+      ResourceARN: kmsArn,
+      Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+    },
+    {
+      ResourceARN: s3Arn,
+      Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+    },
+  ];
+
+  it("calls enrichWithCreatedDate for rows with N/A date and sets createdDate", async () => {
+    const enrichWithCreatedDate = vi
+      .fn()
+      .mockResolvedValue(new Map([[kmsArn, "2026-01-10"]]));
+
+    const result = await fetchManagedResources({
+      region: "us-east-1",
+      fetchRgtaResources: async () => mappings,
+      enrichWithCreatedDate,
+    });
+
+    expect(enrichWithCreatedDate).toHaveBeenCalledTimes(1);
+    const kmsRow = result.find((r) => r.arn === kmsArn);
+    expect(kmsRow!.createdDate).toBe("2026-01-10");
+  });
+
+  it("does not call enrichWithCreatedDate when no rows have N/A date", async () => {
+    vi.mocked(provisionLog.loadProvisionData).mockReturnValue({
+      costMap: new Map(),
+      timestampMap: new Map([
+        [kmsArn, "2026-01-10"],
+        [s3Arn, "2025-11-01"],
+      ]),
+    });
+    const enrichWithCreatedDate = vi.fn().mockResolvedValue(new Map());
+
+    await fetchManagedResources({
+      region: "us-east-1",
+      fetchRgtaResources: async () => mappings,
+      enrichWithCreatedDate,
+    });
+
+    expect(enrichWithCreatedDate).not.toHaveBeenCalled();
+  });
+
+  it("leaves row as N/A when enrichWithCreatedDate returns empty Map", async () => {
+    const enrichWithCreatedDate = vi.fn().mockResolvedValue(new Map());
+
+    const result = await fetchManagedResources({
+      region: "us-east-1",
+      fetchRgtaResources: async () => mappings,
+      enrichWithCreatedDate,
+    });
+
+    const kmsRow = result.find((r) => r.arn === kmsArn);
+    expect(kmsRow!.createdDate).toBe("N/A");
+  });
+
+  it("does NOT crash when enrichWithCreatedDate throws — output degrades gracefully", async () => {
+    const enrichWithCreatedDate = vi
+      .fn()
+      .mockRejectedValue(new Error("SDK unreachable"));
+
+    const result = await fetchManagedResources({
+      region: "us-east-1",
+      fetchRgtaResources: async () => mappings,
+      enrichWithCreatedDate,
+    });
+
+    // Should return 2 rows without throwing; dates stay N/A
+    expect(result).toHaveLength(2);
+    expect(result.every((r) => r.createdDate === "N/A")).toBe(true);
+  });
+
+  it("is a no-op when enrichWithCreatedDate is undefined", async () => {
+    const result = await fetchManagedResources({
+      region: "us-east-1",
+      fetchRgtaResources: async () => mappings,
+    });
+    expect(result).toHaveLength(2);
+    expect(result[0]!.createdDate).toBe("N/A");
   });
 });

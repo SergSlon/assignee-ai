@@ -26,6 +26,10 @@ import { tryAssigneeCredentials } from "../config/aws-credentials.js";
 import { TAG_KEY_MANAGED_BY, TAG_VALUE_MANAGED_BY } from "../utils/tags.js";
 import { fetchBillingData } from "./billing.js";
 import { fetchManagedIamRoles } from "./iam-role-inventory.js";
+import {
+  createListPricingEnricher,
+  createListCreatedDateEnricher,
+} from "@assignee/core";
 
 // Re-export for consumers that import from this module.
 export { arnToCloudFormationType, parseArn } from "@assignee/core";
@@ -81,6 +85,16 @@ export async function fetchManagedResources(
     return all;
   };
 
+  // Build credentials object for SDK-based enrichers (created-date, etc.).
+  // `opCreds` is already resolved above for the RGTA client — reuse it.
+  const sdkCredentials = opCreds
+    ? {
+        accessKeyId: opCreds.accessKeyId,
+        secretAccessKey: opCreds.secretAccessKey,
+        ...(opCreds.sessionToken ? { sessionToken: opCreds.sessionToken } : {}),
+      }
+    : undefined;
+
   return coreFetchManagedResources({
     region: resolvedRegion,
     fetchRgtaResources,
@@ -93,6 +107,17 @@ export async function fetchManagedResources(
               string,
               { actualMonthlyCost: string }
             >,
+        }
+      : {}),
+    // Pricing-MCP enrichment: resolves rate-card costs for N/A rows.
+    enrichWithPricing: createListPricingEnricher(),
+    // Created-date enrichment: resolves creation timestamps for N/A rows.
+    ...(sdkCredentials
+      ? {
+          enrichWithCreatedDate: createListCreatedDateEnricher(
+            sdkCredentials,
+            resolvedRegion,
+          ),
         }
       : {}),
     createdDateFallback: "na",

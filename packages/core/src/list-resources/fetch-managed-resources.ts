@@ -63,6 +63,28 @@ export type BillingEnricher = (
   resources: ManagedResource[],
 ) => Promise<Map<string, { actualMonthlyCost: string }>>;
 
+/**
+ * Pricing-MCP enrichment callback — resolves live rate-card cost strings
+ * for resources whose cost would otherwise remain N/A. Returns a map of
+ * ARN → cost label string (e.g. "$1.00/mo", "$0.023/GB-Mo").
+ *
+ * Story: feature-pricing-mcp-list-enrichment
+ */
+export type PricingEnricher = (
+  resources: ManagedResource[],
+) => Promise<Map<string, string>>;
+
+/**
+ * Created-date enrichment callback — resolves live creation timestamps
+ * for resources whose createdDate would otherwise remain N/A. Returns a
+ * map of ARN → date string (e.g. "2026-03-15" or "2026-03-15 (modified)").
+ *
+ * Story: feature-list-created-date-enrichment
+ */
+export type CreatedDateEnricher = (
+  resources: ManagedResource[],
+) => Promise<Map<string, string>>;
+
 /** Options controlling which enrichers fire and how timestamps resolve. */
 export interface FetchManagedResourcesOptions {
   /** AWS region to stamp on resources when parseArn can't derive one. */
@@ -73,6 +95,19 @@ export interface FetchManagedResourcesOptions {
   enrichWithIamRoles?: () => Promise<ManagedIamRole[]>;
   /** Optional live-billing enrichment (Story 19.7). */
   enrichWithBilling?: BillingEnricher;
+  /**
+   * Optional live Pricing-MCP enrichment — resolves rate-card cost labels
+   * for every row whose `estimatedMonthlyCost` is still N/A after billing
+   * enrichment. Fires after billing so actuals always take precedence.
+   * Story: feature-pricing-mcp-list-enrichment.
+   */
+  enrichWithPricing?: PricingEnricher;
+  /**
+   * Optional live created-date enrichment — resolves creation timestamps
+   * for every row whose `createdDate` is still N/A after provision-log
+   * lookup. Story: feature-list-created-date-enrichment.
+   */
+  enrichWithCreatedDate?: CreatedDateEnricher;
   /** Filter results to a single CloudFormation resource type. */
   resourceTypeFilter?: string;
   /**
@@ -122,6 +157,8 @@ export async function fetchManagedResources(
     fetchRgtaResources,
     enrichWithIamRoles,
     enrichWithBilling,
+    enrichWithPricing,
+    enrichWithCreatedDate,
     resourceTypeFilter,
     createdDateFallback = "na",
     useFreeTierFallback = false,
@@ -257,6 +294,54 @@ export async function fetchManagedResources(
       }
     } catch {
       // Billing MCP unavailable — keep provision log costs.
+    }
+  }
+
+  // ── Pricing-MCP enrichment (feature-pricing-mcp-list-enrichment) ──
+  // Fires AFTER billing so actuals always take precedence. Only targets
+  // rows whose estimatedMonthlyCost is still CostEstimateLabel.NA — rows
+  // already resolved via provision-log, billing, or free-tier fallback
+  // are left untouched.
+  if (enrichWithPricing && resources.length > 0) {
+    try {
+      const naRows = resources.filter(
+        (r) => r.estimatedMonthlyCost === CostEstimateLabel.NA,
+      );
+      if (naRows.length > 0) {
+        const pricingMap = await enrichWithPricing(naRows);
+        for (const resource of resources) {
+          const cost = pricingMap.get(resource.arn);
+          if (cost !== undefined) {
+            resource.estimatedMonthlyCost = cost;
+          }
+        }
+      }
+    } catch {
+      // Pricing MCP unavailable — keep current cost labels (N/A or
+      // provision-log values). Degrade gracefully, never crash.
+    }
+  }
+
+  // ── Created-date enrichment (feature-list-created-date-enrichment) ─
+  // Fires after all other date resolution paths. Only targets rows
+  // whose createdDate is still CostEstimateLabel.NA.
+  if (enrichWithCreatedDate && resources.length > 0) {
+    try {
+      const naDateRows = resources.filter(
+        (r) => r.createdDate === CostEstimateLabel.NA,
+      );
+      if (naDateRows.length > 0) {
+        const dateMap = await enrichWithCreatedDate(naDateRows);
+        for (const resource of resources) {
+          const date = dateMap.get(resource.arn);
+          if (date !== undefined) {
+            resource.createdDate = date;
+          }
+        }
+      }
+    } catch {
+      // SDK describe calls failed — keep current date labels (N/A).
+      // Degrade gracefully, never crash.
     }
   }
 
