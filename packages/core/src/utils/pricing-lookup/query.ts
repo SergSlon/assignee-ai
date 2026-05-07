@@ -32,7 +32,7 @@ export function extractPrice(data: AwsPricingResponse): string | null {
       const dims = Object.values(term.priceDimensions ?? {});
       for (const dim of dims) {
         if (dim.beginRange === "0") {
-          const usd = parseFloat(dim.pricePerUnit?.USD ?? "0");
+          const usd = parseFloat(dim.pricePerUnit?.["USD"] ?? "0");
           if (usd > 0) {
             const decimals =
               usd >= 0.0001 ? 4 : Math.ceil(-Math.log10(usd)) + 3;

@@ -22,6 +22,7 @@ import {
   type PricingLineItem,
   type PricingLineItemResult,
 } from "@/index.js";
+import { extractTieredPrice } from "@/pricing/mcp-parser.js";
 import { AWS_REGION } from "@/config/constants/aws.js";
 import { PRICING_TIMEOUT_MS } from "@/config/constants/timeouts.js";
 import { HOURS_PER_MONTH } from "@/config/constants/limits.js";
@@ -152,6 +153,28 @@ export async function queryLineItemPrices(
             setCachedPrice(item.serviceCode, item.filters, data);
           }
 
+          // ── Tiered-rate path (e.g. S3 data-transfer-out) ──────────────
+          // Try the tiered renderer first. When the MCP response contains
+          // multiple priceDimensions with sequential beginRange/endRange,
+          // the tier-ladder helper produces a human-readable one-liner
+          // (e.g. "free up to 100 GB, $0.090/GB next 10 TB, …") and a
+          // structured tiers array for the --json envelope.
+          //
+          // Tiered items are NOT counted in hasPartialFailure — they are
+          // successfully resolved; the bottom-of-plan warning must only
+          // fire for genuine failures (MCP error, timeout, etc.).
+          const tieredRender = extractTieredPrice(data, item.filters);
+          if (tieredRender !== undefined) {
+            return {
+              lineItem: item,
+              unitPrice: "tiered",
+              monthlyCost: null,
+              displayPrice: `${tieredRender.text} (tiered)`,
+              tiers: tieredRender.tiers,
+            };
+          }
+
+          // ── Flat-rate path ──────────────────────────────────────────────
           const priceStr = extractFirstTierPrice(
             data,
             item.priceUnit,

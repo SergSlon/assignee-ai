@@ -219,9 +219,32 @@ export function formatPricingBreakdown(breakdown: PricingBreakdown): string {
   if (breakdown.usageBasedItems.length > 0) {
     lines.push(``);
     lines.push(`  Usage-based (per-unit rates):`);
+    // Available width inside the plan box (boxen adds ~4 chars of padding)
+    // A label column of 24 chars + 2-char prefix = 26; remaining ~54 chars for price.
+    // Tier-ladder strings can easily exceed 54 chars — wrap to second line when needed.
+    const PRICE_COL_WIDTH = 54;
     for (const item of breakdown.usageBasedItems) {
       const price = item.displayPrice;
-      lines.push(`  · ${item.lineItem.label.padEnd(24)} ${price}`);
+      const labelStr = item.lineItem.label.padEnd(24);
+      if (price.length > PRICE_COL_WIDTH) {
+        // Wrap: first line has the label + beginning of the price string
+        // up to the last comma before the column limit, then continue on
+        // the next line indented to align with the price column start.
+        const indent = `  · ${" ".repeat(24)} `;
+        // Find a clean break point (after a comma) within PRICE_COL_WIDTH
+        const breakAt = price.lastIndexOf(", ", PRICE_COL_WIDTH);
+        if (breakAt > 0) {
+          const firstPart = price.slice(0, breakAt + 2); // include ", "
+          const secondPart = price.slice(breakAt + 2);
+          lines.push(`  · ${labelStr} ${firstPart}`);
+          lines.push(`${indent}${secondPart}`);
+        } else {
+          // No comma — emit as-is (rare)
+          lines.push(`  · ${labelStr} ${price}`);
+        }
+      } else {
+        lines.push(`  · ${labelStr} ${price}`);
+      }
     }
   }
 
@@ -231,7 +254,11 @@ export function formatPricingBreakdown(breakdown: PricingBreakdown): string {
     : `  Prices fetched at ${breakdown.fetchedAt}`;
   lines.push(fetchedNote);
 
-  if (breakdown.hasPartialFailure) {
+  // Only emit the warning when there are items that are GENUINELY unavailable
+  // (MCP failure, timeout, region not supported). Tiered items that rendered
+  // successfully via the tier-ladder path do NOT trigger this warning.
+  const hasGenuinelyUnavailable = breakdown.hasPartialFailure;
+  if (hasGenuinelyUnavailable) {
     const warning = isTTY
       ? chalk.yellow(`  ⚠ Some prices unavailable`)
       : `  ⚠ Some prices unavailable`;

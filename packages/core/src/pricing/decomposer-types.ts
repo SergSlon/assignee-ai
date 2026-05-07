@@ -7,6 +7,7 @@
 
 import type { McpPricingFilter } from "./types.js";
 import type { PricingKind } from "./filter-constants.js";
+import type { PriceTier } from "./tier-ladder.js";
 
 /** Classification of a pricing line item. */
 export type PricingLineItemKind =
@@ -51,6 +52,13 @@ export interface PricingLineItemResult {
   monthlyCost: number | null;
   /** Formatted display string (e.g., "$3.00/mo" or "$0.09/GB") */
   displayPrice: string;
+  /**
+   * Structured tier data when the MCP response returned a tiered rate
+   * (e.g. S3 data-transfer-out: free 100 GB, $0.09/GB next 10 TB, ...).
+   * Omitted (undefined) for flat-rate line items.
+   * Included verbatim in the --json envelope under the "tiers" field.
+   */
+  tiers?: PriceTier[];
 }
 
 /**
@@ -65,7 +73,12 @@ export interface PricingBreakdown {
   fixedSubtotal: number;
   /** Timestamp when prices were fetched */
   fetchedAt: string;
-  /** Whether any line item pricing failed */
+  /**
+   * Whether any line item pricing genuinely failed (MCP error, timeout,
+   * region not supported, etc.). Does NOT include items that rendered as
+   * a tiered ladder — those are successfully resolved even though they
+   * don't have a single flat rate.
+   */
   hasPartialFailure: boolean;
   /**
    * Story 46.2: provenance signal for callers that summarize the breakdown
