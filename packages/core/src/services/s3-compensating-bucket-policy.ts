@@ -98,11 +98,20 @@ export interface AttachResult {
  * on the bucket carrying `aws:ResourceTag/managed-by = assignee-ai`.
  *
  * Returns a plain object — caller is responsible for JSON.stringify.
+ *
+ * bug-s3-bucket-policy-region-fallback-edge-case: derive the effective
+ * region by falling back to `AWS_REGION` when `args.region` is empty so
+ * the partition we splice into the resource ARN matches the partition the
+ * S3 client is talking to. Without this, a GovCloud caller passing
+ * `region: ""` would build an `arn:aws:` policy ARN while the client
+ * connects to a `us-gov-*` endpoint, producing a partition mismatch the
+ * operator would not see until the policy attaches to the wrong scope.
  */
 export function buildCompensatingBucketPolicy(
   args: CompensatingPolicyArgs,
 ): object {
-  const partition = getPartitionFromRegion(args.region);
+  const effectiveRegion = args.region || AWS_REGION;
+  const partition = getPartitionFromRegion(effectiveRegion);
   const managedByValue = args.managedByTag ?? MANAGED_BY_TAG_VALUE;
   const bucketArn = `arn:${partition}:s3:::${args.bucketName}`;
 
@@ -144,11 +153,21 @@ export async function attachCompensatingBucketPolicy(
   args: CompensatingPolicyArgs,
   s3Client?: S3Client,
 ): Promise<AttachResult> {
-  const policy = buildCompensatingBucketPolicy(args);
+  // bug-s3-bucket-policy-region-fallback-edge-case: resolve the effective
+  // region ONCE at function entry and reuse for both the policy ARN and
+  // the client. Previously the policy ARN was built with `args.region`
+  // (falling back to partition `aws` when empty) while the client used
+  // `args.region || AWS_REGION` — silently mismatched on a GovCloud
+  // caller that passed `region: ""`.
+  const effectiveRegion = args.region || AWS_REGION;
+  const policy = buildCompensatingBucketPolicy({
+    ...args,
+    region: effectiveRegion,
+  });
   const client =
     s3Client ??
     new S3Client({
-      region: args.region || AWS_REGION,
+      region: effectiveRegion,
       credentials: requireAssigneeCredentials("operator"),
     });
 

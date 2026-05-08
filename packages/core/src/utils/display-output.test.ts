@@ -417,6 +417,84 @@ describe("renderResourceTable — non-TTY", () => {
     expect(output).toContain("arn:aws:s3:::test");
     expect(output).toContain("us-east-1");
   });
+
+  // bug-s3-bucket-policy-attach-failure-observability — list output
+  // surfaces a warning row underneath any S3 bucket whose provision
+  // record carries `compensatingPolicyAttached: false`.
+  it("emits a warning row for an S3 bucket where the compensating policy attach failed", async () => {
+    const { renderResourceTable } = await import("./display.js");
+    const writeSpy = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation(() => true);
+    renderResourceTable([
+      {
+        resourceType: "AWS::S3::Bucket",
+        arn: "arn:aws:s3:::failed-policy-bucket",
+        region: "us-east-1",
+        createdDate: "2026-05-08",
+        estimatedMonthlyCost: "$0.02",
+        compensatingPolicyAttached: false,
+        compensatingPolicyError: "AccessDenied: PutBucketPolicy not allowed",
+      },
+    ]);
+    const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+    writeSpy.mockRestore();
+    expect(output).toContain("arn:aws:s3:::failed-policy-bucket");
+    // Warning row must follow the main row.
+    expect(output).toContain("Compensating bucket policy missing");
+    expect(output).toContain("AccessDenied: PutBucketPolicy not allowed");
+    expect(output).toContain("re-run `assignee setup` to retry");
+    // L2 fix: pin the non-TTY-specific `WARNING:` prefix so the
+    // plain-path branch of `renderPlainTable` is not silently
+    // collapsed into the TTY-only chalk-yellow path. The TTY
+    // branch emits the same suffix WITHOUT the `WARNING:` token,
+    // so this assertion is non-trivial — a regression that
+    // routed both branches through chalk-yellow would fail here.
+    expect(output).toContain("WARNING: Compensating bucket policy missing");
+  });
+
+  it("does NOT emit a warning row for buckets where the compensating policy attached cleanly", async () => {
+    const { renderResourceTable } = await import("./display.js");
+    const writeSpy = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation(() => true);
+    renderResourceTable([
+      {
+        resourceType: "AWS::S3::Bucket",
+        arn: "arn:aws:s3:::happy-bucket",
+        region: "us-east-1",
+        createdDate: "2026-05-08",
+        estimatedMonthlyCost: "$0.02",
+        // compensatingPolicyAttached: true means the field is set but
+        // happy — renderer must NOT add a warning row.
+        compensatingPolicyAttached: true,
+      },
+    ]);
+    const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+    writeSpy.mockRestore();
+    expect(output).toContain("arn:aws:s3:::happy-bucket");
+    expect(output).not.toContain("Compensating bucket policy missing");
+  });
+
+  it("does NOT emit a warning row for non-S3 / pre-bug rows where the field is undefined", async () => {
+    const { renderResourceTable } = await import("./display.js");
+    const writeSpy = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation(() => true);
+    renderResourceTable([
+      {
+        resourceType: "AWS::Lambda::Function",
+        arn: "arn:aws:lambda:us-east-1:112233445566:function:fn",
+        region: "us-east-1",
+        createdDate: "2026-05-08",
+        estimatedMonthlyCost: "$0.20/mo",
+        // compensatingPolicyAttached intentionally omitted.
+      },
+    ]);
+    const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+    writeSpy.mockRestore();
+    expect(output).not.toContain("Compensating bucket policy missing");
+  });
 });
 
 describe("renderEmptyList — non-TTY", () => {
