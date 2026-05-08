@@ -70,6 +70,24 @@ const _memoryMocks = vi.hoisted(() => ({
 }));
 vi.mock("../../../services/memory.js", () => _memoryMocks);
 
+// Wave B-1 (epic-104) — writeProvisionRecord now emits an
+// `apply_resource_created` audit-log entry after every successful
+// appendProvision. The mocked appendProvision above resolves successfully,
+// so without this peer mock the unmocked `appendAuditRecord` would write
+// to the operator's real `~/.assignee/audit/audit.log` and the 90-day
+// retention floor blocks cleanup. This is a unit/integration test of the
+// compound-provisioning flow — chain integrity is exercised end-to-end by
+// `packages/core/src/utils/memory-recorder-audit.test.ts` (AC#4).
+vi.mock("../../../audit/audit-log.js", () => ({
+  appendAuditRecord: vi.fn().mockResolvedValue(undefined),
+  readAuditLog: vi.fn().mockResolvedValue([]),
+  auditLogExists: vi.fn().mockReturnValue(false),
+  guardAuditLogTruncation: vi.fn().mockResolvedValue({ ok: true }),
+  isAuditEntryWithinRetentionFloor: vi.fn().mockReturnValue(false),
+  DEFAULT_AUDIT_LOG_DIR: "/tmp/assignee-test-audit",
+  DEFAULT_AUDIT_LOG_FILE: "/tmp/assignee-test-audit/audit.log",
+}));
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function createMockProvisioner(): ProvisioningPort & {

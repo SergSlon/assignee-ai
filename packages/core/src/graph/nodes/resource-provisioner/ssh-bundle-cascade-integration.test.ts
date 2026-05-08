@@ -293,8 +293,22 @@ function buildApplyTimeRenderable(
 
 let tmpDir: string;
 let tmpService: MemoryService;
+let tmpAuditLogFile: string;
 let appendSpy: MockInstance<MemoryService["appendProvision"]> | undefined;
 let readSpy: MockInstance<MemoryService["readProvisionRecord"]> | undefined;
+// Wave B-1 (epic-104): writeProvisionRecord now emits an
+// `apply_resource_created` audit-log entry after every successful
+// appendProvision. Without redirecting `appendAuditRecord`, that emit
+// would land in the operator's real `~/.assignee/audit/audit.log` —
+// permanent pollution because the 90-day retention floor blocks
+// cleanup. Spy in `beforeEach`, restore in `afterEach`, and route the
+// (unmocked) impl at a tmp file under `tmpDir` so each test gets a
+// fresh, throwaway chain.
+let auditAppendSpy:
+  | MockInstance<
+      (typeof import("../../../audit/audit-log.js"))["appendAuditRecord"]
+    >
+  | undefined;
 
 beforeEach(async () => {
   mockIamSend.mockReset();
@@ -308,6 +322,7 @@ beforeEach(async () => {
     path.join(os.tmpdir(), "ssh-bundle-cascade-"),
   );
   tmpService = new MemoryService(tmpDir);
+  tmpAuditLogFile = path.join(tmpDir, "audit.log");
 
   // Redirect defaultMemoryService.appendProvision / readProvisionRecord
   // to the tmpdir-backed instance so the cascade's writeProvisionRecord
@@ -322,11 +337,23 @@ beforeEach(async () => {
   readSpy = vi
     .spyOn(memoryModule.defaultMemoryService, "readProvisionRecord")
     .mockImplementation((id) => tmpService.readProvisionRecord(id));
+
+  // Wave B-1 isolation: redirect appendAuditRecord to a tmp file under
+  // the per-test tmpDir. The real impl runs (so chain construction is
+  // exercised end-to-end) but the operator's audit log is untouched.
+  const auditLogModule = await import("../../../audit/audit-log.js");
+  const realAppendAuditRecord = auditLogModule.appendAuditRecord;
+  auditAppendSpy = vi
+    .spyOn(auditLogModule, "appendAuditRecord")
+    .mockImplementation((record, _logFile, config) =>
+      realAppendAuditRecord(record, tmpAuditLogFile, config),
+    );
 });
 
 afterEach(async () => {
   appendSpy?.mockRestore();
   readSpy?.mockRestore();
+  auditAppendSpy?.mockRestore();
   setTty(false);
   await fsPromises.rm(tmpDir, { recursive: true, force: true });
 });

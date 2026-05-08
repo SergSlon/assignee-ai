@@ -9,6 +9,23 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
+
+// query-handler emits `query_executed` audit events via appendAuditRecord.
+// Without this mock the test pollutes the operator's real
+// `~/.assignee/audit/audit.log` and the 90-day retention floor blocks
+// cleanup. Pre-existing oversight unrelated to Wave B-1, surfaced while
+// auditing audit-log isolation; chain integrity is exercised in
+// `packages/core/src/audit/audit-log.test.ts`.
+vi.mock("../../audit/audit-log.js", () => ({
+  appendAuditRecord: vi.fn().mockResolvedValue(undefined),
+  readAuditLog: vi.fn().mockResolvedValue([]),
+  auditLogExists: vi.fn().mockReturnValue(false),
+  guardAuditLogTruncation: vi.fn().mockResolvedValue({ ok: true }),
+  isAuditEntryWithinRetentionFloor: vi.fn().mockReturnValue(false),
+  DEFAULT_AUDIT_LOG_DIR: "/tmp/assignee-test-audit",
+  DEFAULT_AUDIT_LOG_FILE: "/tmp/assignee-test-audit/audit.log",
+}));
+
 import {
   createQueryHandlerNode,
   inferResourceTypeFromQuery,
