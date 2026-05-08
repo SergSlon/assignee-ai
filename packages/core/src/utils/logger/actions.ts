@@ -129,6 +129,31 @@ export const LOG_ACTIONS = {
    * `extras.field` / `extras.index` to triage.
    */
   RESTORE_AUDIT_LOG_SKIP: "restore_audit_log_skip",
+  /**
+   * Wave C (epic-104-demo-dryrun): emitted by `kms-alias-resolver.ts`
+   * when the resolver creates a new default CMK + alias. Carries
+   * `extras.keyArn`, `extras.aliasName`, `extras.tagsApplied`. Routed
+   * through the shared `log()` helper at INFO level so `--verbose`
+   * users see the one-time CMK creation event in the daily log file.
+   */
+  KMS_ALIAS_CMK_CREATED: "kms_alias_cmk_created",
+  /**
+   * Wave C (epic-104-demo-dryrun): emitted at WARN level when the
+   * resolver finishes the create-path but a non-fatal sub-step failed
+   * (typically `EnableKeyRotation`). The CMK + alias still resolved;
+   * operator can rerun `aws kms enable-key-rotation` to fix the
+   * residual state. Carries `extras.failedStep` and
+   * `extras.failureReason`.
+   */
+  KMS_ALIAS_RESOLVE_PARTIAL: "kms_alias_resolve_partial",
+  /**
+   * Wave C (epic-104-demo-dryrun): emitted at WARN level when the
+   * resolver loses a `CreateAlias` race (concurrent apply created the
+   * alias in the same window). Carries `extras.orphanedKeyArn` so the
+   * operator can verify the just-created CMK was scheduled for the
+   * 7-day pending-deletion window.
+   */
+  KMS_ALIAS_RACE_LOST: "kms_alias_race_lost",
 } as const;
 
 export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];

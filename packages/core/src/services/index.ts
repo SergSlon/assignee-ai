@@ -68,3 +68,12 @@ export {
   repairRequiredFields,
   type RepairResult,
 } from "./required-field-repairer.js";
+
+// KMS alias-based default CMK resolver — Wave C (epic-104-demo-dryrun)
+export {
+  resolveOrCreateDefaultKmsKey,
+  clearKmsAliasCache,
+  DEFAULT_KMS_ALIAS_NAME,
+  type ResolveDefaultKmsKeyOptions,
+  type ResolveDefaultKmsKeyResult,
+} from "./kms-alias-resolver.js";
