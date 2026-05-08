@@ -67,6 +67,16 @@ export const SECURITY_ACTIONS: Record<string, string[]> = {
     "kms:Encrypt",
     "kms:Decrypt",
     "kms:GenerateDataKey",
+    // Wave C (epic-104-demo-dryrun): alias-based default-CMK reuse
+    // (`kms-alias-resolver.ts` — alias `alias/assignee-default-encryption`).
+    // ListAliases for the lookup-or-create probe; CreateAlias on the
+    // create-path; DeleteAlias for race-recovery cleanup; UpdateAlias
+    // is included defensively so a future "rotate the default CMK"
+    // flow can repoint the alias without re-touching the IAM policy.
+    "kms:CreateAlias",
+    "kms:DeleteAlias",
+    "kms:ListAliases",
+    "kms:UpdateAlias",
   ],
   [RESOURCE_TYPES.SECRETSMANAGER_SECRET]: [
     "secretsmanager:CreateSecret",

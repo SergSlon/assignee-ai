@@ -17,6 +17,50 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### KMS alias-based default-CMK resolver (epic-104 Wave C, 2026-05-08)
+
+- core: NEW `services/kms-alias-resolver.ts` exports
+  `resolveOrCreateDefaultKmsKey()` — looks up (or atomically creates) one
+  account+region-scoped customer-managed CMK addressable via the alias
+  `alias/assignee-default-encryption`. The first call within a session
+  paginates `kms:ListAliases` to find the alias; on a hit it returns the
+  underlying key arn (after a `kms:DescribeKey` `KeyState=Enabled` sanity
+  check). On a miss it creates the CMK with the project's standard
+  `managed-by=assignee-ai` tag set (inline via `CreateKey`'s `Tags` —
+  zero extra `TagResource` round-trips), enables key rotation
+  (warn-and-continue if the operator's IAM doesn't grant
+  `kms:EnableKeyRotation`), and creates the alias. A `CreateAlias`
+  `AlreadyExistsException` race is handled by scheduling the just-created
+  orphan key for the 7-day pending-deletion window and re-entering the
+  lookup once. Subsequent calls in the same session hit the per-process
+  cache. Stale alias targets (`Disabled`/`PendingDeletion`/`PendingImport`)
+  raise `AssigneeError(KMS_ALIAS_STALE)` with operator-actionable advice
+  rather than silently re-pointing the alias.
+- core: NEW `apply_resource_created` audit-event emit on the create-path
+  (re-uses Wave B-1's audit shape) so `assignee restore-provisions
+--from-audit-log` can rebuild a provision record for the auto-created
+  CMK. The reuse-path emits no audit event (no resource was created).
+- core: NEW structured-log actions `KMS_ALIAS_CMK_CREATED` (info on
+  successful create), `KMS_ALIAS_RESOLVE_PARTIAL` (warn when a non-fatal
+  sub-step like `EnableKeyRotation` failed), and `KMS_ALIAS_RACE_LOST`
+  (warn on the orphan-key path). All three route through the shared
+  `log()` helper so `--verbose` users see them in
+  `~/.assignee/logs/cli-YYYY-MM-DD.jsonl` and OTEL-configured deployments
+  ship them downstream.
+- iam: operator policy gains `kms:CreateAlias`, `kms:DeleteAlias`,
+  `kms:ListAliases`, `kms:UpdateAlias` so the resolver can lookup-or-create
+  the alias without IAM-policy churn. The four actions land in the
+  existing `SECURITY_ACTIONS[KMS_KEY]` registry, so the
+  `audit-iam-policies.ts` registry-driven coverage check picks them up
+  automatically. `kms:UpdateAlias` is included defensively so a future
+  "rotate the default CMK" flow can repoint the alias without re-touching
+  the IAM policy.
+- scope (deferred to a follow-up wave): plugin-level wiring that lets
+  S3 SSE-KMS / SQS / SNS / Logs / EFS / EventBridge default to the
+  resolved alias when the user opts into customer-managed encryption
+  but supplies no `KmsKeyId`. Wave C ships the primitive + IAM + audit
+  surface only; consumer plugins consume the resolver in the next wave.
+
 ### `restore-provisions --from-audit-log` (epic-104 Wave B-2, 2026-05-08)
 
 - cli: `assignee restore-provisions --from-audit-log` rebuilds missing
