@@ -24,6 +24,15 @@ export const PROVISIONS_FILE = "provisions.json";
 export interface ProvisionLookup {
   costMap: Map<string, string>;
   timestampMap: Map<string, string>;
+  /**
+   * bug-s3-bucket-policy-attach-failure-observability — `arn → outcome`
+   * lookup so `fetchManagedResources` can surface a warning for S3
+   * buckets where the apply-time `attachCompensatingBucketPolicy` call
+   * failed. Indexed by both full ARN and name-suffix to mirror the
+   * existing cost/timestamp maps. Only entries where the field is
+   * present in the provision record appear in this map.
+   */
+  compensatingPolicyMap: Map<string, { attached: boolean; reason?: string }>;
 }
 
 /**
@@ -39,6 +48,10 @@ export interface ProvisionLookup {
 export function loadProvisionData(): ProvisionLookup {
   const costMap = new Map<string, string>();
   const timestampMap = new Map<string, string>();
+  const compensatingPolicyMap = new Map<
+    string,
+    { attached: boolean; reason?: string }
+  >();
   const provisionLogPath = path.join(
     os.homedir(),
     ASSIGNEE_DIR,
@@ -63,6 +76,20 @@ export function loadProvisionData(): ProvisionLookup {
           timestampMap.set(key, entry.timestamp);
           if (nameSuffix) timestampMap.set(nameSuffix, entry.timestamp);
         }
+        // bug-s3-bucket-policy-attach-failure-observability — index the
+        // S3 compensating-policy outcome by full ARN AND name-suffix so
+        // the fetch-managed-resources merge step can match it against
+        // RGTA results regardless of which form RGTA returned.
+        if (entry.compensatingPolicyAttached !== undefined) {
+          const outcome = {
+            attached: entry.compensatingPolicyAttached,
+            ...(entry.compensatingPolicyError
+              ? { reason: entry.compensatingPolicyError }
+              : {}),
+          };
+          compensatingPolicyMap.set(key, outcome);
+          if (nameSuffix) compensatingPolicyMap.set(nameSuffix, outcome);
+        }
       }
     }
   } catch (err: unknown) {
@@ -77,5 +104,5 @@ export function loadProvisionData(): ProvisionLookup {
     }
   }
 
-  return { costMap, timestampMap };
+  return { costMap, timestampMap, compensatingPolicyMap };
 }

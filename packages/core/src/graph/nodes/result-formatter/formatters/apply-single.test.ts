@@ -824,4 +824,72 @@ describe("formatApplySingleSuccess — S3 compensating bucket policy", () => {
     expect(mockAttachCompensatingBucketPolicy).not.toHaveBeenCalled();
     expect(renderApplySuccess).toHaveBeenCalledTimes(1);
   });
+
+  // bug-s3-bucket-policy-attach-failure-observability — propagation
+  // path: when the SDK call returns `attached: false`, the provision
+  // record must capture compensatingPolicyAttached + compensatingPolicyError
+  // so `assignee list` can flag the bucket.
+  it("threads compensatingPolicyAttached=false + reason onto the provision record on attach failure", async () => {
+    const { writeProvisionRecord } = await import("@/utils/memory-recorder.js");
+    mockAttachCompensatingBucketPolicy.mockResolvedValueOnce({
+      attached: false,
+      reason: "AccessDenied: PutBucketPolicy not allowed",
+    });
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+
+    const state = makeState({
+      resourceType: "AWS::S3::Bucket",
+      resourceArn: S3_BUCKET_NAME,
+    });
+    await formatApplySingleSuccess(state);
+
+    // writeProvisionRecord called with extras carrying the failure info.
+    const writeCalls = (
+      writeProvisionRecord as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls;
+    expect(writeCalls.length).toBeGreaterThan(0);
+    // Find the call for the S3 bucket — extras is the 7th positional arg.
+    const lastCall = writeCalls[writeCalls.length - 1]!;
+    const extras = lastCall[6] as
+      | {
+          compensatingPolicyAttached?: boolean;
+          compensatingPolicyError?: string;
+        }
+      | undefined;
+    expect(extras).toBeDefined();
+    expect(extras!.compensatingPolicyAttached).toBe(false);
+    expect(extras!.compensatingPolicyError).toBe(
+      "AccessDenied: PutBucketPolicy not allowed",
+    );
+
+    stderrSpy.mockRestore();
+  });
+
+  it("threads compensatingPolicyAttached=true onto the provision record on attach success", async () => {
+    const { writeProvisionRecord } = await import("@/utils/memory-recorder.js");
+    // Default mock from beforeEach already returns { attached: true }.
+
+    const state = makeState({
+      resourceType: "AWS::S3::Bucket",
+      resourceArn: S3_BUCKET_NAME,
+    });
+    await formatApplySingleSuccess(state);
+
+    const writeCalls = (
+      writeProvisionRecord as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls;
+    const lastCall = writeCalls[writeCalls.length - 1]!;
+    const extras = lastCall[6] as
+      | {
+          compensatingPolicyAttached?: boolean;
+          compensatingPolicyError?: string;
+        }
+      | undefined;
+    expect(extras).toBeDefined();
+    expect(extras!.compensatingPolicyAttached).toBe(true);
+    // No error field on the happy path.
+    expect(extras!.compensatingPolicyError).toBeUndefined();
+  });
 });

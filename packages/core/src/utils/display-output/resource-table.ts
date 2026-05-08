@@ -35,6 +35,18 @@ function displayKey(r: ManagedResource, maxLen: number): string {
   return "";
 }
 
+/**
+ * bug-s3-bucket-policy-attach-failure-observability — does this row
+ * carry a flagged S3 compensating-policy attachment failure that should
+ * surface a warning row underneath the resource? The provision-log
+ * field is only set to `false` when apply-time `PutBucketPolicy` failed;
+ * non-S3 / happy-path / pre-bug rows are all undefined and skip the
+ * warning entirely.
+ */
+function hasCompensatingPolicyWarning(r: ManagedResource): boolean {
+  return r.compensatingPolicyAttached === false;
+}
+
 function renderTTYTable(resources: ManagedResource[]): void {
   const col = (label: string, values: string[], min: number) =>
     Math.max(min, label.length + 2, ...values.map((v) => v.length + 2));
@@ -72,14 +84,28 @@ function renderTTYTable(resources: ManagedResource[]): void {
       "Created".padEnd(cDate) +
       "Est. Cost",
   );
-  const rows = resources.map(
-    (r) =>
+  const rows = resources.flatMap((r) => {
+    const main =
       r.resourceType.padEnd(cType) +
       displayKey(r, maxArn).padEnd(cArn) +
       r.region.padEnd(cRegion) +
       fmtDate(r.createdDate).padEnd(cDate) +
-      r.estimatedMonthlyCost,
-  );
+      r.estimatedMonthlyCost;
+    if (!hasCompensatingPolicyWarning(r)) return [main];
+    // bug-s3-bucket-policy-attach-failure-observability: render a
+    // warning row underneath the bucket so the operator can spot that
+    // per-bucket tag-scoped destructive access is NOT in effect. The
+    // identity-policy `S3BucketDestructiveResourcePrefixScoped`
+    // statement still allows destructive ops, so the bucket itself is
+    // functional — but the compensating tag boundary is missing.
+    const reason = r.compensatingPolicyError
+      ? `: ${r.compensatingPolicyError}`
+      : "";
+    const warning = chalk.yellow(
+      `  ⚠ Compensating bucket policy missing${reason} — re-run \`assignee setup\` to retry.`,
+    );
+    return [main, warning];
+  });
   const lineWidth = cType + cArn + cRegion + cDate + 20;
   const footer = chalk.dim(
     `\n${resources.length} resource${resources.length === 1 ? "" : "s"} total`,
@@ -103,10 +129,17 @@ function renderTTYTable(resources: ManagedResource[]): void {
 
 function renderPlainTable(resources: ManagedResource[]): void {
   const header = "Type\tResource\tRegion\tCreated\tEst. Cost";
-  const rows = resources.map(
-    (r) =>
-      `${r.resourceType}\t${r.arn || r.primaryIdentifier || ""}\t${r.region}\t${r.createdDate}\t${r.estimatedMonthlyCost}`,
-  );
+  const rows = resources.flatMap((r) => {
+    const main = `${r.resourceType}\t${r.arn || r.primaryIdentifier || ""}\t${r.region}\t${r.createdDate}\t${r.estimatedMonthlyCost}`;
+    if (!hasCompensatingPolicyWarning(r)) return [main];
+    const reason = r.compensatingPolicyError
+      ? `: ${r.compensatingPolicyError}`
+      : "";
+    return [
+      main,
+      `  WARNING: Compensating bucket policy missing${reason} — re-run \`assignee setup\` to retry.`,
+    ];
+  });
   process.stdout.write([header, ...rows].join("\n") + "\n");
 }
 

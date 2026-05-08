@@ -266,3 +266,52 @@ describe("loadProvisionData — valid entries", () => {
     ).toBe("$2.00");
   });
 });
+
+// bug-s3-bucket-policy-attach-failure-observability — provision log
+// surfaces compensating-policy attach outcome via `compensatingPolicyMap`.
+describe("loadProvisionData — compensatingPolicyMap (S3 attach observability)", () => {
+  it("indexes failed-attach entries by full ARN AND name suffix", () => {
+    const failedArn = "arn:aws:s3:::bucket-where-policy-failed-2026";
+    writeArray([
+      {
+        resourceArn: failedArn,
+        estimatedMonthlyCost: "$0.02",
+        compensatingPolicyAttached: false,
+        compensatingPolicyError: "AccessDenied: PutBucketPolicy not allowed",
+      },
+    ]);
+    const result = loadProvisionData();
+    expect(result.compensatingPolicyMap.size).toBeGreaterThanOrEqual(1);
+    const byArn = result.compensatingPolicyMap.get(failedArn);
+    expect(byArn).toBeDefined();
+    expect(byArn!.attached).toBe(false);
+    expect(byArn!.reason).toBe("AccessDenied: PutBucketPolicy not allowed");
+  });
+
+  it("preserves attached=true outcomes (renderer suppresses warning at the leaf)", () => {
+    const happyArn = "arn:aws:s3:::happy-bucket-2026";
+    writeArray([
+      {
+        resourceArn: happyArn,
+        estimatedMonthlyCost: "$0.02",
+        compensatingPolicyAttached: true,
+      },
+    ]);
+    const result = loadProvisionData();
+    const entry = result.compensatingPolicyMap.get(happyArn);
+    expect(entry).toBeDefined();
+    expect(entry!.attached).toBe(true);
+    expect(entry!.reason).toBeUndefined();
+  });
+
+  it("entries without compensatingPolicy fields produce no map entry", () => {
+    writeArray([
+      {
+        resourceArn: "arn:aws:s3:::pre-bug-bucket",
+        estimatedMonthlyCost: "$0.02",
+      },
+    ]);
+    const result = loadProvisionData();
+    expect(result.compensatingPolicyMap.size).toBe(0);
+  });
+});
