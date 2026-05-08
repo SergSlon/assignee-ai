@@ -27,6 +27,11 @@ import {
   ProcessEnvConfigAdapter,
   type ConfigPort,
 } from "../config/config-port.js";
+// Wave B-1 (epic-104-demo-dryrun): emit a per-resource audit event on
+// successful appendProvision so a future `restore-provisions
+// --from-audit-log` flag (Wave B-2) can rebuild a missing provision
+// record from the HMAC-chained audit log alone.
+import { appendAuditRecord } from "../audit/audit-log.js";
 
 /** Lock name = provisions.json path for advisory-lock serialisation. */
 const PROVISIONS_LOCK_NAME = path.join(
@@ -35,6 +40,39 @@ const PROVISIONS_LOCK_NAME = path.join(
   "memory",
   "provisions.json",
 );
+
+/**
+ * Wave B-1 (epic-104-demo-dryrun): typed shape for the per-resource audit
+ * event emitted after a successful `appendProvision`. This is the contract
+ * consumed by Wave B-2 (`restore-provisions --from-audit-log`): every field
+ * here MUST be sufficient to reconstruct a `ProvisionRecord` whose
+ * provisions.json write was lost (e.g. crash mid-apply, or bug-pre-fix).
+ *
+ * The event is appended to the same HMAC-chained audit log as
+ * `query_executed`, `apply_auto_approved`, etc. Tamper-evidence is
+ * inherited from the chain.
+ *
+ * Free-form `record: unknown` is the convention at the audit-log seam
+ * (see `query-handler.ts:189`); this interface exists for type-safety at
+ * the emit site only — the audit log does not enforce it at runtime.
+ */
+export interface ApplyResourceCreatedEvent {
+  action: "apply_resource_created";
+  runId: string;
+  resourceType: string;
+  resourceArn: string;
+  region: string;
+  estimatedMonthlyCost: string;
+  desiredStateHash: string;
+  /**
+   * ISO 8601 timestamp captured at provision-write time. Mirrors the
+   * `timestamp` field on the ProvisionRecord so B-2 can reconstruct the
+   * record's `timestamp` field from the audit event without falling back
+   * to the audit-entry envelope timestamp (which would carry the audit
+   * write time, not the apply time).
+   */
+  timestamp: string;
+}
 
 /**
  * Optional extras for `writeProvisionRecord`. Kept as a separate object
@@ -84,23 +122,43 @@ export async function writeProvisionRecord(
   extras?: ProvisionRecordExtras,
 ): Promise<void> {
   const effectiveConfig = config ?? new ProcessEnvConfigAdapter();
-  // W4-03: advisory lock wraps the full write.
+  // Compute derived fields once so the audit-event mirror (Wave B-1)
+  // sees the SAME values that land in provisions.json. Reconstruction in
+  // Wave B-2 depends on this equality — diverging hashes/regions/timestamps
+  // between the two records would produce a record that fails drift checks
+  // immediately after restore.
+  const resolvedResourceType = resourceType || UNKNOWN_FALLBACK;
+  const resolvedResourceArn = resourceArn ?? "";
+  const resolvedRegion =
+    effectiveConfig.get(EnvVar.AWS_REGION) ??
+    effectiveConfig.get(EnvVar.AWS_DEFAULT_REGION) ??
+    UNKNOWN_FALLBACK;
+  const resolvedDesiredStateHash = crypto
+    .createHash("sha256")
+    .update(JSON.stringify(desiredState ?? {}))
+    .digest("hex");
+  const resolvedEstimatedMonthlyCost =
+    estimatedMonthlyCost ?? CostEstimateLabel.NA;
+  const resolvedTimestamp = new Date().toISOString();
+
+  // W4-03: advisory lock wraps the provisions.json write only.
+  // Wave B-1 review note: the audit emit is INTENTIONALLY moved OUT of
+  // this lock callback (see below). Holding the provisions lock across
+  // `appendAuditRecord`'s tail-read + appendFile + 2× fsync (~100ms
+  // under contention) would serialise provisions throughput on audit
+  // fsync latency, and an audit-lock retry storm would exhaust while
+  // still holding the provisions lock. Keep the critical section tight.
+  let provisionWriteSucceeded = false;
   await defaultFileAdvisoryLock.withLock(PROVISIONS_LOCK_NAME, async () => {
     try {
       await defaultMemoryService.appendProvision({
         runId,
-        resourceType: resourceType || UNKNOWN_FALLBACK,
-        resourceArn: resourceArn ?? "",
-        region:
-          effectiveConfig.get(EnvVar.AWS_REGION) ??
-          effectiveConfig.get(EnvVar.AWS_DEFAULT_REGION) ??
-          UNKNOWN_FALLBACK,
-        desiredStateHash: crypto
-          .createHash("sha256")
-          .update(JSON.stringify(desiredState ?? {}))
-          .digest("hex"),
-        estimatedMonthlyCost: estimatedMonthlyCost ?? CostEstimateLabel.NA,
-        timestamp: new Date().toISOString(),
+        resourceType: resolvedResourceType,
+        resourceArn: resolvedResourceArn,
+        region: resolvedRegion,
+        desiredStateHash: resolvedDesiredStateHash,
+        estimatedMonthlyCost: resolvedEstimatedMonthlyCost,
+        timestamp: resolvedTimestamp,
         // Story iv: only persist the field when the caller actually
         // captured a public IP (EC2 happy path). Omit the property
         // entirely for non-EC2 / private-subnet resources so the
@@ -123,6 +181,7 @@ export async function writeProvisionRecord(
           ? { compensatingPolicyError: extras.compensatingPolicyError }
           : {}),
       });
+      provisionWriteSucceeded = true;
     } catch (err) {
       log({
         ts: new Date().toISOString(),
@@ -133,6 +192,55 @@ export async function writeProvisionRecord(
       });
     }
   });
+
+  // Wave B-1 (epic-104-demo-dryrun): emit a per-resource audit event so
+  // the future `restore-provisions --from-audit-log` (Wave B-2) can
+  // rebuild a missing record.
+  //
+  // Invariants:
+  //   - Fires ONLY after a successful appendProvision. A failed
+  //     provision write produces no audit event — audit events are
+  //     evidence of successful operations.
+  //   - Audit-emit failure is non-fatal: the provision write is the
+  //     source of truth. We log a structured warning via the existing
+  //     logger (which routes to stderr in verbose mode and is always
+  //     persisted to the daily log file) but never re-throw.
+  //   - Emitted OUTSIDE the provisions.json advisory lock. Byte-identity
+  //     between the audit event and the persisted ProvisionRecord is
+  //     preserved by passing the resolved values (timestamp, hash,
+  //     region, …) computed BEFORE the lock — they are captured in
+  //     closure and reused here. Throughput is preserved by not holding
+  //     the provisions lock during the audit log's tail-read +
+  //     appendFile + 2× fsync. The audit log uses its own advisory lock
+  //     (keyed on the audit log file path), so concurrent emits from
+  //     other writers serialise there, not on the provisions lock.
+  if (provisionWriteSucceeded) {
+    const event: ApplyResourceCreatedEvent = {
+      action: "apply_resource_created",
+      runId,
+      resourceType: resolvedResourceType,
+      resourceArn: resolvedResourceArn,
+      region: resolvedRegion,
+      estimatedMonthlyCost: resolvedEstimatedMonthlyCost,
+      desiredStateHash: resolvedDesiredStateHash,
+      timestamp: resolvedTimestamp,
+    };
+    try {
+      await appendAuditRecord(event, undefined, effectiveConfig);
+    } catch (auditErr) {
+      log({
+        ts: new Date().toISOString(),
+        runId,
+        level: "warn",
+        action: LOG_ACTIONS.MEMORY_WRITE_FAILED,
+        extras: {
+          auditEmitError:
+            auditErr instanceof Error ? auditErr.message : String(auditErr),
+          event: "apply_resource_created",
+        },
+      });
+    }
+  }
 }
 
 /**
