@@ -276,3 +276,25 @@ bundler plugins used in the monorepo's build toolchain; it is never exposed to
 untrusted CSS input at runtime.
 
 **Reviewed**: 2026-04 — Klaus Weber
+
+---
+
+## fast-uri
+
+**Covers overrides**: `fast-uri@<3.1.1`
+
+**CVE**: GHSA-q3j6-qgpj-74h6 (path traversal via percent-encoded dot segments
+in fast-uri ≤ 3.1.0 when parsing URI references; the parser fails to canonicalise
+`%2e%2e` segments before path-segment normalisation, allowing crafted URIs to
+escape an intended subtree).
+
+**Mitigation**: Pin to 3.1.2+ (3.1.1 is the patched floor; 3.1.2 includes the
+follow-up fix for the same advisory class). fast-uri is pulled transitively
+through `@langchain/mcp-adapters > @modelcontextprotocol/sdk > ajv > fast-uri`.
+The CLI does not parse user-supplied URIs through this code path at runtime
+(MCP server URIs are pre-validated against a hard-coded protocol allowlist),
+but the override eliminates the vulnerability class across the dependency tree.
+
+**Reviewed**: 2026-05-08 — coordinator (Wave C Phase 1 PR #24 CI surfaced the
+advisory; mitigation matches the existing hono / postcss / minimatch override
+pattern).
