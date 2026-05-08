@@ -58,12 +58,12 @@
   "dependencies": {
     "@assignee/best-practices": "workspace:*",
     "@assignee/core": "workspace:*",
-    "@aws-sdk/client-cloudcontrol": "^3.1015.0",
-    "@aws-sdk/client-dynamodb": "^3.1015.0",
-    "@aws-sdk/client-ec2": "^3.1015.0",
-    "@aws-sdk/client-iam": "^3.1014.0",
-    "@aws-sdk/client-resource-groups-tagging-api": "^3.1014.0",
-    "@aws-sdk/client-sts": "^3.1030.0",
+    "@aws-sdk/client-cloudcontrol": "^3.1045.0",
+    "@aws-sdk/client-dynamodb": "^3.1045.0",
+    "@aws-sdk/client-ec2": "^3.1045.0",
+    "@aws-sdk/client-iam": "^3.1045.0",
+    "@aws-sdk/client-resource-groups-tagging-api": "^3.1045.0",
+    "@aws-sdk/client-sts": "^3.1045.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^3.25.76"
   },
