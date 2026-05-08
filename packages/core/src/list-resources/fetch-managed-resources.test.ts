@@ -4,6 +4,10 @@ vi.mock("./provision-log.js", () => ({
   loadProvisionData: vi.fn(() => ({
     costMap: new Map<string, string>(),
     timestampMap: new Map<string, string>(),
+    compensatingPolicyMap: new Map<
+      string,
+      { attached: boolean; reason?: string }
+    >(),
   })),
 }));
 
@@ -26,6 +30,10 @@ import * as provisionLog from "./provision-log.js";
 const emptyLookup = {
   costMap: new Map<string, string>(),
   timestampMap: new Map<string, string>(),
+  compensatingPolicyMap: new Map<
+    string,
+    { attached: boolean; reason?: string }
+  >(),
 };
 
 describe("hasManagedByTag", () => {
@@ -149,6 +157,10 @@ describe("fetchManagedResources — provision log enrichment", () => {
     vi.mocked(provisionLog.loadProvisionData).mockReturnValue({
       costMap: new Map([["arn:aws:s3:::ledger", "$12.34/month"]]),
       timestampMap: new Map([["arn:aws:s3:::ledger", "2026-03-01T10:00:00Z"]]),
+      compensatingPolicyMap: new Map<
+        string,
+        { attached: boolean; reason?: string }
+      >(),
     });
     const result = await fetchManagedResources({
       region: "us-east-1",
@@ -161,6 +173,86 @@ describe("fetchManagedResources — provision log enrichment", () => {
     });
     expect(result[0]!.estimatedMonthlyCost).toBe("$12.34/month");
     expect(result[0]!.createdDate).toBe("2026-03-01T10:00:00Z");
+  });
+});
+
+// bug-s3-bucket-policy-attach-failure-observability — fetchManagedResources
+// must propagate the provision-log compensatingPolicyMap onto S3 rows so
+// the renderer can flag buckets whose apply-time PutBucketPolicy failed.
+describe("fetchManagedResources — compensating-policy attach observability", () => {
+  it("propagates compensatingPolicyAttached=false + reason from provision log onto the matching S3 row", async () => {
+    const failedBucketArn = "arn:aws:s3:::failed-policy-bucket-2026";
+    vi.mocked(provisionLog.loadProvisionData).mockReturnValue({
+      costMap: new Map(),
+      timestampMap: new Map(),
+      compensatingPolicyMap: new Map<
+        string,
+        { attached: boolean; reason?: string }
+      >([
+        [
+          failedBucketArn,
+          {
+            attached: false,
+            reason: "AccessDenied: PutBucketPolicy not allowed",
+          },
+        ],
+      ]),
+    });
+    const result = await fetchManagedResources({
+      region: "us-east-1",
+      fetchRgtaResources: async () => [
+        {
+          ResourceARN: failedBucketArn,
+          Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+        },
+      ],
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0]!.compensatingPolicyAttached).toBe(false);
+    expect(result[0]!.compensatingPolicyError).toBe(
+      "AccessDenied: PutBucketPolicy not allowed",
+    );
+  });
+
+  it("does NOT carry compensatingPolicy fields for buckets where the policy attached cleanly", async () => {
+    // Provision log records `attached: true` — keep the row clean
+    // (renderer renders no warning when the field is undefined OR true).
+    const happyBucketArn = "arn:aws:s3:::happy-policy-bucket-2026";
+    vi.mocked(provisionLog.loadProvisionData).mockReturnValue({
+      costMap: new Map(),
+      timestampMap: new Map(),
+      compensatingPolicyMap: new Map<
+        string,
+        { attached: boolean; reason?: string }
+      >([[happyBucketArn, { attached: true }]]),
+    });
+    const result = await fetchManagedResources({
+      region: "us-east-1",
+      fetchRgtaResources: async () => [
+        {
+          ResourceARN: happyBucketArn,
+          Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+        },
+      ],
+    });
+    expect(result[0]!.compensatingPolicyAttached).toBeUndefined();
+    expect(result[0]!.compensatingPolicyError).toBeUndefined();
+  });
+
+  it("does NOT carry compensatingPolicy fields for non-S3 resources", async () => {
+    const lambdaArn =
+      "arn:aws:lambda:us-east-1:112233445566:function:assignee-fn-2026";
+    vi.mocked(provisionLog.loadProvisionData).mockReturnValue(emptyLookup);
+    const result = await fetchManagedResources({
+      region: "us-east-1",
+      fetchRgtaResources: async () => [
+        {
+          ResourceARN: lambdaArn,
+          Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+        },
+      ],
+    });
+    expect(result[0]!.compensatingPolicyAttached).toBeUndefined();
   });
 });
 
@@ -513,6 +605,10 @@ describe("fetchManagedResources — pricing enrichment", () => {
         [s3Arn, "$0.50/mo"],
       ]),
       timestampMap: new Map(),
+      compensatingPolicyMap: new Map<
+        string,
+        { attached: boolean; reason?: string }
+      >(),
     });
     const enrichWithPricing = vi.fn().mockResolvedValue(new Map());
 
@@ -636,6 +732,10 @@ describe("fetchManagedResources — createdDate enrichment", () => {
         [kmsArn, "2026-01-10"],
         [s3Arn, "2025-11-01"],
       ]),
+      compensatingPolicyMap: new Map<
+        string,
+        { attached: boolean; reason?: string }
+      >(),
     });
     const enrichWithCreatedDate = vi.fn().mockResolvedValue(new Map());
 

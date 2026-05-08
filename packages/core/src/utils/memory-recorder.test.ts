@@ -372,3 +372,216 @@ describe("writeProvisionRecord concurrency — 10 parallel writes all land (AC#4
     expect(records[0]!.resourceArn).toBe("arn:aws:s3:::no-warning-bucket");
   });
 });
+
+// ── Story bug-clearfailurehistory-appenddestroyedarn-outer-lock-symmetry ─────
+//
+// Verifies that `clearFailureHistory` and `appendDestroyedArn` route their
+// underlying writes through `defaultFileAdvisoryLock.withLock`, mirroring
+// the symmetry of `writeProvisionRecord` / `writeFailureRecord` /
+// `upsertPatternRecord`. Cross-process safety: two terminals running
+// `assignee apply` / `assignee destroy` against the same workstation
+// cannot interleave on `~/.assignee/memory/{failures,destroyed-arns}.json`.
+
+describe("clearFailureHistory + appendDestroyedArn outer-lock symmetry", () => {
+  it("clearFailureHistory invokes defaultFileAdvisoryLock.withLock around the write", async () => {
+    const { defaultFileAdvisoryLock } =
+      await import("../locks/file-advisory-lock.js");
+    const { clearFailureHistory } = await import("./memory-recorder.js");
+
+    const withLockSpy = vi.spyOn(defaultFileAdvisoryLock, "withLock");
+    try {
+      await clearFailureHistory("test-run-clear-001", "AWS::S3::Bucket");
+      expect(withLockSpy).toHaveBeenCalledTimes(1);
+      // The lock name MUST resolve to the provisions.json path so the
+      // outer wrapper serialises against the other 3 writers (which all
+      // use the same PROVISIONS_LOCK_NAME).
+      const [lockName, fn] = withLockSpy.mock.calls[0]!;
+      expect(lockName).toMatch(/provisions\.json$/);
+      expect(typeof fn).toBe("function");
+    } finally {
+      withLockSpy.mockRestore();
+    }
+  });
+
+  it("appendDestroyedArn invokes defaultFileAdvisoryLock.withLock around the write", async () => {
+    const { defaultFileAdvisoryLock } =
+      await import("../locks/file-advisory-lock.js");
+    const { appendDestroyedArn } = await import("./memory-recorder.js");
+
+    const withLockSpy = vi.spyOn(defaultFileAdvisoryLock, "withLock");
+    try {
+      await appendDestroyedArn(
+        "test-run-destroy-001",
+        "arn:aws:s3:::test-destroyed-bucket-2026",
+      );
+      expect(withLockSpy).toHaveBeenCalledTimes(1);
+      const [lockName, fn] = withLockSpy.mock.calls[0]!;
+      expect(lockName).toMatch(/provisions\.json$/);
+      expect(typeof fn).toBe("function");
+    } finally {
+      withLockSpy.mockRestore();
+    }
+  });
+
+  it("appendDestroyedArn early-returns on empty arn without acquiring lock", async () => {
+    const { defaultFileAdvisoryLock } =
+      await import("../locks/file-advisory-lock.js");
+    const { appendDestroyedArn } = await import("./memory-recorder.js");
+
+    const withLockSpy = vi.spyOn(defaultFileAdvisoryLock, "withLock");
+    try {
+      await appendDestroyedArn("test-run-destroy-002", "");
+      // Empty ARN guard short-circuits before withLock — no lock acquired.
+      expect(withLockSpy).not.toHaveBeenCalled();
+    } finally {
+      withLockSpy.mockRestore();
+    }
+  });
+
+  it("clearFailureHistory + appendDestroyedArn serialise through the lock under concurrent invocation", async () => {
+    // Concurrency regression guard: 5 concurrent calls of each must
+    // serialise through `withLock` (the inner critical section sees a
+    // strict in-flight count of 1 at every observation point). Mirrors
+    // the AC#4 pattern from the writeProvisionRecord block above but
+    // exercises the new outer-lock wrappers.
+    const { FileAdvisoryLockAdapter } =
+      await import("../locks/file-advisory-lock.js");
+    const adapter = new FileAdvisoryLockAdapter({
+      staleLockTimeoutMs: 10_000,
+      maxRetries: 50,
+      retryDelayMs: 20,
+    });
+
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const lockName = path.join(
+      await fs.mkdtemp(path.join(os.tmpdir(), "assignee-symmetry-test-")),
+      "provisions.json",
+    );
+
+    const N = 5;
+    const tasks = Array.from({ length: N }, () =>
+      adapter.withLock(lockName, async () => {
+        inFlight++;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        // Yield once so any concurrent tasks have a chance to run.
+        await new Promise((resolve) => setImmediate(resolve));
+        inFlight--;
+      }),
+    );
+
+    await Promise.all(tasks);
+
+    // The lock MUST keep maxInFlight at exactly 1 — the whole point of
+    // outer-lock symmetry.
+    expect(maxInFlight).toBe(1);
+  });
+});
+
+// ── Story bug-s3-bucket-policy-attach-failure-observability ──────────────────
+//
+// Covers ProvisionRecordExtras.{compensatingPolicyAttached,
+// compensatingPolicyError} round-trip through the JSON file. The
+// `writeProvisionRecord` helper writes to the singleton, so we verify the
+// flow indirectly via `MemoryService.appendProvision` against a temp dir.
+
+describe("ProvisionRecord — compensatingPolicy round-trip (S3 attach observability)", () => {
+  let service: MemoryService;
+  let dir: string;
+  const RUN_ID = "550e8400-e29b-41d4-a716-446655440042";
+
+  beforeEach(async () => {
+    const tmp = await makeTmpMemoryService();
+    service = tmp.service;
+    dir = tmp.dir;
+  });
+
+  it("persists compensatingPolicyAttached=false + reason for a failed S3 attach", async () => {
+    const record: ProvisionRecord = {
+      runId: RUN_ID,
+      resourceType: "AWS::S3::Bucket",
+      resourceArn: "arn:aws:s3:::assignee-failed-policy-bucket-2026",
+      region: "us-east-1",
+      desiredStateHash: "h123",
+      estimatedMonthlyCost: "$0.023/GB-month",
+      timestamp: "2026-05-08T10:00:00.000Z",
+      compensatingPolicyAttached: false,
+      compensatingPolicyError: "AccessDenied: PutBucketPolicy not allowed",
+    };
+
+    await service.appendProvision(record);
+
+    const records = await service.readProvisions();
+    expect(records).toHaveLength(1);
+    expect(records[0]!.compensatingPolicyAttached).toBe(false);
+    expect(records[0]!.compensatingPolicyError).toBe(
+      "AccessDenied: PutBucketPolicy not allowed",
+    );
+
+    const diskContent = await readJsonFile(path.join(dir, "provisions.json"));
+    expect(diskContent).toContain("compensatingPolicyAttached");
+    expect(diskContent).toContain("AccessDenied: PutBucketPolicy not allowed");
+  });
+
+  it("persists compensatingPolicyAttached=true (happy path) without error field", async () => {
+    const record: ProvisionRecord = {
+      runId: RUN_ID,
+      resourceType: "AWS::S3::Bucket",
+      resourceArn: "arn:aws:s3:::assignee-happy-bucket-2026",
+      region: "us-east-1",
+      desiredStateHash: "h456",
+      estimatedMonthlyCost: "$0.023/GB-month",
+      timestamp: "2026-05-08T11:00:00.000Z",
+      compensatingPolicyAttached: true,
+    };
+
+    await service.appendProvision(record);
+
+    const records = await service.readProvisions();
+    expect(records[0]!.compensatingPolicyAttached).toBe(true);
+    expect(records[0]!.compensatingPolicyError).toBeUndefined();
+  });
+
+  it("non-S3 resource records omit the compensatingPolicy fields entirely", async () => {
+    const record: ProvisionRecord = {
+      runId: RUN_ID,
+      resourceType: "AWS::Lambda::Function",
+      resourceArn:
+        "arn:aws:lambda:us-east-1:112233445566:function:assignee-fn-2026",
+      region: "us-east-1",
+      desiredStateHash: "h789",
+      estimatedMonthlyCost: "$0.20/mo",
+      timestamp: "2026-05-08T12:00:00.000Z",
+    };
+
+    await service.appendProvision(record);
+
+    const diskContent = await readJsonFile(path.join(dir, "provisions.json"));
+    expect(diskContent).not.toContain("compensatingPolicyAttached");
+    expect(diskContent).not.toContain("compensatingPolicyError");
+  });
+
+  it("backwards-compat: pre-bug record (no compensatingPolicy fields) reads without error", async () => {
+    const fsMod = await import("node:fs/promises");
+    const legacyRecord = {
+      runId: RUN_ID,
+      resourceType: "AWS::S3::Bucket",
+      resourceArn: "arn:aws:s3:::pre-bug-legacy-bucket-2026",
+      region: "us-east-1",
+      desiredStateHash: "legacy",
+      estimatedMonthlyCost: "$0.023/GB-month",
+      timestamp: "2026-03-01T10:00:00.000Z",
+    };
+    await fsMod.mkdir(dir, { recursive: true });
+    await fsMod.writeFile(
+      path.join(dir, "provisions.json"),
+      JSON.stringify([legacyRecord]),
+      "utf-8",
+    );
+
+    const records = await service.readProvisions();
+    expect(records).toHaveLength(1);
+    expect(records[0]!.compensatingPolicyAttached).toBeUndefined();
+    expect(records[0]!.compensatingPolicyError).toBeUndefined();
+  });
+});

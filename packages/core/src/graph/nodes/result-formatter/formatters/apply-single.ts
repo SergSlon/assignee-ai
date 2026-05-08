@@ -233,6 +233,13 @@ export async function formatApplySingleSuccess(
   // but do NOT roll back the bucket creation — the bucket exists and the user
   // can re-run `assignee setup` to re-attach. The identity policy already
   // allows destructive operations so the bucket is fully functional.
+  // bug-s3-bucket-policy-attach-failure-observability: capture the
+  // attach outcome so it can be persisted on the provision record below.
+  // Undefined for non-S3 resources or when the operator ARN was
+  // unavailable (skip path) — `writeProvisionRecord` then omits the
+  // field from the JSON entirely.
+  let compensatingPolicyAttached: boolean | undefined;
+  let compensatingPolicyError: string | undefined;
   if (state.resourceType === RESOURCE_TYPES.S3_BUCKET && state.resourceArn) {
     const operatorArn = await getOperatorCallerArn();
     if (operatorArn) {
@@ -241,7 +248,9 @@ export async function formatApplySingleSuccess(
         operatorArn,
         region: AWS_REGION,
       });
+      compensatingPolicyAttached = policyResult.attached;
       if (!policyResult.attached) {
+        compensatingPolicyError = policyResult.reason ?? "unknown error";
         process.stderr.write(
           chalk.yellow(
             `⚠ Compensating bucket policy could not be attached to ${state.resourceArn}: ${policyResult.reason ?? "unknown error"}\n` +
@@ -302,6 +311,19 @@ export async function formatApplySingleSuccess(
   // diverges (stop/start cycles re-issue public IPs). Undefined-by-
   // default extras keep behaviour byte-identical for non-EC2 / private-
   // subnet resources.
+  // bug-s3-bucket-policy-attach-failure-observability: thread the
+  // S3 compensating-policy outcome (captured above) onto the
+  // provision record so `assignee list` can flag buckets where the
+  // per-bucket tag boundary is not in effect.
+  const recordExtras: Parameters<typeof writeProvisionRecord>[6] = {
+    ...(networkOverlay?.publicIpAddress
+      ? { publicIpAddressAtApply: networkOverlay.publicIpAddress }
+      : {}),
+    ...(compensatingPolicyAttached !== undefined
+      ? { compensatingPolicyAttached }
+      : {}),
+    ...(compensatingPolicyError ? { compensatingPolicyError } : {}),
+  };
   await writeProvisionRecord(
     state.runId,
     state.resourceType,
@@ -309,9 +331,7 @@ export async function formatApplySingleSuccess(
     state.desiredState,
     state.estimatedMonthlyCost,
     undefined,
-    networkOverlay?.publicIpAddress
-      ? { publicIpAddressAtApply: networkOverlay.publicIpAddress }
-      : undefined,
+    Object.keys(recordExtras).length > 0 ? recordExtras : undefined,
   );
 
   // Story 20.13 — wipe stale failure history for this resource type.

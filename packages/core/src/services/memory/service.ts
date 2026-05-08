@@ -276,12 +276,14 @@ export class MemoryService extends FileStore {
    * Called after a successful provision so stale errors are not surfaced.
    *
    * NOTE: Only called from `memory-recorder.ts` (`clearFailureHistory`),
-   * which does NOT hold the outer lock (it calls directly, no `withLock`
-   * wrapper). Safe without inner lock because `clearFailureHistory` is a
-   * best-effort cleanup — it cannot interleave destructively with the
-   * provision/failure writes (different logical operation, same-process,
-   * sequential event loop). If concurrent safety is needed in future, route
-   * through a `withLock` wrapper in `memory-recorder.ts`.
+   * which holds the outer `defaultFileAdvisoryLock` via
+   * `withLock(PROVISIONS_LOCK_NAME, ...)`. No inner lock here — same
+   * re-entrant double-lock guard as `appendProvision` above.
+   *
+   * Outer-lock symmetry was added by
+   * bug-clearfailurehistory-appenddestroyedarn-outer-lock-symmetry so two
+   * terminals running `assignee apply` on the same workstation cannot
+   * interleave a `failures.json` rewrite with a parallel `appendFailure`.
    */
   async clearFailuresForType(resourceType: string): Promise<void> {
     await this.ensureDir();
@@ -371,9 +373,15 @@ export class MemoryService extends FileStore {
    * Append a destroyed ARN to destroyed-arns.json.
    *
    * NOTE: Only called from `memory-recorder.ts` (`appendDestroyedArn`), which
-   * does NOT hold the outer lock (direct call, no `withLock` wrapper). Safe
-   * for the same reason as `clearFailuresForType` — best-effort, no
-   * interleave risk with provision writes in the same process.
+   * holds the outer `defaultFileAdvisoryLock` via
+   * `withLock(PROVISIONS_LOCK_NAME, ...)`. No inner lock here — same
+   * re-entrant double-lock guard as `appendProvision` above.
+   *
+   * Outer-lock symmetry was added by
+   * bug-clearfailurehistory-appenddestroyedarn-outer-lock-symmetry so two
+   * terminals running `assignee destroy` on the same workstation cannot
+   * interleave a `destroyed-arns.json` read+rewrite (the file is a JSON
+   * array we round-trip on every append).
    */
   async appendDestroyedArn(arn: string): Promise<void> {
     if (!arn) return;

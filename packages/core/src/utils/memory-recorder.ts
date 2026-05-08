@@ -51,6 +51,23 @@ const PROVISIONS_LOCK_NAME = path.join(
 export interface ProvisionRecordExtras {
   /** Apply-time PublicIpAddress for EC2; undefined for non-EC2 / private. */
   publicIpAddressAtApply?: string;
+  /**
+   * bug-s3-bucket-policy-attach-failure-observability — outcome of the
+   * apply-time `attachCompensatingBucketPolicy` SDK call for S3 buckets.
+   * `true` on success, `false` on attachment failure, undefined for non-
+   * S3 resources or when the operator ARN was unavailable (skipped
+   * altogether). Persisted on the provision record so `assignee list`
+   * can flag buckets where the per-bucket tag-scoped destructive access
+   * boundary is NOT in effect.
+   */
+  compensatingPolicyAttached?: boolean;
+  /**
+   * bug-s3-bucket-policy-attach-failure-observability — captures the
+   * `AttachResult.reason` from a failed `PutBucketPolicy` call so the
+   * `assignee list` warning can echo the same message the operator saw
+   * on stderr at apply time.
+   */
+  compensatingPolicyError?: string;
 }
 
 /**
@@ -93,6 +110,17 @@ export async function writeProvisionRecord(
         ...(extras?.publicIpAddressAtApply &&
         extras.publicIpAddressAtApply.length > 0
           ? { publicIpAddressAtApply: extras.publicIpAddressAtApply }
+          : {}),
+        // bug-s3-bucket-policy-attach-failure-observability: persist
+        // compensating-policy outcome for S3 buckets. `undefined` is
+        // omitted from the JSON; `true`/`false` is preserved so list
+        // can surface a warning row when the attach failed.
+        ...(extras?.compensatingPolicyAttached !== undefined
+          ? { compensatingPolicyAttached: extras.compensatingPolicyAttached }
+          : {}),
+        ...(extras?.compensatingPolicyError &&
+        extras.compensatingPolicyError.length > 0
+          ? { compensatingPolicyError: extras.compensatingPolicyError }
           : {}),
       });
     } catch (err) {
@@ -172,25 +200,35 @@ export async function writeFailureRecord(
 /**
  * Clears stale failure records for a resource type after a successful provision (Story 20.13).
  * Fire-and-forget: failures are logged but never block the apply result.
+ *
+ * bug-clearfailurehistory-appenddestroyedarn-outer-lock-symmetry: wrap the
+ * underlying `clearFailuresForType` write in `defaultFileAdvisoryLock.withLock`
+ * so the cross-process race against `writeFailureRecord`
+ * (failures.json append) can never interleave on a shared workstation. Single-
+ * process safety was already provided by sequential awaits, but two terminals
+ * running `assignee apply` against the same `~/.assignee/memory/` could
+ * theoretically collide without the outer lock.
  */
 export async function clearFailureHistory(
   runId: string,
   resourceType: string,
 ): Promise<void> {
-  try {
-    await defaultMemoryService.clearFailuresForType(resourceType);
-  } catch (err) {
-    log({
-      ts: new Date().toISOString(),
-      runId,
-      level: "warn",
-      action: LOG_ACTIONS.MEMORY_WRITE_FAILED,
-      extras: {
-        memoryWriteError: "Failed to clear failure history",
-        error: err instanceof Error ? err.message : String(err),
-      },
-    });
-  }
+  await defaultFileAdvisoryLock.withLock(PROVISIONS_LOCK_NAME, async () => {
+    try {
+      await defaultMemoryService.clearFailuresForType(resourceType);
+    } catch (err) {
+      log({
+        ts: new Date().toISOString(),
+        runId,
+        level: "warn",
+        action: LOG_ACTIONS.MEMORY_WRITE_FAILED,
+        extras: {
+          memoryWriteError: "Failed to clear failure history",
+          error: err instanceof Error ? err.message : String(err),
+        },
+      });
+    }
+  });
 }
 
 /**
@@ -198,26 +236,36 @@ export async function clearFailureHistory(
  * filter it from list output while the AWS resource lingers in INACTIVE
  * state (e.g. ECS clusters stay tagged for ~1h after deletion).
  * Fire-and-forget: failures are logged but never block the destroy result.
+ *
+ * bug-clearfailurehistory-appenddestroyedarn-outer-lock-symmetry: wrap the
+ * underlying `appendDestroyedArn` write in `defaultFileAdvisoryLock.withLock`
+ * so cross-process invocations (two terminals running `assignee destroy` on
+ * the same workstation) cannot interleave reads/writes on
+ * `~/.assignee/memory/destroyed-arns.json`. Mirrors the symmetry of the
+ * other 3 writers (`writeProvisionRecord`, `writeFailureRecord`,
+ * `upsertPatternRecord`).
  */
 export async function appendDestroyedArn(
   runId: string,
   arn: string,
 ): Promise<void> {
   if (!arn) return;
-  try {
-    await defaultMemoryService.appendDestroyedArn(arn);
-  } catch (err) {
-    log({
-      ts: new Date().toISOString(),
-      runId,
-      level: "warn",
-      action: LOG_ACTIONS.MEMORY_WRITE_FAILED,
-      extras: {
-        memoryWriteError: "Failed to record destroyed ARN",
-        error: err instanceof Error ? err.message : String(err),
-      },
-    });
-  }
+  await defaultFileAdvisoryLock.withLock(PROVISIONS_LOCK_NAME, async () => {
+    try {
+      await defaultMemoryService.appendDestroyedArn(arn);
+    } catch (err) {
+      log({
+        ts: new Date().toISOString(),
+        runId,
+        level: "warn",
+        action: LOG_ACTIONS.MEMORY_WRITE_FAILED,
+        extras: {
+          memoryWriteError: "Failed to record destroyed ARN",
+          error: err instanceof Error ? err.message : String(err),
+        },
+      });
+    }
+  });
 }
 
 /**

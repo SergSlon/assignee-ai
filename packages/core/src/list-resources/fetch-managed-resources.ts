@@ -166,7 +166,7 @@ export async function fetchManagedResources(
     getDestroyedArns,
   } = opts;
 
-  const { costMap, timestampMap } = loadProvisionData();
+  const { costMap, timestampMap, compensatingPolicyMap } = loadProvisionData();
   const resources: ManagedResource[] = [];
 
   const mappings = await fetchRgtaResources();
@@ -198,6 +198,14 @@ export async function fetchManagedResources(
       ? "global"
       : parsed.region || region;
 
+    // bug-s3-bucket-policy-attach-failure-observability — surface the
+    // S3 compensating-policy outcome on the row so `assignee list` can
+    // flag buckets where the per-bucket tag boundary is not in effect.
+    // Only set the field when the provision record carries it; non-S3
+    // resources, S3 buckets where the policy attached cleanly, and pre-
+    // bug records all leave it undefined.
+    const policyOutcome =
+      compensatingPolicyMap.get(arn) ?? compensatingPolicyMap.get(arnName);
     resources.push({
       resourceType: parsed.resourceType,
       arn,
@@ -209,6 +217,14 @@ export async function fetchManagedResources(
         costMap.get(arnName) ??
         freeTierLabel ??
         CostEstimateLabel.NA,
+      ...(policyOutcome && !policyOutcome.attached
+        ? {
+            compensatingPolicyAttached: false,
+            ...(policyOutcome.reason
+              ? { compensatingPolicyError: policyOutcome.reason }
+              : {}),
+          }
+        : {}),
     });
   }
 

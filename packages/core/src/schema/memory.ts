@@ -29,6 +29,24 @@ export const ProvisionRecordSchema = z.object({
    * new public IP).
    */
   publicIpAddressAtApply: z.string().optional(),
+  /**
+   * bug-s3-bucket-policy-attach-failure-observability — `true` when
+   * `attachCompensatingBucketPolicy` returned `{ attached: true }` for an
+   * S3 bucket at apply time, `false` when the SDK call failed (throttle,
+   * IAM gap, network), `undefined` for non-S3 resources and pre-bug
+   * provision records. `assignee list` surfaces a warning row when the
+   * field is `false` so the operator can spot buckets where the
+   * per-bucket tag boundary is not in effect.
+   */
+  compensatingPolicyAttached: z.boolean().optional(),
+  /**
+   * bug-s3-bucket-policy-attach-failure-observability — human-readable
+   * reason from the `AttachResult.reason` field when
+   * `compensatingPolicyAttached` is `false`. Aligned with the existing
+   * stderr warning so the listing output and the apply-time warning say
+   * the same thing.
+   */
+  compensatingPolicyError: z.string().optional(),
 });
 
 export const FailureRecordSchema = z.object({

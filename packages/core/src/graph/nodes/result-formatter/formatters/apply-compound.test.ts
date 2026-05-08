@@ -88,10 +88,29 @@ beforeEach(() => {
   _arnDisplayMocks.resolveDisplayArn.mockResolvedValue(
     "arn:aws:ec2:us-east-1:210987654321:vpc/vpc-12345",
   );
-  // buildDisplayArnMap returns a map keyed by resourceId → resourceArn.
-  // For test purposes an empty map is sufficient: arnForRecord falls back
-  // to completed.resourceArn which is always defined in the test fixtures.
-  _arnDisplayMocks.buildDisplayArnMap.mockResolvedValue({});
+  // M1 fix: production reality — `buildDisplayArnMap` always
+  // populates a `resourceId → fullArn` map (see
+  // `result-formatter/arn-templates.ts`). The previous empty-map
+  // default masked H1 (bare-vs-full-ARN mismatch) by routing the
+  // arnForRecord fallback to `completed.resourceArn` (BARE form).
+  // With the H1 fix the policy-outcome lookup is keyed by
+  // `resourceId` so the ARN form no longer matters for that
+  // lookup, but the default must reflect production: full ARNs
+  // in the map. Realistic AWS ARN shapes per
+  // `feedback_real_data_mocks_all_cases`. Individual tests can
+  // re-stub via `mockResolvedValueOnce` when they need a
+  // narrower fixture.
+  _arnDisplayMocks.buildDisplayArnMap.mockResolvedValue({
+    "vpc-main": "arn:aws:ec2:us-east-1:210987654321:vpc/vpc-abcdef01",
+    "subnet-public":
+      "arn:aws:ec2:us-east-1:210987654321:subnet/subnet-99887766",
+    "cloudfront-dist":
+      "arn:aws:cloudfront::210987654321:distribution/E1ABCDEF123456",
+    "s3-bucket": "arn:aws:s3:::assignee-static-site-2026",
+    "s3-a": "arn:aws:s3:::assignee-bucket-a-2026",
+    "s3-b": "arn:aws:s3:::assignee-bucket-b-2026",
+    "s3-c": "arn:aws:s3:::assignee-bucket-c-2026",
+  });
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -311,6 +330,7 @@ describe("formatApplyCompoundSuccess — S3 compensating bucket policy", () => {
 
   it("warns to stderr + logs when attachCompensatingBucketPolicy fails in compound — does NOT fail the apply", async () => {
     const { formatApplyCompoundSuccess } = await import("./apply-compound.js");
+    const { writeProvisionRecord } = await import("@/utils/memory-recorder.js");
     mockAttachCompensatingBucketPolicy.mockResolvedValueOnce({
       attached: false,
       reason: "ThrottlingException",
@@ -345,7 +365,208 @@ describe("formatApplyCompoundSuccess — S3 compensating bucket policy", () => {
       ),
     );
 
+    // H1 fix verification: provision record for the S3 bucket must
+    // carry compensatingPolicyAttached=false + the reason — proves
+    // the resourceId-keyed lookup correctly surfaces the failure on
+    // the matching record even though the writer derives a FULL
+    // ARN via displayArns while the policy-outcome map keys by
+    // resourceId.
+    const writeCalls = (
+      writeProvisionRecord as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls;
+    const s3Call = writeCalls.find((c) => c[1] === "AWS::S3::Bucket");
+    expect(s3Call).toBeDefined();
+    expect(s3Call![6]).toEqual({
+      compensatingPolicyAttached: false,
+      compensatingPolicyError: "ThrottlingException",
+    });
+
     stderrSpy.mockRestore();
+  });
+
+  // bug-s3-bucket-policy-compound-serialization: replace the previous
+  // sequential `for…await` with a bounded-concurrency runner. Today no
+  // pattern provisions multiple S3 buckets so the observable difference
+  // is zero, but the structure must (a) attempt EVERY bucket even when
+  // earlier ones fail (no early-exit on rejection) and (b) preserve
+  // per-bucket outcomes so the provision-record writer can flag the
+  // failed buckets to `assignee list`.
+  describe("bounded-concurrency S3 PutBucketPolicy in compound terminal SUCCESS", () => {
+    const BUCKET_A = "assignee-bucket-a-2026";
+    const BUCKET_B = "assignee-bucket-b-2026";
+    const BUCKET_C = "assignee-bucket-c-2026";
+
+    const tripleS3Queue = [
+      {
+        resourceId: "s3-a",
+        resourceType: "AWS::S3::Bucket",
+        displayName: "Bucket A",
+      },
+      {
+        resourceId: "s3-b",
+        resourceType: "AWS::S3::Bucket",
+        displayName: "Bucket B",
+      },
+      {
+        resourceId: "s3-c",
+        resourceType: "AWS::S3::Bucket",
+        displayName: "Bucket C",
+      },
+    ];
+
+    const tripleS3Pattern = {
+      patternId: "triple-s3",
+      displayName: "Triple S3",
+      keywords: ["s3"],
+      resourceList: tripleS3Queue,
+      dependencyOrder: [["s3-a"], ["s3-b"], ["s3-c"]],
+      defaultOptions: {},
+    };
+
+    it("attempts every bucket even when one fails, and preserves per-bucket outcomes", async () => {
+      const { formatApplyCompoundSuccess } =
+        await import("./apply-compound.js");
+      const { writeProvisionRecord } =
+        await import("@/utils/memory-recorder.js");
+      mockGetOperatorCallerArn.mockResolvedValue(OPERATOR_ARN);
+      // M1 fix: stub buildDisplayArnMap to return realistic FULL
+      // ARNs keyed by resourceId — this is what production
+      // resolution always returns (see arn-templates.ts). The
+      // previous default `{}` masked H1 by routing arnForRecord
+      // back to the BARE name; the new default + H1 fix
+      // (resourceId-keyed lookup) means the per-bucket outcome is
+      // now correctly threaded onto the matching provision record.
+      _arnDisplayMocks.buildDisplayArnMap.mockResolvedValueOnce({
+        "s3-a": `arn:aws:s3:::${BUCKET_A}`,
+        "s3-b": `arn:aws:s3:::${BUCKET_B}`,
+        "s3-c": `arn:aws:s3:::${BUCKET_C}`,
+      });
+      // Bucket B fails; A and C succeed. Match by bucketName so the
+      // ordering is independent of the concurrency runner.
+      mockAttachCompensatingBucketPolicy.mockImplementation(
+        async (args: { bucketName: string }) => {
+          if (args.bucketName === BUCKET_B) {
+            return {
+              attached: false,
+              reason: "AccessDenied: PutBucketPolicy not allowed",
+            };
+          }
+          return { attached: true };
+        },
+      );
+
+      const state = makeState({
+        currentResourceIndex: 2,
+        resourceType: "AWS::S3::Bucket",
+        resourceArn: BUCKET_C,
+        resourceQueue: tripleS3Queue as unknown as AgentState["resourceQueue"],
+        resourcePattern:
+          tripleS3Pattern as unknown as AgentState["resourcePattern"],
+        completedResources: [
+          {
+            resourceId: "s3-a",
+            resourceType: "AWS::S3::Bucket",
+            resourceArn: BUCKET_A,
+            executionStatus: ExecutionStatus.SUCCESS,
+          },
+          {
+            resourceId: "s3-b",
+            resourceType: "AWS::S3::Bucket",
+            resourceArn: BUCKET_B,
+            executionStatus: ExecutionStatus.SUCCESS,
+          },
+        ],
+      });
+
+      const stderrSpy = vi
+        .spyOn(process.stderr, "write")
+        .mockImplementation(() => true);
+
+      await formatApplyCompoundSuccess(state);
+
+      // All 3 buckets must be attempted — no early-exit on the failure.
+      expect(mockAttachCompensatingBucketPolicy).toHaveBeenCalledTimes(3);
+      const attemptedNames = mockAttachCompensatingBucketPolicy.mock.calls.map(
+        (call: unknown[]) => (call[0] as { bucketName: string }).bucketName,
+      );
+      expect(attemptedNames).toEqual(
+        expect.arrayContaining([BUCKET_A, BUCKET_B, BUCKET_C]),
+      );
+
+      // The failure for Bucket B surfaces a stderr warning citing the
+      // bucket name and reason — proves per-bucket outcomes are
+      // preserved, not collapsed into a single failure.
+      const stderrText = stderrSpy.mock.calls.map((c) => String(c[0])).join("");
+      expect(stderrText).toContain(BUCKET_B);
+      expect(stderrText).toContain("AccessDenied");
+      // Successful buckets must NOT appear in the warning output.
+      expect(stderrText).not.toContain(`could not be attached to ${BUCKET_A}`);
+      expect(stderrText).not.toContain(`could not be attached to ${BUCKET_C}`);
+
+      // H1 fix verification: writeProvisionRecord must be called for
+      // every completed S3 bucket with extras matching the per-bucket
+      // attach outcome. Previously, the BARE-vs-FULL-ARN map mismatch
+      // silently dropped the extras for compound applies.
+      const writeCalls = (
+        writeProvisionRecord as unknown as { mock: { calls: unknown[][] } }
+      ).mock.calls;
+      const callByArn = new Map<string, unknown[]>();
+      for (const c of writeCalls) {
+        const arn = c[2] as string;
+        callByArn.set(arn, c);
+      }
+      // BUCKET_B failed → extras should carry attached=false + reason.
+      const callB = callByArn.get(`arn:aws:s3:::${BUCKET_B}`);
+      expect(callB).toBeDefined();
+      expect(callB![6]).toEqual({
+        compensatingPolicyAttached: false,
+        compensatingPolicyError: "AccessDenied: PutBucketPolicy not allowed",
+      });
+      // BUCKET_A succeeded → attached=true, no error field.
+      const callA = callByArn.get(`arn:aws:s3:::${BUCKET_A}`);
+      expect(callA).toBeDefined();
+      expect(callA![6]).toEqual({ compensatingPolicyAttached: true });
+      // BUCKET_C succeeded → attached=true, no error field.
+      const callC = callByArn.get(`arn:aws:s3:::${BUCKET_C}`);
+      expect(callC).toBeDefined();
+      expect(callC![6]).toEqual({ compensatingPolicyAttached: true });
+
+      stderrSpy.mockRestore();
+    });
+
+    it("runWithBoundedConcurrency caps in-flight tasks and runs every item even on per-task throws", async () => {
+      const { runWithBoundedConcurrency } = await import("./apply-compound.js");
+
+      let inFlight = 0;
+      let maxInFlight = 0;
+      const completed: number[] = [];
+      const items = [0, 1, 2, 3, 4, 5, 6, 7];
+
+      await runWithBoundedConcurrency(3, items, async (i) => {
+        inFlight++;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((resolve) => setImmediate(resolve));
+        // Item 4 throws — runner must swallow and continue.
+        if (i === 4) {
+          inFlight--;
+          throw new Error("simulated SDK failure");
+        }
+        completed.push(i);
+        inFlight--;
+      });
+
+      // Concurrency cap respected.
+      expect(maxInFlight).toBeLessThanOrEqual(3);
+      // Every non-throwing item completed (the throw didn't abort the batch).
+      expect(completed.sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 5, 6, 7]);
+    });
+
+    it("runWithBoundedConcurrency is a no-op for empty input", async () => {
+      const { runWithBoundedConcurrency } = await import("./apply-compound.js");
+      const task = vi.fn();
+      await runWithBoundedConcurrency(5, [], task);
+      expect(task).not.toHaveBeenCalled();
+    });
   });
 
   it("skips policy attachment when operator ARN is unavailable and logs the skip", async () => {
