@@ -103,6 +103,23 @@ vi.mock("../../../services/memory.js", () => ({
   MemoryService: vi.fn(() => mockMemoryService),
 }));
 
+// Wave B-1 (epic-104) — writeProvisionRecord now emits an
+// `apply_resource_created` audit-log entry after every successful
+// appendProvision. Without mocking, these unit tests would write to the
+// operator's real `~/.assignee/audit/audit.log` and the 90-day retention
+// floor blocks cleanup. This is a pure unit test so a no-op resolved
+// stub is sufficient — chain integrity is exercised end-to-end by
+// `packages/core/src/utils/memory-recorder-audit.test.ts` (AC#4).
+vi.mock("../../../audit/audit-log.js", () => ({
+  appendAuditRecord: vi.fn().mockResolvedValue(undefined),
+  readAuditLog: vi.fn().mockResolvedValue([]),
+  auditLogExists: vi.fn().mockReturnValue(false),
+  guardAuditLogTruncation: vi.fn().mockResolvedValue({ ok: true }),
+  isAuditEntryWithinRetentionFloor: vi.fn().mockReturnValue(false),
+  DEFAULT_AUDIT_LOG_DIR: "/tmp/assignee-test-audit",
+  DEFAULT_AUDIT_LOG_FILE: "/tmp/assignee-test-audit/audit.log",
+}));
+
 import { resultFormatterNode } from "../result-formatter.js";
 import {
   renderApplySuccess,

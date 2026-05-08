@@ -17,6 +17,19 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### Audit-log provision events (epic-104 Wave B-1, 2026-05-08)
+
+- audit: emit `apply_resource_created` event after successful `appendProvision`
+  (B-1; pre-requisite for `restore-provisions --from-audit-log`). The event
+  joins the existing HMAC chain (`packages/core/src/audit/audit-log.ts`) and
+  carries `runId`, `resourceType`, `resourceArn`, `region`,
+  `estimatedMonthlyCost`, `desiredStateHash`, and `timestamp` so a future
+  Wave B-2 CLI flag can rebuild a missing `provisions.json` record from the
+  audit log alone. Audit-emit happens AFTER the provisions advisory lock is
+  released so audit fsync latency does not serialise provisions throughput.
+  Audit-emit failure is non-fatal — the provision write is the source of
+  truth and a structured `MEMORY_WRITE_FAILED` warning is logged on failure.
+
 ### S3 bucket destroy IAM fix — AWS tag-scoping limitation workaround (2026-05-07)
 
 `assignee destroy <s3-arn>` (single and bulk) now succeeds for all
