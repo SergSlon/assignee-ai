@@ -39,6 +39,10 @@
     "./destroy": {
       "import": "./dist/destroy/index.js",
       "types": "./dist/destroy/index.d.ts"
+    },
+    "./locks": {
+      "import": "./dist/locks/index.js",
+      "types": "./dist/locks/index.d.ts"
     }
   },
   "files": [

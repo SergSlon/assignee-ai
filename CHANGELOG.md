@@ -17,6 +17,28 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### `restore-provisions --from-audit-log` (epic-104 Wave B-2, 2026-05-08)
+
+- cli: `assignee restore-provisions --from-audit-log` rebuilds missing
+  `provisions.json` records from the HMAC-chained audit log produced by
+  Wave B-1. Verifies the chain BEFORE any write (refuses to rebuild from
+  a tampered log), acquires the existing provisions advisory lock around
+  the append, writes a `provisions.json.pre-restore.<ts>` safety backup,
+  and validates every reconstructed record against `ProvisionRecordSchema`
+  before persistence. Skip telemetry routes through the shared structured
+  `log()` helper at WARN level (new action `RESTORE_AUDIT_LOG_SKIP`).
+  `--from-audit-log` and `--from <date>` are mutually exclusive — combining
+  them throws `AssigneeError(USAGE_ERROR)` and exits 73. JSON envelope adds
+  `mode`, `rebuiltCount`, `skippedCount`, `alreadyPresentCount`,
+  `inBatchDuplicateCount`, `candidateCount`, `durationMs`, and `errorCode`
+  fields for CI/automation parity.
+- core: NEW `@assignee/core/locks` subpath export exposes
+  `defaultFileAdvisoryLock`, `FileAdvisoryLockAdapter`, `LockAcquisitionError`,
+  and the file-lock retry constants so cross-package consumers (e.g. the new
+  CLI recovery path) can serialise writes against the same advisory-lock
+  primitive used inside core. Implementation moved nowhere; this is a public
+  re-export only.
+
 ### Audit-log provision events (epic-104 Wave B-1, 2026-05-08)
 
 - audit: emit `apply_resource_created` event after successful `appendProvision`

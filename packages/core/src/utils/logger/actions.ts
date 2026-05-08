@@ -114,6 +114,21 @@ export const LOG_ACTIONS = {
    * previously used inside query_handler (wrong callsite semantics).
    */
   QUERY_RESOLVED: "query_resolved",
+  /**
+   * Wave B-2 (epic-104-demo-dryrun): emitted by
+   * `restore-provisions --from-audit-log` when an `apply_resource_created`
+   * audit entry is skipped because it lacks a required reconstruction
+   * field (resourceArn, timestamp, runId, …) or because the reconstructed
+   * ProvisionRecord fails ZodSchema validation. Routed through the
+   * shared `log()` helper at WARN level so it is persisted to
+   * `~/.assignee/logs/cli-YYYY-MM-DD.jsonl`, exported via OTEL when
+   * configured, and visible under `--verbose`.
+   *
+   * Operators tracking "why did the recovery skip 17 entries?" can grep
+   * the daily log file for this action and inspect `extras.reason` /
+   * `extras.field` / `extras.index` to triage.
+   */
+  RESTORE_AUDIT_LOG_SKIP: "restore_audit_log_skip",
 } as const;
 
 export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];
