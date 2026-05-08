@@ -32,8 +32,9 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { randomBytes } from "node:crypto";
 import { Command } from "commander";
-import { ProcessExitCode } from "../constants/errors.js";
-import { ProvisionLogSchema } from "@assignee/core";
+import { ErrorCode, ProcessExitCode } from "../constants/errors.js";
+import { AssigneeError, ProvisionLogSchema } from "@assignee/core";
+import { restoreFromAuditLog } from "./restore-provisions-audit-log.js";
 
 // ── Constants ─────────────────────────────────────────────────────────
 
@@ -269,49 +270,166 @@ export async function restoreProvisions(
 
 // ── Commander command ─────────────────────────────────────────────────
 
-export const restoreProvisionsCommand = new Command("restore-provisions")
-  .description("Restore provisions.json from a dated backup (BCP/DR)")
-  .option(
-    "--from <date>",
-    "Restore from a specific backup date (YYYY-MM-DD). Defaults to most recent backup.",
-  )
-  .option(
-    "--json",
-    "Emit machine-readable JSON to stdout instead of human-readable text",
-  )
-  .action(async (opts: { from?: string; json?: boolean }) => {
-    const result = await restoreProvisions({ from: opts.from });
+/**
+ * Build a fresh `restore-provisions` Commander subcommand instance.
+ *
+ * Tests dispatching `parseAsync` against the same Commander instance
+ * inherit its mutated option state — re-running with `--from-audit-log`
+ * after a previous `--from` invocation can leave `from` populated from
+ * the prior parse, leaking across tests (L3 of Wave B-2 review). Tests
+ * call this factory for a fresh instance per test; production exports
+ * the singleton built once at module load.
+ */
+export function createRestoreProvisionsCommand(): Command {
+  return buildRestoreProvisionsCommand();
+}
 
-    if (!result.restored) {
-      if (opts.json) {
-        process.stdout.write(
-          JSON.stringify({
-            restored: false,
-            backup: result.sourcePath ?? "",
-            message: result.message,
-          }) + "\n",
-        );
-      } else {
-        process.stderr.write(`error: ${result.message}\n`);
-      }
-      process.exitCode = ProcessExitCode.GENERIC_ERROR;
-      return;
-    }
+function buildRestoreProvisionsCommand(): Command {
+  return new Command("restore-provisions")
+    .description("Restore provisions.json from a dated backup (BCP/DR)")
+    .option(
+      "--from <date>",
+      "Restore from a specific backup date (YYYY-MM-DD). Defaults to most recent backup.",
+    )
+    .option(
+      "--from-audit-log",
+      "Rebuild missing provision records from the HMAC-chained audit log " +
+        "(~/.assignee/audit/audit.log). Reads `apply_resource_created` events " +
+        "and appends a reconstructed record for any ARN absent from " +
+        "provisions.json. Cannot be combined with --from <date>.",
+    )
+    .option(
+      "--json",
+      "Emit machine-readable JSON to stdout instead of human-readable text",
+    )
+    .action(
+      async (opts: {
+        from?: string;
+        fromAuditLog?: boolean;
+        json?: boolean;
+      }) => {
+        // Mutually-exclusive validation BEFORE any I/O — surfaces the
+        // configuration error fast and prevents accidental double-write
+        // attempts. Thrown as `AssigneeError(USAGE_ERROR)` so the top-level
+        // unhandled-error catch in `apps/cli/src/index.ts` (via
+        // `errorToExitCode`) maps it to `ProcessExitCode.USAGE_ERROR` (73).
+        // This matches the project convention documented at
+        // `apps/cli/src/utils/exit-code.ts:26-28` and modelled by `init.ts`.
+        if (opts.from !== undefined && opts.fromAuditLog === true) {
+          const message =
+            "--from <date> and --from-audit-log are mutually exclusive. " +
+            "Pick one: --from to replay a backup, --from-audit-log to rebuild " +
+            "missing records from the audit log.";
+          // JSON-mode operators still get the structured envelope on stdout;
+          // emit it BEFORE throwing so the AssigneeError surface (handled by
+          // the top-level catch) drives the exit code while the JSON consumer
+          // still has a parseable record describing the failure.
+          if (opts.json) {
+            process.stdout.write(
+              JSON.stringify({
+                restored: false,
+                mode: "invalid",
+                message,
+              }) + "\n",
+            );
+          }
+          throw new AssigneeError(message, ErrorCode.USAGE_ERROR);
+        }
 
-    // Extract the backup filename for the JSON envelope.
-    const backupBasename = result.sourcePath
-      ? path.basename(result.sourcePath)
-      : "";
+        // Branch A: --from-audit-log → rebuild from audit log.
+        if (opts.fromAuditLog === true) {
+          const auditResult = await restoreFromAuditLog();
+          if (!auditResult.ok) {
+            if (opts.json) {
+              process.stdout.write(
+                JSON.stringify({
+                  restored: false,
+                  mode: "from-audit-log",
+                  rebuiltCount: auditResult.rebuiltCount,
+                  skippedCount: auditResult.skippedCount,
+                  alreadyPresentCount: auditResult.alreadyPresentCount,
+                  inBatchDuplicateCount: auditResult.inBatchDuplicateCount,
+                  candidateCount: auditResult.candidateCount,
+                  durationMs: auditResult.durationMs,
+                  errorCode: auditResult.errorCode,
+                  message: auditResult.message,
+                }) + "\n",
+              );
+            } else {
+              process.stderr.write(`error: ${auditResult.message}\n`);
+            }
+            process.exitCode = ProcessExitCode.GENERIC_ERROR;
+            return;
+          }
+          if (opts.json) {
+            process.stdout.write(
+              JSON.stringify({
+                restored: true,
+                mode: "from-audit-log",
+                rebuiltCount: auditResult.rebuiltCount,
+                skippedCount: auditResult.skippedCount,
+                alreadyPresentCount: auditResult.alreadyPresentCount,
+                inBatchDuplicateCount: auditResult.inBatchDuplicateCount,
+                candidateCount: auditResult.candidateCount,
+                durationMs: auditResult.durationMs,
+                safetyBackup: auditResult.safetyBackupPath
+                  ? path.basename(auditResult.safetyBackupPath)
+                  : "",
+                skips: auditResult.skips,
+                message: auditResult.message,
+              }) + "\n",
+            );
+          } else {
+            process.stdout.write(`${auditResult.message}\n`);
+          }
+          return;
+        }
 
-    if (opts.json) {
-      process.stdout.write(
-        JSON.stringify({
-          restored: true,
-          backup: backupBasename,
-          message: result.message,
-        }) + "\n",
-      );
-    } else {
-      process.stdout.write(`${result.message}\n`);
-    }
-  });
+        // Branch B: classic dated-backup restore.
+        const result = await restoreProvisions({ from: opts.from });
+
+        if (!result.restored) {
+          if (opts.json) {
+            process.stdout.write(
+              JSON.stringify({
+                restored: false,
+                mode: "from-backup",
+                backup: result.sourcePath ?? "",
+                message: result.message,
+              }) + "\n",
+            );
+          } else {
+            process.stderr.write(`error: ${result.message}\n`);
+          }
+          process.exitCode = ProcessExitCode.GENERIC_ERROR;
+          return;
+        }
+
+        // Extract the backup filename for the JSON envelope.
+        const backupBasename = result.sourcePath
+          ? path.basename(result.sourcePath)
+          : "";
+
+        if (opts.json) {
+          process.stdout.write(
+            JSON.stringify({
+              restored: true,
+              mode: "from-backup",
+              backup: backupBasename,
+              message: result.message,
+            }) + "\n",
+          );
+        } else {
+          process.stdout.write(`${result.message}\n`);
+        }
+      },
+    );
+}
+
+/**
+ * Production-singleton instance, built once at module load.  Apps that
+ * compose the CLI program tree (e.g. `apps/cli/src/index.ts`) consume
+ * this; tests that need fresh option state per assertion call
+ * `createRestoreProvisionsCommand()` instead.
+ */
+export const restoreProvisionsCommand = buildRestoreProvisionsCommand();

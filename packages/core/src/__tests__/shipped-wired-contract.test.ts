@@ -223,6 +223,7 @@ const PROBE_WHITELIST_FLAGS = new Set<string>([
   "--gaps-only", // status --bp-coverage — tested in status-bp-coverage.test.ts
   "--include-structural-gaps", // status --bp-coverage — tested in status-bp-coverage.test.ts
   "--from", // restore-provisions (W4-04) — tested in restore-provisions.test.ts; audit-verify (W3-01) — tested in audit-verify.test.ts
+  "--from-audit-log", // restore-provisions (Wave B-2 epic-104-demo-dryrun) — local-file flag (no AWS probe surface); tested in restore-provisions-audit-log.test.ts
   "--to", // audit-verify (W3-01) — end-date filter; tested in audit-verify.test.ts
   "--log-file", // audit-verify (W3-01) — override audit log path; tested in audit-verify.test.ts
   "--target-account", // plan/apply/destroy (W3-04) — multi-account surface flag; Epic 101 wires STS assume-role; tested in account-id-validator.test.ts + plan/apply/destroy *.test.ts
