@@ -580,7 +580,7 @@ describe("queryLineItemPrices — SDK bypass for AWSDataTransfer", () => {
     });
   }
 
-  it("happy path: resolves operator credentials, calls PricingClient.send, returns real numeric rate (NOT unavailable)", async () => {
+  it("happy path: resolves reader credentials, calls PricingClient.send, returns real numeric rate (NOT unavailable)", async () => {
     mockPricingClientSend.mockResolvedValueOnce(
       buildGetProductsResponse("0.0900000000"),
     );
@@ -597,7 +597,14 @@ describe("queryLineItemPrices — SDK bypass for AWSDataTransfer", () => {
     // Assertion 1: credential provider was actually invoked. This is the
     // load-bearing assertion — the regression was that creds were NEVER
     // resolved, so the SDK threw an auth error.
-    expect(mockRequireAssigneeCredentials).toHaveBeenCalledWith("operator");
+    //
+    // Reader role is the correct role for this call (Layer 2 fix
+    // 2026-05-09). The operator IAM policy does NOT grant `pricing:*` —
+    // only the reader policy does (see iam-policies/reader.ts:39-47).
+    // Passing "operator" here would silently fail in production with
+    // an AccessDenied — which is exactly the regression that motivated
+    // the role swap.
+    expect(mockRequireAssigneeCredentials).toHaveBeenCalledWith("reader");
     expect(mockRequireAssigneeCredentials).toHaveBeenCalledTimes(1);
 
     // Assertion 2: PricingClient.send was called with the AWSDataTransfer
@@ -629,11 +636,16 @@ describe("queryLineItemPrices — SDK bypass for AWSDataTransfer", () => {
 
   it("negative path: when credential provider throws, error is logged via PRICING_SDK_BYPASS_FAILED and result is unavailable", async () => {
     // Simulate the production failure mode: command-runner renamed AWS_*
-    // to ASSIGNEE_OPERATOR_* but the user's env had no credentials at all,
+    // to ASSIGNEE_READER_* but the user's env had no credentials at all,
     // so requireAssigneeCredentials throws. Pre-fix this got swallowed by
     // the bare `catch {}` and surfaced as a silent `unavailable`.
+    //
+    // Error string mirrors the real production error built by
+    // `requireAssigneeCredentials("reader")` (see aws-credentials.ts:50)
+    // which interpolates the role name into the "Missing <role>
+    // credentials" message and the env-var names.
     const authError = new Error(
-      "Missing operator credentials. Set ASSIGNEE_OPERATOR_ACCESS_KEY_ID and ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY",
+      "Missing reader credentials. Set ASSIGNEE_READER_ACCESS_KEY_ID and ASSIGNEE_READER_SECRET_ACCESS_KEY",
     );
     mockRequireAssigneeCredentials.mockImplementationOnce(() => {
       throw authError;
@@ -664,7 +676,7 @@ describe("queryLineItemPrices — SDK bypass for AWSDataTransfer", () => {
     };
     expect(event.level).toBe("warn");
     expect(event.extras?.serviceCode).toBe("AWSDataTransfer");
-    expect(event.extras?.error).toContain("Missing operator credentials");
+    expect(event.extras?.error).toContain("Missing reader credentials");
 
     // Assertion 3: the SDK send was never called (auth failed first).
     expect(mockPricingClientSend).not.toHaveBeenCalled();

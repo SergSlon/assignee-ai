@@ -133,6 +133,37 @@ export function getCachedPrice(
       return null;
     }
 
+    // Body-validation guard (Layer 3 fix, 2026-05-09): defends against
+    // cache poisoning where the upstream awslabs Pricing MCP returned
+    // a wrong-shape response (e.g. asked for `serviceCode: "AWSDataTransfer"`
+    // and got back an `AmazonS3 / Storage` payload). Without this guard the
+    // poisoned entry sits under the storage-category 24h TTL and blocks
+    // every fresh run for a day. We inspect `entry.data.service_name` and
+    // treat any mismatch with the requested `serviceCode` as a cache miss
+    // + delete the stale file (mirrors the expired-deletion pattern above).
+    //
+    // Edge cases:
+    //   - Missing `service_name` field (legacy entries written before this
+    //     guard) → conservative pass-through (don't break valid caches).
+    //   - Non-string `service_name` → corrupt; treat as miss + delete.
+    //   - String `service_name` that doesn't match `serviceCode` → poisoned;
+    //     treat as miss + delete.
+    const body = entry.data as Record<string, unknown> | null | undefined;
+    if (body && typeof body === "object" && "service_name" in body) {
+      const bodyServiceName = (body as { service_name?: unknown }).service_name;
+      if (
+        typeof bodyServiceName !== "string" ||
+        bodyServiceName !== serviceCode
+      ) {
+        try {
+          fs.unlinkSync(filePath);
+        } catch {
+          // Ignore deletion errors
+        }
+        return null;
+      }
+    }
+
     return entry.data;
   } catch {
     return null;
