@@ -37,6 +37,7 @@ import {
 } from "./resource-provisioner/ssh-iam.js";
 import { ensureSubnet } from "./resource-provisioner/subnet.js";
 import { ensureS3DefaultKms } from "./resource-provisioner/s3-encryption.js";
+import { ensureSqsDefaultKms } from "./resource-provisioner/sqs-encryption.js";
 import { cleanupAllocatedResources } from "./resource-provisioner/cleanup.js";
 import {
   createResourceWithCloudFrontRetry,
@@ -185,6 +186,27 @@ export async function resourceProvisionerNode(
     return {
       executionStatus: ExecutionStatus.FAILED,
       errorMessage: s3KmsRes.errorMessage,
+      desiredState,
+    };
+  }
+
+  // Pre-hook: substitute the default Assignee-managed CMK alias-name
+  // into any SQS queue desiredState that lacks an explicit
+  // KmsMasterKeyId (Wave D-2, epic-104). Threads `result.aliasName`
+  // (NOT keyArn) because SQS accepts alias-form. No-op for non-SQS
+  // resources or when the user supplied an explicit key. Fails closed
+  // on resolver errors so we never silently fall back to AWS-managed
+  // alias/aws/sqs.
+  const sqsKmsRes = await ensureSqsDefaultKms(state, desiredState);
+  if (!sqsKmsRes.ok) {
+    await cleanupAllocatedResources(state, {
+      eipReleased: freshlyAllocatedEipIds,
+      sshDeleted: sshKeyCreatedName,
+      sshIamCreated,
+    });
+    return {
+      executionStatus: ExecutionStatus.FAILED,
+      errorMessage: sqsKmsRes.errorMessage,
       desiredState,
     };
   }
