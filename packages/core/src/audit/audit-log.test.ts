@@ -157,6 +157,69 @@ describe("readAuditLog", () => {
   });
 });
 
+// ── Defect 5 (2026-05-09): appendAuditRecord ensures parent dir is 0o700 ──
+//
+// The audit-log writer used to call `fs.mkdir({recursive:true, mode:0o700})`
+// which only applied the mode to the LEAF directory it actually created.
+// When `~/.assignee` already existed (typical case after the audit-key
+// writer pre-created it) it was silently left at its umask-derived mode,
+// producing the "audit key directory ~/.assignee has mode 755" warning
+// on every run. The new code calls `ensureAssigneeHomeDir` which
+// explicitly chmod's the existing parent dir.
+
+describe("appendAuditRecord — Defect 5: parent-dir mode auto-fix", () => {
+  it(
+    "leaves the audit log directory at 0o700 even when the parent existed at 0o755",
+    { skip: process.platform === "win32" },
+    async () => {
+      // Create a scoped tempdir; its inner `audit/` subdir will be the
+      // logFile parent. To exercise Defect 5 we simulate the umask leak
+      // by pre-creating the parent dir at 0o755.
+      const sandboxParent = await fs.mkdtemp(
+        path.join(os.tmpdir(), "audit-defect-5-"),
+      );
+      try {
+        // Override HOME so `ensureAssigneeHomeDir()` resolves under
+        // sandboxParent. We use HOME because resolveAssigneeHomeDir
+        // calls os.homedir().
+        const originalHome = process.env["HOME"];
+        process.env["HOME"] = sandboxParent;
+
+        // Pre-create `~/.assignee` at 0o755 — the umask leak case.
+        const assigneeDir = path.join(sandboxParent, ".assignee");
+        await fs.mkdir(assigneeDir, { mode: 0o755 });
+        await fs.chmod(assigneeDir, 0o755);
+        const beforeStat = await fs.stat(assigneeDir);
+        expect(beforeStat.mode & 0o777).toBe(0o755);
+
+        // Append a record to a logFile under that parent.
+        const logFile = path.join(assigneeDir, "audit", "audit.log");
+        try {
+          await appendAuditRecord({ action: "defect-5-probe" }, logFile);
+
+          // After the append, `~/.assignee` MUST be 0o700 (auto-fixed
+          // by ensureAssigneeHomeDir before the leaf mkdir).
+          const afterStat = await fs.stat(assigneeDir);
+          expect(afterStat.mode & 0o777).toBe(0o700);
+
+          // The leaf `audit/` dir is also 0o700 (mkdir{mode} applies
+          // to the leaf when it's freshly created).
+          const leafStat = await fs.stat(path.dirname(logFile));
+          expect(leafStat.mode & 0o777).toBe(0o700);
+        } finally {
+          if (originalHome !== undefined) {
+            process.env["HOME"] = originalHome;
+          } else {
+            delete process.env["HOME"];
+          }
+        }
+      } finally {
+        await fs.rm(sandboxParent, { recursive: true, force: true });
+      }
+    },
+  );
+});
+
 // ── P045: Audit log retention floor enforcement ─────────────────────────
 
 describe("isAuditEntryWithinRetentionFloor (P045)", () => {

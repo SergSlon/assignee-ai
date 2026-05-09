@@ -11,6 +11,7 @@ import {
   ProcessEnvConfigAdapter,
   type ConfigPort,
 } from "../../config/config-port.js";
+import { ensureAssigneeHomeDir } from "../../audit/ensure-assignee-home-dir.js";
 
 /** Environment variable to redirect persistent logs (used by tests). */
 const LOG_DIR_ENV = "ASSIGNEE_LOG_DIR";
@@ -103,6 +104,10 @@ export function resolveActiveLogFile(dir: string, day: string): string {
  */
 export function ensureLogDirCached(dir: string): void {
   if (ensuredDirs.has(dir)) return;
+  // Relock `~/.assignee` to 0o700 before creating the leaf log dir.
+  // mkdirSync with `mode` only applies to leaves — ancestors keep their
+  // umask-derived bits. Helper is idempotent and safe to call frequently.
+  ensureAssigneeHomeDir();
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   ensuredDirs.add(dir);
 }

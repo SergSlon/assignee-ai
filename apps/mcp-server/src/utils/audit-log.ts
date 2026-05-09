@@ -52,6 +52,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 
 import { redactSensitive } from "@assignee/core";
+import { ensureAssigneeHomeDir } from "@assignee/core/audit";
 import { mcpLogError } from "./structured-log.js";
 
 // ── SEC-008: Consecutive failure alarm + rejection gate ───────────────────────
@@ -220,6 +221,11 @@ export async function auditLog(record: AuditRecord): Promise<void> {
 
   try {
     const dir = auditLogDir();
+    // Defect 5 mirror (2026-05-09): relock `~/.assignee` to 0o700 in
+    // case it was pre-created at umask-derived 0o755. mkdirSync `mode`
+    // only applies to leaves — ancestors keep their existing mode.
+    // Helper is idempotent and safe to call frequently.
+    ensureAssigneeHomeDir();
     await fs.mkdir(dir, { recursive: true, mode: 0o700 });
 
     // SEC-034: use the effective day key (anchored to the first record of

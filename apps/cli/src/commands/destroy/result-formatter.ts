@@ -123,3 +123,32 @@ export function renderDestroyScheduled(
     process.stdout.write(line);
   }
 }
+
+/**
+ * Defect 4 (2026-05-09): renderer for the already_pending path when we
+ * could NOT recover the real scheduled deletion date from AWS (e.g.
+ * DescribeKey/DescribeSecret threw, or the resource was already purged).
+ *
+ * The previous code fabricated a client-side `Date.now() + window` value
+ * and rendered it via `renderDestroyScheduled`, which lied to operators —
+ * the synthetic date had no relationship to AWS's actual deletion
+ * schedule. Operators planning cost cut-off dates would see
+ * "2026-05-16" when the real date was a week earlier (or already past).
+ *
+ * Honest phrasing: "Scheduled for deletion (pending-delete window in
+ * progress; check the AWS console for the exact date). Estimated savings
+ * after deletion: <cost>".
+ */
+export function renderDestroyScheduledUnknown(
+  estimatedMonthlyCost: string,
+): void {
+  const line =
+    `Scheduled for deletion (pending-delete window in progress; ` +
+    `check the AWS console for the exact date). ` +
+    `Estimated savings after deletion: ${estimatedMonthlyCost}\n`;
+  if (process.stdout.isTTY) {
+    process.stdout.write(chalk.green(line));
+  } else {
+    process.stdout.write(line);
+  }
+}

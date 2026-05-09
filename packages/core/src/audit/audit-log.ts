@@ -43,6 +43,7 @@ import * as fsSync from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { computeChainLink, GENESIS_HMAC, getAuditKey } from "./hmac-chain.js";
+import { ensureAssigneeHomeDir } from "./ensure-assignee-home-dir.js";
 import { getCurrentRole } from "../rbac/role-context.js";
 import { defaultFileAdvisoryLock } from "../locks/file-advisory-lock.js";
 import {
@@ -128,6 +129,11 @@ export async function appendAuditRecord(
   return defaultFileAdvisoryLock.withLock(logFile, async () => {
     // Ensure the directory exists (0o700).
     const dir = path.dirname(logFile);
+    // Relock `~/.assignee` (parent of `audit/`) to 0o700 in case it was
+    // pre-created by a tool that left it umask-derived (typically 0o755).
+    // mkdirSync with `mode` only applies to leaves — ancestors keep the
+    // mode they had when first created. Helper is idempotent.
+    ensureAssigneeHomeDir();
     await fs.mkdir(dir, { recursive: true, mode: 0o700 });
 
     // Read existing entries to determine (index, prevHmac).

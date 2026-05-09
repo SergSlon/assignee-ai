@@ -354,6 +354,17 @@ function renderPlan(
 
 // ── Progress rendering ─────────────────────────────────────────────────
 
+/**
+ * Per-resource outcome for the final summary + per-line rendering.
+ * - `"destroyed"` — resource was freshly destroyed in this run.
+ * - `"already_pending"` — resource was already scheduled for deletion (idempotent success).
+ * - `"failed"` — destroy threw an error.
+ *
+ * Hoisted to module scope (Defect 2 fix, 2026-05-09) so the renderer
+ * can pattern-match on it.
+ */
+type ResourceOutcome = "destroyed" | "already_pending" | "failed";
+
 function renderResourceStart(
   idx: number,
   total: number,
@@ -365,17 +376,32 @@ function renderResourceStart(
   );
 }
 
+/**
+ * Defect 2 fix (2026-05-09): widened to accept the per-resource
+ * `outcome` instead of a bare `success` boolean. The previous signature
+ * collapsed `destroyed` and `already_pending` into the same `success`
+ * branch and unconditionally printed `"✓ Destroyed"`, which was a lie
+ * for KMS keys / SecretsManager secrets that were already in
+ * PendingDeletion before this run. The bulk loop already classifies
+ * the outcome at site `:675-ish`; this renderer now branches on it.
+ */
 function renderResourceDone(
   idx: number,
   total: number,
   r: ManagedResource,
-  success: boolean,
+  outcome: ResourceOutcome,
   error?: string,
 ): void {
   const id = r.arn || r.primaryIdentifier || "(no identifier)";
-  if (success) {
+  if (outcome === "destroyed") {
     const line = `[${idx + 1}/${total}] ✓ Destroyed ${r.resourceType} — ${id}\n`;
     process.stderr.write(process.stderr.isTTY ? chalk.green(line) : line);
+  } else if (outcome === "already_pending") {
+    // ↻ marker (counter-clockwise arrow) signals "already in flight"
+    // so the operator can distinguish a fresh destroy from a re-run
+    // hitting an already-scheduled resource. Yellow on TTY.
+    const line = `[${idx + 1}/${total}] ↻ Already pending ${r.resourceType} — ${id}\n`;
+    process.stderr.write(process.stderr.isTTY ? chalk.yellow(line) : line);
   } else {
     const line = `[${idx + 1}/${total}] ✗ FAILED ${r.resourceType} — ${id}: ${error ?? "unknown error"}\n`;
     process.stderr.write(process.stderr.isTTY ? chalk.red(line) : line);
@@ -604,14 +630,6 @@ export async function runBulkDestroyAction(
     );
   }
 
-  /**
-   * Per-resource outcome for the final summary.
-   * - `"destroyed"` — resource was freshly destroyed in this run.
-   * - `"already_pending"` — resource was already scheduled for deletion (idempotent success).
-   * - `"failed"` — destroy threw an error.
-   */
-  type ResourceOutcome = "destroyed" | "already_pending" | "failed";
-
   const executionResults: Array<{
     resource: ManagedResource;
     success: boolean;
@@ -686,7 +704,7 @@ export async function runBulkDestroyAction(
       error: errorMessage,
     });
     if (!jsonMode) {
-      renderResourceDone(i, orderedPlan.length, r, success, errorMessage);
+      renderResourceDone(i, orderedPlan.length, r, outcome, errorMessage);
     }
   }
 

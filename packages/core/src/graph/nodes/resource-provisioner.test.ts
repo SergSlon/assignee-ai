@@ -1243,10 +1243,19 @@ describe("resourceProvisionerNode", () => {
 
       // mkdirSync throws BEFORE writeFileSync runs (e.g. EACCES on
       // ~/.assignee/keys/ when the home directory is read-only).
-      mockMkdirSync.mockImplementationOnce(() => {
-        throw Object.assign(new Error("EACCES: permission denied"), {
-          code: "EACCES",
-        });
+      //
+      // Path-scoped: ensureAssigneeHomeDir() (introduced post-SEC-005)
+      // calls mkdirSync on the *parent* `~/.assignee` first, swallowing
+      // any error. Only the LEAF call for `~/.assignee/keys` should
+      // throw — that is the failure path this test exercises (unable to
+      // create the keys dir, so the .pem write must NOT happen and the
+      // already-created AWS keypair must be cleaned up).
+      mockMkdirSync.mockImplementation((p: string) => {
+        if (/\.assignee\/keys$/.test(p)) {
+          throw Object.assign(new Error("EACCES: permission denied"), {
+            code: "EACCES",
+          });
+        }
       });
 
       // CloudControl shouldn't be called since we'll fail before that, but

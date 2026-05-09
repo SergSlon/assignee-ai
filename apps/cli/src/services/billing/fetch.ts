@@ -12,7 +12,7 @@
  */
 
 import type { StructuredTool } from "@langchain/core/tools";
-import { CostEstimateLabel } from "@assignee/core";
+import { CostEstimateLabel, createListPricingEnricher } from "@assignee/core";
 import { AWS_REGION, UNKNOWN_FALLBACK } from "../../config/constants.js";
 import type { ManagedResource } from "../list-resources.js";
 import { defaultMemoryService } from "../memory.js";
@@ -134,17 +134,52 @@ export async function fetchBillingData(
  *   - anything else (incl. `CostEstimateLabel.NA`,
  *     `"Per-request pricing (standard queue)"`, `"Per-GB pricing"`) →
  *     `"No cost savings"` (closes A-08 + D-15)
- *   - MCP + provision-log both empty → `"No cost savings"`
+ *   - MCP + provision-log both empty AND no decomposer registered →
+ *     `"No cost savings"`
+ *
+ * Defect 3 fix (2026-05-09): when the cost-explorer MCP and the
+ * provision-log fallback both return nothing AND a `resourceType` is
+ * known, fall back to the per-resource pricing decomposer registry
+ * (the same path that powers the `$1.00/mo` rendering in
+ * `assignee list` for a fresh KMS key). The destroy path used to ship
+ * `UNKNOWN_FALLBACK` as the resourceType, which fed the cost-explorer
+ * lookup a service it could never resolve, and then short-circuited
+ * straight to "No cost savings" — even for KMS keys where the list
+ * command had just shown `$1.00/mo` a moment earlier.
+ *
+ * The new optional `resourceType` parameter is the bridge: when callers
+ * thread it through (every site in the destroy flow does), we use it
+ * BOTH (a) to populate the dummy ManagedResource with the real type
+ * for cost-explorer / provision-log lookups, AND (b) to drive the
+ * decomposer fallback when neither lookup yields a value. Callers that
+ * don't yet pass it (legacy non-destroy callsites) get the original
+ * UNKNOWN_FALLBACK behaviour with no decomposer fallback.
+ *
+ * Zero hardcoded prices: the `$1.00/mo` value flows out of the
+ * `kms-key.ts` decomposer at runtime, not a literal in this file.
  *
  * @returns Formatted string. Never throws.
  */
 export async function getCostSavingsEstimate(
   arn: string,
-  mcpTools?: StructuredTool[],
+  mcpToolsOrResourceType?: StructuredTool[] | string,
+  maybeMcpTools?: StructuredTool[],
 ): Promise<string> {
+  // ── Argument resolution: backwards-compatible 2-arg form ──────────
+  // Existing callers pass `(arn, mcpTools)`. New destroy-flow callers
+  // pass `(arn, resourceType, mcpTools)`. Detect by type — when the
+  // second arg is a string we treat it as the resourceType.
+  const resourceType =
+    typeof mcpToolsOrResourceType === "string"
+      ? mcpToolsOrResourceType
+      : undefined;
+  const mcpTools = Array.isArray(mcpToolsOrResourceType)
+    ? mcpToolsOrResourceType
+    : maybeMcpTools;
+
   try {
     const dummyResource: ManagedResource = {
-      resourceType: UNKNOWN_FALLBACK,
+      resourceType: resourceType ?? UNKNOWN_FALLBACK,
       arn,
       region: AWS_REGION,
       createdDate: CostEstimateLabel.NA,
@@ -156,10 +191,48 @@ export async function getCostSavingsEstimate(
     if (data) {
       return formatSavingsDisplay(data.actualMonthlyCost);
     }
+
+    // ── Defect 3: decomposer-registry fallback ──────────────────────
+    // Cost-explorer + provision-log both empty. If we know the
+    // resourceType, ask the same per-resource pricing decomposer that
+    // `assignee list` uses to compute $X.XX/mo from rate-card data.
+    // Skip when resourceType is unknown — we'd just spin up an MCP
+    // client to query a service we can't name.
+    if (resourceType && resourceType !== UNKNOWN_FALLBACK) {
+      const decomposerLabel = await tryDecomposerCostLabel(dummyResource);
+      if (decomposerLabel) {
+        return formatSavingsDisplay(decomposerLabel);
+      }
+    }
   } catch (err) {
     logBillingMcpFailure("getCostSavingsEstimate", err);
     // Graceful degradation
   }
 
   return NO_SAVINGS_DISPLAY;
+}
+
+/**
+ * Defect 3 helper: invoke the canonical per-resource pricing enricher
+ * (the one `assignee list` uses) for a single resource and extract the
+ * resulting cost label. Returns `undefined` on any failure (no
+ * decomposer, MCP unavailable, registry mismatch) so the caller can
+ * fall through to the "No cost savings" sentinel.
+ *
+ * Reuses `createListPricingEnricher` from `@assignee/core/list-resources`
+ * — the SAME function path that powers the `$1.00/mo` rendering for KMS
+ * keys in `assignee list`. Calling it from the destroy path keeps the
+ * two surfaces in sync (no two-source-of-truth drift).
+ */
+async function tryDecomposerCostLabel(
+  resource: ManagedResource,
+): Promise<string | undefined> {
+  try {
+    const enricher = createListPricingEnricher();
+    const labels = await enricher([resource]);
+    return labels.get(resource.arn);
+  } catch (err) {
+    logBillingMcpFailure("getCostSavingsEstimate.decomposerFallback", err);
+    return undefined;
+  }
 }
