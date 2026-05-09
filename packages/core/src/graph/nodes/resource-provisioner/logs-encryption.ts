@@ -78,11 +78,11 @@ import { CfnKey, RESOURCE_TYPES } from "@/index.js";
 import type { AgentState } from "../../graph-state.js";
 import { AWS_REGION } from "@/config/constants/aws.js";
 import { resolveDefaultKmsKeyForApply } from "@/services/apply-time-kms-resolver.js";
+import { KMSClient } from "@aws-sdk/client-kms";
 import {
-  KMSClient,
-  GetKeyPolicyCommand,
-  PutKeyPolicyCommand,
-} from "@aws-sdk/client-kms";
+  ensureServicePrincipalGrant,
+  clearKmsServicePrincipalGrantCache,
+} from "./kms-service-principal-grant.js";
 
 /**
  * Result of the LogGroup default-CMK pre-hook. Mirrors
@@ -94,23 +94,22 @@ export type EnsureLogsDefaultKmsResult =
   | { ok: false; errorMessage: string };
 
 /**
- * Per-process cache: (keyArn, region) → "policy already extended".
- * Shared across all LogGroups in the same apply so we issue at most
- * one GetKeyPolicy + (zero or one) PutKeyPolicy per (key, region).
+ * Per-region KMSClient cache. The policy-grant cache itself lives in
+ * the shared `kms-service-principal-grant` module (Wave D-7
+ * refactor) so EventBridge + Logs share the cache key namespace.
  *
  * Reset hook for SaaS multi-tenant + test isolation.
  */
-const policyGrantCache = new Set<string>();
 const logsKmsClientByRegion: Map<string, KMSClient> = new Map();
 
 /**
- * Test/SaaS reset: clear the per-process policy-grant cache + KMSClient
- * cache. Production CLI never calls this — the cache lives for the
- * apply process lifetime.
+ * Test/SaaS reset: clear the per-process KMSClient cache AND the
+ * shared policy-grant cache. Production CLI never calls this — the
+ * caches live for the apply process lifetime.
  */
 export function clearLogsKmsCache(): void {
-  policyGrantCache.clear();
   logsKmsClientByRegion.clear();
+  clearKmsServicePrincipalGrantCache();
 }
 
 /**
@@ -165,25 +164,29 @@ export async function ensureLogsDefaultKms(
   }
 
   // I-D6-3: ensure the CMK's key policy grants logs.<region>.amazonaws.com.
-  // Cached per (keyArn, region) so two LogGroups in one apply share one
-  // GetKeyPolicy + at most one PutKeyPolicy.
-  const cacheKey = `${resolvedKeyArn}|${region}`;
-  if (!policyGrantCache.has(cacheKey)) {
-    const kms = injectedKmsClient ?? getOrCreateKmsClient(region);
-    try {
-      await ensureLogsServicePrincipalGrant(kms, resolvedKeyArn, region);
-      policyGrantCache.add(cacheKey);
-    } catch (err) {
-      const cause = err instanceof Error ? err.message : String(err);
-      return {
-        ok: false,
-        errorMessage:
-          `Failed to grant logs.${region}.amazonaws.com access to the Assignee default CMK (${cause}). ` +
-          "Either supply an explicit KmsKeyId on a CMK whose policy already grants " +
-          "the CloudWatch Logs service principal, or grant kms:GetKeyPolicy + kms:PutKeyPolicy " +
-          "permissions to the Assignee operator role and retry.",
-      };
-    }
+  // Delegated to the shared `kms-service-principal-grant` helper which
+  // caches per (keyArn, region, servicePrincipal) so two LogGroups in
+  // one apply share one GetKeyPolicy + at most one PutKeyPolicy.
+  const kms = injectedKmsClient ?? getOrCreateKmsClient(region);
+  try {
+    await ensureServicePrincipalGrant({
+      kms,
+      keyArn: resolvedKeyArn,
+      region,
+      servicePrincipal: `logs.${region}.amazonaws.com`,
+      sid: LOGS_GRANT_SID,
+      canonicalActions: LOGS_KMS_ACTIONS,
+    });
+  } catch (err) {
+    const cause = err instanceof Error ? err.message : String(err);
+    return {
+      ok: false,
+      errorMessage:
+        `Failed to grant logs.${region}.amazonaws.com access to the Assignee default CMK (${cause}). ` +
+        "Either supply an explicit KmsKeyId on a CMK whose policy already grants " +
+        "the CloudWatch Logs service principal, or grant kms:GetKeyPolicy + kms:PutKeyPolicy " +
+        "permissions to the Assignee operator role and retry.",
+    };
   }
 
   // I-D6-2: substitute the key ARN (NOT the alias-name) — CloudWatch
@@ -204,124 +207,20 @@ function getOrCreateKmsClient(region: string): KMSClient {
 /**
  * Statement Sid used by Assignee for the CloudWatch Logs service
  * principal grant. Lookup is by Sid so the policy editor can see this
- * statement is Assignee-managed.
+ * statement is Assignee-managed. Exported so the test file can pin
+ * the canonical literal.
  */
-const LOGS_GRANT_SID = "AssigneeGrantCloudWatchLogs";
+export const LOGS_GRANT_SID = "AssigneeGrantCloudWatchLogs";
 
-const LOGS_KMS_ACTIONS: ReadonlyArray<string> = [
+/**
+ * Canonical KMS actions CloudWatch Logs needs on the CMK. The
+ * predicate accepts a statement that lists ANY of these (or `kms:*`
+ * superset) — operators may grant a broader set without confusing us.
+ */
+export const LOGS_KMS_ACTIONS: ReadonlyArray<string> = [
   "kms:Encrypt*",
   "kms:Decrypt*",
   "kms:ReEncrypt*",
   "kms:GenerateDataKey*",
   "kms:Describe*",
 ];
-
-/**
- * Get the CMK's default policy, check if a CloudWatch-Logs grant
- * statement exists (by Sid OR by service principal match), and add
- * one via PutKeyPolicy if missing. Idempotent.
- *
- * Side effect: at most ONE PutKeyPolicy call per (keyArn, region) per
- * process (gated by the policyGrantCache in `ensureLogsDefaultKms`).
- */
-async function ensureLogsServicePrincipalGrant(
-  kms: KMSClient,
-  keyArn: string,
-  region: string,
-): Promise<void> {
-  const servicePrincipal = `logs.${region}.amazonaws.com`;
-
-  const getResp = await kms.send(
-    new GetKeyPolicyCommand({ KeyId: keyArn, PolicyName: "default" }),
-  );
-  const policyDoc = getResp.Policy ?? "";
-  if (policyDoc.length === 0) {
-    throw new Error(
-      `KMS GetKeyPolicy returned an empty policy for ${keyArn}. ` +
-        "This is unexpected — the Wave C alias-resolver should have created " +
-        "the CMK with a default policy. Please inspect the key in AWS Console.",
-    );
-  }
-
-  const policy = JSON.parse(policyDoc) as {
-    Version?: string;
-    Statement?: Array<{
-      Sid?: string;
-      Effect?: string;
-      Principal?: unknown;
-      Action?: string | string[];
-    }>;
-  };
-  const statements = Array.isArray(policy.Statement) ? policy.Statement : [];
-
-  if (statements.some((s) => statementGrantsLogsService(s, servicePrincipal))) {
-    return; // Idempotent: grant already present.
-  }
-
-  const newStatement = {
-    Sid: LOGS_GRANT_SID,
-    Effect: "Allow",
-    Principal: { Service: servicePrincipal },
-    Action: [...LOGS_KMS_ACTIONS],
-    Resource: "*",
-  };
-
-  const newPolicy = {
-    ...policy,
-    Statement: [...statements, newStatement],
-  };
-
-  await kms.send(
-    new PutKeyPolicyCommand({
-      KeyId: keyArn,
-      PolicyName: "default",
-      Policy: JSON.stringify(newPolicy),
-    }),
-  );
-}
-
-function statementGrantsLogsService(
-  statement: {
-    Sid?: string;
-    Effect?: string;
-    Principal?: unknown;
-    Action?: string | string[];
-  },
-  servicePrincipal: string,
-): boolean {
-  // Cheap check: if our Sid is present, the grant is already there.
-  if (statement.Sid === LOGS_GRANT_SID) return true;
-
-  // Effect must be Allow.
-  if (statement.Effect !== "Allow") return false;
-
-  // Principal.Service must include the logs service principal (string
-  // OR string[]).
-  const principal = statement.Principal as
-    | { Service?: string | string[] }
-    | undefined;
-  const services = principal?.Service;
-  let hasService = false;
-  if (typeof services === "string") {
-    hasService = services === servicePrincipal;
-  } else if (Array.isArray(services)) {
-    hasService = services.includes(servicePrincipal);
-  }
-  if (!hasService) return false;
-
-  // Action must include AT LEAST one of the canonical Logs KMS actions
-  // OR the `kms:*` superset wildcard. Operators who granted `kms:*` to
-  // logs.<region>.amazonaws.com (broader than our 5 actions) already
-  // satisfy the policy requirement; we should NOT add a redundant
-  // narrower grant alongside theirs.
-  const actions = statement.Action;
-  let hasAction = false;
-  if (typeof actions === "string") {
-    hasAction = actions === "kms:*" || LOGS_KMS_ACTIONS.includes(actions);
-  } else if (Array.isArray(actions)) {
-    hasAction = actions.some(
-      (a) => a === "kms:*" || LOGS_KMS_ACTIONS.includes(a),
-    );
-  }
-  return hasAction;
-}

@@ -42,6 +42,7 @@ import { ensureSnsDefaultKms } from "./resource-provisioner/sns-encryption.js";
 import { ensureSecretsManagerDefaultKms } from "./resource-provisioner/secretsmanager-encryption.js";
 import { ensureEfsDefaultKms } from "./resource-provisioner/efs-encryption.js";
 import { ensureLogsDefaultKms } from "./resource-provisioner/logs-encryption.js";
+import { ensureEventsDefaultKms } from "./resource-provisioner/events-encryption.js";
 import { cleanupAllocatedResources } from "./resource-provisioner/cleanup.js";
 import {
   createResourceWithCloudFrontRetry,
@@ -307,6 +308,29 @@ export async function resourceProvisionerNode(
     return {
       executionStatus: ExecutionStatus.FAILED,
       errorMessage: logsKmsRes.errorMessage,
+      desiredState,
+    };
+  }
+
+  // Pre-hook: substitute the default Assignee-managed CMK alias-name
+  // into an EventBridge EventBus desiredState whose `KmsKeyIdentifier`
+  // is missing or blank, AND extend the CMK's resource policy to
+  // grant `events.amazonaws.com` access (Wave D-7, epic-104). The
+  // EventBridge service principal is REGION-AGNOSTIC (unlike Logs's
+  // logs.<region>.amazonaws.com); the shared
+  // ensureServicePrincipalGrant helper handles this transparently.
+  // Threads `result.aliasName` (NOT keyArn) because EventBridge
+  // accepts alias-form. Fails closed on resolver OR policy errors.
+  const eventsKmsRes = await ensureEventsDefaultKms(state, desiredState);
+  if (!eventsKmsRes.ok) {
+    await cleanupAllocatedResources(state, {
+      eipReleased: freshlyAllocatedEipIds,
+      sshDeleted: sshKeyCreatedName,
+      sshIamCreated,
+    });
+    return {
+      executionStatus: ExecutionStatus.FAILED,
+      errorMessage: eventsKmsRes.errorMessage,
       desiredState,
     };
   }
