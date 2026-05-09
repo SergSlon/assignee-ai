@@ -38,6 +38,7 @@ import {
 import { ensureSubnet } from "./resource-provisioner/subnet.js";
 import { ensureS3DefaultKms } from "./resource-provisioner/s3-encryption.js";
 import { ensureSqsDefaultKms } from "./resource-provisioner/sqs-encryption.js";
+import { ensureSnsDefaultKms } from "./resource-provisioner/sns-encryption.js";
 import { cleanupAllocatedResources } from "./resource-provisioner/cleanup.js";
 import {
   createResourceWithCloudFrontRetry,
@@ -207,6 +208,30 @@ export async function resourceProvisionerNode(
     return {
       executionStatus: ExecutionStatus.FAILED,
       errorMessage: sqsKmsRes.errorMessage,
+      desiredState,
+    };
+  }
+
+  // Pre-hook: substitute the default Assignee-managed CMK alias-name
+  // into any SNS topic desiredState whose `KmsMasterKeyId` is missing,
+  // blank, or equals the AWS-managed sentinel `alias/aws/sns` (the
+  // SNS plugin's default — see sns-topic.ts:162). Threads
+  // `result.aliasName` (NOT keyArn) because SNS accepts alias-form.
+  // No-op for non-SNS resources or when the operator supplied an
+  // explicit non-sentinel value (CMK ARN, custom alias, or the
+  // alias-ARN escape hatch `arn:aws:kms:<r>:<a>:alias/aws/sns`).
+  // Fails closed on resolver errors so we never silently fall back to
+  // AWS-managed alias/aws/sns. (Wave D-3, epic-104.)
+  const snsKmsRes = await ensureSnsDefaultKms(state, desiredState);
+  if (!snsKmsRes.ok) {
+    await cleanupAllocatedResources(state, {
+      eipReleased: freshlyAllocatedEipIds,
+      sshDeleted: sshKeyCreatedName,
+      sshIamCreated,
+    });
+    return {
+      executionStatus: ExecutionStatus.FAILED,
+      errorMessage: snsKmsRes.errorMessage,
       desiredState,
     };
   }
