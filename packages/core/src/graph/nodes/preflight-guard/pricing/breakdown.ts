@@ -89,21 +89,34 @@ function isSdkBypassService(serviceCode: string): boolean {
 /**
  * Lazy-initialised Pricing SDK client; constructed on first bypass use.
  *
- * IMPORTANT: must attach operator credentials. The CLI command-runner
- * auto-renames AWS_* env vars to ASSIGNEE_OPERATOR_* before any
- * command runs (see apps/cli/src/config/aws-credentials.ts) and does
- * NOT fall back to AWS_* in the standard SDK provider chain. A bare
- * `new PricingClient({ region })` therefore throws an auth error in
- * production — which the previous bare `catch {}` swallowed, surfacing
- * as a silent "unavailable" rendering. We resolve operator creds the
- * same way every other AWS SDK client in @assignee/core does
- * (cloudcontrol-client.ts / s3-upload.ts) and let the
- * `MissingAssigneeCredentialsError` propagate to the caller, where it
- * is logged with full context before falling through to "unavailable".
+ * IMPORTANT: must attach **reader** credentials. The CLI command-runner
+ * auto-renames AWS_* env vars to ASSIGNEE_OPERATOR_* / ASSIGNEE_READER_*
+ * before any command runs (see apps/cli/src/config/aws-credentials.ts)
+ * and does NOT fall back to AWS_* in the standard SDK provider chain.
+ * A bare `new PricingClient({ region })` therefore throws an auth error
+ * in production — which the previous bare `catch {}` swallowed,
+ * surfacing as a silent "unavailable" rendering.
+ *
+ * Role split (Layer 2 fix, 2026-05-09): the SDK bypass performs a
+ * read-only `pricing:GetProducts` call. The operator IAM policy
+ * (see `packages/core/src/config/iam-policies/operator.ts`) does NOT
+ * grant any `pricing:*` actions — only the **reader** policy
+ * (`reader.ts:39-47`) grants `PRICING_GET_PRODUCTS`,
+ * `PRICING_DESCRIBE_SERVICES`, `PRICING_GET_ATTRIBUTE_VALUES`. Calling
+ * with operator creds therefore produced an authoritative AccessDenied
+ * (visible in production logs as
+ * `pricing_sdk_bypass_failed: ... is not authorized to perform:
+ * pricing:GetProducts because no identity-based policy allows the
+ * pricing:GetProducts action`).
+ *
+ * Precedent: `packages/core/src/config/mcp-servers.ts:78` (`readerEnv`)
+ * already uses `requireAssigneeCredentials("reader")` for the awslabs
+ * Pricing MCP subprocess. The SDK bypass here is the same semantic
+ * read-only call against the same API and must use the same role.
  *
  * Pricing API has only 2 global endpoints: us-east-1 and ap-south-1;
  * data is identical across both. Hardcoding us-east-1 is safe and
- * avoids surfacing the operator's `AWS_REGION` to a service whose
+ * avoids surfacing the reader's `AWS_REGION` to a service whose
  * data isn't actually region-locked.
  */
 let _pricingClient: PricingClient | undefined;
@@ -111,7 +124,9 @@ function getPricingClient(): PricingClient {
   if (!_pricingClient) {
     _pricingClient = new PricingClient({
       region: "us-east-1",
-      credentials: requireAssigneeCredentials("operator"),
+      // Reader role: pricing:GetProducts lives in the reader policy only.
+      // Operator policy lacks pricing:* and would AccessDenied here.
+      credentials: requireAssigneeCredentials("reader"),
     });
   }
   return _pricingClient;
@@ -452,14 +467,22 @@ export async function queryLineItemPrices(
             monthlyCost,
             displayPrice,
           };
-        } catch {
+        } catch (err) {
           hasPartialFailure = true;
           log({
             ts: new Date().toISOString(),
             runId,
             level: "warn",
             action: LOG_ACTIONS.PRICING_UNAVAILABLE,
-            extras: { lineItem: item.label, serviceCode: item.serviceCode },
+            extras: {
+              lineItem: item.label,
+              serviceCode: item.serviceCode,
+              // Surface the underlying error so operators running with
+              // `--verbose` can see WHY a line item rendered as
+              // `unavailable` (parse error, MCP timeout, JSON-shape
+              // mismatch, etc.) instead of having to bisect from logs.
+              error: err instanceof Error ? err.message : String(err),
+            },
           });
           return {
             lineItem: item,
