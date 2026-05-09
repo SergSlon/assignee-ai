@@ -43,6 +43,7 @@ import { ensureSecretsManagerDefaultKms } from "./resource-provisioner/secretsma
 import { ensureEfsDefaultKms } from "./resource-provisioner/efs-encryption.js";
 import { ensureLogsDefaultKms } from "./resource-provisioner/logs-encryption.js";
 import { ensureEventsDefaultKms } from "./resource-provisioner/events-encryption.js";
+import { ensureEventsConnectionDefaultKms } from "./resource-provisioner/events-connection-encryption.js";
 import { cleanupAllocatedResources } from "./resource-provisioner/cleanup.js";
 import {
   createResourceWithCloudFrontRetry,
@@ -331,6 +332,33 @@ export async function resourceProvisionerNode(
     return {
       executionStatus: ExecutionStatus.FAILED,
       errorMessage: eventsKmsRes.errorMessage,
+      desiredState,
+    };
+  }
+
+  // Pre-hook: substitute the default Assignee-managed CMK alias-name
+  // into an EventBridge Connection desiredState whose `KmsKeyIdentifier`
+  // is missing or blank, AND extend the CMK's resource policy to grant
+  // `events.amazonaws.com` access (Wave D-8, epic-104). EventBridge
+  // owns the underlying SecretsManager secret on the operator's behalf
+  // (per `events-connection.ts:174` configHint), so the service
+  // principal needing CMK access is EventBridge — SAME as D-7. The
+  // shared service-principal-grant cache means D-7 + D-8 in the same
+  // apply share one Get/PutKeyPolicy. Threads `result.aliasName`
+  // (NOT keyArn). Fails closed on resolver OR policy errors.
+  const eventsConnKmsRes = await ensureEventsConnectionDefaultKms(
+    state,
+    desiredState,
+  );
+  if (!eventsConnKmsRes.ok) {
+    await cleanupAllocatedResources(state, {
+      eipReleased: freshlyAllocatedEipIds,
+      sshDeleted: sshKeyCreatedName,
+      sshIamCreated,
+    });
+    return {
+      executionStatus: ExecutionStatus.FAILED,
+      errorMessage: eventsConnKmsRes.errorMessage,
       desiredState,
     };
   }
