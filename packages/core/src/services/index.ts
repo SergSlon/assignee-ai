@@ -77,3 +77,12 @@ export {
   type ResolveDefaultKmsKeyOptions,
   type ResolveDefaultKmsKeyResult,
 } from "./kms-alias-resolver.js";
+
+// Apply-time KMS resolver foundation — Wave D-0 (epic-104-demo-dryrun)
+export {
+  resolveDefaultKmsKeyForApply,
+  clearApplyTimeKmsClientCache,
+  KMS_DEFAULT_RESOLVE_ACCOUNT_FAILED,
+  type ResolveDefaultKmsKeyForApplyOptions,
+  type ApplyTimeKmsResult,
+} from "./apply-time-kms-resolver.js";
