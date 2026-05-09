@@ -33,6 +33,7 @@ import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
 import { unwrapMcpText } from "@/utils/mcp.js";
 import { withTimeout } from "@/utils/timeout.js";
 import { getCachedPrice, setCachedPrice } from "@/services/price-cache.js";
+import { requireAssigneeCredentials } from "@/config/aws-credentials.js";
 
 /**
  * Service codes that we route through the AWS Pricing SDK directly
@@ -59,6 +60,19 @@ function shouldInjectFromRegionCode(serviceCode: string): boolean {
 }
 
 /**
+ * Whether the current process is a vitest worker. Extracted as a
+ * standalone export so tests can mock it (via `vi.spyOn` or
+ * `vi.mock` on this module) and exercise the SDK bypass branch
+ * without resorting to brittle `delete process.env.VITEST` dances.
+ *
+ * Reads `process.env["VITEST"]` at every call — there is no caching
+ * intentionally, so a test can flip the value mid-suite if needed.
+ */
+export function isVitestEnvironment(): boolean {
+  return process.env["VITEST"] === "true";
+}
+
+/**
  * Whether the actual fetch should bypass the MCP and call the AWS
  * Pricing SDK directly. Routing decision (separate from the filter-
  * injection decision above): under vitest, even though we still inject
@@ -68,21 +82,48 @@ function shouldInjectFromRegionCode(serviceCode: string): boolean {
  * queries reliably.
  */
 function isSdkBypassService(serviceCode: string): boolean {
-  if (process.env["VITEST"] === "true") return false;
+  if (isVitestEnvironment()) return false;
   return SDK_BYPASS_SERVICE_CODES.has(serviceCode);
 }
 
-/** Lazy-initialised Pricing SDK client; constructed on first bypass use. */
+/**
+ * Lazy-initialised Pricing SDK client; constructed on first bypass use.
+ *
+ * IMPORTANT: must attach operator credentials. The CLI command-runner
+ * auto-renames AWS_* env vars to ASSIGNEE_OPERATOR_* before any
+ * command runs (see apps/cli/src/config/aws-credentials.ts) and does
+ * NOT fall back to AWS_* in the standard SDK provider chain. A bare
+ * `new PricingClient({ region })` therefore throws an auth error in
+ * production — which the previous bare `catch {}` swallowed, surfacing
+ * as a silent "unavailable" rendering. We resolve operator creds the
+ * same way every other AWS SDK client in @assignee/core does
+ * (cloudcontrol-client.ts / s3-upload.ts) and let the
+ * `MissingAssigneeCredentialsError` propagate to the caller, where it
+ * is logged with full context before falling through to "unavailable".
+ *
+ * Pricing API has only 2 global endpoints: us-east-1 and ap-south-1;
+ * data is identical across both. Hardcoding us-east-1 is safe and
+ * avoids surfacing the operator's `AWS_REGION` to a service whose
+ * data isn't actually region-locked.
+ */
 let _pricingClient: PricingClient | undefined;
 function getPricingClient(): PricingClient {
   if (!_pricingClient) {
-    // Pricing API has only 2 global endpoints: us-east-1 and ap-south-1.
-    // The pricing data is identical across both. Hardcoding us-east-1 is
-    // safe and avoids surfacing the operator's `AWS_REGION` to a service
-    // whose data isn't actually region-locked.
-    _pricingClient = new PricingClient({ region: "us-east-1" });
+    _pricingClient = new PricingClient({
+      region: "us-east-1",
+      credentials: requireAssigneeCredentials("operator"),
+    });
   }
   return _pricingClient;
+}
+
+/**
+ * Reset the cached PricingClient. Exposed for tests so each test case
+ * can force a fresh credential-resolution / construction sequence.
+ * Not for production use.
+ */
+export function _resetPricingClientForTesting(): void {
+  _pricingClient = undefined;
 }
 
 /**
@@ -91,6 +132,12 @@ function getPricingClient(): PricingClient {
  * would have returned so downstream parsers (extractTieredPrice /
  * extractFirstTierPrice) work unchanged. Returns null on SDK failure
  * — caller treats as "unavailable" same as MCP-failure path.
+ *
+ * Failures are logged at WARN level via `LOG_ACTIONS.PRICING_SDK_BYPASS_FAILED`
+ * so operators running with `--verbose` can see why the line item
+ * rendered as `unavailable` (auth error vs upstream API error vs
+ * timeout). The previous bare `catch {}` swallowed these errors and
+ * masked a credential-resolution bug in production for weeks.
  */
 async function fetchPricingViaSdk(
   serviceCode: string,
@@ -129,7 +176,17 @@ async function fetchPricingViaSdk(
       service_name: serviceCode,
       data: products,
     } as AwsPricingResponse;
-  } catch {
+  } catch (err) {
+    log({
+      ts: new Date().toISOString(),
+      runId: "system",
+      level: "warn",
+      action: LOG_ACTIONS.PRICING_SDK_BYPASS_FAILED,
+      extras: {
+        serviceCode,
+        error: err instanceof Error ? err.message : String(err),
+      },
+    });
     return null;
   }
 }

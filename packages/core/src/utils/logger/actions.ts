@@ -154,6 +154,17 @@ export const LOG_ACTIONS = {
    * 7-day pending-deletion window.
    */
   KMS_ALIAS_RACE_LOST: "kms_alias_race_lost",
+  /**
+   * Pricing SDK bypass (currently AWSDataTransfer): emitted at WARN
+   * level when the direct `@aws-sdk/client-pricing` GetProducts call
+   * fails — typically because operator credentials are not resolvable
+   * (auth error from the SDK provider chain) or because the upstream
+   * AWS Pricing API is unhealthy. Carries `extras.serviceCode` and
+   * `extras.error`. The caller still returns null and the line item
+   * renders as `unavailable`; this log entry exists so operators can
+   * diagnose the *why* instead of seeing a silently-blank price.
+   */
+  PRICING_SDK_BYPASS_FAILED: "pricing_sdk_bypass_failed",
 } as const;
 
 export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];
