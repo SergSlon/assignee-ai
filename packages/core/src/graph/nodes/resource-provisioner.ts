@@ -39,6 +39,7 @@ import { ensureSubnet } from "./resource-provisioner/subnet.js";
 import { ensureS3DefaultKms } from "./resource-provisioner/s3-encryption.js";
 import { ensureSqsDefaultKms } from "./resource-provisioner/sqs-encryption.js";
 import { ensureSnsDefaultKms } from "./resource-provisioner/sns-encryption.js";
+import { ensureSecretsManagerDefaultKms } from "./resource-provisioner/secretsmanager-encryption.js";
 import { cleanupAllocatedResources } from "./resource-provisioner/cleanup.js";
 import {
   createResourceWithCloudFrontRetry,
@@ -232,6 +233,32 @@ export async function resourceProvisionerNode(
     return {
       executionStatus: ExecutionStatus.FAILED,
       errorMessage: snsKmsRes.errorMessage,
+      desiredState,
+    };
+  }
+
+  // Pre-hook: substitute the default Assignee-managed CMK alias-name
+  // into a SecretsManager secret desiredState whose `KmsKeyId` is
+  // missing or blank (Wave D-4, epic-104). The plugin sets only
+  // `GenerateSecretString: true` as a default — no `KmsKeyId` literal
+  // — so the standard "absent or blank → substitute" discriminator
+  // covers every bare-intent secret. User-supplied values (including
+  // the AWS-managed shorthand `aws/secretsmanager`) are preserved
+  // verbatim. Threads `result.aliasName` (NOT keyArn) because
+  // SecretsManager accepts alias-form. Fails closed on resolver errors.
+  const secretsKmsRes = await ensureSecretsManagerDefaultKms(
+    state,
+    desiredState,
+  );
+  if (!secretsKmsRes.ok) {
+    await cleanupAllocatedResources(state, {
+      eipReleased: freshlyAllocatedEipIds,
+      sshDeleted: sshKeyCreatedName,
+      sshIamCreated,
+    });
+    return {
+      executionStatus: ExecutionStatus.FAILED,
+      errorMessage: secretsKmsRes.errorMessage,
       desiredState,
     };
   }
