@@ -40,6 +40,7 @@ import { ensureS3DefaultKms } from "./resource-provisioner/s3-encryption.js";
 import { ensureSqsDefaultKms } from "./resource-provisioner/sqs-encryption.js";
 import { ensureSnsDefaultKms } from "./resource-provisioner/sns-encryption.js";
 import { ensureSecretsManagerDefaultKms } from "./resource-provisioner/secretsmanager-encryption.js";
+import { ensureEfsDefaultKms } from "./resource-provisioner/efs-encryption.js";
 import { cleanupAllocatedResources } from "./resource-provisioner/cleanup.js";
 import {
   createResourceWithCloudFrontRetry,
@@ -259,6 +260,29 @@ export async function resourceProvisionerNode(
     return {
       executionStatus: ExecutionStatus.FAILED,
       errorMessage: secretsKmsRes.errorMessage,
+      desiredState,
+    };
+  }
+
+  // Pre-hook: substitute the default Assignee-managed CMK alias-name
+  // into an EFS file system desiredState whose `KmsKeyId` is missing
+  // or blank, AND whose `Encrypted` is `true` (Wave D-5, epic-104).
+  // The plugin defaults `Encrypted: true` (efs-file-system.ts:231),
+  // so virtually every bare-intent EFS apply takes this path; only
+  // operators who explicitly opted into unencrypted EFS skip it.
+  // User-supplied values (including any AWS-managed-alias literal) are
+  // preserved verbatim. Threads `result.aliasName` (NOT keyArn) because
+  // EFS accepts alias-form. Fails closed on resolver errors.
+  const efsKmsRes = await ensureEfsDefaultKms(state, desiredState);
+  if (!efsKmsRes.ok) {
+    await cleanupAllocatedResources(state, {
+      eipReleased: freshlyAllocatedEipIds,
+      sshDeleted: sshKeyCreatedName,
+      sshIamCreated,
+    });
+    return {
+      executionStatus: ExecutionStatus.FAILED,
+      errorMessage: efsKmsRes.errorMessage,
       desiredState,
     };
   }
