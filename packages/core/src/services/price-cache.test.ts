@@ -370,3 +370,222 @@ describe("price-cache Windows HOME resolution", () => {
     vi.doUnmock("node:os");
   });
 });
+
+// Layer 3 cache poisoning guard (2026-05-09) — `getCachedPrice` rejects
+// cache entries whose body's `service_name` does NOT match the requested
+// `serviceCode`. This defends against the awslabs Pricing MCP returning
+// wrong-shape data (live evidence: an AWSDataTransfer query was cached
+// with an `AmazonS3 / Storage` body, blocking every fresh run for 24h
+// because the entry sits under the storage-category TTL).
+describe("price-cache body-validation guard (Layer 3)", () => {
+  let homeDir: string;
+  let originalHome: string | undefined;
+  let originalUserProfile: string | undefined;
+
+  beforeEach(async () => {
+    homeDir = await fsPromises.mkdtemp(
+      path.join(os.tmpdir(), "assignee-pricecache-bodyguard-"),
+    );
+    originalHome = process.env["HOME"];
+    originalUserProfile = process.env["USERPROFILE"];
+    process.env["HOME"] = homeDir;
+    process.env["USERPROFILE"] = homeDir;
+    vi.resetModules();
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    if (originalHome === undefined) {
+      delete process.env["HOME"];
+    } else {
+      process.env["HOME"] = originalHome;
+    }
+    if (originalUserProfile === undefined) {
+      delete process.env["USERPROFILE"];
+    } else {
+      process.env["USERPROFILE"] = originalUserProfile;
+    }
+    await fsPromises
+      .rm(homeDir, { recursive: true, force: true })
+      .catch(() => {});
+  });
+
+  /**
+   * Build a real-shape pricing response payload. Mirrors the production
+   * shape returned by both the awslabs Pricing MCP and the SDK bypass
+   * path (see `breakdown.ts:174-178` and parser fixtures). The
+   * `service_name` field is the load-bearing one for the new guard;
+   * `data` is a minimal real S3-Storage product captured from the
+   * poisoned cache file in the live-dogfood evidence.
+   */
+  function buildResponseWith(serviceName: string): unknown {
+    return {
+      status: "success",
+      service_name: serviceName,
+      data: [
+        {
+          product: {
+            productFamily: "Storage",
+            attributes: {
+              regionCode: "us-east-1",
+              servicecode: "AmazonS3",
+              storageClass: "General Purpose",
+              volumeType: "Standard",
+            },
+            sku: "TESTSKU001",
+          },
+          terms: {
+            OnDemand: {
+              "TESTSKU001.JRTCKXETXF": {
+                priceDimensions: {
+                  "TESTSKU001.JRTCKXETXF.6YS6EN2CT7": {
+                    unit: "GB-Mo",
+                    endRange: "Inf",
+                    description: "Standard storage - first 50 TB / month",
+                    pricePerUnit: { USD: "0.0230000000" },
+                    beginRange: "0",
+                  },
+                },
+                sku: "TESTSKU001",
+              },
+            },
+          },
+        },
+      ],
+    };
+  }
+
+  /**
+   * Compute the on-disk cache filename for a given (serviceCode, filters)
+   * pair. Mirrors the production filename rule in `price-cache.ts`:
+   * `${safe(serviceCode)}-${sha256(JSON({serviceCode,filters})).slice(0,32)}.json`.
+   */
+  function cacheFilenameFor(serviceCode: string, filters: unknown[]): string {
+    const safe = serviceCode.replace(/[^a-zA-Z0-9_-]/g, "");
+    const key = JSON.stringify({ serviceCode, filters });
+    const hash = crypto
+      .createHash("sha256")
+      .update(key)
+      .digest("hex")
+      .slice(0, 32);
+    return `${safe}-${hash}.json`;
+  }
+
+  it("rejects + deletes cache entry whose service_name mismatches the requested serviceCode (poisoned cache regression)", async () => {
+    vi.resetModules();
+    const { setCachedPrice: setCached, getCachedPrice: getCached } =
+      await import("./price-cache.js");
+
+    const requestedServiceCode = "AWSDataTransfer";
+    const filters = [
+      { Type: "TERM_MATCH", Field: "transferType", Value: "AWS Outbound" },
+      { Type: "TERM_MATCH", Field: "fromRegionCode", Value: "us-east-1" },
+    ];
+    // Poisoned: written under AWSDataTransfer key but body claims AmazonS3
+    // (real evidence captured from the live-dogfood failure 2026-05-09).
+    const poisonedBody = buildResponseWith("AmazonS3");
+
+    setCached(requestedServiceCode, filters, poisonedBody);
+
+    // Pre-condition: file exists on disk (proves setCachedPrice landed it
+    // under the requested-serviceCode key irrespective of body shape).
+    const cacheDir = path.join(homeDir, ".assignee", "cache", "pricing");
+    const expectedFile = cacheFilenameFor(requestedServiceCode, filters);
+    expect(fs.readdirSync(cacheDir)).toContain(expectedFile);
+
+    // Action: lookup with the same key the caller would use.
+    const got = getCached(requestedServiceCode, filters);
+
+    // Assertion 1: returns null (treat poisoned entry as cache miss so
+    // the caller falls through to a fresh fetch).
+    expect(got).toBeNull();
+
+    // Assertion 2: stale file deleted from disk so the next run does not
+    // re-pay the read cost for a known-bad entry (mirrors expired-deletion
+    // pattern at price-cache.ts:117-124).
+    expect(fs.readdirSync(cacheDir)).not.toContain(expectedFile);
+  });
+
+  it("accepts cache entry whose service_name exactly matches the requested serviceCode", async () => {
+    vi.resetModules();
+    const { setCachedPrice: setCached, getCachedPrice: getCached } =
+      await import("./price-cache.js");
+
+    const serviceCode = "AmazonS3";
+    const filters = [
+      { Type: "TERM_MATCH", Field: "storageClass", Value: "General Purpose" },
+    ];
+    const validBody = buildResponseWith(serviceCode);
+
+    setCached(serviceCode, filters, validBody);
+    const got = getCached(serviceCode, filters);
+
+    // Round-trips unchanged — guard only fires on mismatch.
+    expect(got).toEqual(validBody);
+
+    // File still on disk (no deletion side-effect for valid entries).
+    const cacheDir = path.join(homeDir, ".assignee", "cache", "pricing");
+    expect(fs.readdirSync(cacheDir)).toContain(
+      cacheFilenameFor(serviceCode, filters),
+    );
+  });
+
+  it("conservatively passes through cache entry whose body has no service_name field (legacy-entry compatibility)", async () => {
+    vi.resetModules();
+    const { setCachedPrice: setCached, getCachedPrice: getCached } =
+      await import("./price-cache.js");
+
+    const serviceCode = "AmazonEC2";
+    const filters = [
+      { Type: "TERM_MATCH", Field: "instanceType", Value: "t3.micro" },
+    ];
+    // Legacy entries written before the body-guard landed have no
+    // `service_name` field. Real data shape captured from
+    // price-cache.test.ts SHA-256 round-trip test above.
+    const legacyBody = { hourlyUsd: 0.0104 };
+
+    setCached(serviceCode, filters, legacyBody);
+    const got = getCached(serviceCode, filters);
+
+    // Conservative pass-through: missing `service_name` is treated as
+    // valid (don't break existing entries that pre-date this guard).
+    expect(got).toEqual(legacyBody);
+
+    const cacheDir = path.join(homeDir, ".assignee", "cache", "pricing");
+    expect(fs.readdirSync(cacheDir)).toContain(
+      cacheFilenameFor(serviceCode, filters),
+    );
+  });
+
+  it("rejects + deletes cache entry whose service_name is non-string (corrupt entry)", async () => {
+    vi.resetModules();
+    const { getCachedPrice: getCached } = await import("./price-cache.js");
+
+    const serviceCode = "AmazonS3";
+    const filters = [
+      { Type: "TERM_MATCH", Field: "storageClass", Value: "General Purpose" },
+    ];
+
+    // Hand-write a corrupt entry directly (setCachedPrice would not
+    // produce a non-string `service_name` in normal flow, but a
+    // malformed cache file from disk corruption / partial write must
+    // still be handled defensively).
+    const cacheDir = path.join(homeDir, ".assignee", "cache", "pricing");
+    fs.mkdirSync(cacheDir, { recursive: true, mode: 0o700 });
+    const fileName = cacheFilenameFor(serviceCode, filters);
+    const filePath = path.join(cacheDir, fileName);
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify({
+        cachedAt: Date.now(),
+        data: { service_name: 12345, data: [] }, // non-string
+        serviceCode,
+        filtersHash: "deadbeef",
+      }),
+    );
+
+    const got = getCached(serviceCode, filters);
+    expect(got).toBeNull();
+    expect(fs.readdirSync(cacheDir)).not.toContain(fileName);
+  });
+});
