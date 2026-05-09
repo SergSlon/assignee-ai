@@ -61,6 +61,38 @@ review methodology notes, see
   but supplies no `KmsKeyId`. Wave C ships the primitive + IAM + audit
   surface only; consumer plugins consume the resolver in the next wave.
 
+### KMS alias-resolver consumer wiring — S3 / SQS / SNS plugins (epic-104 Wave D-1/D-2/D-3, 2026-05-09)
+
+- core: NEW per-resource pre-hooks
+  `graph/nodes/resource-provisioner/{s3,sqs,sns}-encryption.ts` substitute
+  the Wave C alias-CMK (`alias/assignee-default-encryption`) into
+  `desiredState` at apply-time when the operator did NOT supply an
+  explicit customer-managed key. User-supplied values always win;
+  AWS-managed alternatives (S3 SSE-S3 `AES256`, SQS `SqsManagedSseEnabled`,
+  SNS bare `alias/aws/sns` sentinel) skip the substitution via
+  per-plugin discriminators documented in each helper's invariants block.
+  Each pre-hook fails closed (resolver throw → orchestrator returns
+  FAILED with operator-actionable error message rather than silently
+  falling back to AWS-managed).
+- core: pre-hooks share the per-(accountId, region) cache from Wave D-0's
+  `resolveDefaultKmsKeyForApply` — multiple buckets / queues / topics in
+  one apply share one STS round-trip + one `kms:ListAliases` call.
+
+**Behaviour change (cost-implications)** — bare-intent S3 SSE-KMS, SQS,
+and SNS topics that previously consumed the AWS-managed key (free or
+free-tier) now consume the customer-managed
+`alias/assignee-default-encryption` CMK, which costs ~$1/key/month plus
+$0.03 per 10 000 KMS API requests. Free-tier-sensitive deployments
+should explicitly opt into the AWS-managed key per resource:
+
+- S3: leave SSE absent OR set `SSEAlgorithm: "AES256"` (SSE-S3 free).
+- SQS: set `SqsManagedSseEnabled: true` (SSE-SQS free) — already the
+  plugin default.
+- SNS: pass the alias-ARN form
+  `arn:aws:kms:<region>:<account>:alias/aws/sns` (passes plugin validate
+  and is preserved verbatim — the bare `alias/aws/sns` literal is the
+  sentinel-upgrade trigger).
+
 ### `restore-provisions --from-audit-log` (epic-104 Wave B-2, 2026-05-08)
 
 - cli: `assignee restore-provisions --from-audit-log` rebuilds missing
