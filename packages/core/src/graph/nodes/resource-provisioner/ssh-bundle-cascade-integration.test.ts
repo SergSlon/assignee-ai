@@ -501,7 +501,31 @@ describe("SSH-bundle cascade — provisioner → memory → apply-success → de
 
     // Keypair side effect: the .pem was written under
     // `~/.assignee/keys/<sanitized>.pem` with mode 0o400.
-    expect(mockMkdirSync).toHaveBeenCalledTimes(1);
+    //
+    // Two mkdirSync calls land here post-SEC-005:
+    //   1. `ensureAssigneeHomeDir()` mkdir's `~/.assignee` (parent) so
+    //      it exists at mode 0o700 before the leaf is created.
+    //   2. ssh-keypair.ts mkdir's the LEAF `~/.assignee/keys` at mode
+    //      0o700.
+    // Order is parent-then-leaf — verify both paths and the order.
+    expect(mockMkdirSync).toHaveBeenCalledTimes(2);
+    const parentMkdirArg = mockMkdirSync.mock.calls[0]?.[0];
+    const leafMkdirArg = mockMkdirSync.mock.calls[1]?.[0];
+    expect(typeof parentMkdirArg).toBe("string");
+    expect(typeof leafMkdirArg).toBe("string");
+    // Parent: ends in `/.assignee` (no `/keys` segment).
+    expect(String(parentMkdirArg)).toMatch(/\.assignee$/);
+    // Leaf: ends in `/.assignee/keys`.
+    expect(String(leafMkdirArg)).toMatch(/\.assignee\/keys$/);
+    // Both calls must request mode 0o700.
+    expect(mockMkdirSync.mock.calls[0]?.[1]).toMatchObject({
+      recursive: true,
+      mode: 0o700,
+    });
+    expect(mockMkdirSync.mock.calls[1]?.[1]).toMatchObject({
+      recursive: true,
+      mode: 0o700,
+    });
     expect(mockWriteFileSync).toHaveBeenCalledTimes(1);
     const writeCall = mockWriteFileSync.mock.calls[0]!;
     expect(String(writeCall[0])).toContain(`${KEY_NAME}.pem`);

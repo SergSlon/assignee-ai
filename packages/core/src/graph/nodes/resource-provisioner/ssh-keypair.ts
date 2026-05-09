@@ -38,6 +38,7 @@ import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
 import { AWS_REGION } from "@/config/constants/aws.js";
 import { ASSIGNEE_DIR } from "@/config/constants/paths.js";
 import { requireAssigneeCredentials } from "@/config/aws-credentials.js";
+import { ensureAssigneeHomeDir } from "@/audit/ensure-assignee-home-dir.js";
 import { sanitizeKeyName } from "./util.js";
 
 export type SshKeypairResult =
@@ -116,6 +117,10 @@ export async function ensureSshKeypair(
       const { homedir } = await import("node:os");
       const safeKeyName = sanitizeKeyName(keyName);
       const keysDir = join(homedir(), ASSIGNEE_DIR, "keys");
+      // Relock `~/.assignee` to 0o700 first; mkdirSync `mode` only
+      // applies to leaves, so a pre-existing parent retains umask-
+      // derived perms. Helper is idempotent and never throws.
+      ensureAssigneeHomeDir();
       // Mode 0o700 — keys dir must NOT be world-readable.
       mkdirSync(keysDir, { recursive: true, mode: 0o700 });
       try {

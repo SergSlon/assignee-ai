@@ -176,6 +176,10 @@ vi.mock("@aws-sdk/client-kms", () => {
       _type: "ScheduleKeyDeletion",
       input,
     })),
+    DescribeKeyCommand: vi.fn((input: unknown) => ({
+      _type: "DescribeKey",
+      input,
+    })),
     KMSInvalidStateException,
     NotFoundException,
   };
@@ -199,6 +203,10 @@ vi.mock("@aws-sdk/client-secrets-manager", () => {
   return {
     DeleteSecretCommand: vi.fn((input: unknown) => ({
       _type: "DeleteSecret",
+      input,
+    })),
+    DescribeSecretCommand: vi.fn((input: unknown) => ({
+      _type: "DescribeSecret",
       input,
     })),
     InvalidRequestException,
@@ -1138,8 +1146,14 @@ describe("Idempotent-success error classification", () => {
 
     expect(result).toBe("already_pending");
     expect(stderrOutput).toContain("already deleted or scheduled");
-    // renderDestroySuccess fires for already-deleted paths
-    expect(stdoutOutput).toContain("Resource destroyed");
+    // Defect 4 symmetry fix (2026-05-09): the secret is in a recovery
+    // window, NOT destroyed — rendering the honest "Scheduled for
+    // deletion" line replaces the previous "Resource destroyed" lie.
+    // When DescribeSecret can't recover the real ScheduledDeletionDate
+    // (mock returns the same rejection), the unknown-date renderer
+    // fires.
+    expect(stdoutOutput).toContain("Scheduled for deletion");
+    expect(stdoutOutput).not.toContain("Resource destroyed");
   });
 
   it("SecretsManager: ResourceNotFoundException → returns 'already_pending'", async () => {
@@ -1184,6 +1198,161 @@ describe("Idempotent-success error classification", () => {
     await expect(destroyAction(kmsResource.arn, { yes: true })).rejects.toThrow(
       /Failed to schedule KMS key for deletion/,
     );
+  });
+
+  // ── Defect 1 (2026-05-09): pre-call neutral hint, no premature claim ──
+  //
+  // The previous wording ("KMS key scheduled NOW for deletion 7 days from now")
+  // was a lie when the second ScheduleKeyDeletion call threw KMSInvalidStateException
+  // before the notice's claim ever became true. The new wording describes only
+  // what's about to be ATTEMPTED, never the outcome.
+
+  it("Defect 1: KMS pre-call hint never claims 'scheduled NOW' even when key is already-pending", async () => {
+    mockResolveResource.mockResolvedValue(kmsResource);
+    const { KMSInvalidStateException } = await import("@aws-sdk/client-kms");
+    mockKmsSend.mockRejectedValue(
+      new (KMSInvalidStateException as unknown as new (m: string) => Error)(
+        "arn:aws:kms:us-east-1:112233445566:key/abc is pending deletion.",
+      ),
+    );
+
+    await destroyAction(kmsResource.arn, { yes: true });
+
+    // The lying pre-call notice MUST be absent.
+    expect(stderrOutput).not.toContain(
+      "scheduled NOW for deletion 7 days from now",
+    );
+    // The honest hint MUST be present pre-call.
+    expect(stderrOutput).toContain("preparing to destroy KMS key");
+    expect(stderrOutput).toContain("AWS minimum 7-day waiting period");
+  });
+
+  it("Defect 1 symmetry: Secret pre-call hint never claims 'scheduled NOW' for already-pending secret", async () => {
+    mockResolveResource.mockResolvedValue(secretResource);
+    const { InvalidRequestException } =
+      await import("@aws-sdk/client-secrets-manager");
+    mockSecretsSend.mockRejectedValue(
+      new (InvalidRequestException as unknown as new (m: string) => Error)(
+        "You can't perform this operation on the secret because it was deleted.",
+      ),
+    );
+
+    await destroyAction(secretResource.arn, { yes: true });
+
+    expect(stderrOutput).not.toContain(
+      "Secret scheduled NOW for deletion 7 days from now",
+    );
+    expect(stderrOutput).toContain("preparing to destroy secret");
+    expect(stderrOutput).toContain("AWS minimum 7-day recovery window");
+  });
+
+  // ── Defect 4 (2026-05-09): real-DescribeKey date OR honest unknown line ──
+  //
+  // The previous code fabricated `Date.now() + 7d` when the key was already
+  // PendingDeletion. The new code calls DescribeKey for the real DeletionDate;
+  // if DescribeKey itself fails, the renderer prints the unknown-date line
+  // (no fabricated YYYY-MM-DD).
+
+  it("Defect 4 (a): KMS already-pending uses DescribeKey to render the REAL DeletionDate", async () => {
+    mockResolveResource.mockResolvedValue(kmsResource);
+    const { KMSInvalidStateException } = await import("@aws-sdk/client-kms");
+    const realDeletionDate = new Date("2026-05-12T00:00:00Z");
+
+    mockKmsSend
+      // First call: ScheduleKeyDeletion → throws InvalidState/pending
+      .mockRejectedValueOnce(
+        new (KMSInvalidStateException as unknown as new (m: string) => Error)(
+          "arn:aws:kms:us-east-1:112233445566:key/abc is pending deletion.",
+        ),
+      )
+      // Second call: DescribeKey → returns the real KeyMetadata.DeletionDate
+      .mockResolvedValueOnce({
+        KeyMetadata: { DeletionDate: realDeletionDate },
+      });
+
+    const result = await destroyAction(kmsResource.arn, { yes: true });
+
+    expect(result).toBe("already_pending");
+    // Honest output: the real date from DescribeKey, NOT a synthetic
+    // Date.now() + window value.
+    expect(stdoutOutput).toContain("Scheduled for deletion on 2026-05-12");
+    // Two SDK calls were issued (ScheduleKeyDeletion + DescribeKey).
+    expect(mockKmsSend).toHaveBeenCalledTimes(2);
+    const secondCommand = mockKmsSend.mock.calls[1]![0] as { _type: string };
+    expect(secondCommand._type).toBe("DescribeKey");
+  });
+
+  it("Defect 4 (b): KMS already-pending falls back to 'check AWS console' when DescribeKey ALSO fails", async () => {
+    mockResolveResource.mockResolvedValue(kmsResource);
+    const { KMSInvalidStateException } = await import("@aws-sdk/client-kms");
+
+    // Both ScheduleKeyDeletion AND DescribeKey throw. The destroy must
+    // still return "already_pending" — the parent operation logically
+    // succeeded — but the rendered line MUST NOT contain a fabricated
+    // YYYY-MM-DD date.
+    const errInvalid = new (KMSInvalidStateException as unknown as new (
+      m: string,
+    ) => Error)("is pending deletion");
+    mockKmsSend.mockRejectedValue(errInvalid);
+
+    const result = await destroyAction(kmsResource.arn, { yes: true });
+
+    expect(result).toBe("already_pending");
+    // Falls back to the unknown-date rendering.
+    expect(stdoutOutput).toContain("check the AWS console");
+    expect(stdoutOutput).toContain("Scheduled for deletion (");
+    // The "Scheduled for deletion on YYYY-MM-DD" date form MUST be absent —
+    // we don't have a real date and refuse to fabricate one.
+    expect(stdoutOutput).not.toMatch(
+      /Scheduled for deletion on \d{4}-\d{2}-\d{2}/,
+    );
+  });
+
+  it("Defect 4 symmetry (a): Secret already-pending uses DescribeSecret to render the REAL ScheduledDeletionDate", async () => {
+    mockResolveResource.mockResolvedValue(secretResource);
+    const { InvalidRequestException } =
+      await import("@aws-sdk/client-secrets-manager");
+    const realDeletionDate = new Date("2026-05-13T00:00:00Z");
+
+    mockSecretsSend
+      // First call: DeleteSecret → throws InvalidRequest "was deleted"
+      .mockRejectedValueOnce(
+        new (InvalidRequestException as unknown as new (m: string) => Error)(
+          "You can't perform this operation on the secret because it was deleted.",
+        ),
+      )
+      // Second call: DescribeSecret → returns the real DeletedDate.
+      .mockResolvedValueOnce({
+        DeletedDate: realDeletionDate,
+      });
+
+    const result = await destroyAction(secretResource.arn, { yes: true });
+
+    expect(result).toBe("already_pending");
+    expect(stdoutOutput).toContain("Scheduled for deletion on 2026-05-13");
+    expect(stdoutOutput).not.toContain("Resource destroyed");
+  });
+
+  it("Defect 4 symmetry (b): Secret already-pending falls back to 'check AWS console' when DescribeSecret ALSO fails", async () => {
+    mockResolveResource.mockResolvedValue(secretResource);
+    const { InvalidRequestException } =
+      await import("@aws-sdk/client-secrets-manager");
+
+    // BOTH DeleteSecret AND DescribeSecret throw. Honest fallback expected.
+    mockSecretsSend.mockRejectedValue(
+      new (InvalidRequestException as unknown as new (m: string) => Error)(
+        "You can't perform this operation on the secret because it was deleted.",
+      ),
+    );
+
+    const result = await destroyAction(secretResource.arn, { yes: true });
+
+    expect(result).toBe("already_pending");
+    expect(stdoutOutput).toContain("check the AWS console");
+    expect(stdoutOutput).not.toMatch(
+      /Scheduled for deletion on \d{4}-\d{2}-\d{2}/,
+    );
+    expect(stdoutOutput).not.toContain("Resource destroyed");
   });
 });
 

@@ -71,6 +71,7 @@ import {
   renderDestroyBox,
   renderDestroySuccess,
   renderDestroyScheduled,
+  renderDestroyScheduledUnknown,
 } from "./destroy/result-formatter.js";
 import { resourceConfirmationToken } from "./destroy/typed-confirm.js";
 import { tryAssigneeCredentials } from "../config/aws-credentials.js";
@@ -82,11 +83,13 @@ import {
 } from "../services/cloudcontrol-client.js";
 import {
   ScheduleKeyDeletionCommand,
+  DescribeKeyCommand,
   KMSInvalidStateException,
   NotFoundException as KmsNotFoundException,
 } from "@aws-sdk/client-kms";
 import {
   DeleteSecretCommand,
+  DescribeSecretCommand,
   InvalidRequestException as SecretsInvalidRequestException,
   ResourceNotFoundException as SecretsResourceNotFoundException,
 } from "@aws-sdk/client-secrets-manager";
@@ -277,14 +280,22 @@ export async function destroyAction(
     SECRETS_ARN_RE.test(resolved.arn);
   const isEventBus = EVENTBUS_ARN_RE.test(resolved.arn);
 
-  // Emit default-window notices BEFORE the confirmation box so the user
-  // can make an informed choice. --yes skips the prompt but the notice
+  // Emit default-window HINTS BEFORE the confirmation box so the user
+  // can make an informed choice. --yes skips the prompt but the hint
   // still prints so CI logs capture the effective window.
+  //
+  // Defect 1 fix (2026-05-09): the previous wording ("KMS key scheduled
+  // NOW for deletion 7 days from now") was a lie when the key was
+  // already in PendingDeletion — the second ScheduleKeyDeletion call
+  // throws KMSInvalidStateException before the notice's claim ever
+  // becomes true. The notice now only describes what WILL be attempted
+  // (the scheduling call) and what flags adjust it. The honest result
+  // line is rendered AFTER the call, in the outcome-aware branches
+  // below.
   if (isKms && pendingWindow === undefined) {
     process.stderr.write(
-      `[destroy] KMS key scheduled NOW for deletion ${DEFAULT_WINDOW_DAYS} days from now` +
-        ` (default minimum window; pass --pending-window-in-days <7-30> to extend up to 30 days).` +
-        ` AWS does not allow shorter than 7 days for CMK deletion.\n`,
+      `[destroy] preparing to destroy KMS key (AWS minimum ${DEFAULT_WINDOW_DAYS}-day waiting period; ` +
+        `pass --pending-window-in-days <7-30> to extend up to 30 days).\n`,
     );
   }
   if (
@@ -293,16 +304,21 @@ export async function destroyAction(
     recoveryWindow === undefined
   ) {
     process.stderr.write(
-      `[destroy] Secret scheduled NOW for deletion ${DEFAULT_WINDOW_DAYS} days from now` +
-        ` (default minimum window; pass --recovery-window-in-days <7-30> to extend up to 30 days,` +
-        ` or --force-delete-without-recovery to delete immediately).\n`,
+      `[destroy] preparing to destroy secret (AWS minimum ${DEFAULT_WINDOW_DAYS}-day recovery window; ` +
+        `pass --recovery-window-in-days <7-30> to extend up to 30 days, ` +
+        `or --force-delete-without-recovery to delete immediately).\n`,
     );
   }
 
   // Cost estimate + confirmation box are the same for every path.
   const billingTools = await getBillingMcpToolsAsync();
+  // Defect 3 fix (2026-05-09): pass the resolved resourceType so the
+  // estimator can reach the same per-type decomposer registry that
+  // `assignee list` uses (KMS → $1.00/mo, etc.) when cost-explorer +
+  // provision-log are both silent.
   const savingsEstimate = await getCostSavingsEstimate(
     resolved.arn,
+    resolved.resourceType,
     billingTools,
   );
   const estimatedMonthlyCost =
@@ -330,10 +346,23 @@ export async function destroyAction(
       process.stderr.write(
         `[destroy] KMS key already scheduled for deletion (pending-delete window in progress).\n`,
       );
-      renderDestroyScheduled(scheduledAt, estimatedMonthlyCost);
+      // Defect 4 fix (2026-05-09): render the date ONLY when we have
+      // a real one from DescribeKey. When the scheduledAt is undefined
+      // (DescribeKey failed or the key is purged) we print a neutral
+      // line instead of fabricating a synthetic future date — the
+      // synthetic date had no relationship to AWS's actual deletion
+      // schedule and routinely lied to operators by a week or more.
+      if (scheduledAt) {
+        renderDestroyScheduled(scheduledAt, estimatedMonthlyCost);
+      } else {
+        renderDestroyScheduledUnknown(estimatedMonthlyCost);
+      }
       return "already_pending";
     }
-    renderDestroyScheduled(scheduledAt, estimatedMonthlyCost);
+    // outcome === "scheduled" — scheduledAt is the authoritative
+    // DeletionDate returned by ScheduleKeyDeletion (or, failing that,
+    // a client-derived date that matches the requested window).
+    renderDestroyScheduled(scheduledAt!, estimatedMonthlyCost);
     return;
   }
 
@@ -344,6 +373,10 @@ export async function destroyAction(
         process.stderr.write(
           `[destroy] Secret already deleted or scheduled for deletion (idempotent success).\n`,
         );
+        // Force-delete + already_pending: the secret is genuinely gone
+        // (or scheduled for the recovery window in a prior run with the
+        // same effect under --force, since force is fully destructive).
+        // "Resource destroyed" is honest here.
         renderDestroySuccess(estimatedMonthlyCost);
         return "already_pending";
       }
@@ -358,7 +391,21 @@ export async function destroyAction(
       process.stderr.write(
         `[destroy] Secret already deleted or scheduled for deletion (idempotent success).\n`,
       );
-      renderDestroySuccess(estimatedMonthlyCost);
+      // Defect 4 symmetry fix (2026-05-09): same as the KMS branch above
+      // — when the secret was already scheduled in a prior run, try to
+      // recover the real ScheduledDeletionDate via DescribeSecret. If
+      // DescribeSecret succeeds, render the honest scheduled-on line;
+      // otherwise render the unknown-date line. The previous code
+      // printed "Resource destroyed" via renderDestroySuccess, which
+      // was a lie — the secret is in a recovery window, not destroyed.
+      const realDate = scheduledAt
+        ? scheduledAt
+        : await tryDescribeSecretDeletionDate(resolved);
+      if (realDate) {
+        renderDestroyScheduled(realDate, estimatedMonthlyCost);
+      } else {
+        renderDestroyScheduledUnknown(estimatedMonthlyCost);
+      }
       return "already_pending";
     }
     // scheduled path — deleteSecret returns a Date for the scheduled path.
@@ -485,7 +532,7 @@ export type KmsDestroyOutcome = "scheduled" | "already_pending";
 async function scheduleKmsKeyDeletion(
   resolved: ResolvedResource,
   pendingWindowInDays: number,
-): Promise<{ scheduledAt: Date; outcome: KmsDestroyOutcome }> {
+): Promise<{ scheduledAt: Date | undefined; outcome: KmsDestroyOutcome }> {
   const awsCreds = tryAssigneeCredentials("operator");
   const region = resolved.region || AWS_REGION;
   const kms = createKmsClient(awsCreds ? { ...awsCreds, region } : { region });
@@ -514,20 +561,28 @@ async function scheduleKmsKeyDeletion(
       err instanceof KMSInvalidStateException &&
       /pending.?deletion/i.test(err.message)
     ) {
-      // We don't know the exact deletion date without a DescribeKey call;
-      // return a sentinel date so the renderer can still print something
-      // meaningful. The key is already on the path to deletion.
+      // Defect 4 fix (2026-05-09): the previous code fabricated a
+      // client-side sentinel `Date.now() + pendingWindowInDays` value
+      // here, which lied to operators — the synthetic date had no
+      // relationship to AWS's actual scheduled DeletionDate. Replace
+      // the sentinel with a DescribeKey call that returns the real
+      // DeletionDate. If DescribeKey itself fails (throttle, AccessDenied)
+      // we return `scheduledAt: undefined` so the renderer can print a
+      // honest "check AWS console for the exact date" line.
+      const realDeletionDate = await tryDescribeKmsDeletionDate(
+        kms,
+        resolved.identifier || resolved.arn,
+      );
       return {
-        scheduledAt: new Date(
-          Date.now() + pendingWindowInDays * 24 * 60 * 60 * 1000,
-        ),
+        scheduledAt: realDeletionDate,
         outcome: "already_pending",
       };
     }
     // NotFoundException: key was deleted-and-purged in a prior run.
+    // No DeletionDate to recover; renderer prints the unknown-date line.
     if (err instanceof KmsNotFoundException) {
       return {
-        scheduledAt: new Date(Date.now()),
+        scheduledAt: undefined,
         outcome: "already_pending",
       };
     }
@@ -539,6 +594,68 @@ async function scheduleKmsKeyDeletion(
   } finally {
     stopSpinner();
     kms.destroy();
+  }
+}
+
+/**
+ * Defect 4 (2026-05-09) helper: best-effort DescribeKey to recover the
+ * real `KeyMetadata.DeletionDate` for a key that AWS reports as already
+ * in PendingDeletion. Returns the date when the call succeeds and the
+ * field is populated; returns `undefined` on any failure (the caller
+ * renders an honest "check AWS console" line in that case rather than
+ * fabricating a synthetic future date).
+ */
+async function tryDescribeKmsDeletionDate(
+  kms: ReturnType<typeof createKmsClient>,
+  keyId: string,
+): Promise<Date | undefined> {
+  try {
+    const response = await kms.send(new DescribeKeyCommand({ KeyId: keyId }));
+    const deletionDate = response.KeyMetadata?.DeletionDate;
+    return deletionDate instanceof Date ? deletionDate : undefined;
+  } catch {
+    // Any failure (throttle, AccessDenied, transient network) — return
+    // undefined and let the renderer print the unknown-date line. We
+    // intentionally do NOT throw: the parent destroy already succeeded
+    // logically (the key is being deleted), so a DescribeKey failure
+    // must not turn that success into a failure.
+    return undefined;
+  }
+}
+
+/**
+ * Defect 4 symmetry helper (2026-05-09): best-effort DescribeSecret to
+ * recover the real `ScheduledDeletionDate` for a secret that AWS
+ * reports as already in the recovery window. Returns the date when the
+ * call succeeds and the field is populated; returns `undefined` on any
+ * failure.
+ *
+ * Note: this opens a fresh SecretsManager client (the parent
+ * `deleteSecret` call already destroyed its own). The cost is one extra
+ * SDK setup but it preserves a strict separation between the destroy
+ * call and the recovery-date probe so a Describe failure cannot
+ * cascade into the destroy outcome.
+ */
+async function tryDescribeSecretDeletionDate(
+  resolved: ResolvedResource,
+): Promise<Date | undefined> {
+  const awsCreds = tryAssigneeCredentials("operator");
+  const region = resolved.region || AWS_REGION;
+  const client = createSecretsManagerClient(
+    awsCreds ? { ...awsCreds, region } : { region },
+  );
+  try {
+    const response = await client.send(
+      new DescribeSecretCommand({
+        SecretId: resolved.arn || resolved.identifier,
+      }),
+    );
+    const deletionDate = response.DeletedDate;
+    return deletionDate instanceof Date ? deletionDate : undefined;
+  } catch {
+    return undefined;
+  } finally {
+    client.destroy();
   }
 }
 

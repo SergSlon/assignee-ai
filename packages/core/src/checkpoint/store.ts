@@ -35,6 +35,7 @@ import {
 import { CheckpointError } from "../errors.js";
 import { LocalFsStorageAdapter } from "../adapters/storage/local-fs-adapter.js";
 import type { StoragePort } from "../ports/storage-port.js";
+import { ensureAssigneeHomeDir } from "../audit/ensure-assignee-home-dir.js";
 
 /** The on-disk key for a checkpoint runId — stable across adapters. */
 function checkpointKey(runId: string): string {
@@ -81,6 +82,9 @@ export async function saveCheckpoint(
   // Legacy direct-fs path — preserves the original concurrent-saves
   // race regression test (per-call random temp suffix instead of pid)
   // and the defence-in-depth post-rename chmod.
+  // Relock `~/.assignee` to 0o700 first; mkdirSync `mode` only applies
+  // to leaves, so a pre-existing parent retains umask-derived perms.
+  ensureAssigneeHomeDir();
   await fs.mkdir(dir, { recursive: true, mode: 0o700 });
   // Use a per-call random suffix instead of process.pid so two concurrent
   // saveCheckpoint() invocations from the same process (or two processes that

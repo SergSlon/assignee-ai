@@ -784,14 +784,33 @@ describe("runBulkDestroyAction", () => {
         .mockResolvedValueOnce(undefined) // resource 1 → destroyed
         .mockResolvedValue("already_pending"); // resources 2,3,4 → already_pending
 
+      // Defect 2 (2026-05-09): we additionally need to capture stderr so
+      // we can pin per-resource line phrasing.  Wrap stderr.write only
+      // for this test so the runtime never lets a worker emit garbage
+      // into the parent vitest reporter.
+      const stderrChunks: string[] = [];
+      const originalStderr = process.stderr.write;
+      process.stderr.write = ((chunk: string | Uint8Array) => {
+        stderrChunks.push(
+          typeof chunk === "string"
+            ? chunk
+            : Buffer.from(chunk).toString("utf-8"),
+        );
+        return true;
+      }) as typeof process.stderr.write;
+
       const runBulkDestroyAction = await getSubject();
       process.exitCode = 0;
 
-      await runBulkDestroyAction({
-        yes: true,
-        noConfirm: true,
-        destroyOne: alreadyPendingDestroyOne,
-      });
+      try {
+        await runBulkDestroyAction({
+          yes: true,
+          noConfirm: true,
+          destroyOne: alreadyPendingDestroyOne,
+        });
+      } finally {
+        process.stderr.write = originalStderr;
+      }
 
       const out = stdoutCapture.output();
       // Summary must show three buckets
@@ -800,6 +819,73 @@ describe("runBulkDestroyAction", () => {
       expect(out).toContain("0 failed");
       // Exit 0 — already_pending is success
       expect(process.exitCode).toBe(0);
+
+      // Defect 2: per-resource progress lines now branch on outcome.
+      const stderr = stderrChunks.join("");
+      // Each of the 3 already-pending KMS keys gets the ↻ marker.
+      const alreadyPendingLines = stderr
+        .split("\n")
+        .filter((l) => l.includes("↻ Already pending"));
+      expect(alreadyPendingLines).toHaveLength(3);
+      // The 3 already-pending lines MUST NOT also be tagged "✓ Destroyed".
+      for (const line of alreadyPendingLines) {
+        expect(line).not.toContain("✓ Destroyed");
+      }
+      // Exactly 2 destroyed lines for the freshly-destroyed resources.
+      const destroyedLines = stderr
+        .split("\n")
+        .filter((l) => l.includes("✓ Destroyed"));
+      expect(destroyedLines).toHaveLength(2);
+    });
+
+    it("Defect 2: failed resource line keeps the ✗ FAILED marker (no regression)", async () => {
+      const resources = makeResources(3);
+      mockFetchManagedResources.mockResolvedValue(resources);
+
+      const mixedDestroyOne = vi
+        .fn()
+        .mockResolvedValueOnce(undefined) // resource 0 → destroyed
+        .mockResolvedValueOnce("already_pending") // resource 1 → already_pending
+        .mockRejectedValueOnce(new Error("Throttling: rate exceeded")); // resource 2 → failed
+
+      const stderrChunks: string[] = [];
+      const originalStderr = process.stderr.write;
+      process.stderr.write = ((chunk: string | Uint8Array) => {
+        stderrChunks.push(
+          typeof chunk === "string"
+            ? chunk
+            : Buffer.from(chunk).toString("utf-8"),
+        );
+        return true;
+      }) as typeof process.stderr.write;
+
+      const runBulkDestroyAction = await getSubject();
+      process.exitCode = 0;
+
+      try {
+        await runBulkDestroyAction({
+          yes: true,
+          noConfirm: true,
+          destroyOne: mixedDestroyOne,
+        });
+      } finally {
+        process.stderr.write = originalStderr;
+      }
+
+      const stderr = stderrChunks.join("");
+      // All three branches produce distinct line shapes — no overlap.
+      const destroyed = stderr
+        .split("\n")
+        .filter((l) => l.includes("✓ Destroyed"));
+      const alreadyPending = stderr
+        .split("\n")
+        .filter((l) => l.includes("↻ Already pending"));
+      const failed = stderr.split("\n").filter((l) => l.includes("✗ FAILED"));
+      expect(destroyed).toHaveLength(1);
+      expect(alreadyPending).toHaveLength(1);
+      expect(failed).toHaveLength(1);
+      // The failed line embeds the original error message.
+      expect(failed[0]).toContain("Throttling: rate exceeded");
     });
 
     it("0 destroyed + 15 already_pending + 0 failed → exit 0 (the bug-report scenario)", async () => {
