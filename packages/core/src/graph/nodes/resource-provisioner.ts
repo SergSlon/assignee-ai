@@ -41,6 +41,7 @@ import { ensureSqsDefaultKms } from "./resource-provisioner/sqs-encryption.js";
 import { ensureSnsDefaultKms } from "./resource-provisioner/sns-encryption.js";
 import { ensureSecretsManagerDefaultKms } from "./resource-provisioner/secretsmanager-encryption.js";
 import { ensureEfsDefaultKms } from "./resource-provisioner/efs-encryption.js";
+import { ensureLogsDefaultKms } from "./resource-provisioner/logs-encryption.js";
 import { cleanupAllocatedResources } from "./resource-provisioner/cleanup.js";
 import {
   createResourceWithCloudFrontRetry,
@@ -283,6 +284,29 @@ export async function resourceProvisionerNode(
     return {
       executionStatus: ExecutionStatus.FAILED,
       errorMessage: efsKmsRes.errorMessage,
+      desiredState,
+    };
+  }
+
+  // Pre-hook: substitute the default Assignee-managed CMK key ARN
+  // into a CloudWatch Logs LogGroup desiredState whose `KmsKeyId` is
+  // missing or blank, AND extend the CMK's resource policy to grant
+  // logs.<region>.amazonaws.com access (Wave D-6, epic-104). Without
+  // this grant CCAPI rejects the apply at AssociateKmsKey time. The
+  // policy ensure is cached per (keyArn, region) so multiple LogGroups
+  // share one Get/PutKeyPolicy round-trip. Threads `result.keyArn`
+  // (NOT alias-name) because CloudFormation canonicalises KmsKeyId on
+  // LogGroup to ARN form. Fails closed on resolver OR policy errors.
+  const logsKmsRes = await ensureLogsDefaultKms(state, desiredState);
+  if (!logsKmsRes.ok) {
+    await cleanupAllocatedResources(state, {
+      eipReleased: freshlyAllocatedEipIds,
+      sshDeleted: sshKeyCreatedName,
+      sshIamCreated,
+    });
+    return {
+      executionStatus: ExecutionStatus.FAILED,
+      errorMessage: logsKmsRes.errorMessage,
       desiredState,
     };
   }
