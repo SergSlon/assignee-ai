@@ -52,6 +52,7 @@ import {
   type ConfigPort,
 } from "../config/config-port.js";
 import { AssigneeError } from "../errors.js";
+import { ensureAssigneeHomeDir } from "./ensure-assignee-home-dir.js";
 
 // ── SEC-037: legacy fallback opt-in env var ────────────────────────────
 /**
@@ -249,8 +250,18 @@ export function resolveAuditKey(
           );
         }
         // ── SEC-005: validate parent-directory mode ──────────────────
+        // Auto-fix the mode FIRST, then warn only if the relock failed.
+        // Previously this branch unconditionally printed the warning on
+        // every `resolveAuditKey()` call when the parent dir had been
+        // pre-created at umask-derived 0o755 — operators could not
+        // silence the nag without manually chmodding. ensureAssigneeHomeDir
+        // attempts the relock and emits its own structured warning if the
+        // chmod fails; we only fall through to the legacy human-readable
+        // warning when the post-fix mode is still wrong (read-only fs,
+        // EPERM, foreign owner).
         const parentDir = path.dirname(keyFile);
         try {
+          ensureAssigneeHomeDir(parentDir);
           const dirStat = fs.statSync(parentDir);
           if ((dirStat.mode & 0o777) !== 0o700) {
             process.stderr.write(

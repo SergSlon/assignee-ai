@@ -123,8 +123,12 @@ export async function singleDestroyAction(
 
   // ── Estimate cost savings (Story 19.7) ──────────────────────────
   const billingTools = await getBillingMcpToolsAsync();
+  // Defect 3 fix (2026-05-09): thread resourceType so the estimator
+  // can fall back to the per-type decomposer registry when MCP +
+  // provision-log are both silent.
   const savingsEstimate = await getCostSavingsEstimate(
     resolved.arn,
+    resolved.resourceType,
     billingTools,
   );
   const estimatedMonthlyCost =

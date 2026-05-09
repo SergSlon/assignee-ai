@@ -35,3 +35,8 @@ export {
   type VerifyReason,
   type ChainMode,
 } from "./audit-verifier.js";
+
+export {
+  ensureAssigneeHomeDir,
+  resolveAssigneeHomeDir,
+} from "./ensure-assignee-home-dir.js";

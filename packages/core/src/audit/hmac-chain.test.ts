@@ -341,13 +341,17 @@ describe("resolveAuditKey — FS security (SEC-003/004/005)", () => {
   );
 
   it(
-    "emits a parent-dir mode warning when directory is not 0o700 (SEC-005)",
+    "auto-fixes parent-dir mode to 0o700 when it was 0o755 (SEC-005, Defect 5 fix 2026-05-09)",
     { skip: process.platform === "win32" },
     () => {
-      // Create directory with wrong mode
-      fs.mkdirSync(path.join(tmpDir, "wide-dir"), { mode: 0o755 });
-      const keyFileInWideDir = path.join(tmpDir, "wide-dir", "audit-key");
+      // Create directory with wrong mode (umask-derived 0o755).
+      const wideDir = path.join(tmpDir, "wide-dir");
+      fs.mkdirSync(wideDir, { mode: 0o755 });
+      const keyFileInWideDir = path.join(wideDir, "audit-key");
       fs.writeFileSync(keyFileInWideDir, "w".repeat(64), { mode: 0o600 });
+
+      // Sanity: the dir starts at 0o755.
+      expect(fs.statSync(wideDir).mode & 0o777).toBe(0o755);
 
       const stderrChunks: string[] = [];
       const originalWrite = process.stderr.write.bind(process.stderr);
@@ -366,13 +370,24 @@ describe("resolveAuditKey — FS security (SEC-003/004/005)", () => {
         process.stderr.write = originalWrite;
       }
 
+      // Auto-fix: the dir is now 0o700 — the helper relocked it BEFORE
+      // the warning branch ran, so the human-readable warning does NOT
+      // fire. Operators no longer see this nag on every run for a dir
+      // that was created with default umask. (Previously this test
+      // asserted that the warning fired; that behavior was the bug.)
+      expect(fs.statSync(wideDir).mode & 0o777).toBe(0o700);
       const dirWarnings = stderrChunks.filter((c) =>
         c.includes("audit key directory"),
       );
-      expect(dirWarnings.length).toBeGreaterThanOrEqual(1);
-      expect(dirWarnings[0]).toContain("expected 0700");
+      expect(dirWarnings).toHaveLength(0);
     },
   );
+
+  // Note: the chmod-FAILS fallback path (where ensureAssigneeHomeDir
+  // can't relock the dir, so the human-readable warning fires as a
+  // last-resort signal) is covered by `ensure-assignee-home-dir.test.ts`
+  // — vitest can't spy on fs.chmodSync in ESM, but the helper exports
+  // its own injection seam where that branch is reachable directly.
 
   it(
     "does NOT emit parent-dir warning when directory mode is 0o700 (SEC-005 happy path)",
