@@ -228,7 +228,9 @@ describe("getCostSavingsEstimate", () => {
 
     const result = await getCostSavingsEstimate(sampleResource.arn, tools);
 
-    expect(result).toBe("$0.02/month saved");
+    // Polish item 1 (2026-05-09): unified `$X.XX/mo` shape so destroy
+    // savings match the `assignee list` cost column.
+    expect(result).toBe("$0.02/mo saved");
   });
 
   it("returns formatted savings from provision log fallback", async () => {
@@ -246,7 +248,9 @@ describe("getCostSavingsEstimate", () => {
 
     const result = await getCostSavingsEstimate(sampleResource.arn);
 
-    expect(result).toBe("$2.50/month saved");
+    // Polish item 1 (2026-05-09): unified `$X.XX/mo` shape so destroy
+    // savings match the `assignee list` cost column.
+    expect(result).toBe("$2.50/mo saved");
   });
 
   it('returns "No cost savings" when no data available (Epic 92 A-08/D-15)', async () => {

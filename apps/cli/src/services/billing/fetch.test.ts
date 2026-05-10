@@ -56,8 +56,11 @@ const mockReadProvisions = vi.mocked(defaultMemoryService.readProvisions);
 
 describe("formatSavingsDisplay (Epic 92 Wave 4.a)", () => {
   describe("bucket 1: parseable dollar amount → '{cost} saved'", () => {
-    it("formats $X.XX/month", () => {
-      expect(formatSavingsDisplay("$0.02/month")).toBe("$0.02/month saved");
+    it("formats $X.XX/month → unified $X.XX/mo (polish item 1)", () => {
+      // Polish item 1 (2026-05-09): the legacy `$0.02/month` output is
+      // now normalised to `$0.02/mo` so destroy savings match the
+      // `assignee list` cost column. Pin the new shape explicitly.
+      expect(formatSavingsDisplay("$0.02/month")).toBe("$0.02/mo saved");
     });
 
     it("formats $X.XX/mo abbreviation", () => {
@@ -68,8 +71,12 @@ describe("formatSavingsDisplay (Epic 92 Wave 4.a)", () => {
       expect(formatSavingsDisplay("~$32.85/mo")).toBe("~$32.85/mo saved");
     });
 
-    it("formats integer-only $N/mo", () => {
-      expect(formatSavingsDisplay("$5/mo")).toBe("$5/mo saved");
+    it("formats integer-only $N/mo → 2-decimal $N.00/mo (polish item 1)", () => {
+      // Polish item 1 (2026-05-09): integer-only inputs are
+      // re-quantized to two decimal places so the destroy savings line
+      // matches the canonical `$X.XX/mo` shape rendered by
+      // `assignee list`.
+      expect(formatSavingsDisplay("$5/mo")).toBe("$5.00/mo saved");
     });
 
     it("formats cent-precision $X.XX/GB-month", () => {
@@ -125,6 +132,74 @@ describe("formatSavingsDisplay (Epic 92 Wave 4.a)", () => {
       expect(formatSavingsDisplay("")).toBe("No cost savings");
     });
   });
+
+  // ── Polish item 1 (2026-05-09): unify monthly cost label format ──────
+  //
+  // Problem: `assignee list` renders `$1.00/mo` for KMS via the
+  // `pricing-enricher.ts` two-decimal canonicaliser, but `assignee
+  // destroy` for a freshly-created KMS key rendered `$1.0000/key-month
+  // saved` because the value was replayed verbatim from a provision-log
+  // `estimatedMonthlyCost` string emitted by `mcp-parser.ts:110-112`
+  // (`decimals = scaled >= 0.0001 ? 4 : ...`) plus the `key-month` unit
+  // baked into the KMS pricing flow.
+  //
+  // Fix: a label normaliser inside `formatSavingsDisplay` maps any
+  // `$X.X/{key-month|key-mo|month|mo}` shape to canonical `$X.XX/mo`
+  // BEFORE the parseable-dollar branch runs. Other units (e.g.
+  // `/GB-Mo`, `/hr`) are passed through unchanged so storage / billing-
+  // resolver decomposers keep their native units.
+  describe("polish item 1: monthly cost label normaliser", () => {
+    it("normalises $X.XXXX/key-month → $X.XX/mo and appends 'saved'", () => {
+      const result = formatSavingsDisplay("$1.0000/key-month");
+      expect(result).toContain("$1.00/mo");
+      expect(result).toContain("saved");
+      expect(result).not.toContain("$1.0000");
+      expect(result).not.toContain("key-month");
+    });
+
+    it("normalises $X.XX/month → $X.XX/mo and appends 'saved'", () => {
+      const result = formatSavingsDisplay("$1.00/month");
+      expect(result).toContain("$1.00/mo");
+      expect(result).toContain("saved");
+    });
+
+    it("normalises $X.XX/key-mo → $X.XX/mo and appends 'saved'", () => {
+      // mcp-parser.ts emits a `key-mo` shorthand variant in some
+      // captured fixtures; the normaliser must collapse both forms.
+      expect(formatSavingsDisplay("$2.50/key-mo")).toBe("$2.50/mo saved");
+    });
+
+    it("normalises integer-only $N/month → $N.00/mo and appends 'saved'", () => {
+      expect(formatSavingsDisplay("$5/month")).toBe("$5.00/mo saved");
+    });
+
+    it("leaves $X.XX/mo unchanged (already canonical, just re-quantizes decimals)", () => {
+      expect(formatSavingsDisplay("$1.00/mo")).toBe("$1.00/mo saved");
+    });
+
+    it("does NOT touch /GB-Mo unit (pass-through, not a monthly-cost variant)", () => {
+      // Existing-shape regression-pin: the /GB-Mo flow is rendered by
+      // S3 / EBS / EFS storage decomposers and must stay untouched.
+      const result = formatSavingsDisplay("$0.0230/GB-Mo");
+      expect(result).toBe("$0.0230/GB-Mo saved");
+      expect(result).toContain("GB-Mo");
+    });
+
+    it("does NOT touch /hr unit (pass-through, not a monthly-cost variant)", () => {
+      // Hourly-rate decomposers (e.g. EC2) keep their native unit.
+      expect(formatSavingsDisplay("$0.0125/hr")).toBe("$0.0125/hr saved");
+    });
+
+    it("does NOT touch ~$X.XX/mo approximate prefix (the leading ~ violates the regex anchor)", () => {
+      // Approximate-prefix labels are emitted by some pricing flows
+      // (~$32.85/mo). They already match the canonical 2-decimal /mo
+      // shape, so leaving them alone is the right call — re-running
+      // them through the normaliser would strip the `~` and lose the
+      // approximation signal.
+      const result = formatSavingsDisplay("~$32.85/mo");
+      expect(result).toBe("~$32.85/mo saved");
+    });
+  });
 });
 
 const s3Resource: ManagedResource = {
@@ -149,7 +224,8 @@ describe("getCostSavingsEstimate (Epic 92 Wave 4.a)", () => {
       createBillingMockTool(McpMocks.billing.s3BucketCost.success),
     ];
     const result = await getCostSavingsEstimate(s3Resource.arn, tools);
-    expect(result).toBe("$0.02/month saved");
+    // Polish item 1 (2026-05-09): unified `$X.XX/mo` shape.
+    expect(result).toBe("$0.02/mo saved");
   });
 
   it("returns 'Free, $0.00 savings' when provision-log stored CostEstimateLabel.FREE (B-21)", async () => {
@@ -287,13 +363,14 @@ describe("getCostSavingsEstimate (Epic 92 Wave 4.a)", () => {
       "AWS::S3::Bucket",
       tools,
     );
-    expect(result).toBe("$0.02/month saved");
+    // Polish item 1 (2026-05-09): unified `$X.XX/mo` shape.
+    expect(result).toBe("$0.02/mo saved");
   });
 });
 
 const snsResource: ManagedResource = {
   resourceType: "AWS::SNS::Topic",
-  arn: "arn:aws:sns:us-east-1:210987654321:alerts",
+  arn: "arn:aws:sns:us-east-1:112233445566:alerts",
   region: "us-east-1",
   createdDate: "2026-04-15",
   estimatedMonthlyCost: "N/A",
@@ -301,7 +378,7 @@ const snsResource: ManagedResource = {
 
 const ddbResource: ManagedResource = {
   resourceType: "AWS::DynamoDB::Table",
-  arn: "arn:aws:dynamodb:us-east-1:210987654321:table/events",
+  arn: "arn:aws:dynamodb:us-east-1:112233445566:table/events",
   region: "us-east-1",
   createdDate: "2026-04-15",
   estimatedMonthlyCost: "N/A",

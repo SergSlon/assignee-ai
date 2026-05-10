@@ -74,6 +74,7 @@ import {
   renderDestroyScheduledUnknown,
 } from "./destroy/result-formatter.js";
 import { resourceConfirmationToken } from "./destroy/typed-confirm.js";
+import { maybeWarnYesInTty } from "./destroy/yes-warning.js";
 import { tryAssigneeCredentials } from "../config/aws-credentials.js";
 import { AWS_REGION } from "../config/constants.js";
 import {
@@ -149,6 +150,16 @@ export interface DestroyOptions {
   confirm?: boolean;
   /** Allow bulk-destroy of > 100 resources (explicit opt-in). */
   allowLargeSweep?: boolean;
+  /**
+   * INTERNAL — set by `runBulkDestroyAction` when threading per-resource
+   * destroy invocations through `destroyAction`. Signals that the
+   * bulk-destroy parent already collected the typed-account-ID
+   * confirmation, so per-resource paths should suppress the
+   * "--yes flag used in interactive session" warning. Not a public CLI
+   * flag (no Commander binding); see `bulk-action.ts` for the only
+   * production setter.
+   */
+  noConfirm?: boolean;
 }
 
 const MIN_WINDOW_DAYS = 7;
@@ -240,7 +251,14 @@ export async function destroyAction(
     recoveryWindow !== undefined ||
     opts.forceDeleteWithoutRecovery === true;
   if (!argMatchesSpecial && !flagsRequireSpecial) {
-    return genericDestroyAction(resource, { yes: opts.yes });
+    // Forward `noConfirm` so per-resource invocations triggered by
+    // `assignee destroy --all` don't re-emit the per-key
+    // "--yes flag used in interactive session" warning. The bulk-destroy
+    // parent already collected the typed-account-ID confirmation once.
+    return genericDestroyAction(resource, {
+      yes: opts.yes,
+      noConfirm: opts.noConfirm,
+    });
   }
 
   // Special path: resolve, prompt, dispatch to the direct-SDK handler.
@@ -334,7 +352,7 @@ export async function destroyAction(
     estimatedMonthlyCost,
   });
 
-  await confirmDestroy(resolved, opts.yes);
+  await confirmDestroy(resolved, opts.yes, opts.noConfirm === true);
 
   if (isKms) {
     const window = pendingWindow ?? DEFAULT_WINDOW_DAYS;
@@ -479,13 +497,15 @@ async function resolveForDestroy(
 async function confirmDestroy(
   resolved: ResolvedResource,
   yes: boolean | undefined,
+  noConfirm: boolean = false,
 ): Promise<void> {
   if (yes) {
-    if (process.stdout.isTTY) {
-      process.stderr.write(
-        "Warning: --yes flag used in interactive session. Auto-confirming destroy.\n",
-      );
-    }
+    // Suppressed when the bulk-destroy parent already ran the
+    // typed-account-ID gate (it threads `noConfirm: true` into the
+    // per-resource invocation). Otherwise emits the standard
+    // interactive-TTY warning so the operator sees that --yes bypassed
+    // the typed-name confirmation.
+    maybeWarnYesInTty({ yes, noConfirm });
     return;
   }
   if (!process.stdin.isTTY) {
@@ -1043,6 +1063,10 @@ the resource is still billing and recoverable during the window.
             // Without this injection the bulk loop falls back to the
             // generic destroy path which silently drops per-type flags.
             destroyOne: (resource, perResourceOpts) =>
+              // `perResourceOpts.noConfirm` is forwarded so the
+              // per-resource `confirmDestroy` warning is suppressed in
+              // bulk mode (the bulk parent already gated on the typed
+              // account-ID confirmation).
               destroyAction(resource, { ...perResourceOpts, yes: true }),
           });
         } catch (err) {

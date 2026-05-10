@@ -16,6 +16,13 @@ export async function destroyAction(
   resource: string | undefined,
   opts: {
     yes?: boolean;
+    /**
+     * INTERNAL — bulk-destroy threads `noConfirm: true` so per-resource
+     * iterations suppress the "--yes flag used in interactive session"
+     * warning that the bulk parent already addressed once via the typed
+     * account-ID prompt. Not a public CLI flag.
+     */
+    noConfirm?: boolean;
   },
 ): Promise<void> {
   if (!resource) {

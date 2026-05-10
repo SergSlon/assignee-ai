@@ -52,6 +52,29 @@ function isParseableDollarAmount(s: string): boolean {
 }
 
 /**
+ * Unifies the per-month cost label so the destroy-savings line matches the
+ * `$X.XX/mo` shape that `assignee list` shows in `pricing-enricher.ts`.
+ *
+ * Inputs (any of these) → `$X.XX/mo`:
+ *   - `$1.0000/key-month` (mcp-parser.ts emits 4-decimal `key-month` for
+ *     scaled amounts ≥ 0.0001 — replayed verbatim from provision-log
+ *     `estimatedMonthlyCost` strings via `getCostSavingsEstimate` →
+ *     `formatSavingsDisplay`)
+ *   - `$1.00/key-mo`
+ *   - `$1.00/month`
+ *   - `$1.00/mo` (already canonical, only re-quantizes the decimal)
+ *
+ * Anything else (e.g. `$0.0230/GB-Mo`, `$0.0001/hr`, prefixed `~$32.85/mo`,
+ * non-dollar labels) is returned unchanged so the caller's existing branches
+ * (Free / No-charge / N/A) keep working.
+ */
+function normalizeMonthlyCostLabel(s: string): string {
+  const m = s.match(/^\$(\d+(?:\.\d+)?)\/(?:key-mo(?:nth)?|month|mo)$/);
+  if (!m) return s;
+  return `$${parseFloat(m[1]!).toFixed(2)}/mo`;
+}
+
+/**
  * Epic 92 Wave 4 (e92.4.a) — render the savings suffix safely.
  * Closes A-08 / B-21 / D-15 / D-18.
  *
@@ -66,12 +89,18 @@ function isParseableDollarAmount(s: string): boolean {
  * `getCostSavingsEstimate`).
  */
 export function formatSavingsDisplay(actualMonthlyCost: string): string {
-  if (isParseableDollarAmount(actualMonthlyCost)) {
-    return `${actualMonthlyCost} saved`;
+  // Normalize KMS-style `$1.0000/key-month` and other per-month variants
+  // to the canonical `$1.00/mo` so the destroy savings line matches the
+  // `assignee list` cost column. Non-monthly units (e.g. `/GB-Mo`, `/hr`)
+  // pass through unchanged. Sentinel buckets (Free / No-charge) also
+  // pass through because the regex demands a leading `$` + digit.
+  const unified = normalizeMonthlyCostLabel(actualMonthlyCost);
+  if (isParseableDollarAmount(unified)) {
+    return `${unified} saved`;
   }
   if (
-    actualMonthlyCost === CostEstimateLabel.FREE ||
-    actualMonthlyCost === CostEstimateLabel.NO_CHARGE
+    unified === CostEstimateLabel.FREE ||
+    unified === CostEstimateLabel.NO_CHARGE
   ) {
     return FREE_SAVINGS_DISPLAY;
   }
@@ -128,7 +157,9 @@ export async function fetchBillingData(
  * Used by `assignee destroy` to show savings when removing a resource.
  *
  * Epic 92 Wave 4 (e92.4.a) — sanitized output:
- *   - parseable dollar amount (`$0.02/month`) → `"$0.02/month saved"`
+ *   - parseable dollar amount (`$0.02/month`) → `"$0.02/mo saved"`
+ *     (polish 2026-05-09: per-month variants are normalised to the
+ *     canonical `$X.XX/mo` shape rendered by `assignee list`)
  *   - `CostEstimateLabel.FREE` / `CostEstimateLabel.NO_CHARGE` →
  *     `"Free, $0.00 savings"` (closes B-21 + D-18)
  *   - anything else (incl. `CostEstimateLabel.NA`,
