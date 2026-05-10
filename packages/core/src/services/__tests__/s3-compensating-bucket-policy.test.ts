@@ -25,8 +25,20 @@ vi.mock("@aws-sdk/client-s3", () => {
   function PutBucketPolicyCommand(input: unknown) {
     return { _type: "PutBucketPolicyCommand", input };
   }
-  return { S3Client, PutBucketPolicyCommand };
+  function GetBucketPolicyCommand(input: unknown) {
+    return { _type: "GetBucketPolicyCommand", input };
+  }
+  return { S3Client, PutBucketPolicyCommand, GetBucketPolicyCommand };
 });
+
+// bug-s3-oac-bucket-policy-clobbering: logger writes the warn-fallthrough
+// message — silence it so the test runner output stays clean.
+vi.mock("../../utils/logger/index.js", () => ({
+  log: vi.fn(),
+  LOG_ACTIONS: {
+    MEMORY_WRITE_FAILED: "memory_write_failed",
+  },
+}));
 
 // Snapshot env so credential mutations don't leak between tests.
 const ORIGINAL_ENV = { ...process.env };
@@ -225,7 +237,27 @@ describe("buildCompensatingBucketPolicy", () => {
 // ── attachCompensatingBucketPolicy ───────────────────────────────────────────
 
 describe("attachCompensatingBucketPolicy", () => {
+  /**
+   * Helper: simulate a bucket that has NO existing bucket policy.
+   * The compensating attach flow always issues GetBucketPolicy first
+   * (bug-s3-oac-bucket-policy-clobbering merge); empty-bucket → AWS
+   * returns NoSuchBucketPolicy.
+   */
+  function mockNoExistingPolicy(): void {
+    mockS3Send.mockImplementationOnce(() => {
+      const err = new Error("The bucket policy does not exist") as Error & {
+        name: string;
+        Code: string;
+      };
+      err.name = "NoSuchBucketPolicy";
+      err.Code = "NoSuchBucketPolicy";
+      return Promise.reject(err);
+    });
+  }
+
   it("calls PutBucketPolicyCommand with correct Bucket and Policy string", async () => {
+    // GET → NoSuchBucketPolicy (empty bucket), PUT → success.
+    mockNoExistingPolicy();
     mockS3Send.mockResolvedValueOnce({});
 
     const client = new S3Client({ region: REGION });
@@ -239,11 +271,13 @@ describe("attachCompensatingBucketPolicy", () => {
     );
 
     expect(result).toEqual({ attached: true });
-    expect(mockS3Send).toHaveBeenCalledTimes(1);
+    expect(mockS3Send).toHaveBeenCalledTimes(2);
 
-    const [calledWith] = mockS3Send.mock.calls[0] as [
+    // The PUT is the SECOND send call (GET was first).
+    const putCall = mockS3Send.mock.calls[1] as [
       { _type: string; input: { Bucket: string; Policy: string } },
     ];
+    const calledWith = putCall[0];
     expect(calledWith._type).toBe("PutBucketPolicyCommand");
     expect(calledWith.input.Bucket).toBe(BUCKET_NAME);
 
@@ -267,6 +301,7 @@ describe("attachCompensatingBucketPolicy", () => {
   });
 
   it("returns { attached: false, reason } when PutBucketPolicyCommand throws — does NOT propagate", async () => {
+    mockNoExistingPolicy();
     mockS3Send.mockRejectedValueOnce(
       Object.assign(new Error("Access Denied"), {
         name: "AccessDeniedException",
@@ -286,11 +321,12 @@ describe("attachCompensatingBucketPolicy", () => {
 
     expect(result.attached).toBe(false);
     expect(result.reason).toContain("Access Denied");
-    // Must NOT throw — caller decides how to handle.
-    expect(mockS3Send).toHaveBeenCalledTimes(1);
+    // GET + PUT = 2 calls; must NOT throw.
+    expect(mockS3Send).toHaveBeenCalledTimes(2);
   });
 
   it("returns { attached: false, reason } for throttling errors", async () => {
+    mockNoExistingPolicy();
     mockS3Send.mockRejectedValueOnce(
       Object.assign(new Error("Rate exceeded"), {
         name: "ThrottlingException",
@@ -313,6 +349,7 @@ describe("attachCompensatingBucketPolicy", () => {
   });
 
   it("returns { attached: false, reason } for non-Error throws (string error)", async () => {
+    mockNoExistingPolicy();
     mockS3Send.mockRejectedValueOnce("unexpected string error");
 
     const client = new S3Client({ region: REGION });
@@ -330,6 +367,7 @@ describe("attachCompensatingBucketPolicy", () => {
   });
 
   it("creates its own S3Client from operator credentials when none is injected", async () => {
+    mockNoExistingPolicy();
     mockS3Send.mockResolvedValueOnce({});
 
     // No client injected — should use env credentials.
@@ -340,10 +378,11 @@ describe("attachCompensatingBucketPolicy", () => {
     });
 
     expect(result.attached).toBe(true);
-    expect(mockS3Send).toHaveBeenCalledTimes(1);
+    expect(mockS3Send).toHaveBeenCalledTimes(2);
   });
 
   it("uses AWS_REGION from env when region arg is empty string", async () => {
+    mockNoExistingPolicy();
     mockS3Send.mockResolvedValueOnce({});
 
     const result = await attachCompensatingBucketPolicy({
@@ -363,6 +402,7 @@ describe("attachCompensatingBucketPolicy", () => {
   // so an empty string fell back to partition `aws` while the client
   // used AWS_REGION — masking a partition mismatch on GovCloud callers.
   it("derives policy ARN partition AND client region from the same effectiveRegion when args.region is empty", async () => {
+    mockNoExistingPolicy();
     mockS3Send.mockResolvedValueOnce({});
     const { AWS_REGION: importedRegion } =
       await import("../../config/constants/aws.js");
@@ -377,11 +417,11 @@ describe("attachCompensatingBucketPolicy", () => {
     });
 
     expect(result.attached).toBe(true);
-    expect(mockS3Send).toHaveBeenCalledTimes(1);
+    expect(mockS3Send).toHaveBeenCalledTimes(2);
 
-    const [calledWith] = mockS3Send.mock.calls[0] as [
-      { input: { Policy: string } },
-    ];
+    // PUT is the SECOND call (GET was first).
+    const putCall = mockS3Send.mock.calls[1] as [{ input: { Policy: string } }];
+    const calledWith = putCall[0];
     const parsedPolicy = JSON.parse(calledWith.input.Policy) as {
       Statement: Array<{ Resource: string[] }>;
     };
@@ -391,5 +431,209 @@ describe("attachCompensatingBucketPolicy", () => {
     expect(parsedPolicy.Statement[0]!.Resource[0]).toMatch(
       new RegExp(`^arn:${expectedPartition}:s3:::`),
     );
+  });
+
+  // ─────────────────────────────────────────────────────────────────────
+  // bug-s3-oac-bucket-policy-clobbering: a plain PutBucketPolicy clobbers
+  // the OAC cloudfront.amazonaws.com grant the static-website compound
+  // attaches via the BucketPolicy step BEFORE we run. The merge logic
+  // must preserve existing statements (or replace the same Sid when
+  // already present), and refuse to overwrite a malformed existing
+  // policy. Falling through to legacy PUT-only behaviour is the
+  // back-compat guarantee for non-OAC buckets where the operator might
+  // lack `s3:GetBucketPolicy`.
+  // ─────────────────────────────────────────────────────────────────────
+
+  describe("bug-s3-oac-bucket-policy-clobbering — merge logic", () => {
+    /** Realistic OAC bucket policy as CCAPI's BucketPolicy step writes it. */
+    const OAC_DISTRIBUTION_ARN =
+      "arn:aws:cloudfront::112233445566:distribution/E1A2B3C4D5E6F7";
+    const oacOnlyPolicy = {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Sid: "AllowCloudFrontServicePrincipalReadOnly",
+          Effect: "Allow",
+          Principal: { Service: "cloudfront.amazonaws.com" },
+          Action: "s3:GetObject",
+          Resource: `arn:aws:s3:::${BUCKET_NAME}/*`,
+          Condition: {
+            StringEquals: {
+              "AWS:SourceArn": OAC_DISTRIBUTION_ARN,
+            },
+          },
+        },
+      ],
+    };
+
+    it("OAC-grant-only existing policy → PUT receives merged [OAC, compensating]", async () => {
+      // GET returns the OAC policy as a JSON string (real AWS shape).
+      mockS3Send.mockResolvedValueOnce({
+        Policy: JSON.stringify(oacOnlyPolicy),
+      });
+      // PUT succeeds.
+      mockS3Send.mockResolvedValueOnce({});
+
+      const client = new S3Client({ region: REGION });
+      const result = await attachCompensatingBucketPolicy(
+        {
+          bucketName: BUCKET_NAME,
+          operatorArn: OPERATOR_ARN,
+          region: REGION,
+        },
+        client,
+      );
+
+      expect(result).toEqual({ attached: true });
+      expect(mockS3Send).toHaveBeenCalledTimes(2);
+
+      const putCall = mockS3Send.mock.calls[1] as [
+        { _type: string; input: { Policy: string } },
+      ];
+      expect(putCall[0]._type).toBe("PutBucketPolicyCommand");
+      const merged = JSON.parse(putCall[0].input.Policy) as {
+        Statement: Array<{ Sid: string }>;
+      };
+      // EXACTLY two statements: OAC preserved, compensating appended.
+      expect(merged.Statement).toHaveLength(2);
+      expect(merged.Statement[0]!.Sid).toBe(
+        "AllowCloudFrontServicePrincipalReadOnly",
+      );
+      expect(merged.Statement[1]!.Sid).toBe(
+        "AssigneeOperatorDestructiveTagScoped",
+      );
+    });
+
+    it("both statements already present → idempotent: compensating REPLACED, length stays 2", async () => {
+      // Pre-existing policy already has BOTH the OAC grant and a stale
+      // compensating statement (e.g. earlier `assignee setup` run).
+      const stalePolicy = {
+        Version: "2012-10-17",
+        Statement: [
+          oacOnlyPolicy.Statement[0],
+          {
+            Sid: "AssigneeOperatorDestructiveTagScoped",
+            Effect: "Allow",
+            Principal: { AWS: "arn:aws:iam::112233445566:user/stale-operator" },
+            Action: ["s3:DeleteBucket"],
+            Resource: [
+              `arn:aws:s3:::${BUCKET_NAME}`,
+              `arn:aws:s3:::${BUCKET_NAME}/*`,
+            ],
+            Condition: {
+              StringEquals: {
+                "aws:ResourceTag/managed-by": "assignee-ai",
+              },
+            },
+          },
+        ],
+      };
+      mockS3Send.mockResolvedValueOnce({
+        Policy: JSON.stringify(stalePolicy),
+      });
+      mockS3Send.mockResolvedValueOnce({});
+
+      const client = new S3Client({ region: REGION });
+      const result = await attachCompensatingBucketPolicy(
+        {
+          bucketName: BUCKET_NAME,
+          operatorArn: OPERATOR_ARN,
+          region: REGION,
+        },
+        client,
+      );
+
+      expect(result).toEqual({ attached: true });
+      expect(mockS3Send).toHaveBeenCalledTimes(2);
+
+      const putCall = mockS3Send.mock.calls[1] as [
+        { input: { Policy: string } },
+      ];
+      const merged = JSON.parse(putCall[0].input.Policy) as {
+        Statement: Array<{
+          Sid: string;
+          Principal: { AWS?: string; Service?: string };
+          Action: string | string[];
+        }>;
+      };
+      // Length stays 2 (no append).
+      expect(merged.Statement).toHaveLength(2);
+      // OAC still in position 0 (preserved by index-replace).
+      expect(merged.Statement[0]!.Sid).toBe(
+        "AllowCloudFrontServicePrincipalReadOnly",
+      );
+      // Compensating REPLACED — Principal.AWS is the CURRENT operator,
+      // not the stale one, and Action is the full 6-action sorted list.
+      expect(merged.Statement[1]!.Sid).toBe(
+        "AssigneeOperatorDestructiveTagScoped",
+      );
+      expect(merged.Statement[1]!.Principal.AWS).toBe(OPERATOR_ARN);
+      expect(Array.isArray(merged.Statement[1]!.Action)).toBe(true);
+      expect((merged.Statement[1]!.Action as string[]).length).toBe(6);
+    });
+
+    it("GetBucketPolicy throws non-NoSuch error → log warn, fall through to legacy PUT-only", async () => {
+      // Throttling on GET — operator may also lack `s3:GetBucketPolicy`
+      // IAM permission entirely. The legacy fallback writes ONLY the
+      // compensating statement (back-compat for non-OAC buckets).
+      mockS3Send.mockRejectedValueOnce(
+        Object.assign(new Error("Rate exceeded"), {
+          name: "ThrottlingException",
+          $fault: "client",
+        }),
+      );
+      mockS3Send.mockResolvedValueOnce({});
+
+      const client = new S3Client({ region: REGION });
+      const result = await attachCompensatingBucketPolicy(
+        {
+          bucketName: BUCKET_NAME,
+          operatorArn: OPERATOR_ARN,
+          region: REGION,
+        },
+        client,
+      );
+
+      expect(result).toEqual({ attached: true });
+      expect(mockS3Send).toHaveBeenCalledTimes(2);
+
+      const putCall = mockS3Send.mock.calls[1] as [
+        { input: { Policy: string } },
+      ];
+      const written = JSON.parse(putCall[0].input.Policy) as {
+        Statement: Array<{ Sid: string }>;
+      };
+      // Legacy behaviour: ONLY the compensating statement.
+      expect(written.Statement).toHaveLength(1);
+      expect(written.Statement[0]!.Sid).toBe(
+        "AssigneeOperatorDestructiveTagScoped",
+      );
+    });
+
+    it("existing policy is malformed JSON → return { attached: false, reason }, NO PUT happens", async () => {
+      // Real AWS would never serve invalid JSON, but a manual operator
+      // edit could. Refuse to PUT instead of clobbering the malformed
+      // policy with something else — operator intent is unknowable.
+      mockS3Send.mockResolvedValueOnce({
+        Policy: "{ this is not valid json",
+      });
+
+      const client = new S3Client({ region: REGION });
+      const result = await attachCompensatingBucketPolicy(
+        {
+          bucketName: BUCKET_NAME,
+          operatorArn: OPERATOR_ARN,
+          region: REGION,
+        },
+        client,
+      );
+
+      expect(result.attached).toBe(false);
+      expect(result.reason).toMatch(/malformed JSON/i);
+      // ONLY the GET happened — no PUT.
+      expect(mockS3Send).toHaveBeenCalledTimes(1);
+      const [getCall] = mockS3Send.mock.calls[0] as [{ _type: string }];
+      expect(getCall._type).toBe("GetBucketPolicyCommand");
+    });
   });
 });

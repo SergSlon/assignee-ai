@@ -253,6 +253,23 @@ export async function formatApplyCompoundSuccess(
             : {}),
         }
       : {};
+    // `assignee update` follow-on: when this completed resource is the
+    // CloudFront distribution, capture the live DomainName so the
+    // future `assignee update <bucket>` resolver can print the URL
+    // without an extra GetDistribution. We pull from BOTH places the
+    // hostname could be carried: (a) the metadata we already stamped
+    // on `completedEntry` for the static-website compound (line
+    // ~76-79), and (b) the `state.cloudFrontDomainName` slot the
+    // status-poller populates on the active resource. Either is
+    // sufficient; we prefer the per-resource value because compounds
+    // can carry multiple CloudFront distributions in the future.
+    if (completed.resourceType === RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION) {
+      const domain =
+        completed.metadata?.cloudFrontDomainName ?? state.cloudFrontDomainName;
+      if (typeof domain === "string" && domain.length > 0) {
+        extras.cloudFrontDomainName = domain;
+      }
+    }
     await writeProvisionRecord(
       state.runId,
       completed.resourceType,

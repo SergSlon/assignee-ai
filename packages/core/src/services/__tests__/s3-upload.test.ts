@@ -9,15 +9,23 @@ import { tmpdir } from "node:os";
 // they have no call assertions.
 vi.mock("@aws-sdk/client-s3", () => {
   function PutObjectCommand(input: unknown) {
-    return input;
+    return { _type: "PutObjectCommand", ...(input as object) };
   }
   function PutBucketPolicyCommand(input: unknown) {
-    return input;
+    return { _type: "PutBucketPolicyCommand", ...(input as object) };
+  }
+  function ListObjectsV2Command(input: unknown) {
+    return { _type: "ListObjectsV2Command", ...(input as object) };
+  }
+  function DeleteObjectsCommand(input: unknown) {
+    return { _type: "DeleteObjectsCommand", ...(input as object) };
   }
   return {
     S3Client: vi.fn(),
     PutObjectCommand,
     PutBucketPolicyCommand,
+    ListObjectsV2Command,
+    DeleteObjectsCommand,
   };
 });
 
@@ -420,5 +428,226 @@ describe("s3-upload fail-closed credential enforcement", () => {
       expect(msg).toContain("ASSIGNEE_OPERATOR_ACCESS_KEY_ID");
       expect(msg).toContain("ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY");
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// `assignee update` follow-on: MIME-type expansion (video / audio / markdown)
+// ─────────────────────────────────────────────────────────────────────────────
+describe("getMimeType — assignee-update MIME expansion", () => {
+  // Pure data table. Drives both the unit assertion and (indirectly via
+  // import in `uploadStaticSite`) the ContentType S3 will store.
+  const TABLE: ReadonlyArray<[string, string]> = [
+    ["clip.mp4", "video/mp4"],
+    ["clip.webm", "video/webm"],
+    ["clip.mov", "video/quicktime"],
+    ["clip.m4v", "video/x-m4v"],
+    ["song.mp3", "audio/mpeg"],
+    ["sample.wav", "audio/wav"],
+    ["loop.ogg", "audio/ogg"],
+    ["README.md", "text/markdown"],
+    // Case-insensitive resolution (existing behaviour, regression guard).
+    ["TRAILER.MP4", "video/mp4"],
+    ["song.MP3", "audio/mpeg"],
+  ];
+  for (const [name, expected] of TABLE) {
+    it(`maps ${name} → ${expected}`, () => {
+      expect(getMimeType(name)).toBe(expected);
+    });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// `assignee update` follow-on: deleteOrphans sweep
+// ─────────────────────────────────────────────────────────────────────────────
+describe("uploadStaticSite — deleteOrphans", () => {
+  let tmpDir: string;
+  let mockSend: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    tmpDir = mkdtempSync(join(tmpdir(), "s3-upload-deleteorphans-"));
+    const { S3Client } = await import("@aws-sdk/client-s3");
+    mockSend = vi.fn();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Partial mock of S3Client; only `send` is exercised
+    vi.mocked(S3Client).mockImplementation(() => ({ send: mockSend }) as any);
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  /**
+   * Helper: drive `mockSend` through the PUT/LIST/DELETE call sequence.
+   *
+   * - PutObjectCommand calls (N of them, one per local file) → resolve {}
+   * - ListObjectsV2Command → resolve { Contents: [...], IsTruncated: false }
+   * - DeleteObjectsCommand → resolve { Errors: [] } (Quiet=true)
+   */
+  function wireUploadThenListAndDelete(
+    localFileCount: number,
+    remoteKeys: readonly string[],
+  ): void {
+    for (let i = 0; i < localFileCount; i++) {
+      mockSend.mockResolvedValueOnce({
+        ETag: '"d41d8cd98f00b204e9800998ecf8427e"',
+        $metadata: { httpStatusCode: 200, requestId: `req-put-${i}` },
+      });
+    }
+    mockSend.mockResolvedValueOnce({
+      Contents: remoteKeys.map((Key) => ({ Key, Size: 100 })),
+      IsTruncated: false,
+      $metadata: { httpStatusCode: 200, requestId: "req-list-1" },
+    });
+    mockSend.mockResolvedValueOnce({
+      Errors: [],
+      Deleted: remoteKeys.map((Key) => ({ Key })),
+      $metadata: { httpStatusCode: 200, requestId: "req-delete-1" },
+    });
+  }
+
+  it("returns deleted: 0 when no deleteOrphans option is passed (default OFF)", async () => {
+    writeFileSync(join(tmpDir, "index.html"), "<h1>hi</h1>");
+    mockSend.mockResolvedValueOnce({
+      ETag: '"d41d8cd98f00b204e9800998ecf8427e"',
+      $metadata: { httpStatusCode: 200, requestId: "req-put-default" },
+    });
+
+    const result = await uploadStaticSite("my-bucket", tmpDir);
+
+    expect(result.uploaded).toBe(1);
+    expect(result.deleted).toBe(0);
+    // ONLY the PUT happened — no LIST, no DELETE.
+    expect(mockSend).toHaveBeenCalledTimes(1);
+    const cmd = mockSend.mock.calls[0]![0];
+    expect(cmd._type).toBe("PutObjectCommand");
+  });
+
+  it("deletes remote objects with no local counterpart", async () => {
+    writeFileSync(join(tmpDir, "index.html"), "<h1>new</h1>");
+    writeFileSync(join(tmpDir, "style.css"), "body {}");
+
+    // Remote has TWO extra orphans: old/legacy.html and removed.js.
+    wireUploadThenListAndDelete(2, [
+      "index.html", // present locally → preserved
+      "style.css", // present locally → preserved
+      "old/legacy.html", // orphan → delete
+      "removed.js", // orphan → delete
+    ]);
+
+    const result = await uploadStaticSite("my-bucket", tmpDir, {
+      deleteOrphans: true,
+    });
+
+    expect(result.uploaded).toBe(2);
+    expect(result.deleted).toBe(2);
+    expect(result.failed).toBe(0);
+
+    // Last call was a DeleteObjectsCommand carrying the exact orphan set.
+    type DelCmd = {
+      _type: string;
+      Bucket: string;
+      Delete: { Objects: Array<{ Key: string }>; Quiet: boolean };
+    };
+    const delCmd = mockSend.mock.calls.at(-1)![0] as DelCmd;
+    expect(delCmd._type).toBe("DeleteObjectsCommand");
+    expect(delCmd.Bucket).toBe("my-bucket");
+    expect(delCmd.Delete.Quiet).toBe(true);
+    const deletedKeys = delCmd.Delete.Objects.map((o) => o.Key).sort();
+    expect(deletedKeys).toEqual(["old/legacy.html", "removed.js"].sort());
+  });
+
+  it("returns deleted: 0 when there are no orphans (clean bucket)", async () => {
+    writeFileSync(join(tmpDir, "index.html"), "<h1>hi</h1>");
+    // Remote contains EXACTLY the local set — no orphans.
+    mockSend.mockResolvedValueOnce({
+      $metadata: { httpStatusCode: 200, requestId: "req-put" },
+    });
+    mockSend.mockResolvedValueOnce({
+      Contents: [{ Key: "index.html", Size: 100 }],
+      IsTruncated: false,
+      $metadata: { httpStatusCode: 200, requestId: "req-list" },
+    });
+
+    const result = await uploadStaticSite("my-bucket", tmpDir, {
+      deleteOrphans: true,
+    });
+
+    expect(result.uploaded).toBe(1);
+    expect(result.deleted).toBe(0);
+    // PUT + LIST, but NO DELETE call (empty orphan batch is skipped).
+    expect(mockSend).toHaveBeenCalledTimes(2);
+    const last = mockSend.mock.calls.at(-1)![0];
+    expect(last._type).toBe("ListObjectsV2Command");
+  });
+
+  it("paginates ListObjectsV2 via NextContinuationToken", async () => {
+    writeFileSync(join(tmpDir, "index.html"), "<h1>hi</h1>");
+    mockSend.mockResolvedValueOnce({
+      $metadata: { httpStatusCode: 200, requestId: "req-put" },
+    });
+    // Page 1 — truncated, with continuation token.
+    mockSend.mockResolvedValueOnce({
+      Contents: [{ Key: "page1-orphan.txt" }],
+      IsTruncated: true,
+      NextContinuationToken: "page2-token",
+      $metadata: { httpStatusCode: 200, requestId: "req-list-1" },
+    });
+    // Page 2 — final.
+    mockSend.mockResolvedValueOnce({
+      Contents: [{ Key: "page2-orphan.txt" }, { Key: "index.html" }],
+      IsTruncated: false,
+      $metadata: { httpStatusCode: 200, requestId: "req-list-2" },
+    });
+    // Delete batch.
+    mockSend.mockResolvedValueOnce({
+      Errors: [],
+      Deleted: [{ Key: "page1-orphan.txt" }, { Key: "page2-orphan.txt" }],
+      $metadata: { httpStatusCode: 200, requestId: "req-delete" },
+    });
+
+    const result = await uploadStaticSite("my-bucket", tmpDir, {
+      deleteOrphans: true,
+    });
+
+    expect(result.deleted).toBe(2);
+    // Second LIST call MUST carry the continuation token from page 1.
+    const listCalls = mockSend.mock.calls
+      .map((c) => c[0])
+      .filter((c) => c._type === "ListObjectsV2Command");
+    expect(listCalls).toHaveLength(2);
+    expect(listCalls[1].ContinuationToken).toBe("page2-token");
+  });
+
+  it("counts S3 DeleteObjects per-key errors as failures, not deletes", async () => {
+    writeFileSync(join(tmpDir, "index.html"), "<h1>hi</h1>");
+    mockSend.mockResolvedValueOnce({
+      $metadata: { httpStatusCode: 200, requestId: "req-put" },
+    });
+    mockSend.mockResolvedValueOnce({
+      Contents: [
+        { Key: "orphan-1" },
+        { Key: "orphan-2" },
+        { Key: "index.html" },
+      ],
+      IsTruncated: false,
+      $metadata: { httpStatusCode: 200, requestId: "req-list" },
+    });
+    mockSend.mockResolvedValueOnce({
+      Errors: [
+        { Key: "orphan-2", Code: "AccessDenied", Message: "policy denies" },
+      ],
+      Deleted: [{ Key: "orphan-1" }],
+      $metadata: { httpStatusCode: 200, requestId: "req-delete" },
+    });
+
+    const result = await uploadStaticSite("my-bucket", tmpDir, {
+      deleteOrphans: true,
+    });
+
+    // 2 orphans, 1 succeeded, 1 reported as error.
+    expect(result.deleted).toBe(1);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]!.file).toBe("orphan-2");
+    expect(result.errors[0]!.error).toMatch(/policy denies/);
   });
 });

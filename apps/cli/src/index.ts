@@ -51,6 +51,7 @@ import { reconcileCommand } from "./commands/reconcile.js";
 import { doctorCommand } from "./commands/doctor.js";
 import { restoreProvisionsCommand } from "./commands/restore-provisions.js";
 import { auditVerifyCommand } from "./commands/audit-verify.js";
+import { updateCommand } from "./commands/update.js";
 import { versionCommand } from "./commands/version.js";
 import { ProcessExitCode } from "./constants/errors.js";
 import { errorToExitCode } from "./utils/exit-code.js";
@@ -184,6 +185,7 @@ program.addCommand(auditVerifyCommand);
 program.addCommand(applyCommand);
 program.addCommand(reconcileCommand);
 program.addCommand(doctorCommand);
+program.addCommand(updateCommand);
 
 // Propagate `showGlobalOptions: true` to every subcommand so the root-level
 // `--verbose` (and any future global options) appear in `<subcommand> --help`

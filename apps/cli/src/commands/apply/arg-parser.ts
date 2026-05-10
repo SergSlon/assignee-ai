@@ -92,8 +92,12 @@ async function resolveExplicitCheckpoint(
 
 /**
  * Validate --source dir exists, non-empty, counts files; warn on truncation.
+ *
+ * `assignee update` follow-on: exported so `commands/update/arg-parser.ts`
+ * can reuse the same validation logic (existence, non-empty, truncation
+ * warning) without duplicating the call to `countSourceFiles`.
  */
-function resolveSourceDir(opts: ApplyOpts): {
+export function resolveSourceDir(opts: ApplyOpts): {
   resolvedSourceDir: string | undefined;
   sourceFileCount: number | undefined;
 } {
