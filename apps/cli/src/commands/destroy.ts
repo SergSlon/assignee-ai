@@ -85,6 +85,7 @@ import {
 import {
   ScheduleKeyDeletionCommand,
   DescribeKeyCommand,
+  DisableKeyCommand,
   KMSInvalidStateException,
   NotFoundException as KmsNotFoundException,
 } from "@aws-sdk/client-kms";
@@ -558,6 +559,12 @@ async function scheduleKmsKeyDeletion(
   const kms = createKmsClient(awsCreds ? { ...awsCreds, region } : { region });
 
   startSpinner("Scheduling KMS key for deletion...");
+  // Defense-in-depth (2026-05-09): pre-disable the key BEFORE scheduling
+  // deletion so a cancelled `kms:ScheduleKeyDeletion` (operator runs
+  // `kms:CancelKeyDeletion` during the pending window) leaves the key
+  // in `Disabled` state instead of silently re-Enabled. Best-effort —
+  // any failure is swallowed and the schedule call still runs.
+  await tryDisableKmsKey(kms, resolved.identifier || resolved.arn);
   try {
     const response = await kms.send(
       new ScheduleKeyDeletionCommand({
@@ -614,6 +621,48 @@ async function scheduleKmsKeyDeletion(
   } finally {
     stopSpinner();
     kms.destroy();
+  }
+}
+
+/**
+ * Defense-in-depth (2026-05-09) helper: best-effort `kms:DisableKey`
+ * BEFORE `kms:ScheduleKeyDeletion`. Pre-flight DescribeKey gates the
+ * Disable call to keys whose current state is `Enabled`, so we don't
+ * trip InvalidStateException on Disabled / PendingDeletion / etc.
+ *
+ * Why this matters: ScheduleKeyDeletion alone leaves the key Enabled
+ * during the 7–30 day pending window. If the operator runs
+ * `kms:CancelKeyDeletion` (e.g. they realised the destroy was wrong),
+ * the key returns to its prior state — Enabled — and any application
+ * still holding the ARN can decrypt with it again. Pre-disabling
+ * forces a cancelled destroy back into `Disabled` state, requiring an
+ * explicit `kms:EnableKey` to re-arm. Defense in depth: a cancelled
+ * destroy is a near-miss, not a silent re-enablement.
+ *
+ * Best-effort contract: ANY failure (DescribeKey throttle, AccessDenied,
+ * DisableKey failure) is swallowed silently — the parent destroy must
+ * still attempt ScheduleKeyDeletion. The IAM policy for `assignee-operator`
+ * already grants `kms:DisableKey` (security.ts:53), so AccessDenied is
+ * possible only on customer-managed roles. Style matches
+ * `tryDescribeKmsDeletionDate` (silent swallow, no logging).
+ */
+async function tryDisableKmsKey(
+  kms: ReturnType<typeof createKmsClient>,
+  keyId: string,
+): Promise<{ disabled: boolean; reason?: string }> {
+  try {
+    const describe = await kms.send(new DescribeKeyCommand({ KeyId: keyId }));
+    const state = describe.KeyMetadata?.KeyState;
+    if (state !== "Enabled") {
+      return { disabled: false, reason: `state:${state ?? "unknown"}` };
+    }
+    await kms.send(new DisableKeyCommand({ KeyId: keyId }));
+    return { disabled: true };
+  } catch (err) {
+    return {
+      disabled: false,
+      reason: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
