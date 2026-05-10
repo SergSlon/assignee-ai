@@ -11,6 +11,8 @@ import {
   S3Client,
   PutObjectCommand,
   PutBucketPolicyCommand,
+  ListObjectsV2Command,
+  DeleteObjectsCommand,
 } from "@aws-sdk/client-s3";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, relative, extname, sep as pathSep } from "node:path";
@@ -30,6 +32,13 @@ export interface UploadResult {
   failed: number;
   totalBytes: number;
   errors: Array<{ file: string; error: string }>;
+  /**
+   * Count of remote objects deleted because they had no local
+   * counterpart. Always `0` when the caller does not pass
+   * `{ deleteOrphans: true }`. Additive — pre-feature callers and
+   * tests see the same field set with the value zero.
+   */
+  deleted: number;
 }
 
 export interface UploadProgress {
@@ -65,6 +74,19 @@ const MIME_TYPES: Record<string, string> = {
   ".zip": "application/zip",
   ".map": ContentType.JSON,
   ".webmanifest": "application/manifest+json",
+  // ── `assignee update` follow-on: video / audio / markdown ─────────
+  // The `update` command refreshes existing static sites that today
+  // routinely embed marketing video clips, podcasts, or doc previews.
+  // Without these mappings S3 served `application/octet-stream` which
+  // forces a download instead of streaming inline.
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+  ".mov": "video/quicktime",
+  ".m4v": "video/x-m4v",
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
+  ".ogg": "audio/ogg",
+  ".md": "text/markdown",
 };
 
 /** Resolve MIME type from file extension, defaulting to application/octet-stream. */
@@ -173,9 +195,15 @@ export async function configureBucketPolicy(
  * correct MIME type. Individual file failures do not stop the upload — errors
  * are collected and returned in the result.
  *
+ * When `options.deleteOrphans === true`, after the upload loop completes
+ * the function paginates `ListObjectsV2` over the bucket, computes the set
+ * of remote keys that have no local counterpart, and deletes them in
+ * 1000-key batches via `DeleteObjectsCommand` (AWS limit). The result
+ * carries the `deleted` count.
+ *
  * @param bucketName - Target S3 bucket name
  * @param sourceDir  - Local directory containing static site files
- * @param options    - Optional region override and progress callback
+ * @param options    - Optional region override, progress callback, orphan deletion
  * @returns Upload result with counts and any errors
  */
 export async function uploadStaticSite(
@@ -185,6 +213,12 @@ export async function uploadStaticSite(
     region?: string;
     onProgress?: (progress: UploadProgress) => void;
     config?: ConfigPort;
+    /**
+     * `assignee update` follow-on: when `true`, deletes remote objects
+     * whose key is NOT present in the local upload set. Default `false`
+     * (additive-only is the safer default for first-time uploads).
+     */
+    deleteOrphans?: boolean;
   },
 ): Promise<UploadResult> {
   const client = createS3Client(options?.region, options?.config);
@@ -195,7 +229,11 @@ export async function uploadStaticSite(
     failed: 0,
     totalBytes: 0,
     errors: [],
+    deleted: 0,
   };
+
+  /** S3 keys we successfully PUT in this run — used by the orphan sweep. */
+  const uploadedKeys = new Set<string>();
 
   for (let i = 0; i < allFiles.length; i++) {
     const filePath = allFiles[i]!;
@@ -221,6 +259,7 @@ export async function uploadStaticSite(
       );
       result.uploaded += 1;
       result.totalBytes += body.length;
+      uploadedKeys.add(key);
     } catch (err) {
       result.failed += 1;
       result.errors.push({
@@ -234,6 +273,74 @@ export async function uploadStaticSite(
       total: allFiles.length,
       file: key,
     });
+  }
+
+  // ── Orphan sweep (opt-in) ───────────────────────────────────────────
+  if (options?.deleteOrphans === true) {
+    // For the orphan calculation we also include the local key set
+    // (files that FAILED to upload should NOT be deleted from the
+    // bucket — they may already exist there from a prior run that
+    // succeeded). The set we want is `remote - local-from-disk`.
+    const localKeys = new Set<string>(
+      allFiles.map((f) => relative(sourceDir, f).split(pathSep).join("/")),
+    );
+
+    const orphans: string[] = [];
+    let continuationToken: string | undefined;
+    do {
+      const listResp = (await client.send(
+        new ListObjectsV2Command({
+          Bucket: bucketName,
+          ContinuationToken: continuationToken,
+        }),
+      )) as {
+        Contents?: Array<{ Key?: string }>;
+        IsTruncated?: boolean;
+        NextContinuationToken?: string;
+      };
+      for (const obj of listResp.Contents ?? []) {
+        const k = obj.Key;
+        if (k && !localKeys.has(k)) orphans.push(k);
+      }
+      continuationToken = listResp.IsTruncated
+        ? listResp.NextContinuationToken
+        : undefined;
+    } while (continuationToken);
+
+    // S3 DeleteObjects is capped at 1000 keys per request. Batch.
+    for (let i = 0; i < orphans.length; i += 1000) {
+      const batch = orphans.slice(i, i + 1000);
+      try {
+        const delResp = (await client.send(
+          new DeleteObjectsCommand({
+            Bucket: bucketName,
+            Delete: {
+              Objects: batch.map((Key) => ({ Key })),
+              Quiet: true,
+            },
+          }),
+        )) as { Errors?: Array<{ Key?: string; Message?: string }> };
+        // Successful deletes = batch size minus error count.
+        const errCount = delResp.Errors?.length ?? 0;
+        result.deleted += batch.length - errCount;
+        for (const e of delResp.Errors ?? []) {
+          result.errors.push({
+            file: e.Key ?? "<unknown>",
+            error: `delete failed: ${e.Message ?? "unknown"}`,
+          });
+        }
+      } catch (err) {
+        // Whole-batch failure (network, throttling). Record each key.
+        for (const k of batch) {
+          result.errors.push({
+            file: k,
+            error: `delete failed: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          });
+        }
+      }
+    }
   }
 
   return result;

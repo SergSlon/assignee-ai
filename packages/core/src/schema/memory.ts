@@ -47,6 +47,15 @@ export const ProvisionRecordSchema = z.object({
    * the same thing.
    */
   compensatingPolicyError: z.string().optional(),
+  /**
+   * `assignee update` follow-on: real DNS-resolvable CloudFront hostname
+   * (e.g. `d1eka2i9dtl8tu.cloudfront.net`) captured at apply time for
+   * static-website compounds. Lets `assignee update` print the live URL
+   * on subsequent runs without an extra GetDistribution roundtrip.
+   * Optional and additive — pre-feature provision records validate
+   * without it, and non-CloudFront resources never carry a value.
+   */
+  cloudFrontDomainName: z.string().optional(),
 });
 
 export const FailureRecordSchema = z.object({

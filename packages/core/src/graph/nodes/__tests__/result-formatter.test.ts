@@ -197,6 +197,7 @@ beforeEach(async () => {
     failed: 0,
     totalBytes: 15360,
     errors: [],
+    deleted: 0,
   });
   vi.mocked(s3.configureBucketPolicy).mockResolvedValue(undefined);
 
@@ -1664,6 +1665,7 @@ describe("resultFormatterNode — Story 37.4 static site upload", () => {
       failed: 1,
       totalBytes: 10240,
       errors: [{ file: "broken.html", error: "Permission denied" }],
+      deleted: 0,
     });
 
     const state = makeState({

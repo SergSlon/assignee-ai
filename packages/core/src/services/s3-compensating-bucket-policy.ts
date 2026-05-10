@@ -27,12 +27,17 @@
  *   Bug story:     bug-s3-destructive-tag-condition-aws-limitation.md (Part 2)
  */
 
-import { S3Client, PutBucketPolicyCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  PutBucketPolicyCommand,
+  GetBucketPolicyCommand,
+} from "@aws-sdk/client-s3";
 import { IamEffect } from "../config/iam-effects.js";
 import { IamPolicy } from "../config/aws-arns.js";
 import { getPartitionFromRegion } from "../config/aws-partition.js";
 import { requireAssigneeCredentials } from "../config/aws-credentials.js";
 import { AWS_REGION } from "../config/constants/aws.js";
+import { log, LOG_ACTIONS } from "../utils/logger/index.js";
 
 /**
  * Actions granted to the operator principal in the compensating bucket policy.
@@ -67,6 +72,15 @@ export const COMPENSATING_POLICY_ACTIONS: readonly string[] = [
 /** Tag key/value used to scope the compensating Allow in the bucket policy. */
 export const MANAGED_BY_TAG_KEY = "managed-by" as const;
 export const MANAGED_BY_TAG_VALUE = "assignee-ai" as const;
+
+/**
+ * Statement Sid for the compensating allow. Used by the merge logic in
+ * `attachCompensatingBucketPolicy` to find + replace the same statement
+ * idempotently (instead of appending duplicates) when an existing policy
+ * already carries it.
+ */
+export const COMPENSATING_POLICY_SID =
+  "AssigneeOperatorDestructiveTagScoped" as const;
 
 export interface CompensatingPolicyArgs {
   /** Bare S3 bucket name (not the full ARN). */
@@ -119,7 +133,7 @@ export function buildCompensatingBucketPolicy(
     Version: IamPolicy.VERSION,
     Statement: [
       {
-        Sid: "AssigneeOperatorDestructiveTagScoped",
+        Sid: COMPENSATING_POLICY_SID,
         Effect: IamEffect.ALLOW,
         Principal: {
           AWS: args.operatorArn,
@@ -137,12 +151,49 @@ export function buildCompensatingBucketPolicy(
 }
 
 /**
- * Attaches the compensating bucket policy via `PutBucketPolicy`.
+ * Type-safe shape for a single bucket-policy Statement. We only need to
+ * read the Sid for the merge logic; everything else is preserved by-value
+ * so the rewritten policy keeps any caller-supplied keys (Condition,
+ * NotAction, NotPrincipal, …) intact.
+ */
+interface PolicyStatement {
+  Sid?: string;
+  [k: string]: unknown;
+}
+
+interface PolicyDocument {
+  Version?: string;
+  Statement?: PolicyStatement[];
+  [k: string]: unknown;
+}
+
+/**
+ * Attaches the compensating bucket policy.
  *
- * On failure (network error, throttling, IAM gap), returns
- * `{ attached: false, reason: "<message>" }` — does NOT throw.
- * The caller is responsible for logging and deciding whether to
- * surface a user-visible warning.
+ * **bug-s3-oac-bucket-policy-clobbering**: a plain `PutBucketPolicy`
+ * REPLACES the entire bucket policy, which clobbers any prior statements
+ * (most importantly the `cloudfront.amazonaws.com` OAC grant the
+ * static-website compound's `AWS::S3::BucketPolicy` step attaches before
+ * we run). Instead of blind PUT, the new flow is:
+ *
+ *   1. `GetBucketPolicy` on the bucket.
+ *   2. NoSuchBucketPolicy → start from an empty statement list.
+ *   3. Other GET errors (Throttle / AccessDenied / network) → log a
+ *      warn and fall through to legacy PUT-only behaviour so non-OAC
+ *      buckets stay compatible with operators that lack `s3:GetBucketPolicy`.
+ *   4. Malformed JSON in the existing policy → return
+ *      `{ attached: false, reason }` and do NOT PUT. Overwriting a
+ *      malformed policy would also overwrite whatever the operator
+ *      intended that policy to express.
+ *   5. Merge by Sid: if an existing statement has the same Sid as the
+ *      compensating statement (`AssigneeOperatorDestructiveTagScoped`),
+ *      REPLACE it; otherwise APPEND the new statement to the existing
+ *      list. Then PUT the merged document.
+ *
+ * On any unexpected error during PUT, returns
+ * `{ attached: false, reason: "<message>" }` — does NOT throw. The
+ * caller is responsible for logging and deciding whether to surface a
+ * user-visible warning.
  *
  * @param args       - Bucket name, operator ARN, region.
  * @param s3Client   - Optional pre-constructed S3Client (injectable for tests).
@@ -160,10 +211,20 @@ export async function attachCompensatingBucketPolicy(
   // `args.region || AWS_REGION` — silently mismatched on a GovCloud
   // caller that passed `region: ""`.
   const effectiveRegion = args.region || AWS_REGION;
-  const policy = buildCompensatingBucketPolicy({
+  const newPolicy = buildCompensatingBucketPolicy({
     ...args,
     region: effectiveRegion,
-  });
+  }) as PolicyDocument;
+  const compensatingStatement = newPolicy.Statement?.[0];
+  if (!compensatingStatement) {
+    // Defensive — buildCompensatingBucketPolicy always returns one
+    // statement, but the explicit guard makes the merge logic below
+    // safe against any future refactor.
+    return {
+      attached: false,
+      reason: "buildCompensatingBucketPolicy returned no statements",
+    };
+  }
   const client =
     s3Client ??
     new S3Client({
@@ -171,11 +232,107 @@ export async function attachCompensatingBucketPolicy(
       credentials: requireAssigneeCredentials("operator"),
     });
 
+  // ── Step 1 + 2 + 3: GET the existing bucket policy ─────────────────
+  let existingStatements: PolicyStatement[] = [];
+  let mergeMode: "merge" | "legacy" = "merge";
+  try {
+    const getResp = (await client.send(
+      new GetBucketPolicyCommand({ Bucket: args.bucketName }),
+    )) as { Policy?: string };
+    const existingJson = getResp.Policy;
+    if (existingJson) {
+      // ── Step 4: malformed-JSON guard ──────────────────────────────
+      let parsed: PolicyDocument;
+      try {
+        parsed = JSON.parse(existingJson) as PolicyDocument;
+      } catch (parseErr) {
+        return {
+          attached: false,
+          reason: `existing bucket policy is malformed JSON — refusing PutBucketPolicy to avoid overwriting operator-intended policy (${
+            parseErr instanceof Error ? parseErr.message : String(parseErr)
+          })`,
+        };
+      }
+      // Coerce Statement to an array even when AWS returned a single-
+      // object form (rare but legal — IAM/S3 accept both).
+      const stmt = parsed.Statement;
+      if (Array.isArray(stmt)) {
+        existingStatements = stmt;
+      } else if (stmt && typeof stmt === "object") {
+        existingStatements = [stmt as PolicyStatement];
+      }
+    }
+  } catch (err: unknown) {
+    const name =
+      err instanceof Error && (err as { name?: string }).name
+        ? (err as { name?: string }).name!
+        : "";
+    const code =
+      err instanceof Error && (err as { Code?: string }).Code
+        ? (err as { Code?: string }).Code!
+        : "";
+    const message = err instanceof Error ? err.message : String(err);
+    const isNoSuchPolicy =
+      name === "NoSuchBucketPolicy" ||
+      code === "NoSuchBucketPolicy" ||
+      /NoSuchBucketPolicy/i.test(message);
+    if (!isNoSuchPolicy) {
+      // Non-NoSuch error from GET — log a structured warn and fall
+      // through to legacy PUT-only behaviour so this code path
+      // remains compatible with operators that lack
+      // `s3:GetBucketPolicy` IAM permission or are seeing transient
+      // throttling on the GET. The PUT itself is still attempted;
+      // if it ALSO fails, the catch below converts it to
+      // `{ attached: false }` as before.
+      log({
+        ts: new Date().toISOString(),
+        runId: "compensating-bucket-policy",
+        level: "warn",
+        action: LOG_ACTIONS.MEMORY_WRITE_FAILED,
+        extras: {
+          compensatingPolicyGetFailed: true,
+          bucket: args.bucketName,
+          errorName: name || undefined,
+          error: message,
+        },
+      });
+      mergeMode = "legacy";
+    }
+    // NoSuchBucketPolicy → existingStatements stays [] and we merge.
+  }
+
+  // ── Step 5: merge by Sid ───────────────────────────────────────────
+  let mergedStatements: PolicyStatement[];
+  if (mergeMode === "legacy") {
+    // Legacy PUT-only behaviour: emit ONLY the compensating statement.
+    mergedStatements = [compensatingStatement];
+  } else {
+    const existingSidIndex = existingStatements.findIndex(
+      (s) => s?.Sid === COMPENSATING_POLICY_SID,
+    );
+    if (existingSidIndex >= 0) {
+      // Replace the stale compensating statement in place — preserves
+      // the order of the operator-intended statements (e.g. OAC grant
+      // first, compensating second) so the rewritten policy diffs
+      // cleanly against the pre-PUT version.
+      mergedStatements = [...existingStatements];
+      mergedStatements[existingSidIndex] = compensatingStatement;
+    } else {
+      mergedStatements = [...existingStatements, compensatingStatement];
+    }
+  }
+
+  const mergedPolicy: PolicyDocument = {
+    ...newPolicy,
+    Statement: mergedStatements,
+  };
+
+  // ── PUT the merged policy ──────────────────────────────────────────
   try {
     await client.send(
       new PutBucketPolicyCommand({
         Bucket: args.bucketName,
-        Policy: JSON.stringify(policy),
+        Policy: JSON.stringify(mergedPolicy),
       }),
     );
     return { attached: true };

@@ -230,6 +230,13 @@ const PROBE_WHITELIST_FLAGS = new Set<string>([
   "--all", // destroy --all (bulk-destroy re-introduction) — tested in bulk-action.test.ts + cli-flow-commands.test.ts
   "--no-confirm", // destroy --all --no-confirm (skip typed-confirmation, CI/CD) — tested in bulk-action.test.ts
   "--allow-large-sweep", // destroy --all --allow-large-sweep (> 100 resource opt-in) — tested in bulk-action.test.ts
+  // `assignee update` follow-on — flag surface + behaviour covered by
+  // `apps/cli/src/commands/__tests__/update.test.ts` (flag-registration
+  // suite + runUpdate e2e suite). Probes deferred to the next probe wave.
+  "--delete",
+  "--invalidation-paths",
+  "--no-invalidation",
+  "--wait",
 ]);
 
 /** Extract every `<long-flag>` from Commander `.option("...")` calls. */
