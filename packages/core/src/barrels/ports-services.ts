@@ -124,6 +124,17 @@ export {
   type UploadProgress,
 } from "../services/s3-upload.js";
 
+// Services — CloudFront cache invalidation (`assignee update` follow-on)
+export {
+  createInvalidation,
+  waitForInvalidation,
+  MAX_INVALIDATION_PATHS,
+  DEFAULT_POLL_INTERVAL_MS,
+  DEFAULT_TIMEOUT_MS,
+  type InvalidationArgs,
+  type InvalidationResult,
+} from "../services/cloudfront-invalidate.js";
+
 // Services — desired-state sanitizer (Story 50-4 Wave 5 Pass H)
 export {
   sanitizeDesiredState,

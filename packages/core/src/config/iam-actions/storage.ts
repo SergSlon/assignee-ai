@@ -27,6 +27,11 @@ export const STORAGE_ACTIONS: Record<string, string[]> = {
     "elasticfilesystem:DeleteMountTarget",
   ],
   // A14 (2026-04-09): AWS::CloudFront::Distribution first-class.
+  // `assignee update` follow-on: CreateInvalidation + GetInvalidation are
+  // required by the new `cloudfront-invalidate` service so the post-upload
+  // cache refresh step does not require a separate IAM grant. Both
+  // actions only target `cloudfront:*Distribution/<id>`, so least-privilege
+  // is unchanged: no broader cloudfront:* scope is granted.
   [RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION]: [
     "cloudfront:CreateDistribution",
     "cloudfront:CreateDistributionWithTags",
@@ -38,6 +43,8 @@ export const STORAGE_ACTIONS: Record<string, string[]> = {
     "cloudfront:ListTagsForResource",
     "cloudfront:TagResource",
     "cloudfront:UntagResource",
+    "cloudfront:CreateInvalidation",
+    "cloudfront:GetInvalidation",
   ],
   // (f) 2026-04-09 Task 4b: AWS::CloudFront::OriginAccessControl.
   [RESOURCE_TYPES.CLOUDFRONT_ORIGIN_ACCESS_CONTROL]: [

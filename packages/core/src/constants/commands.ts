@@ -19,6 +19,7 @@ export const CommandName = {
   RECONCILE: "reconcile",
   SETUP: "setup",
   STATUS: "status",
+  UPDATE: "update",
 } as const;
 
 export type CommandNameType = (typeof CommandName)[keyof typeof CommandName];
@@ -39,6 +40,8 @@ export const CommandDescription = {
   SETUP:
     "Create IAM users and policies for least-privilege credential separation",
   STATUS: "Show summary of managed infrastructure",
+  UPDATE:
+    "Refresh a deployed static-website: upload new files to S3 and invalidate CloudFront",
 } as const;
 
 export const CommandArgs = {

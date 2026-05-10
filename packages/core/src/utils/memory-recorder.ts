@@ -106,6 +106,15 @@ export interface ProvisionRecordExtras {
    * on stderr at apply time.
    */
   compensatingPolicyError?: string;
+  /**
+   * `assignee update` follow-on: real DNS hostname (e.g.
+   * `d1eka2i9dtl8tu.cloudfront.net`) for CloudFront distributions in a
+   * static-website compound. Apply-compound's result-formatter pulls
+   * this from the resource's `metadata.cloudFrontDomainName` and persists
+   * it so subsequent `assignee update <bucket>` invocations can print
+   * the live URL without an extra GetDistribution roundtrip.
+   */
+  cloudFrontDomainName?: string;
 }
 
 /**
@@ -179,6 +188,13 @@ export async function writeProvisionRecord(
         ...(extras?.compensatingPolicyError &&
         extras.compensatingPolicyError.length > 0
           ? { compensatingPolicyError: extras.compensatingPolicyError }
+          : {}),
+        // `assignee update` follow-on: persist CloudFront hostname for
+        // static-website compounds so the future `assignee update`
+        // resolver can print the live URL without a re-fetch.
+        ...(extras?.cloudFrontDomainName &&
+        extras.cloudFrontDomainName.length > 0
+          ? { cloudFrontDomainName: extras.cloudFrontDomainName }
           : {}),
       });
       provisionWriteSucceeded = true;
