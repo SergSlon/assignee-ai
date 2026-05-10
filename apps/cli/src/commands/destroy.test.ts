@@ -180,6 +180,10 @@ vi.mock("@aws-sdk/client-kms", () => {
       _type: "DescribeKey",
       input,
     })),
+    DisableKeyCommand: vi.fn((input: unknown) => ({
+      _type: "DisableKey",
+      input,
+    })),
     KMSInvalidStateException,
     NotFoundException,
   };
@@ -880,24 +884,44 @@ describe("Epic 92 Wave 1 — destroy scheduled-deletion paths", () => {
 
   it("KMS destroy with --pending-window-in-days 7 → ScheduleKeyDeletion(7)", async () => {
     mockResolveResource.mockResolvedValue(kmsResource);
+    // Defense-in-depth (2026-05-09): pre-flight DescribeKey + DisableKey
+    // run before ScheduleKeyDeletion when the key state is `Enabled`.
     // Simulate a realistic AWS response: DeletionDate set to 7 days out.
     const deletionDate = new Date("2026-04-27T00:00:00Z");
-    mockKmsSend.mockResolvedValue({ DeletionDate: deletionDate });
+    mockKmsSend
+      // Pre-flight DescribeKey (defense-in-depth)
+      .mockResolvedValueOnce({ KeyMetadata: { KeyState: "Enabled" } })
+      // DisableKey (defense-in-depth)
+      .mockResolvedValueOnce({})
+      // ScheduleKeyDeletion (the actual destroy call)
+      .mockResolvedValueOnce({ DeletionDate: deletionDate });
 
     await destroyAction(kmsResource.arn, {
       yes: true,
       pendingWindowInDays: "7",
     });
 
-    // Exactly one ScheduleKeyDeletion command with the 7-day window.
-    expect(mockKmsSend).toHaveBeenCalledTimes(1);
-    const command = mockKmsSend.mock.calls[0]![0] as {
+    // Three ordered SDK calls: Describe → Disable → Schedule.
+    expect(mockKmsSend).toHaveBeenCalledTimes(3);
+    const describeCommand = mockKmsSend.mock.calls[0]![0] as {
+      _type: string;
+      input: { KeyId: string };
+    };
+    const disableCommand = mockKmsSend.mock.calls[1]![0] as {
+      _type: string;
+      input: { KeyId: string };
+    };
+    const scheduleCommand = mockKmsSend.mock.calls[2]![0] as {
       _type: string;
       input: { KeyId: string; PendingWindowInDays: number };
     };
-    expect(command._type).toBe("ScheduleKeyDeletion");
-    expect(command.input.PendingWindowInDays).toBe(7);
-    expect(command.input.KeyId).toBe(kmsResource.identifier);
+    expect(describeCommand._type).toBe("DescribeKey");
+    expect(describeCommand.input.KeyId).toBe(kmsResource.identifier);
+    expect(disableCommand._type).toBe("DisableKey");
+    expect(disableCommand.input.KeyId).toBe(kmsResource.identifier);
+    expect(scheduleCommand._type).toBe("ScheduleKeyDeletion");
+    expect(scheduleCommand.input.PendingWindowInDays).toBe(7);
+    expect(scheduleCommand.input.KeyId).toBe(kmsResource.identifier);
     // Scheduled-deletion phrasing; NOT "Resource destroyed".
     expect(stdoutOutput).toContain("Scheduled for deletion on 2026-04-27");
     expect(stdoutOutput).not.toContain("Resource destroyed");
@@ -907,17 +931,26 @@ describe("Epic 92 Wave 1 — destroy scheduled-deletion paths", () => {
     // D-21 default rationale: 7 (minimum) beats 30 (AWS default) because
     // cost exposure during the window is real.
     mockResolveResource.mockResolvedValue(kmsResource);
-    mockKmsSend.mockResolvedValue({
-      DeletionDate: new Date("2026-04-27T00:00:00Z"),
-    });
+    mockKmsSend
+      // Pre-flight DescribeKey (defense-in-depth, 2026-05-09)
+      .mockResolvedValueOnce({ KeyMetadata: { KeyState: "Enabled" } })
+      // DisableKey
+      .mockResolvedValueOnce({})
+      // ScheduleKeyDeletion
+      .mockResolvedValueOnce({
+        DeletionDate: new Date("2026-04-27T00:00:00Z"),
+      });
 
     await destroyAction(kmsResource.arn, { yes: true });
 
-    expect(mockKmsSend).toHaveBeenCalledTimes(1);
-    const command = mockKmsSend.mock.calls[0]![0] as {
+    // Three ordered SDK calls: Describe → Disable → Schedule.
+    expect(mockKmsSend).toHaveBeenCalledTimes(3);
+    const scheduleCommand = mockKmsSend.mock.calls[2]![0] as {
+      _type: string;
       input: { PendingWindowInDays: number };
     };
-    expect(command.input.PendingWindowInDays).toBe(7);
+    expect(scheduleCommand._type).toBe("ScheduleKeyDeletion");
+    expect(scheduleCommand.input.PendingWindowInDays).toBe(7);
   });
 
   it("KMS destroy rejects --pending-window-in-days 6 (below minimum)", async () => {
@@ -1278,13 +1311,16 @@ describe("Idempotent-success error classification", () => {
     const realDeletionDate = new Date("2026-05-12T00:00:00Z");
 
     mockKmsSend
-      // First call: ScheduleKeyDeletion → throws InvalidState/pending
+      // Pre-flight DescribeKey (defense-in-depth, 2026-05-09): key is
+      // already PendingDeletion → tryDisableKmsKey skips DisableKey.
+      .mockResolvedValueOnce({ KeyMetadata: { KeyState: "PendingDeletion" } })
+      // ScheduleKeyDeletion → throws InvalidState/pending
       .mockRejectedValueOnce(
         new (KMSInvalidStateException as unknown as new (m: string) => Error)(
           "arn:aws:kms:us-east-1:112233445566:key/abc is pending deletion.",
         ),
       )
-      // Second call: DescribeKey → returns the real KeyMetadata.DeletionDate
+      // Recovery DescribeKey → returns the real KeyMetadata.DeletionDate
       .mockResolvedValueOnce({
         KeyMetadata: { DeletionDate: realDeletionDate },
       });
@@ -1295,20 +1331,32 @@ describe("Idempotent-success error classification", () => {
     // Honest output: the real date from DescribeKey, NOT a synthetic
     // Date.now() + window value.
     expect(stdoutOutput).toContain("Scheduled for deletion on 2026-05-12");
-    // Two SDK calls were issued (ScheduleKeyDeletion + DescribeKey).
-    expect(mockKmsSend).toHaveBeenCalledTimes(2);
-    const secondCommand = mockKmsSend.mock.calls[1]![0] as { _type: string };
-    expect(secondCommand._type).toBe("DescribeKey");
+    // Three SDK calls in order: pre-flight DescribeKey (skips Disable
+    // because state is PendingDeletion) → ScheduleKeyDeletion (throws) →
+    // recovery DescribeKey (real DeletionDate). NO DisableKey between
+    // them — the allowlist correctly excluded the non-Enabled state.
+    expect(mockKmsSend).toHaveBeenCalledTimes(3);
+    const preflightCommand = mockKmsSend.mock.calls[0]![0] as { _type: string };
+    const scheduleCommand = mockKmsSend.mock.calls[1]![0] as { _type: string };
+    const recoveryCommand = mockKmsSend.mock.calls[2]![0] as { _type: string };
+    expect(preflightCommand._type).toBe("DescribeKey");
+    expect(scheduleCommand._type).toBe("ScheduleKeyDeletion");
+    expect(recoveryCommand._type).toBe("DescribeKey");
   });
 
   it("Defect 4 (b): KMS already-pending falls back to 'check AWS console' when DescribeKey ALSO fails", async () => {
     mockResolveResource.mockResolvedValue(kmsResource);
     const { KMSInvalidStateException } = await import("@aws-sdk/client-kms");
 
-    // Both ScheduleKeyDeletion AND DescribeKey throw. The destroy must
-    // still return "already_pending" — the parent operation logically
-    // succeeded — but the rendered line MUST NOT contain a fabricated
-    // YYYY-MM-DD date.
+    // Both ScheduleKeyDeletion AND the recovery DescribeKey throw. The
+    // destroy must still return "already_pending" — the parent operation
+    // logically succeeded — but the rendered line MUST NOT contain a
+    // fabricated YYYY-MM-DD date.
+    //
+    // Defense-in-depth (2026-05-09): the pre-flight DescribeKey from
+    // `tryDisableKmsKey` ALSO throws here — that failure is swallowed
+    // silently by the helper (best-effort contract), so the
+    // ScheduleKeyDeletion and recovery DescribeKey paths still run.
     const errInvalid = new (KMSInvalidStateException as unknown as new (
       m: string,
     ) => Error)("is pending deletion");
@@ -1325,6 +1373,151 @@ describe("Idempotent-success error classification", () => {
     expect(stdoutOutput).not.toMatch(
       /Scheduled for deletion on \d{4}-\d{2}-\d{2}/,
     );
+    // Three SDK calls were issued in order: pre-flight DescribeKey
+    // (swallowed by `tryDisableKmsKey`) → ScheduleKeyDeletion (throws
+    // InvalidState/pending) → recovery DescribeKey (also throws).
+    expect(mockKmsSend).toHaveBeenCalledTimes(3);
+    const preflightCommand = mockKmsSend.mock.calls[0]![0] as { _type: string };
+    const scheduleCommand = mockKmsSend.mock.calls[1]![0] as { _type: string };
+    const recoveryCommand = mockKmsSend.mock.calls[2]![0] as { _type: string };
+    expect(preflightCommand._type).toBe("DescribeKey");
+    expect(scheduleCommand._type).toBe("ScheduleKeyDeletion");
+    expect(recoveryCommand._type).toBe("DescribeKey");
+  });
+
+  // ── Defense-in-depth (2026-05-09): kms:DisableKey before kms:ScheduleKeyDeletion ──
+  //
+  // ScheduleKeyDeletion alone leaves the key Enabled during the 7–30 day
+  // pending window. If an operator runs `kms:CancelKeyDeletion`, the key
+  // returns to its prior state — Enabled — and any application still
+  // holding the ARN can decrypt with it again. Pre-disabling forces a
+  // cancelled destroy back into `Disabled` state, requiring an explicit
+  // `kms:EnableKey` to re-arm. Best-effort: any failure swallowed,
+  // ScheduleKeyDeletion still runs.
+  //
+  // Allowlist: only KeyState === "Enabled" gets DisableKey. Disabled,
+  // PendingDeletion, PendingImport, PendingReplicaDeletion, Unavailable,
+  // Creating, Updating → skip.
+
+  it("DisableKey defense-in-depth: Enabled key → DescribeKey + DisableKey + ScheduleKeyDeletion in order", async () => {
+    mockResolveResource.mockResolvedValue(kmsResource);
+    const deletionDate = new Date("2026-04-27T00:00:00Z");
+    mockKmsSend
+      .mockResolvedValueOnce({ KeyMetadata: { KeyState: "Enabled" } })
+      .mockResolvedValueOnce({}) // DisableKey returns void/empty
+      .mockResolvedValueOnce({ DeletionDate: deletionDate });
+
+    const result = await destroyAction(kmsResource.arn, {
+      yes: true,
+      pendingWindowInDays: "7",
+    });
+
+    expect(result).toBeUndefined(); // happy-path: undefined (destroyed)
+    expect(mockKmsSend).toHaveBeenCalledTimes(3);
+    const describeCommand = mockKmsSend.mock.calls[0]![0] as {
+      _type: string;
+      input: { KeyId: string };
+    };
+    const disableCommand = mockKmsSend.mock.calls[1]![0] as {
+      _type: string;
+      input: { KeyId: string };
+    };
+    const scheduleCommand = mockKmsSend.mock.calls[2]![0] as { _type: string };
+    expect(describeCommand._type).toBe("DescribeKey");
+    expect(describeCommand.input.KeyId).toBe(kmsResource.identifier);
+    expect(disableCommand._type).toBe("DisableKey");
+    // The DisableKey command MUST target the SAME key — not a constant.
+    expect(disableCommand.input.KeyId).toBe(kmsResource.identifier);
+    expect(scheduleCommand._type).toBe("ScheduleKeyDeletion");
+    expect(stdoutOutput).toContain("Scheduled for deletion on 2026-04-27");
+  });
+
+  it("DisableKey defense-in-depth: Disabled key → skip DisableKey, only DescribeKey + ScheduleKeyDeletion", async () => {
+    mockResolveResource.mockResolvedValue(kmsResource);
+    const deletionDate = new Date("2026-04-27T00:00:00Z");
+    mockKmsSend
+      // Pre-flight reports Disabled — allowlist rejects, no DisableKey call.
+      .mockResolvedValueOnce({ KeyMetadata: { KeyState: "Disabled" } })
+      .mockResolvedValueOnce({ DeletionDate: deletionDate });
+
+    const result = await destroyAction(kmsResource.arn, {
+      yes: true,
+      pendingWindowInDays: "7",
+    });
+
+    expect(result).toBeUndefined();
+    // Exactly two SDK calls — DisableKey is correctly skipped.
+    expect(mockKmsSend).toHaveBeenCalledTimes(2);
+    const firstCommand = mockKmsSend.mock.calls[0]![0] as { _type: string };
+    const secondCommand = mockKmsSend.mock.calls[1]![0] as { _type: string };
+    expect(firstCommand._type).toBe("DescribeKey");
+    expect(secondCommand._type).toBe("ScheduleKeyDeletion");
+    // Pin: NO DisableKey command between them.
+    const types = mockKmsSend.mock.calls.map(
+      (c) => (c[0] as { _type: string })._type,
+    );
+    expect(types).not.toContain("DisableKey");
+    expect(stdoutOutput).toContain("Scheduled for deletion on 2026-04-27");
+  });
+
+  it("DisableKey defense-in-depth: DescribeKey throws → ScheduleKeyDeletion still runs", async () => {
+    mockResolveResource.mockResolvedValue(kmsResource);
+    const deletionDate = new Date("2026-04-27T00:00:00Z");
+    // Realistic AWS throttle error shape: name + message body the SDK
+    // would actually emit on TPS exceeded.
+    const throttleErr = Object.assign(new Error("Rate exceeded"), {
+      name: "ThrottlingException",
+    });
+    mockKmsSend
+      // Pre-flight DescribeKey throws — best-effort, swallowed silently.
+      .mockRejectedValueOnce(throttleErr)
+      // ScheduleKeyDeletion still runs and succeeds.
+      .mockResolvedValueOnce({ DeletionDate: deletionDate });
+
+    const result = await destroyAction(kmsResource.arn, {
+      yes: true,
+      pendingWindowInDays: "7",
+    });
+
+    expect(result).toBeUndefined(); // success despite Describe failure
+    expect(mockKmsSend).toHaveBeenCalledTimes(2);
+    const firstCommand = mockKmsSend.mock.calls[0]![0] as { _type: string };
+    const secondCommand = mockKmsSend.mock.calls[1]![0] as { _type: string };
+    expect(firstCommand._type).toBe("DescribeKey");
+    expect(secondCommand._type).toBe("ScheduleKeyDeletion");
+    expect(stdoutOutput).toContain("Scheduled for deletion on 2026-04-27");
+  });
+
+  it("DisableKey defense-in-depth: DisableKey throws → ScheduleKeyDeletion still runs", async () => {
+    mockResolveResource.mockResolvedValue(kmsResource);
+    const deletionDate = new Date("2026-04-27T00:00:00Z");
+    // Realistic AWS AccessDenied error shape.
+    const accessDeniedErr = Object.assign(
+      new Error(
+        "User: arn:aws:iam::112233445566:role/assignee-operator is not authorized to perform: kms:DisableKey",
+      ),
+      { name: "AccessDeniedException" },
+    );
+    mockKmsSend
+      // Pre-flight Describe → Enabled (Disable will be attempted).
+      .mockResolvedValueOnce({ KeyMetadata: { KeyState: "Enabled" } })
+      // DisableKey throws (AccessDenied) — best-effort, swallowed silently.
+      .mockRejectedValueOnce(accessDeniedErr)
+      // ScheduleKeyDeletion still runs and succeeds.
+      .mockResolvedValueOnce({ DeletionDate: deletionDate });
+
+    const result = await destroyAction(kmsResource.arn, {
+      yes: true,
+      pendingWindowInDays: "7",
+    });
+
+    expect(result).toBeUndefined(); // success despite Disable failure
+    expect(mockKmsSend).toHaveBeenCalledTimes(3);
+    const types = mockKmsSend.mock.calls.map(
+      (c) => (c[0] as { _type: string })._type,
+    );
+    expect(types).toEqual(["DescribeKey", "DisableKey", "ScheduleKeyDeletion"]);
+    expect(stdoutOutput).toContain("Scheduled for deletion on 2026-04-27");
   });
 
   it("Defect 4 symmetry (a): Secret already-pending uses DescribeSecret to render the REAL ScheduledDeletionDate", async () => {
