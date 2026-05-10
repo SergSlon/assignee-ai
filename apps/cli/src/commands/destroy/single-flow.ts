@@ -34,11 +34,12 @@ import { ErrorCode } from "../../constants/errors.js";
 import { destroySingleResource } from "../../services/destroy-service.js";
 import { resourceConfirmationToken } from "./typed-confirm.js";
 import { renderDestroyBox, renderDestroySuccess } from "./result-formatter.js";
+import { maybeWarnYesInTty } from "./yes-warning.js";
 
 /** Handles single-resource destroy. `resource` must be set by caller. */
 export async function singleDestroyAction(
   resource: string,
-  opts: { yes?: boolean },
+  opts: { yes?: boolean; noConfirm?: boolean },
 ): Promise<void> {
   // ── Initialize AWS clients ────────────────────────────────────────
   const opCreds = tryAssigneeCredentials("operator");
@@ -146,11 +147,10 @@ export async function singleDestroyAction(
 
   // ── Confirmation prompt ─────────────────────────────────────────
   if (opts.yes) {
-    if (process.stdout.isTTY) {
-      process.stderr.write(
-        "Warning: --yes flag used in interactive session. Auto-confirming destroy.\n",
-      );
-    }
+    // Suppressed when the bulk-destroy orchestrator threads `noConfirm`
+    // through after its own typed-account-ID confirmation; otherwise
+    // emits once per interactive `destroy --yes` invocation.
+    maybeWarnYesInTty(opts);
   } else {
     if (!process.stdin.isTTY) {
       throw new AssigneeError(

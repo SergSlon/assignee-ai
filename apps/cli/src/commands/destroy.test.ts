@@ -568,6 +568,25 @@ describe("assignee destroy", () => {
       await destroyAction("test-bucket", { yes: true });
       expect(stderrOutput).toContain("--yes flag used in interactive session");
     });
+
+    // Polish item 2 (2026-05-09): bulk-destroy threads `noConfirm: true`
+    // into every per-resource invocation so the warning does NOT fire
+    // for each iteration; the bulk parent already collected the typed
+    // account-ID confirmation once at the top of the run.
+    it("does NOT warn when noConfirm=true (bulk-destroy parent already confirmed)", async () => {
+      mockResolveResource.mockResolvedValue(mockResource);
+      mockDestroySingleResource.mockResolvedValue({
+        success: true,
+        resourceType: "AWS::S3::Bucket",
+        identifier: "test-bucket",
+        arn: "arn:aws:s3:::test-bucket",
+      });
+
+      await destroyAction("test-bucket", { yes: true, noConfirm: true });
+      expect(stderrOutput).not.toContain(
+        "--yes flag used in interactive session",
+      );
+    });
   });
 
   describe("non-TTY without --yes", () => {
@@ -788,7 +807,7 @@ describe("resourceConfirmationToken — edge cases (P2-R2-5)", () => {
     expect(
       fn({
         identifier: "my-cluster/",
-        arn: "arn:aws:ecs:us-east-1:210987654321:cluster/my-cluster",
+        arn: "arn:aws:ecs:us-east-1:112233445566:cluster/my-cluster",
       }),
     ).toBe("my-cluster");
   });
@@ -812,7 +831,7 @@ describe("resourceConfirmationToken — edge cases (P2-R2-5)", () => {
 
   it("handles ARN-only input (no identifier) by using ARN tail", async () => {
     const fn = await load();
-    expect(fn({ arn: "arn:aws:iam::210987654321:role/MyRole" })).toBe("MyRole");
+    expect(fn({ arn: "arn:aws:iam::112233445566:role/MyRole" })).toBe("MyRole");
   });
 });
 
@@ -834,14 +853,14 @@ describe("resourceConfirmationToken — edge cases (P2-R2-5)", () => {
 // shape is sent and which renderer string is emitted.
 describe("Epic 92 Wave 1 — destroy scheduled-deletion paths", () => {
   const kmsResource = {
-    arn: "arn:aws:kms:us-east-1:210987654321:key/ba48550a-3f14-446e-8f0c-1473f345c62d",
+    arn: "arn:aws:kms:us-east-1:112233445566:key/ba48550a-3f14-446e-8f0c-1473f345c62d",
     resourceType: "AWS::KMS::Key",
     region: "us-east-1",
     tags: { "managed-by": "assignee-ai" },
     identifier: "ba48550a-3f14-446e-8f0c-1473f345c62d",
   };
   const secretResource = {
-    arn: "arn:aws:secretsmanager:us-east-1:210987654321:secret:my-app/prod/db-password-AbCdEf",
+    arn: "arn:aws:secretsmanager:us-east-1:112233445566:secret:my-app/prod/db-password-AbCdEf",
     resourceType: "AWS::SecretsManager::Secret",
     region: "us-east-1",
     tags: { "managed-by": "assignee-ai" },
@@ -852,7 +871,7 @@ describe("Epic 92 Wave 1 — destroy scheduled-deletion paths", () => {
   // inline dispatch must detect the `event-bus/` segment and route to
   // DeleteEventBus regardless of the classifier output.
   const eventBusResource = {
-    arn: "arn:aws:events:us-east-1:210987654321:event-bus/e92d-bus-1776801116",
+    arn: "arn:aws:events:us-east-1:112233445566:event-bus/e92d-bus-1776801116",
     resourceType: "AWS::Events::Rule", // INTENTIONALLY the wrong class
     region: "us-east-1",
     tags: { "managed-by": "assignee-ai" },
@@ -1025,7 +1044,7 @@ describe("Epic 92 Wave 1 — destroy scheduled-deletion paths", () => {
     mockResolveResource.mockResolvedValue(mockResource);
 
     await expect(
-      destroyAction("arn:aws:kms:us-east-1:210987654321:key/uuid", {
+      destroyAction("arn:aws:kms:us-east-1:112233445566:key/uuid", {
         yes: true,
         pendingWindowInDays: "10",
       }),
@@ -1062,21 +1081,21 @@ describe("Epic 92 Wave 1 — destroy scheduled-deletion paths", () => {
 
 describe("Idempotent-success error classification", () => {
   const kmsResource = {
-    arn: "arn:aws:kms:us-east-1:210987654321:key/ba48550a-3f14-446e-8f0c-1473f345c62d",
+    arn: "arn:aws:kms:us-east-1:112233445566:key/ba48550a-3f14-446e-8f0c-1473f345c62d",
     resourceType: "AWS::KMS::Key",
     region: "us-east-1",
     tags: { "managed-by": "assignee-ai" },
     identifier: "ba48550a-3f14-446e-8f0c-1473f345c62d",
   };
   const secretResource = {
-    arn: "arn:aws:secretsmanager:us-east-1:210987654321:secret:my-app/prod/db-password-AbCdEf",
+    arn: "arn:aws:secretsmanager:us-east-1:112233445566:secret:my-app/prod/db-password-AbCdEf",
     resourceType: "AWS::SecretsManager::Secret",
     region: "us-east-1",
     tags: { "managed-by": "assignee-ai" },
     identifier: "my-app/prod/db-password",
   };
   const eventBusResource = {
-    arn: "arn:aws:events:us-east-1:210987654321:event-bus/e92d-bus-1776801116",
+    arn: "arn:aws:events:us-east-1:112233445566:event-bus/e92d-bus-1776801116",
     resourceType: "AWS::Events::Rule", // intentionally wrong class (real-world classifier bug)
     region: "us-east-1",
     tags: { "managed-by": "assignee-ai" },
@@ -1089,7 +1108,7 @@ describe("Idempotent-success error classification", () => {
     const { KMSInvalidStateException } = await import("@aws-sdk/client-kms");
     mockKmsSend.mockRejectedValue(
       new (KMSInvalidStateException as unknown as new (m: string) => Error)(
-        "arn:aws:kms:us-east-1:210987654321:key/ba48550a is pending deletion.",
+        "arn:aws:kms:us-east-1:112233445566:key/ba48550a is pending deletion.",
       ),
     );
 
@@ -1108,7 +1127,7 @@ describe("Idempotent-success error classification", () => {
     const { KMSInvalidStateException } = await import("@aws-sdk/client-kms");
     mockKmsSend.mockRejectedValue(
       new (KMSInvalidStateException as unknown as new (m: string) => Error)(
-        "arn:aws:kms:us-east-1:210987654321:key/ba48550a is disabled.",
+        "arn:aws:kms:us-east-1:112233445566:key/ba48550a is disabled.",
       ),
     );
 
@@ -1366,21 +1385,21 @@ describe("Idempotent-success error classification", () => {
 
 describe("W6-S2 — destroy helpers use cloudcontrol-client.js factories", () => {
   const w6KmsResource = {
-    arn: "arn:aws:kms:us-east-1:210987654321:key/ba48550a-3f14-446e-8f0c-1473f345c62d",
+    arn: "arn:aws:kms:us-east-1:112233445566:key/ba48550a-3f14-446e-8f0c-1473f345c62d",
     resourceType: "AWS::KMS::Key",
     region: "us-east-1",
     tags: { "managed-by": "assignee-ai" },
     identifier: "ba48550a-3f14-446e-8f0c-1473f345c62d",
   };
   const w6SecretResource = {
-    arn: "arn:aws:secretsmanager:us-east-1:210987654321:secret:my-app/prod/db-password-AbCdEf",
+    arn: "arn:aws:secretsmanager:us-east-1:112233445566:secret:my-app/prod/db-password-AbCdEf",
     resourceType: "AWS::SecretsManager::Secret",
     region: "us-east-1",
     tags: { "managed-by": "assignee-ai" },
     identifier: "my-app/prod/db-password",
   };
   const w6EventBusResource = {
-    arn: "arn:aws:events:us-east-1:210987654321:event-bus/e92d-bus-1776801116",
+    arn: "arn:aws:events:us-east-1:112233445566:event-bus/e92d-bus-1776801116",
     resourceType: "AWS::Events::Rule",
     region: "us-east-1",
     tags: { "managed-by": "assignee-ai" },

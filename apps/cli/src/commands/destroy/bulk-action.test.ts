@@ -600,6 +600,70 @@ describe("runBulkDestroyAction", () => {
     });
   });
 
+  // ── Polish item 2 (2026-05-09): per-resource --yes warning suppressed ─
+
+  describe("per-resource --yes warning suppression", () => {
+    it("threads noConfirm=true into the per-resource destroyer (suppresses per-key --yes warning)", async () => {
+      // Bulk-destroy collected typed-account-ID confirmation once
+      // (line 575-609 of bulk-action.ts). Per-resource invocations must
+      // forward `noConfirm: true` so the
+      // "--yes flag used in interactive session" warning that
+      // single-flow.ts / confirmDestroy emit does NOT fire 3× for a
+      // 3-resource run. Polished by extracting `maybeWarnYesInTty`
+      // into yes-warning.ts and wiring `noConfirm` from
+      // BulkDestroyOptions through perResourceOpts.
+      mockFetchManagedResources.mockResolvedValue([
+        S3_BUCKET,
+        LAMBDA_FN,
+        USER_IAM_ROLE,
+      ]);
+      const runBulkDestroyAction = await getSubject();
+
+      await runBulkDestroyAction({ yes: true, noConfirm: true });
+
+      expect(mockSingleDestroyAction).toHaveBeenCalledTimes(3);
+      for (const call of mockSingleDestroyAction.mock.calls) {
+        // The fallback wraps perResourceOpts and forwards `noConfirm`
+        // into the singleDestroyAction opts payload. Each per-resource
+        // call MUST carry `noConfirm: true` so the warning is gated.
+        expect(call[1]).toMatchObject({ yes: true, noConfirm: true });
+      }
+    });
+
+    it("does NOT emit per-resource --yes warning string into stderr during bulk run", async () => {
+      mockFetchManagedResources.mockResolvedValue([
+        S3_BUCKET,
+        LAMBDA_FN,
+        USER_IAM_ROLE,
+      ]);
+      const runBulkDestroyAction = await getSubject();
+
+      const stderrChunks: string[] = [];
+      const origStderr = process.stderr.write;
+      process.stderr.write = ((chunk: string | Uint8Array) => {
+        stderrChunks.push(
+          typeof chunk === "string"
+            ? chunk
+            : Buffer.from(chunk as Uint8Array).toString("utf8"),
+        );
+        return true;
+      }) as typeof process.stderr.write;
+
+      try {
+        await runBulkDestroyAction({ yes: true, noConfirm: true });
+      } finally {
+        process.stderr.write = origStderr;
+      }
+
+      const stderr = stderrChunks.join("");
+      // No per-resource --yes warning even though 3 per-resource
+      // destroys ran. The bulk-confirm step happened upstream
+      // (--no-confirm path in this test, so even the bulk warning is
+      // about --no-confirm not --yes).
+      expect(stderr).not.toContain("--yes flag used in interactive session");
+    });
+  });
+
   // ── Audit log ─────────────────────────────────────────────────────
 
   describe("audit log", () => {

@@ -61,9 +61,16 @@ import { singleDestroyAction } from "./single-flow.js";
  */
 async function destroyOneFallback(
   resource: string,
-  opts: { yes?: boolean },
+  opts: { yes?: boolean; noConfirm?: boolean },
 ): Promise<"already_pending" | void> {
-  return singleDestroyAction(resource, { yes: opts.yes ?? true });
+  return singleDestroyAction(resource, {
+    yes: opts.yes ?? true,
+    // Forward bulk-destroy's "already-confirmed" signal so the
+    // per-resource flow doesn't re-emit the
+    // "--yes flag used in interactive session" warning that the
+    // bulk parent already handled via the typed-account-ID gate.
+    noConfirm: opts.noConfirm,
+  });
 }
 import { tryAssigneeCredentials } from "../../config/aws-credentials.js";
 import { AWS_REGION } from "../../config/constants.js";
@@ -457,6 +464,13 @@ export interface BulkDestroyOptions {
       pendingWindowInDays?: string;
       forceDeleteWithoutRecovery?: boolean;
       recoveryWindowInDays?: string;
+      /**
+       * INTERNAL — bulk-destroy already collected typed-account-ID
+       * confirmation; per-resource invocations should suppress the
+       * "--yes flag used in interactive session" warning. Not a public
+       * CLI flag.
+       */
+      noConfirm?: boolean;
     },
   ) => Promise<"already_pending" | void>;
 }
@@ -669,10 +683,17 @@ export async function runBulkDestroyAction(
       const isSecret = r.resourceType === "AWS::SecretsManager::Secret";
       const perResourceOpts: {
         yes: true;
+        // Bulk parent already collected typed-account-ID confirmation
+        // (see lines 575-609 above) so per-resource iterations must NOT
+        // re-emit the "--yes flag used in interactive session" warning.
+        // This flag is consumed by `destroyAction` /
+        // `singleDestroyAction` / `confirmDestroy` to suppress that
+        // single line; it does not change any other behaviour.
+        noConfirm: true;
         pendingWindowInDays?: string;
         forceDeleteWithoutRecovery?: boolean;
         recoveryWindowInDays?: string;
-      } = { yes: true };
+      } = { yes: true, noConfirm: true };
       if (isKmsKey && opts.pendingWindowInDays !== undefined) {
         perResourceOpts.pendingWindowInDays = opts.pendingWindowInDays;
       }
