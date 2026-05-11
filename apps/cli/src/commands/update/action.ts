@@ -170,9 +170,14 @@ export async function runUpdate(
     const confirmFn =
       options.confirm ??
       (async (msg: string) => {
+        // T4-2: default-YES on a destructive --delete operation is an
+        // anti-pattern. Flip to false when --delete is active so pressing
+        // Enter without reading defaults to NO instead of silently bulk-
+        // deleting remote orphans. For non-delete updates the UX is
+        // unchanged (confirmFn is only called when isTTY is true).
         const answer = await clack.confirm({
           message: msg,
-          initialValue: true,
+          initialValue: !args.deleteOrphans,
         });
         return !clack.isCancel(answer) && answer === true;
       });
@@ -233,12 +238,24 @@ export async function runUpdate(
   // ── 6. Invalidation ──────────────────────────────────────────────
   let invalidation: UpdateActionResult["invalidation"];
   if (!args.noInvalidation && resolved.distributionId) {
-    const created = await createInvalidation({
-      distributionId: resolved.distributionId,
-      paths: args.invalidationPaths,
-      callerReference: runId,
+    // T2-3: construct one CloudFrontClient for the entire invalidation flow.
+    // Both createInvalidation and waitForInvalidation use the same
+    // distribution, so reusing one client saves a TLS handshake.
+    const { CloudFrontClient } = await import("@aws-sdk/client-cloudfront");
+    const { requireAssigneeCredentials } = await import("@assignee/core");
+    const sharedCfClient = new CloudFrontClient({
       region: resolved.region,
+      credentials: requireAssigneeCredentials("operator"),
     });
+    const created = await createInvalidation(
+      {
+        distributionId: resolved.distributionId,
+        paths: args.invalidationPaths,
+        callerReference: runId,
+        region: resolved.region,
+      },
+      sharedCfClient,
+    );
     invalidation = {
       invalidationId: created.invalidationId,
       status: created.status,
@@ -255,6 +272,7 @@ export async function runUpdate(
         created.invalidationId,
         {
           region: resolved.region,
+          cloudFrontClient: sharedCfClient,
           ...(options.waitTimeoutMs !== undefined
             ? { timeoutMs: options.waitTimeoutMs }
             : {}),

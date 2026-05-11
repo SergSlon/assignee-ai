@@ -174,6 +174,23 @@ export const LOG_ACTIONS = {
    * diagnose the *why* instead of seeing a silently-blank price.
    */
   PRICING_SDK_BYPASS_FAILED: "pricing_sdk_bypass_failed",
+  /**
+   * T3-3: emitted at WARN level when `createInvalidation` receives an
+   * unexpected SDK error (not AccessDeniedException — those throw
+   * PERMISSION_ERROR immediately). Carries `extras.distributionId` and
+   * `extras.error` so operators running `--verbose` can grep the NDJSON
+   * log to see why an invalidation silently failed instead of bisecting
+   * CloudFront logs.
+   */
+  CLOUDFRONT_INVALIDATION_FAILED: "cloudfront_invalidation_failed",
+  /**
+   * T3-3: emitted at WARN level when `waitForInvalidation` exits with
+   * `timedOut: true`. Carries `extras.distributionId`,
+   * `extras.invalidationId`, `extras.timeoutMs`, and `extras.lastStatus`
+   * so operators can correlate CloudFront throttling or propagation
+   * delays with a specific invalidation request.
+   */
+  CLOUDFRONT_INVALIDATION_TIMEOUT: "cloudfront_invalidation_timeout",
 } as const;
 
 export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];

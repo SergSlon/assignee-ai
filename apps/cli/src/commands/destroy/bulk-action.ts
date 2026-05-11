@@ -344,8 +344,7 @@ function renderPlan(
         "\n",
     );
     process.stdout.write(
-      `  Note: real-time cost enrichment requires Pricing MCP — ` +
-        `see feature-pricing-mcp-list-enrichment.md\n\n`,
+      `  Note: cost estimates are based on stored pricing data — run with the Pricing MCP configured for real-time values.\n\n`,
     );
   }
 

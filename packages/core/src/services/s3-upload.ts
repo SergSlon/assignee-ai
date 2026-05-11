@@ -10,15 +10,12 @@
 import {
   S3Client,
   PutObjectCommand,
-  PutBucketPolicyCommand,
   ListObjectsV2Command,
   DeleteObjectsCommand,
 } from "@aws-sdk/client-s3";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, relative, extname, sep as pathSep } from "node:path";
 import { ConfigurationError } from "../errors.js";
-import { IamEffect } from "../config/iam-effects.js";
-import { getPartitionFromRegion } from "../config/aws-partition.js";
 import { requireAssigneeCredentials } from "../config/aws-credentials.js";
 import { EnvVar } from "../constants/env-vars.js";
 import { ContentType } from "../constants/errors.js";
@@ -26,6 +23,11 @@ import {
   ProcessEnvConfigAdapter,
   type ConfigPort,
 } from "../config/config-port.js";
+
+// T2-1: re-export configureBucketPolicy from its canonical module.
+// Backwards-compat shim so existing importers (barrel, tests, CLI
+// s3-upload.ts) need no change.
+export { configureBucketPolicy } from "./s3-public-website-policy.js";
 
 export interface UploadResult {
   uploaded: number;
@@ -142,52 +144,6 @@ function createS3Client(region?: string, config?: ConfigPort): S3Client {
 }
 
 /**
- * Configure a public-read bucket policy for static website hosting.
- *
- * Allows anonymous GET requests on all objects in the bucket, which is
- * required for S3 website hosting to serve files to browsers.
- *
- * @param bucketName - Target S3 bucket name
- * @param options    - Optional region override
- */
-export async function configureBucketPolicy(
-  bucketName: string,
-  options?: { region?: string; config?: ConfigPort },
-): Promise<void> {
-  const effectiveConfig = options?.config ?? new ProcessEnvConfigAdapter();
-  const client = createS3Client(options?.region, effectiveConfig);
-
-  // Partition-aware ARN: S3 bucket policies in GovCloud/China reject
-  // `arn:aws:` resource ARNs because IAM evaluates the partition literal
-  // against the caller's partition. Resolve from the caller's region
-  // (options.region > AWS_REGION env var) so GovCloud/China operators
-  // emit `arn:aws-us-gov:s3:::...` / `arn:aws-cn:s3:::...` policies.
-  const resolvedRegion =
-    options?.region ?? effectiveConfig.get(EnvVar.AWS_REGION)?.trim() ?? "";
-  const partition = getPartitionFromRegion(resolvedRegion);
-
-  const policy = {
-    Version: "2012-10-17",
-    Statement: [
-      {
-        Sid: "PublicReadGetObject",
-        Effect: IamEffect.ALLOW,
-        Principal: "*",
-        Action: "s3:GetObject",
-        Resource: `arn:${partition}:s3:::${bucketName}/*`,
-      },
-    ],
-  };
-
-  await client.send(
-    new PutBucketPolicyCommand({
-      Bucket: bucketName,
-      Policy: JSON.stringify(policy),
-    }),
-  );
-}
-
-/**
  * Upload local files to an S3 bucket for static website hosting.
  *
  * Reads operator credentials from the environment (ASSIGNEE_OPERATOR_* vars),
@@ -224,6 +180,19 @@ export async function uploadStaticSite(
   const client = createS3Client(options?.region, options?.config);
 
   const allFiles = collectFiles(sourceDir);
+
+  // T3-2: snapshot localKeys at upload START, before the upload loop.
+  // Computing localKeys from `allFiles` AFTER the loop would be racy:
+  // if the OS removes a local file between `collectFiles` and the orphan
+  // sweep, that file's key is absent from the late-computed set, causing
+  // the still-valid remote object to be incorrectly treated as an orphan
+  // and deleted. By snapshotting here we close the race window — any file
+  // that existed when we started the upload is included in localKeys even
+  // if it disappears mid-flight.
+  const localKeys = new Set<string>(
+    allFiles.map((f) => relative(sourceDir, f).split(pathSep).join("/")),
+  );
+
   const result: UploadResult = {
     uploaded: 0,
     failed: 0,
@@ -277,13 +246,11 @@ export async function uploadStaticSite(
 
   // ── Orphan sweep (opt-in) ───────────────────────────────────────────
   if (options?.deleteOrphans === true) {
-    // For the orphan calculation we also include the local key set
-    // (files that FAILED to upload should NOT be deleted from the
-    // bucket — they may already exist there from a prior run that
-    // succeeded). The set we want is `remote - local-from-disk`.
-    const localKeys = new Set<string>(
-      allFiles.map((f) => relative(sourceDir, f).split(pathSep).join("/")),
-    );
+    // `localKeys` was snapshotted at upload-start (T3-2 race-closure).
+    // Files that FAILED to upload are still in localKeys (their key was
+    // computed from the snapshot), so they are NOT treated as orphans —
+    // the bucket may already hold a prior-run version of the file.
+    // The set we want is `remote - localKeys`.
 
     const orphans: string[] = [];
     let continuationToken: string | undefined;
