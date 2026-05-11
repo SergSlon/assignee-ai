@@ -62,6 +62,24 @@ const ALREADY_EXISTS_PREFIX =
 const THROTTLED_PREFIX = "Request throttled by AWS. Please wait and retry.";
 
 /**
+ * Substring that CCAPI embeds when AttributeDefinitions contains entries
+ * not referenced by any KeySchema (table-level, GSI, or LSI). This
+ * happens when the LLM adds TTL-target attributes to AttributeDefinitions
+ * — AWS rejects them because TTL attrs must NOT appear there.
+ *
+ * The sanitizer (desired-state-sanitizer.ts Rule 3) strips these
+ * automatically on the next run; the hint below tells the user why their
+ * current plan was rejected and what to do.
+ */
+const DDB_ATTR_DEFS_MISMATCH_SUBSTRING =
+  "number of attributes in keyschema does not exactly match number of attributes defined in attributedefinitions";
+
+const DDB_ATTR_DEFS_HINT =
+  "DynamoDB AttributeDefinitions must only contain attributes used in KeySchema, GlobalSecondaryIndexes, or LocalSecondaryIndexes. " +
+  "Attributes referenced by TTL, indexes-without-keys, or unrelated metadata must not appear here. " +
+  "Re-run the intent; the sanitizer should now drop those extra entries automatically.";
+
+/**
  * Shared base for ALREADY_EXISTS / THROTTLED / UNKNOWN (and any future
  * kinds we add) — promotes a string literal prefix to a dispatch entry.
  */
@@ -115,8 +133,18 @@ const ERROR_DISPATCH: Record<
   },
   [ProvisioningErrorKind.SERVICE_ERROR]: {
     errorCode: PROVISIONING_ERROR_CODES.UNKNOWN,
-    userPrefix: (raw) => raw,
-    shortMessage: (raw) => raw,
+    userPrefix: (raw) => {
+      if (raw.toLowerCase().includes(DDB_ATTR_DEFS_MISMATCH_SUBSTRING)) {
+        return `${DDB_ATTR_DEFS_HINT}\n\nAWS message: ${raw}`;
+      }
+      return raw;
+    },
+    shortMessage: (raw) => {
+      if (raw.toLowerCase().includes(DDB_ATTR_DEFS_MISMATCH_SUBSTRING)) {
+        return `${DDB_ATTR_DEFS_HINT} (raw: ${raw})`;
+      }
+      return raw;
+    },
   },
   [ProvisioningErrorKind.UNKNOWN]: {
     errorCode: PROVISIONING_ERROR_CODES.UNKNOWN,
