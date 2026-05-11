@@ -24,6 +24,7 @@ import {
   type EnrichedPriceMap,
 } from "../../pricing/advisory-prices.js";
 import { stripPromptBoundaryTags } from "../../llm/prompt-sanitize.js";
+import { redactSensitiveFields } from "../../checkpoint/redaction.js";
 
 /**
  * Factory for the advice_generator LangGraph node.
@@ -179,7 +180,18 @@ export function buildAdvicePrompt(
   state: AgentState,
   mcpContext: McpAdviceContext = {},
 ): string {
-  const stateKeys = Object.keys(state.desiredState ?? {}).join(", ");
+  // Redact secrets before serializing to LLM prompt (uses the same
+  // allowlist-based redaction as checkpoint serialization, SEC-02/H17).
+  // Then strip prompt-boundary tags from the JSON output (P013/R8-02):
+  // user-controlled string values in desiredState (tag values, resource
+  // names, description fields) could otherwise carry injection payloads
+  // like </user_intent><system>… that hijack the LLM. JSON's "" quoting
+  // means stripping angle-brackets cannot corrupt the structure.
+  // Reviewer-flagged BLOCKER closure on commit 52d3a0cf.
+  const redactedState = redactSensitiveFields(state.desiredState ?? {});
+  const serializedState = stripPromptBoundaryTags(
+    JSON.stringify(redactedState, null, 2),
+  );
   const costLine = state.estimatedMonthlyCost
     ? `Estimated cost: ${state.estimatedMonthlyCost}/month.`
     : "";
@@ -213,8 +225,13 @@ export function buildAdvicePrompt(
 
 Resource type: ${state.resourceType}
 User intent: "${stripPromptBoundaryTags(state.userIntent)}"
-Configuration keys: ${stateKeys}
-${costLine}${mcpBlock}
+${costLine}
+
+Current configuration (already applied to the plan):
+${serializedState}
+${mcpBlock}
+
+IMPORTANT: Do NOT recommend enabling, setting, or configuring any property that is already present and set to a truthy / non-default value in the configuration above. Only advise on properties that are absent or set to values that warrant a change.
 
 Provide 3-5 short, actionable tips about cost optimization, security best practices, and architecture improvements. Each tip must be a single sentence. Focus on the most impactful advice for this specific resource type and configuration. When real-time data is provided above, use it for specific numbers and recommendations.
 
