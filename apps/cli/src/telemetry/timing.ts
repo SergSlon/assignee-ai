@@ -142,37 +142,61 @@ const LABEL_TO_BUDGET: Record<string, { label: string; budgetMs: number }> = {
 /**
  * Epic 98 e98.W5.P2 (Epic 97 A-03 + A-07): per-apply resource-type
  * context used to swap the `total` budget for resource types with
- * inherently longer CCAPI completion windows (currently SQS — see
+ * inherently longer CCAPI completion windows (SQS, CloudFront — see
  * `APPLY_TOTAL_OVERRIDES_MS`).
  *
- * Set by the apply orchestrator after Phase 1 resolves the terminal
- * `resourceType`; read by `checkTimingsAgainstBudgets` on persist.
- * Undefined on non-apply commands / pre-Phase-1 exits → default
- * COMMAND_TOTAL_MS stays in force. Cleared by `resetTimings()` so
- * tests don't leak context between runs.
+ * For single-resource apply this carries one type; for compound apply
+ * it carries every successfully-completed resource type so the max
+ * override across all of them wins. Static-website is the motivating
+ * compound: it terminates on BucketPolicy (no override) but the
+ * CloudFront Distribution step gates the whole run for 3-5 min — only
+ * the compound-aware lookup catches that.
+ *
+ * Set by the apply orchestrator after Phase 1 resolves the resource
+ * list; read by `checkTimingsAgainstBudgets` on persist. Undefined on
+ * non-apply commands / pre-Phase-1 exits → default COMMAND_TOTAL_MS
+ * stays in force. Cleared by `resetTimings()` so tests don't leak.
  */
-let applyResourceType: string | undefined;
+let applyResourceTypes: readonly string[] | undefined;
 
 /**
  * Set the resource-type context for the `total`-budget override. Call
- * this once per apply run, after the graph resolves the terminal
- * resourceType and before `persistTimings` fires.
+ * this once per apply run, after the graph resolves the resource list
+ * and before `persistTimings` fires. Accepts a single type (single
+ * apply) or an array (compound apply — full `completedResources`
+ * types).
  */
-export function setApplyBudgetContext(resourceType: string | undefined): void {
-  applyResourceType = resourceType;
+export function setApplyBudgetContext(
+  resourceTypes: string | readonly string[] | undefined,
+): void {
+  if (resourceTypes === undefined) {
+    applyResourceTypes = undefined;
+    return;
+  }
+  applyResourceTypes =
+    typeof resourceTypes === "string" ? [resourceTypes] : resourceTypes;
 }
 
 /**
  * Return the effective `total` budget for the current run, consulting
  * the per-resource-type override map when an apply context has been
- * set. Pure-function surface so the check is easy to unit-test.
+ * set. For compound apply, the MAX override across all completed
+ * resource types wins — the slowest resource gates the budget.
+ * Pure-function surface so the check is easy to unit-test.
  */
 function effectiveTotalBudgetMs(): number {
-  if (applyResourceType !== undefined) {
-    const override = APPLY_TOTAL_OVERRIDES_MS[applyResourceType];
-    if (override !== undefined) return override;
+  const defaultBudget: number = STARTUP_BUDGETS.COMMAND_TOTAL.budgetMs;
+  if (applyResourceTypes === undefined || applyResourceTypes.length === 0) {
+    return defaultBudget;
   }
-  return STARTUP_BUDGETS.COMMAND_TOTAL.budgetMs;
+  let max: number = defaultBudget;
+  for (const resourceType of applyResourceTypes) {
+    const override = APPLY_TOTAL_OVERRIDES_MS[resourceType];
+    if (override !== undefined && override > max) {
+      max = override;
+    }
+  }
+  return max;
 }
 
 /**
@@ -284,5 +308,5 @@ export function persistTimings(runId: string, homeDir?: string): void {
 export function resetTimings(): void {
   pending.clear();
   completed.clear();
-  applyResourceType = undefined;
+  applyResourceTypes = undefined;
 }
