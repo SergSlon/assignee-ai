@@ -23,10 +23,14 @@ describe("repairRequiredFields", () => {
       );
 
       // Tier C: dropped redundant toBeDefined() — the next assertion
-      // (.ZipFile access through cast) fails on undefined
-      expect(
-        (repaired["Code"] as Record<string, unknown>)["ZipFile"],
-      ).toContain("exports.handler");
+      // (.ZipFile access through cast) fails on undefined.
+      // Fix DF-D1: fallback body must be 'Hello World', not 'placeholder'.
+      const zipFile = (repaired["Code"] as Record<string, unknown>)[
+        "ZipFile"
+      ] as string;
+      expect(zipFile).toContain("exports.handler");
+      expect(zipFile).toContain("Hello World");
+      expect(zipFile).not.toContain("placeholder");
       expect(injectedFields).toContainEqual({
         field: "Code",
         source: "pluginDefault",
