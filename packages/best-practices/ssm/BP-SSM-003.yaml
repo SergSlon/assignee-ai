@@ -3,8 +3,8 @@ title: "SSM parameter should use SecureString type for sensitive data"
 severity: HIGH
 resource_type: "AWS::SSM::Parameter"
 property_path: "Type"
-check_type: "awareness"
-expected_value: true
+check_type: "equals"
+expected_value: "SecureString"
 source: "TrustedAdvisor"
 source_id: "TA-ssm-secure"
 description: "SSM parameters storing sensitive data (passwords, API keys, connection strings) should use SecureString type for KMS encryption at rest. String and StringList types store values in plaintext."

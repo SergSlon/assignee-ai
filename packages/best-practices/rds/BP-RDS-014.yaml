@@ -3,7 +3,7 @@ title: "RDS single-AZ instance should be evaluated for Multi-AZ"
 severity: HIGH
 resource_type: "AWS::RDS::DBInstance"
 property_path: "MultiAZ"
-check_type: "awareness"
+check_type: "equals"
 expected_value: true
 source: "TrustedAdvisor"
 source_id: "TA-rds-single-az"

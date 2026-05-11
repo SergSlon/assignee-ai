@@ -3,8 +3,8 @@ title: "DynamoDB table should have auto-scaling configured"
 severity: MEDIUM
 resource_type: "AWS::DynamoDB::Table"
 property_path: "BillingMode"
-check_type: "awareness"
-expected_value: true
+check_type: "equals"
+expected_value: "PAY_PER_REQUEST"
 source: "FSBP"
 source_id: "DynamoDB.1"
 description: "DynamoDB tables using provisioned capacity should have auto-scaling configured to handle traffic fluctuations. Without auto-scaling, tables may throttle during traffic spikes or waste capacity during lulls."
