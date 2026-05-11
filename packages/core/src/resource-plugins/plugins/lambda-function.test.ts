@@ -334,5 +334,24 @@ describe("lambdaFunctionPlugin", () => {
       expect(hints).toMatch(/Layers/i);
       expect(hints).toMatch(/ARN/i);
     });
+
+    it("includes Code/ZipFile hint instructing LLM to embed intent body (Fix DF-D1)", () => {
+      // The LLM must always emit a Code.ZipFile and must derive the response
+      // body from the user's intent rather than defaulting to 'placeholder'.
+      // Locate the specific Code hint (NOT the Role hint, which also mentions
+      // "placeholder" — reviewer L1 closure: the previous /placeholder/i
+      // assertion would fire on the Role hint's "placeholder ARNs" string
+      // even if the Code-hint ban-phrase were deleted, masking regressions).
+      const codeHint = lambdaFunctionPlugin.configHints!.find((h) =>
+        h.startsWith("Code:"),
+      );
+      expect(codeHint).toBeDefined();
+      expect(codeHint!).toContain("ZipFile");
+      expect(codeHint!.toLowerCase()).toContain("body");
+      // Lock the literal ban-phrase that must remain in the Code hint —
+      // deleting it would let the LLM regress to body: 'placeholder'.
+      expect(codeHint!).toContain("Never emit the literal word 'placeholder'");
+      expect(codeHint!).toContain("Hello World");
+    });
   });
 });
