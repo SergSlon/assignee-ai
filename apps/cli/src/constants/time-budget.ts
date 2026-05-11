@@ -64,13 +64,24 @@ export const COMMAND_TOTAL_MS = 60000;
  *   delete and a fresh create races the release. Observed wall clock
  *   73-74s on every `assignee apply` of a standard queue (dogfood
  *   slice A). 90s gives ~20% headroom over worst-case observation.
+ * - CloudFront Distribution: AWS edge-deployment finalisation
+ *   intrinsically takes 3-5 min in the typical case (and can take
+ *   up to 25 min per AWS docs). Observed 5m04s wall clock on the
+ *   static-website compound (2026-05-11). 6 min override comfortably
+ *   covers the typical case while still flagging the genuine outlier
+ *   (>10 min) — a real signal worth a WARNING.
  *
  * Callers set the context via `timing.setApplyBudgetContext()` when
- * they know the terminal resourceType (post-Phase-1 in apply). When
- * unset, `total` falls back to `COMMAND_TOTAL_MS`.
+ * they know the terminal resourceType (post-Phase-1 in apply). For
+ * compound apply, callers should pass the FULL list of completed
+ * resource types so the max override across all of them is selected
+ * (compound bottleneck != terminal resource — e.g. static-website
+ * terminates on BucketPolicy but the CloudFront step is the gate).
+ * When unset, `total` falls back to `COMMAND_TOTAL_MS`.
  */
 export const APPLY_TOTAL_OVERRIDES_MS: Readonly<Record<string, number>> = {
   "AWS::SQS::Queue": 90000,
+  "AWS::CloudFront::Distribution": 360000,
 };
 
 /** Per-phase startup time budgets. */

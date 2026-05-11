@@ -442,6 +442,126 @@ describe("timing", () => {
       expect(totalWarnings).toHaveLength(1);
       expect(totalWarnings[0]).toContain("budget: 60000ms");
     });
+
+    it("CloudFront Distribution apply at 5min does NOT fire a warning (360s override)", () => {
+      // CloudFront edge-deployment finalisation intrinsically takes
+      // 3-5 min — observed 5m04s on the 2026-05-11 static-website
+      // dogfood. 360 s (6 min) override comfortably covers the typical
+      // case while still flagging genuine outliers (>10 min).
+      synthesiseTotalMs(303_710);
+      setApplyBudgetContext("AWS::CloudFront::Distribution");
+
+      checkTimingsAgainstBudgets();
+
+      const totalWarnings = warnings.filter((w) =>
+        w.includes("Total command runtime"),
+      );
+      expect(totalWarnings).toHaveLength(0);
+    });
+
+    it("CloudFront Distribution at >6min DOES fire a warning (genuine outlier signal)", () => {
+      synthesiseTotalMs(450_000);
+      setApplyBudgetContext("AWS::CloudFront::Distribution");
+
+      checkTimingsAgainstBudgets();
+
+      const totalWarnings = warnings.filter((w) =>
+        w.includes("Total command runtime"),
+      );
+      expect(totalWarnings).toHaveLength(1);
+      expect(totalWarnings[0]).toContain("budget: 360000ms");
+    });
+
+    it("compound apply (static-website types) picks MAX override across all completedResources", () => {
+      // Static-website compound: terminates on BucketPolicy (no
+      // override) but bottlenecks on CloudFront Distribution (360 s
+      // override). The compound-aware setter MUST pick 360 s, not the
+      // terminal type's 60 s. Pre-fix this combination spuriously
+      // fired at 5 min — that warning is the whole reason this code
+      // exists.
+      synthesiseTotalMs(303_710);
+      setApplyBudgetContext([
+        "AWS::S3::Bucket",
+        "AWS::CloudFront::OriginAccessControl",
+        "AWS::CloudFront::Distribution",
+        "AWS::S3::BucketPolicy",
+      ]);
+
+      checkTimingsAgainstBudgets();
+
+      const totalWarnings = warnings.filter((w) =>
+        w.includes("Total command runtime"),
+      );
+      expect(totalWarnings).toHaveLength(0);
+    });
+
+    it("compound apply at >6min still fires WARNING (max override does not silence genuine outliers)", () => {
+      synthesiseTotalMs(450_000);
+      setApplyBudgetContext([
+        "AWS::S3::Bucket",
+        "AWS::CloudFront::OriginAccessControl",
+        "AWS::CloudFront::Distribution",
+        "AWS::S3::BucketPolicy",
+      ]);
+
+      checkTimingsAgainstBudgets();
+
+      const totalWarnings = warnings.filter((w) =>
+        w.includes("Total command runtime"),
+      );
+      expect(totalWarnings).toHaveLength(1);
+      expect(totalWarnings[0]).toContain("budget: 360000ms");
+    });
+
+    it("compound apply with NO override-eligible types falls back to 60s rule", () => {
+      // Lambda-with-exec-role compound: AWS::IAM::Role + AWS::Lambda::
+      // Function — neither has an override. Must keep the 60s rule.
+      synthesiseTotalMs(75_000);
+      setApplyBudgetContext(["AWS::IAM::Role", "AWS::Lambda::Function"]);
+
+      checkTimingsAgainstBudgets();
+
+      const totalWarnings = warnings.filter((w) =>
+        w.includes("Total command runtime"),
+      );
+      expect(totalWarnings).toHaveLength(1);
+      expect(totalWarnings[0]).toContain("budget: 60000ms");
+    });
+
+    it("compound apply with empty array falls back to 60s rule (defensive)", () => {
+      synthesiseTotalMs(75_000);
+      setApplyBudgetContext([]);
+
+      checkTimingsAgainstBudgets();
+
+      const totalWarnings = warnings.filter((w) =>
+        w.includes("Total command runtime"),
+      );
+      expect(totalWarnings).toHaveLength(1);
+      expect(totalWarnings[0]).toContain("budget: 60000ms");
+    });
+
+    it("compound apply mixing SQS + CloudFront picks 360s (the MAX), not 90s", () => {
+      // Closes reviewer-flagged nit: hypothetical compound with two
+      // override-eligible types must select the LARGER override, not
+      // the first one encountered. Locks the `max` semantics so a
+      // future refactor to `Math.min` / first-match doesn't silently
+      // regress.
+      synthesiseTotalMs(180_000);
+      setApplyBudgetContext([
+        "AWS::SQS::Queue",
+        "AWS::CloudFront::Distribution",
+      ]);
+
+      checkTimingsAgainstBudgets();
+
+      const totalWarnings = warnings.filter((w) =>
+        w.includes("Total command runtime"),
+      );
+      // 180_000 ms is over the SQS 90s override but under the
+      // CloudFront 360s override → MAX must be 360s → no warning.
+      expect(totalWarnings).toHaveLength(0);
+    });
   });
 
   // ─────────────────────────────────────────────────────────────────────────
