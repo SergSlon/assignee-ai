@@ -15,7 +15,6 @@ export {
   DEFAULT_AUDIT_KEY_FILE,
   GENESIS_HMAC,
   AUDIT_KEY_MIN_LENGTH,
-  _resetAuditKeyCache,
 } from "./hmac-chain.js";
 
 export {

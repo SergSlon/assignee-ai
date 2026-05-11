@@ -43,6 +43,10 @@
     "./locks": {
       "import": "./dist/locks/index.js",
       "types": "./dist/locks/index.d.ts"
+    },
+    "./test-hooks/audit": {
+      "import": "./dist/test-hooks/audit.js",
+      "types": "./dist/test-hooks/audit.d.ts"
     }
   },
   "files": [

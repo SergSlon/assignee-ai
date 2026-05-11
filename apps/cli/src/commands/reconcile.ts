@@ -19,7 +19,7 @@
  */
 
 import { Command } from "commander";
-import { AssigneeError, serializeErrorEnvelope } from "@assignee/core";
+import { AssigneeError } from "@assignee/core";
 import { CommandName, CommandDescription } from "../constants/commands.js";
 import {
   ReconcileAction,
@@ -28,7 +28,7 @@ import {
 import { runReconcile } from "./reconcile/orchestrator.js";
 import type { ReconcileOpts } from "./reconcile/types.js";
 import { installJsonStderrFilter } from "./json-stderr-filter.js";
-import { redactAccountIdIfDemoMode } from "./output-format.js";
+import { installJsonStdoutSuppressor } from "../utils/stdio/json-stdout-suppressor.js";
 
 // ── Re-exports for external consumers (tests, reconcile-factory) ──────────
 export { ReconcileAction, type ReconcileActionType };
@@ -60,56 +60,6 @@ interface ReconcileSuccessEnvelope {
   ok: true;
   operation: string;
   runId?: string;
-}
-
-function installJsonStdoutSuppressor(enabled: boolean): {
-  flushSuccess: (envelope: ReconcileSuccessEnvelope) => void;
-  flushError: (code: string, message: string, hint?: string) => void;
-  restore: () => void;
-} {
-  if (!enabled) {
-    return {
-      flushSuccess: () => {},
-      flushError: () => {},
-      restore: () => {},
-    };
-  }
-  const originalWrite = process.stdout.write;
-  process.stdout.write = ((
-    _chunk: string | Uint8Array,
-    ...rest: unknown[]
-  ): boolean => {
-    const cb = rest.find((r) => typeof r === "function") as
-      | ((err?: Error | null) => void)
-      | undefined;
-    if (cb) cb();
-    return true;
-  }) as typeof process.stdout.write;
-
-  let restored = false;
-  const restore = (): void => {
-    if (restored) return;
-    process.stdout.write = originalWrite;
-    restored = true;
-  };
-
-  return {
-    flushSuccess: (envelope) => {
-      restore();
-      originalWrite.call(
-        process.stdout,
-        redactAccountIdIfDemoMode(JSON.stringify(envelope, null, 2) + "\n"),
-      );
-    },
-    flushError: (code, message, hint) => {
-      restore();
-      originalWrite.call(
-        process.stdout,
-        redactAccountIdIfDemoMode(serializeErrorEnvelope(code, message, hint)),
-      );
-    },
-    restore,
-  };
 }
 
 type ReconcileOptsWithJson = ReconcileOpts & {
@@ -153,7 +103,8 @@ Examples:
   )
   .action(async (rawOpts: ReconcileOptsWithJson) => {
     const json = rawOpts.json === true || rawOpts.output === "json";
-    const suppressor = installJsonStdoutSuppressor(json);
+    const suppressor =
+      installJsonStdoutSuppressor<ReconcileSuccessEnvelope>(json);
     // Epic 96 Wave 3 N4 (D-04): suppress renderError human blocks on
     // stderr under JSON mode. Structured JSON log lines pass through;
     // only [ERROR]/[CONTEXT]/[FIX] prefix writes are dropped.
