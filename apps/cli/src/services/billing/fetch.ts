@@ -191,6 +191,24 @@ export async function fetchBillingData(
  *
  * @returns Formatted string. Never throws.
  */
+// T2-2: Explicit TypeScript overload signatures replace the union-type
+// parameter + runtime `typeof` shim. Both call-site forms remain valid:
+// - Legacy 2-arg: getCostSavingsEstimate(arn, mcpTools)
+// - Modern 3-arg:  getCostSavingsEstimate(arn, resourceType, mcpTools)
+// Behaviour is byte-identical to the previous union-type implementation.
+
+/** @overload Legacy 2-arg form — resourceType defaults to UNKNOWN_FALLBACK. */
+export async function getCostSavingsEstimate(
+  arn: string,
+  mcpTools?: StructuredTool[],
+): Promise<string>;
+/** @overload Modern 3-arg form — resourceType enables the decomposer fallback. */
+export async function getCostSavingsEstimate(
+  arn: string,
+  resourceType: string,
+  mcpTools?: StructuredTool[],
+): Promise<string>;
+/** Implementation — not visible to callers directly. */
 export async function getCostSavingsEstimate(
   arn: string,
   mcpToolsOrResourceType?: StructuredTool[] | string,

@@ -664,3 +664,170 @@ describe("price-cache atomic write (A3 / M-H-005)", () => {
     expect(got).toEqual(data);
   });
 });
+
+// T1-3 (Q-M-005): readCacheTtlMinutes configurable-TTL code path coverage.
+//
+// `price-cache.ts:51-66` reads `.assignee/config.yaml` from `projectDir`
+// (or `process.cwd()`) and returns `priceCacheTtlMinutes` when present and
+// valid. Before this test block the three configurable-TTL branches were
+// entirely uncovered — any YAML-parse regression was invisible to the suite.
+describe("readCacheTtlMinutes via getCachedPrice projectDir parameter (T1-3)", () => {
+  let homeDir: string;
+  let projectDir: string;
+  let originalHome: string | undefined;
+  let originalUserProfile: string | undefined;
+
+  beforeEach(async () => {
+    homeDir = await fsPromises.mkdtemp(
+      path.join(os.tmpdir(), "assignee-pricecache-ttl-"),
+    );
+    projectDir = await fsPromises.mkdtemp(
+      path.join(os.tmpdir(), "assignee-project-ttl-"),
+    );
+    originalHome = process.env["HOME"];
+    originalUserProfile = process.env["USERPROFILE"];
+    process.env["HOME"] = homeDir;
+    process.env["USERPROFILE"] = homeDir;
+    vi.resetModules();
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    if (originalHome === undefined) {
+      delete process.env["HOME"];
+    } else {
+      process.env["HOME"] = originalHome;
+    }
+    if (originalUserProfile === undefined) {
+      delete process.env["USERPROFILE"];
+    } else {
+      process.env["USERPROFILE"] = originalUserProfile;
+    }
+    await fsPromises
+      .rm(homeDir, { recursive: true, force: true })
+      .catch(() => {});
+    await fsPromises
+      .rm(projectDir, { recursive: true, force: true })
+      .catch(() => {});
+  });
+
+  /**
+   * Write a config.yaml under `<projectDir>/.assignee/config.yaml`.
+   * Uses real YAML shape that matches the production `config.yaml` schema.
+   */
+  function writeProjectConfig(content: string): void {
+    const configDir = path.join(projectDir, ".assignee");
+    fs.mkdirSync(configDir, { recursive: true });
+    fs.writeFileSync(path.join(configDir, "config.yaml"), content, "utf-8");
+  }
+
+  it("(a) uses custom TTL when config.yaml has valid priceCacheTtlMinutes: 10", async () => {
+    // Write a config.yaml with a 10-minute TTL — well below the default
+    // (60 min for compute / 1440 min for storage). A cache entry written
+    // 11 minutes ago must be treated as expired under the custom TTL and
+    // as fresh under the default — the test asserts the former.
+    writeProjectConfig("priceCacheTtlMinutes: 10\n");
+
+    vi.resetModules();
+    const { setCachedPrice: setCached, getCachedPrice: getCached } =
+      await import("./price-cache.js");
+
+    const serviceCode = "AmazonEC2";
+    const filters = [
+      { Type: "TERM_MATCH", Field: "instanceType", Value: "t3.micro" },
+    ];
+    const data = { hourlyUsd: 0.0104 };
+
+    // Write cache entry, then backdate its cachedAt to 11 minutes ago.
+    setCached(serviceCode, filters, data);
+
+    // Locate the written file and overwrite cachedAt to be 11 min old.
+    const cacheDir = path.join(homeDir, ".assignee", "cache", "pricing");
+    const files = fs.readdirSync(cacheDir);
+    expect(files).toHaveLength(1);
+    const filePath = path.join(cacheDir, files[0]!);
+    const rawEntry = JSON.parse(fs.readFileSync(filePath, "utf-8")) as {
+      data: unknown;
+      serviceCode: string;
+      filtersHash: string;
+    };
+    const backdatedEntry = {
+      ...rawEntry,
+      cachedAt: Date.now() - 11 * 60 * 1000, // 11 minutes ago
+    };
+    fs.writeFileSync(filePath, JSON.stringify(backdatedEntry), "utf-8");
+
+    // With custom TTL=10min the 11-minute-old entry is EXPIRED → null.
+    const got = getCached(serviceCode, filters, "compute", projectDir);
+    expect(got).toBeNull();
+
+    // The expired file must also have been deleted (mirrors the expiry
+    // deletion path at price-cache.ts:117-124).
+    expect(fs.readdirSync(cacheDir)).toHaveLength(0);
+  });
+
+  it("(b) falls back to default TTL when config.yaml has invalid value (string)", async () => {
+    // A config.yaml with a non-numeric priceCacheTtlMinutes is quietly
+    // ignored — readCacheTtlMinutes falls through to the category default.
+    // Real-world cause: user mistakenly quotes the value ("10" instead
+    // of 10), producing a YAML string, not a number.
+    writeProjectConfig('priceCacheTtlMinutes: "not-a-number"\n');
+
+    vi.resetModules();
+    const { setCachedPrice: setCached, getCachedPrice: getCached } =
+      await import("./price-cache.js");
+
+    const serviceCode = "AmazonS3";
+    const filters = [
+      { Type: "TERM_MATCH", Field: "storageClass", Value: "General Purpose" },
+    ];
+    const data = { storageUsd: 0.023 };
+
+    setCached(serviceCode, filters, data);
+
+    // Entry is fresh (just written) — must be valid regardless of config.
+    const got = getCached(serviceCode, filters, "storage", projectDir);
+    expect(got).toEqual(data);
+  });
+
+  it("(b) falls back to default TTL when config.yaml has negative value", async () => {
+    // Negative TTL is invalid; readCacheTtlMinutes checks `ttl > 0` and
+    // falls back to the default.
+    writeProjectConfig("priceCacheTtlMinutes: -5\n");
+
+    vi.resetModules();
+    const { setCachedPrice: setCached, getCachedPrice: getCached } =
+      await import("./price-cache.js");
+
+    const serviceCode = "AmazonEC2";
+    const filters = [
+      { Type: "TERM_MATCH", Field: "instanceType", Value: "t3.small" },
+    ];
+    const data = { hourlyUsd: 0.023 };
+
+    setCached(serviceCode, filters, data);
+
+    // Fresh entry → valid under the default TTL (60 min for compute).
+    const got = getCached(serviceCode, filters, "compute", projectDir);
+    expect(got).toEqual(data);
+  });
+
+  it("(c) falls back to default TTL when config.yaml is absent", async () => {
+    // No .assignee/config.yaml at all — readCacheTtlMinutes catches the
+    // ENOENT from readFileSync and returns DEFAULT_TTL[category].
+    // projectDir has no .assignee/ subdirectory — confirming the absence.
+    vi.resetModules();
+    const { setCachedPrice: setCached, getCachedPrice: getCached } =
+      await import("./price-cache.js");
+
+    const serviceCode = "AWSLambda";
+    const filters = [{ Type: "TERM_MATCH", Field: "product", Value: "Lambda" }];
+    const data = { invocations: "free-tier" };
+
+    setCached(serviceCode, filters, data);
+
+    // Fresh entry → valid under the default TTL.
+    const got = getCached(serviceCode, filters, "default", projectDir);
+    expect(got).toEqual(data);
+  });
+});
