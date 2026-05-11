@@ -16,6 +16,7 @@
 import { describe, it, expect } from "vitest";
 import {
   detectPlaceholderArn,
+  findTemplateTokenInArn,
   placeholderArnGuard,
 } from "./placeholder-arn.js";
 import type { GuardContext } from "../types.js";
@@ -370,5 +371,248 @@ describe("placeholder-arn — W13-S1 region segment tightening (M-α-22)", () =>
       }),
     );
     expect(result.kind).toBe("fail");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Template-token placeholder ARNs (fix/sqs-placeholder-arn-guard)
+//
+// The LLM hallucinates ARNs like `arn:aws:sqs:REGION:ACCOUNT_ID:DLQ_NAME`
+// or `arn:aws:sqs:region:account-id:dlq-genai-dogfood-jobs` — uppercase or
+// lowercase token words in the region / account / resource segments instead
+// of real values. These bypassed both the doc-account-ID guard (which only
+// checks for known 12-digit IDs) and the angle-bracket guard (which only
+// matches `<…>` wrappers).
+// ---------------------------------------------------------------------------
+
+describe("findTemplateTokenInArn — unit (fix/sqs-placeholder-arn-guard)", () => {
+  it("detects first token in segment order — REGION segment before ACCOUNT_ID segment", () => {
+    // ARN: arn:aws:sqs:REGION:ACCOUNT_ID:DLQ_NAME
+    // Segments scanned left-to-right: arn, aws, sqs, REGION (hit first), ACCOUNT_ID, DLQ_NAME
+    expect(
+      findTemplateTokenInArn("arn:aws:sqs:REGION:ACCOUNT_ID:DLQ_NAME"),
+    ).toBe("REGION");
+  });
+
+  it("detects region token (lowercase) — 'region' segment is first token hit", () => {
+    // ARN: arn:aws:sqs:region:account-id:dlq-name
+    // Segments: arn, aws, sqs, region (hit first as REGION), account-id, dlq-name
+    expect(
+      findTemplateTokenInArn("arn:aws:sqs:region:account-id:dlq-name"),
+    ).toBe("REGION");
+  });
+
+  it("detects REGION as bare region segment when it is the only token", () => {
+    expect(
+      findTemplateTokenInArn("arn:aws:sqs:REGION:112233445566:my-dlq"),
+    ).toBe("REGION");
+  });
+
+  it("detects ACCOUNT_ID when no REGION token is present", () => {
+    // ARN: arn:aws:sqs:us-east-1:ACCOUNT_ID:my-dlq
+    // Segments: arn, aws, sqs, us-east-1 (no match), ACCOUNT_ID (hit)
+    expect(
+      findTemplateTokenInArn("arn:aws:sqs:us-east-1:ACCOUNT_ID:my-dlq"),
+    ).toBe("ACCOUNT_ID");
+  });
+
+  it("detects ACCOUNT-ID token (hyphen variant)", () => {
+    expect(
+      findTemplateTokenInArn("arn:aws:sqs:us-east-1:ACCOUNT-ID:my-dlq"),
+    ).toBe("ACCOUNT-ID");
+  });
+
+  it("does NOT flag 'regional' as a REGION token (substring mismatch)", () => {
+    // 'my-regional-queue' is NOT equal to 'REGION' when split on ':'
+    expect(
+      findTemplateTokenInArn(
+        "arn:aws:sqs:us-east-1:112233445566:my-regional-queue",
+      ),
+    ).toBeUndefined();
+  });
+
+  it("returns undefined for a non-ARN string", () => {
+    expect(findTemplateTokenInArn("REGION")).toBeUndefined();
+    expect(findTemplateTokenInArn("not-an-arn")).toBeUndefined();
+  });
+
+  it("returns undefined for a real partition-aware ARN with no token words", () => {
+    expect(
+      findTemplateTokenInArn("arn:aws-cn:sqs:cn-north-1:123412341234:my-dlq"),
+    ).toBeUndefined();
+  });
+
+  it("returns undefined for a real GovCloud DLQ ARN (arn:aws-us-gov)", () => {
+    expect(
+      findTemplateTokenInArn(
+        "arn:aws-us-gov:sqs:us-gov-east-1:112233445566:my-dlq",
+      ),
+    ).toBeUndefined();
+  });
+});
+
+describe("detectPlaceholderArn — template-token ARNs (SQS RedrivePolicy bug)", () => {
+  // --- Tests 1–4: SQS RedrivePolicy shapes from the live bug report ---
+
+  it("rejects RedrivePolicy.deadLetterTargetArn with REGION token (scalar nested)", () => {
+    const err = detectPlaceholderArn({
+      QueueName: "genai-dogfood-jobs",
+      RedrivePolicy: {
+        maxReceiveCount: 5,
+        deadLetterTargetArn: "arn:aws:sqs:REGION:ACCOUNT_ID:DLQ_NAME",
+      },
+    });
+    expect(err).toBeDefined();
+    expect(err).toContain("RedrivePolicy.deadLetterTargetArn");
+    expect(err).toContain("template-token placeholder ARN");
+    // REGION segment appears before ACCOUNT_ID in the ARN — the first
+    // token found is reported in the error message.
+    expect(err).toContain("REGION");
+    // Actionable fix hint
+    expect(err).toContain("--set RedrivePolicy.deadLetterTargetArn=");
+    expect(err).toContain("compound pattern");
+  });
+
+  it("rejects RedrivePolicy.deadLetterTargetArn with ACCOUNT_ID token", () => {
+    const err = detectPlaceholderArn({
+      QueueName: "my-queue",
+      RedrivePolicy: {
+        maxReceiveCount: 3,
+        deadLetterTargetArn: "arn:aws:sqs:us-east-1:ACCOUNT_ID:my-dlq",
+      },
+    });
+    expect(err).toBeDefined();
+    expect(err).toContain("template-token placeholder ARN");
+    expect(err).toContain("ACCOUNT_ID");
+  });
+
+  it("rejects RedrivePolicy.deadLetterTargetArn with lowercase region/account-id tokens", () => {
+    // Observed in live plan summary: arn:aws:sqs:region:account-id:dlq-<name>
+    const err = detectPlaceholderArn({
+      QueueName: "my-queue",
+      RedrivePolicy: {
+        maxReceiveCount: 3,
+        deadLetterTargetArn:
+          "arn:aws:sqs:region:account-id:dlq-genai-dogfood-jobs",
+      },
+    });
+    expect(err).toBeDefined();
+    expect(err).toContain("template-token placeholder ARN");
+    // 'region' segment → detected as REGION token (comes before 'account-id'
+    // in left-to-right segment scan of the ARN)
+    expect(err).toContain("REGION");
+  });
+
+  it("rejects JSON-serialised RedrivePolicy string containing REGION:ACCOUNT_ID tokens", () => {
+    // The plan-generator may serialize RedrivePolicy as a JSON string
+    // (the shape that historically reached CCAPI verbatim).
+    const err = detectPlaceholderArn({
+      RedrivePolicy:
+        '{"maxReceiveCount":5,"deadLetterTargetArn":"arn:aws:sqs:REGION:ACCOUNT_ID:DLQ_NAME"}',
+    });
+    expect(err).toBeDefined();
+    expect(err).toContain("template-token placeholder ARN");
+  });
+
+  // --- Test 5: 123456789012 in a DLQ ARN (already handled by existing guard,
+  //             regression lock to ensure we didn't break it) ---
+  it("still rejects DLQ ARN with 123456789012 (existing doc-account-ID guard)", () => {
+    const err = detectPlaceholderArn({
+      QueueName: "my-queue",
+      RedrivePolicy: {
+        maxReceiveCount: 3,
+        deadLetterTargetArn: "arn:aws:sqs:us-east-1:123456789012:my-dlq",
+      },
+    });
+    expect(err).toBeDefined();
+    expect(err).toContain("123456789012");
+  });
+
+  // --- Test 6: valid partition-aware ARN passes through ---
+  it("passes a real partition-aware DLQ ARN (arn:aws-cn)", () => {
+    const err = detectPlaceholderArn({
+      QueueName: "my-queue",
+      RedrivePolicy: {
+        maxReceiveCount: 3,
+        deadLetterTargetArn: "arn:aws-cn:sqs:cn-north-1:123412341234:my-dlq",
+      },
+    });
+    expect(err).toBeUndefined();
+  });
+
+  it("passes a real GovCloud DLQ ARN (arn:aws-us-gov)", () => {
+    const err = detectPlaceholderArn({
+      QueueName: "my-queue",
+      RedrivePolicy: {
+        maxReceiveCount: 3,
+        deadLetterTargetArn:
+          "arn:aws-us-gov:sqs:us-gov-east-1:112233445566:my-dlq",
+      },
+    });
+    expect(err).toBeUndefined();
+  });
+
+  it("passes a real arn:aws DLQ ARN with a real account ID", () => {
+    const err = detectPlaceholderArn({
+      QueueName: "my-queue",
+      RedrivePolicy: {
+        maxReceiveCount: 3,
+        deadLetterTargetArn: "arn:aws:sqs:us-east-1:112233445566:my-dlq",
+      },
+    });
+    expect(err).toBeUndefined();
+  });
+
+  it("does NOT false-positive on queue name containing 'region' as a word part", () => {
+    // 'my-regional-queue' must NOT trigger the REGION token check
+    const err = detectPlaceholderArn({
+      QueueName: "my-queue",
+      RedrivePolicy: {
+        maxReceiveCount: 3,
+        deadLetterTargetArn:
+          "arn:aws:sqs:us-east-1:112233445566:my-regional-queue",
+      },
+    });
+    expect(err).toBeUndefined();
+  });
+});
+
+describe("placeholderArnGuard.run — template-token SQS shapes", () => {
+  it("fails with actionable error on uppercase token shape", async () => {
+    const result = await placeholderArnGuard.run(
+      ctx({
+        QueueName: "genai-dogfood-jobs",
+        RedrivePolicy: {
+          maxReceiveCount: 5,
+          deadLetterTargetArn: "arn:aws:sqs:REGION:ACCOUNT_ID:DLQ_NAME",
+        },
+      }),
+    );
+    expect(result.kind).toBe("fail");
+    if (result.kind === "fail") {
+      expect(result.errorMessage).toContain("template-token placeholder ARN");
+      expect(result.errorMessage).toContain(
+        "RedrivePolicy.deadLetterTargetArn",
+      );
+      expect(result.errorMessage).toContain("--set");
+      expect(result.errorMessage).toContain("compound pattern");
+    }
+  });
+
+  it("fails with actionable error on lowercase token shape (live bug shape)", async () => {
+    const result = await placeholderArnGuard.run(
+      ctx({
+        QueueName: "genai-dogfood-jobs",
+        RedrivePolicy: {
+          maxReceiveCount: 5,
+          deadLetterTargetArn:
+            "arn:aws:sqs:region:account-id:dlq-genai-dogfood-jobs",
+        },
+      }),
+    );
+    expect(result.kind).toBe("fail");
+    if (result.kind === "fail") {
+      expect(result.errorMessage).toContain("template-token placeholder ARN");
+    }
   });
 });
