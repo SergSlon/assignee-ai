@@ -47,8 +47,8 @@ import { restoreFromAuditLog } from "./restore-provisions-audit-log.js";
 import {
   appendAuditRecord,
   DEFAULT_AUDIT_LOG_FILE,
-  _resetAuditKeyCache,
 } from "@assignee/core/audit";
+import { _resetAuditKeyCache } from "@assignee/core/test-hooks/audit";
 import { defaultFileAdvisoryLock } from "@assignee/core/locks";
 
 // ── Test environment ──────────────────────────────────────────────────
