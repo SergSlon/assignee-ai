@@ -163,4 +163,69 @@ describe("securityPosture", () => {
       expect(hints).toHaveLength(0);
     });
   });
+
+  // ── DF-A2+B3+C4+D4+E4: DDB PITR key-shape tolerance ─────────────────────
+  //
+  // The PITR advisor must handle all three shapes that the plan generator can
+  // emit, and must still fire when the property is genuinely absent.
+  describe("DynamoDB PITR rule (DF-B3 fix)", () => {
+    it("does NOT fire when PITR is nested: { PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true } }", () => {
+      const hints = securityPosture(RESOURCE_TYPES.DYNAMODB_TABLE, {
+        TableName: "my-table",
+        PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true },
+      });
+      expect(
+        hints.some((h) =>
+          h.includes("Point-in-time recovery (PITR) not enabled"),
+        ),
+      ).toBe(false);
+    });
+
+    it("does NOT fire when PITR is shorthand: { PointInTimeRecoverySpecification: true }", () => {
+      const hints = securityPosture(RESOURCE_TYPES.DYNAMODB_TABLE, {
+        TableName: "my-table",
+        PointInTimeRecoverySpecification: true,
+      });
+      expect(
+        hints.some((h) =>
+          h.includes("Point-in-time recovery (PITR) not enabled"),
+        ),
+      ).toBe(false);
+    });
+
+    it("does NOT fire when PITR is flat: { PointInTimeRecoveryEnabled: true }", () => {
+      const hints = securityPosture(RESOURCE_TYPES.DYNAMODB_TABLE, {
+        TableName: "my-table",
+        PointInTimeRecoveryEnabled: true,
+      });
+      expect(
+        hints.some((h) =>
+          h.includes("Point-in-time recovery (PITR) not enabled"),
+        ),
+      ).toBe(false);
+    });
+
+    it("DOES fire when PITR is completely absent", () => {
+      const hints = securityPosture(RESOURCE_TYPES.DYNAMODB_TABLE, {
+        TableName: "my-table",
+      });
+      expect(
+        hints.some((h) =>
+          h.includes("Point-in-time recovery (PITR) not enabled"),
+        ),
+      ).toBe(true);
+    });
+
+    it("DOES fire when PointInTimeRecoveryEnabled is false", () => {
+      const hints = securityPosture(RESOURCE_TYPES.DYNAMODB_TABLE, {
+        TableName: "my-table",
+        PointInTimeRecoveryEnabled: false,
+      });
+      expect(
+        hints.some((h) =>
+          h.includes("Point-in-time recovery (PITR) not enabled"),
+        ),
+      ).toBe(true);
+    });
+  });
 });
