@@ -160,5 +160,57 @@ describe("classifyCreateError", () => {
       expect(result.userPrefix).toBe("Internal service error, please retry.");
       expect(result.shortMessage).toBe("Internal service error, please retry.");
     });
+
+    it("maps DDB AttributeDefinitions/KeySchema mismatch to UNKNOWN code with actionable hint", () => {
+      // Real CCAPI error text reproduced verbatim — the classifier must
+      // recognise the substring (case-insensitive) and return the actionable
+      // hint that tells the user about TTL attrs vs key attrs.
+      const rawMsg =
+        "Number of attributes in KeySchema does not exactly match number of attributes defined in AttributeDefinitions";
+
+      const result = classifyCreateError(
+        {
+          kind: ProvisioningErrorKind.SERVICE_ERROR,
+          message: rawMsg,
+        },
+        "AWS::DynamoDB::Table",
+      );
+
+      expect(result.errorCode).toBe(PROVISIONING_ERROR_CODES.UNKNOWN);
+      // userPrefix must contain the actionable guidance — not the raw AWS msg
+      expect(result.userPrefix).toContain("AttributeDefinitions");
+      expect(result.userPrefix).toContain("TTL");
+      expect(result.userPrefix).toContain("sanitizer");
+      // shortMessage is the same hint
+      expect(result.shortMessage).toContain("AttributeDefinitions");
+      // The raw AWS error text must NOT be the prefix (it's been replaced)
+      expect(result.userPrefix).not.toBe(rawMsg);
+      // Raw AWS message MUST be preserved in both surfaces so operators can
+      // grep logs / paste into AWS support tickets without losing the
+      // canonical CCAPI string (reviewer-flagged H1 on commit d6f456de).
+      expect(result.userPrefix).toContain(rawMsg);
+      expect(result.shortMessage).toContain(rawMsg);
+    });
+
+    it("preserves the unmodified raw message for non-DDB SERVICE_ERROR", () => {
+      // The DDB hint must NOT fire on unrelated SERVICE_ERROR messages —
+      // those must keep the original raw text as both userPrefix and
+      // shortMessage so debugging is unaffected.
+      const rawMsg =
+        "Unable to validate the following destination configurations (Service: AWSLambda)";
+
+      const result = classifyCreateError(
+        {
+          kind: ProvisioningErrorKind.SERVICE_ERROR,
+          message: rawMsg,
+        },
+        "AWS::Lambda::Function",
+      );
+
+      expect(result.errorCode).toBe(PROVISIONING_ERROR_CODES.UNKNOWN);
+      expect(result.userPrefix).toBe(rawMsg);
+      expect(result.shortMessage).toBe(rawMsg);
+      expect(result.userPrefix).not.toContain("AttributeDefinitions");
+    });
   });
 });

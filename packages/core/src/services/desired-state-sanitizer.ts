@@ -292,6 +292,38 @@ function applyDynamoDbRules(
     }
   }
 
+  // Rule 3: Strip AttributeDefinitions entries not referenced by any
+  // KeySchema (table, GSI, or LSI). CCAPI rejects entries for attributes
+  // that are not key attrs — e.g. TTL target attributes.
+  // Only runs when KeySchema is present and non-empty so we don't
+  // aggressively strip valid state when KeySchema is missing.
+  const keySchemaAttrs = collectKeySchemaAttrs(result);
+  if (
+    keySchemaAttrs.size > 0 &&
+    Array.isArray(result["AttributeDefinitions"])
+  ) {
+    const attrDefs = result["AttributeDefinitions"] as Array<
+      Record<string, unknown>
+    >;
+    const retained: Array<Record<string, unknown>> = [];
+    for (const def of attrDefs) {
+      const attrName =
+        def &&
+        typeof def === "object" &&
+        typeof def["AttributeName"] === "string"
+          ? (def["AttributeName"] as string)
+          : undefined;
+      if (attrName === undefined || keySchemaAttrs.has(attrName)) {
+        retained.push(def);
+      } else {
+        strippedKeys.push(`AttributeDefinitions[${attrName}]`);
+      }
+    }
+    if (retained.length !== attrDefs.length) {
+      result["AttributeDefinitions"] = retained;
+    }
+  }
+
   return result;
 }
 

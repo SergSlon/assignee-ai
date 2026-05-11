@@ -635,6 +635,176 @@ describe("sanitizeDesiredState", () => {
       expect(defs).toContainEqual({ AttributeName: "ts", AttributeType: "N" });
     });
 
+    // ── Rule 3: strip AttributeDefinitions entries NOT in any KeySchema ──
+
+    it("strips TTL-only attr from AttributeDefinitions (Rule 3 — A-TTL-1)", () => {
+      // Real repro: LLM adds expiresAt to AttributeDefinitions because
+      // TTL targets it. CCAPI rejects — only key attrs may appear there.
+      const desiredState = {
+        TableName: "user-sessions",
+        BillingMode: "PAY_PER_REQUEST",
+        KeySchema: [{ AttributeName: "sessionId", KeyType: "HASH" }],
+        AttributeDefinitions: [
+          { AttributeName: "sessionId", AttributeType: "S" },
+          { AttributeName: "expiresAt", AttributeType: "N" }, // TTL attr — must be stripped
+        ],
+        TimeToLiveSpecification: { AttributeName: "expiresAt", Enabled: true },
+      };
+
+      const { sanitized, strippedKeys } = sanitizeDesiredState(
+        desiredState,
+        ddbSchema,
+        RESOURCE_TYPES.DYNAMODB_TABLE,
+      );
+
+      const defs = sanitized["AttributeDefinitions"] as Array<
+        Record<string, unknown>
+      >;
+      expect(defs).toHaveLength(1);
+      expect(defs).toContainEqual({
+        AttributeName: "sessionId",
+        AttributeType: "S",
+      });
+      expect(defs).not.toContainEqual(
+        expect.objectContaining({ AttributeName: "expiresAt" }),
+      );
+      expect(strippedKeys).toContain("AttributeDefinitions[expiresAt]");
+    });
+
+    it("retains GSI key attr and strips TTL attr (Rule 3 — A-TTL-2)", () => {
+      // GSI uses tenantId; table key is sessionId; expiresAt is TTL-only.
+      // After sanitize: sessionId + tenantId retained, expiresAt dropped.
+      const desiredState = {
+        TableName: "user-sessions",
+        BillingMode: "PAY_PER_REQUEST",
+        KeySchema: [{ AttributeName: "sessionId", KeyType: "HASH" }],
+        AttributeDefinitions: [
+          { AttributeName: "sessionId", AttributeType: "S" },
+          { AttributeName: "tenantId", AttributeType: "S" },
+          { AttributeName: "expiresAt", AttributeType: "N" }, // TTL — must be stripped
+        ],
+        GlobalSecondaryIndexes: [
+          {
+            IndexName: "byTenant",
+            KeySchema: [{ AttributeName: "tenantId", KeyType: "HASH" }],
+            Projection: { ProjectionType: "ALL" },
+          },
+        ],
+        TimeToLiveSpecification: { AttributeName: "expiresAt", Enabled: true },
+      };
+
+      const { sanitized, strippedKeys } = sanitizeDesiredState(
+        desiredState,
+        ddbSchema,
+        RESOURCE_TYPES.DYNAMODB_TABLE,
+      );
+
+      const defs = sanitized["AttributeDefinitions"] as Array<
+        Record<string, unknown>
+      >;
+      const names = defs.map((d) => d["AttributeName"]);
+      expect(names).toContain("sessionId");
+      expect(names).toContain("tenantId");
+      expect(names).not.toContain("expiresAt");
+      expect(strippedKeys).toContain("AttributeDefinitions[expiresAt]");
+    });
+
+    it("retains LSI key attr and strips garbage attr (Rule 3 — A-LSI-1)", () => {
+      // pk + createdAt (LSI sort key) retained; garbage dropped.
+      const desiredState = {
+        TableName: "events",
+        BillingMode: "PAY_PER_REQUEST",
+        KeySchema: [{ AttributeName: "pk", KeyType: "HASH" }],
+        AttributeDefinitions: [
+          { AttributeName: "pk", AttributeType: "S" },
+          { AttributeName: "createdAt", AttributeType: "N" },
+          { AttributeName: "garbage", AttributeType: "S" }, // unreferenced — must be stripped
+        ],
+        LocalSecondaryIndexes: [
+          {
+            IndexName: "byCreatedAt",
+            KeySchema: [
+              { AttributeName: "pk", KeyType: "HASH" },
+              { AttributeName: "createdAt", KeyType: "RANGE" },
+            ],
+            Projection: { ProjectionType: "ALL" },
+          },
+        ],
+      };
+
+      const { sanitized, strippedKeys } = sanitizeDesiredState(
+        desiredState,
+        ddbSchema,
+        RESOURCE_TYPES.DYNAMODB_TABLE,
+      );
+
+      const defs = sanitized["AttributeDefinitions"] as Array<
+        Record<string, unknown>
+      >;
+      const names = defs.map((d) => d["AttributeName"]);
+      expect(names).toContain("pk");
+      expect(names).toContain("createdAt");
+      expect(names).not.toContain("garbage");
+      expect(strippedKeys).toContain("AttributeDefinitions[garbage]");
+    });
+
+    it("does not strip anything when KeySchema is absent (Rule 3 edge — no KeySchema)", () => {
+      // Guard: if the LLM forgot KeySchema entirely, Rule 3 must not
+      // wipe all AttributeDefinitions. Let other validators handle that.
+      const desiredState = {
+        TableName: "edge-table",
+        BillingMode: "PAY_PER_REQUEST",
+        AttributeDefinitions: [{ AttributeName: "pk", AttributeType: "S" }],
+        // KeySchema intentionally absent
+      };
+
+      const { sanitized, strippedKeys } = sanitizeDesiredState(
+        desiredState,
+        ddbSchema,
+        RESOURCE_TYPES.DYNAMODB_TABLE,
+      );
+
+      const defs = sanitized["AttributeDefinitions"] as Array<
+        Record<string, unknown>
+      >;
+      expect(defs).toHaveLength(1);
+      expect(defs).toContainEqual({ AttributeName: "pk", AttributeType: "S" });
+      // Nothing stripped by Rule 3
+      expect(
+        strippedKeys.filter((k) => k.startsWith("AttributeDefinitions[")),
+      ).toHaveLength(0);
+    });
+
+    it("no error when AttributeDefinitions is empty (Rule 3 edge — idempotent)", () => {
+      // Guard: empty AttributeDefinitions should not cause an error; Rule 3
+      // is a no-op in that case (Rule 2 will seed from KeySchema).
+      const desiredState = {
+        TableName: "edge-table",
+        BillingMode: "PAY_PER_REQUEST",
+        KeySchema: [{ AttributeName: "pk", KeyType: "HASH" }],
+        AttributeDefinitions: [],
+      };
+
+      expect(() =>
+        sanitizeDesiredState(
+          desiredState,
+          ddbSchema,
+          RESOURCE_TYPES.DYNAMODB_TABLE,
+        ),
+      ).not.toThrow();
+
+      const { sanitized } = sanitizeDesiredState(
+        desiredState,
+        ddbSchema,
+        RESOURCE_TYPES.DYNAMODB_TABLE,
+      );
+      // Rule 2 seeds pk; Rule 3 sees it in keySchemaAttrs → keeps it.
+      const defs = sanitized["AttributeDefinitions"] as Array<
+        Record<string, unknown>
+      >;
+      expect(defs).toContainEqual({ AttributeName: "pk", AttributeType: "S" });
+    });
+
     it("seeds LSI attribute into AttributeDefinitions too", () => {
       const desiredState = {
         TableName: "orders",
