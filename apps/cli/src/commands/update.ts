@@ -51,7 +51,12 @@ export const updateCommand = new Command(CommandName.UPDATE)
       `  assignee update my-marketing-site --source ./dist --delete\n` +
       `  assignee update arn:aws:s3:::my-marketing-site --source ./dist --invalidation-paths "/index.html,/css/*"\n` +
       `  assignee update <runId-uuid> --source ./dist --no-invalidation\n` +
-      `  assignee update my-marketing-site --source ./dist --wait --yes --json\n`,
+      `  assignee update my-marketing-site --source ./dist --wait --yes --json\n` +
+      `\nPrerequisites:\n` +
+      `  Requires operator IAM policy with: s3:PutObject, s3:DeleteObject (if --delete),\n` +
+      `  s3:ListBucket, cloudfront:CreateInvalidation, cloudfront:ListDistributions,\n` +
+      `  cloudfront:GetInvalidation (if --wait).\n` +
+      `  Run 'assignee setup' to provision.\n`,
   )
   .action(async (target: string, rawOpts: UpdateOpts) => {
     await updateAction(target, rawOpts);

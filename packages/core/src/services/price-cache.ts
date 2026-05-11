@@ -195,10 +195,26 @@ export function setCachedPrice(
       filtersHash: hash,
     };
 
-    fs.writeFileSync(filePath, JSON.stringify(entry), {
-      encoding: "utf-8",
-      mode: 0o600,
-    });
+    // M-H-005 (PR #40): write to a temp file, then atomically rename.
+    // This prevents a partially-written cache file from being read as
+    // valid JSON by a concurrent reader (e.g. two CLI invocations in
+    // rapid succession). Mirrors local-fs-adapter.ts:118-125.
+    const tmpPath = `${filePath}.tmp.${process.pid}.${crypto.randomBytes(4).toString("hex")}`;
+    try {
+      fs.writeFileSync(tmpPath, JSON.stringify(entry), {
+        encoding: "utf-8",
+        mode: 0o600,
+      });
+      fs.renameSync(tmpPath, filePath);
+    } catch (writeErr) {
+      // Best-effort cleanup of the temp file; ignore errors.
+      try {
+        fs.unlinkSync(tmpPath);
+      } catch {
+        // ignore
+      }
+      throw writeErr;
+    }
   } catch {
     // Cache write failures are non-blocking
   }

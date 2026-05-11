@@ -589,3 +589,78 @@ describe("price-cache body-validation guard (Layer 3)", () => {
     expect(fs.readdirSync(cacheDir)).not.toContain(fileName);
   });
 });
+
+// A3 (M-H-005): atomic cache writes via temp-then-rename.
+// No `.tmp.*` file should remain after a successful write.
+describe("price-cache atomic write (A3 / M-H-005)", () => {
+  let homeDir: string;
+  let originalHome: string | undefined;
+  let originalUserProfile: string | undefined;
+
+  beforeEach(async () => {
+    homeDir = await fsPromises.mkdtemp(
+      path.join(os.tmpdir(), "assignee-pricecache-atomic-"),
+    );
+    originalHome = process.env["HOME"];
+    originalUserProfile = process.env["USERPROFILE"];
+    process.env["HOME"] = homeDir;
+    process.env["USERPROFILE"] = homeDir;
+    vi.resetModules();
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    if (originalHome === undefined) {
+      delete process.env["HOME"];
+    } else {
+      process.env["HOME"] = originalHome;
+    }
+    if (originalUserProfile === undefined) {
+      delete process.env["USERPROFILE"];
+    } else {
+      process.env["USERPROFILE"] = originalUserProfile;
+    }
+    await fsPromises
+      .rm(homeDir, { recursive: true, force: true })
+      .catch(() => {});
+  });
+
+  it("no .tmp.* file remains after a successful setCachedPrice write", async () => {
+    vi.resetModules();
+    const { setCachedPrice: setCached } = await import("./price-cache.js");
+    const serviceCode = "AmazonS3";
+    const filters = [
+      { Type: "TERM_MATCH", Field: "storageClass", Value: "General Purpose" },
+    ];
+    const data = {
+      PriceList: ['{"product":{"sku":"atomic-test"},"terms":{}}'],
+    };
+
+    setCached(serviceCode, filters, data);
+
+    const cacheDir = path.join(homeDir, ".assignee", "cache", "pricing");
+    const files = fs.readdirSync(cacheDir);
+    // Final .json file present.
+    const jsonFiles = files.filter((f) => f.endsWith(".json"));
+    expect(jsonFiles).toHaveLength(1);
+    // No temp files remain.
+    const tmpFiles = files.filter((f) => f.includes(".tmp."));
+    expect(tmpFiles).toHaveLength(0);
+  });
+
+  it("written cache file is valid JSON and round-trips correctly", async () => {
+    vi.resetModules();
+    const { setCachedPrice: setCached, getCachedPrice: getCached } =
+      await import("./price-cache.js");
+    const serviceCode = "AmazonEC2";
+    const filters = [
+      { Type: "TERM_MATCH", Field: "instanceType", Value: "t3.small" },
+    ];
+    const data = { hourlyUsd: 0.023 };
+
+    setCached(serviceCode, filters, data);
+    const got = getCached(serviceCode, filters);
+
+    expect(got).toEqual(data);
+  });
+});

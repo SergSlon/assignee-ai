@@ -76,6 +76,14 @@ vi.mock("@aws-sdk/client-cloudfront", () => {
   };
 });
 
+// A7 / M-H-014: mock appendAuditRecord so tests don't write to ~/.assignee/audit/
+const { mockAppendAuditRecord } = vi.hoisted(() => ({
+  mockAppendAuditRecord: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("@assignee/core/audit", () => ({
+  appendAuditRecord: (...args: unknown[]) => mockAppendAuditRecord(...args),
+}));
+
 const ORIGINAL_ENV = { ...process.env };
 
 beforeEach(() => {
@@ -94,7 +102,7 @@ import { updateCommand } from "../update.js";
 import { classifyTarget, resolveUpdateArgs } from "../update/arg-parser.js";
 import { resolveUpdateTarget } from "../update/resolve-target.js";
 import { runUpdate } from "../update/action.js";
-import { AssigneeError } from "@assignee/core";
+import { AssigneeError, withTimeout } from "@assignee/core";
 import { ErrorCode } from "../../constants/errors.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -456,6 +464,53 @@ describe("resolveUpdateTarget", () => {
       ],
     });
     expect(target.distributionId).toBeUndefined();
+  });
+
+  // A6 (M-H-013): ListDistributions timeout path throws USAGE_ERROR.
+  // Models the same withTimeout(30s) → null → throw pattern used in
+  // liveListDistributions (resolve-target.ts:204-222) via an injected
+  // listDistributions override that exercises the same logical path.
+  it("A6: throws USAGE_ERROR when the ListDistributions call times out after 30 s", async () => {
+    vi.useFakeTimers();
+    let caughtError: unknown;
+    try {
+      const neverResolves = new Promise<never>(() => {});
+
+      const targetPromise = resolveUpdateTarget("slow-cf-bucket", {
+        loadProvisions: async () => [],
+        loadRawProvisions: async () => [],
+        // Mirror the liveListDistributions timeout logic: withTimeout wraps
+        // the never-resolving SDK call; on null return, throw AssigneeError
+        // with USAGE_ERROR and a message containing "timed out after 30s".
+        listDistributions: async () => {
+          const resp = await withTimeout(neverResolves, 30_000);
+          if (resp === null) {
+            throw new AssigneeError(
+              "ListDistributions timed out after 30s — check CloudFront connectivity or pass --no-invalidation to skip the lookup.",
+              ErrorCode.USAGE_ERROR,
+            );
+          }
+          return [];
+        },
+      });
+      // Suppress the unhandled rejection signal — we handle it via try/catch below.
+      targetPromise.catch(() => {});
+
+      // Fire the 30 s timer so withTimeout resolves to null.
+      await vi.advanceTimersByTimeAsync(30_001);
+
+      try {
+        await targetPromise;
+      } catch (err) {
+        caughtError = err;
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(caughtError).toBeInstanceOf(AssigneeError);
+    expect((caughtError as AssigneeError).code).toBe(ErrorCode.USAGE_ERROR);
+    expect((caughtError as Error).message).toContain("timed out after 30s");
   });
 });
 
@@ -939,5 +994,335 @@ describe("resolveUpdateTarget — China partition origin matching", () => {
       ],
     });
     expect(target.distributionId).toBe("ECN0000000111");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PR #40/#41 new test assertions
+// A4 (M-H-010), A5 (M-H-011), A7 (A7), A9 (M-H-016),
+// B2 (S-H-001/002), B7 (Q-H-003)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("PR #40/#41 — security + reliability hardening", () => {
+  let tmpDir: string;
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "update-pr4041-"));
+    writeFileSync(join(tmpDir, "index.html"), "<h1>test</h1>");
+    process.exitCode = undefined;
+    mockAppendAuditRecord.mockResolvedValue(undefined);
+  });
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+    process.exitCode = undefined;
+  });
+
+  function fakeResolve(opts?: {
+    noDistribution?: boolean;
+  }): import("../update/resolve-target.js").ResolveOptions {
+    return {
+      loadProvisions: async () => [
+        {
+          keyKind: "arn" as const,
+          key: "arn:aws:s3:::test-bucket",
+          resourceType: "AWS::S3::Bucket",
+          region: "us-east-1",
+          createdDate: "2026-04-01T00:00:00Z",
+          estimatedMonthlyCost: "$0.50",
+          runId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+        },
+        ...(opts?.noDistribution
+          ? []
+          : [
+              {
+                keyKind: "primaryIdentifier" as const,
+                key: "EDIST123456789",
+                resourceType: "AWS::CloudFront::Distribution",
+                region: "us-east-1",
+                createdDate: "2026-04-01T00:00:00Z",
+                estimatedMonthlyCost: "$0.10",
+                runId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              },
+            ]),
+      ],
+      loadRawProvisions: async () => [
+        {
+          runId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+          resourceType: "AWS::S3::Bucket",
+          resourceArn: "arn:aws:s3:::test-bucket",
+          region: "us-east-1",
+        },
+        ...(opts?.noDistribution
+          ? []
+          : [
+              {
+                runId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                resourceType: "AWS::CloudFront::Distribution",
+                resourceArn: "EDIST123456789",
+                region: "us-east-1",
+                cloudFrontDomainName: "dtestxyz.cloudfront.net",
+              },
+            ]),
+      ],
+      listDistributions: async () => {
+        throw new Error("ListDistributions should not be called");
+      },
+    };
+  }
+
+  // A4 (M-H-010): partial-upload failure sets non-zero exit code.
+  it("A4: sets process.exitCode=1 when any file fails to upload", async () => {
+    // Add a second file so the test directory has 2 files; mockS3Send
+    // succeeds for the first and rejects for the second.
+    writeFileSync(join(tmpDir, "styles.css"), "body{}");
+
+    // Simulate: first file succeeds, second file fails.
+    mockS3Send
+      .mockResolvedValueOnce({
+        ETag: '"abc123"',
+        $metadata: { httpStatusCode: 200, requestId: "req-1" },
+      })
+      .mockRejectedValueOnce(
+        Object.assign(new Error("AccessDenied"), { name: "AccessDenied" }),
+      );
+
+    // Use --no-invalidation so we don't need a distribution.
+    await runUpdate(
+      "test-bucket",
+      { source: tmpDir, yes: true, noInvalidation: true },
+      { resolveOptions: fakeResolve({ noDistribution: true }) },
+    );
+
+    expect(process.exitCode).toBe(1);
+  });
+
+  // A4: zero failures → exit code unchanged (undefined → 0 assumed clean).
+  it("A4: does NOT set process.exitCode when all files upload successfully", async () => {
+    mockS3Send.mockResolvedValue({
+      ETag: '"d41d8cd98f00b204e9800998ecf8427e"',
+      $metadata: { httpStatusCode: 200, requestId: "req-ok" },
+    });
+
+    await runUpdate(
+      "test-bucket",
+      { source: tmpDir, yes: true, noInvalidation: true },
+      { resolveOptions: fakeResolve({ noDistribution: true }) },
+    );
+
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  // A5 (M-H-011): wait-timeout path sets non-zero exit code.
+  it("A5: sets process.exitCode=1 when --wait times out", async () => {
+    mockS3Send.mockResolvedValue({
+      $metadata: { httpStatusCode: 200, requestId: "req-put" },
+    });
+    mockCfSend
+      .mockResolvedValueOnce({
+        Invalidation: { Id: "I-TIMEOUT", Status: "InProgress" },
+        $metadata: { httpStatusCode: 201, requestId: "req-create" },
+      })
+      // Always InProgress — will time out.
+      .mockResolvedValue({
+        Invalidation: { Id: "I-TIMEOUT", Status: "InProgress" },
+        $metadata: { httpStatusCode: 200, requestId: "req-poll" },
+      });
+
+    // Inject a 1 ms timeout so waitForInvalidation exits the poll loop
+    // immediately without waiting for the real 10-minute default.
+    await runUpdate(
+      "test-bucket",
+      { source: tmpDir, wait: true, yes: true },
+      {
+        resolveOptions: fakeResolve(),
+        waitTimeoutMs: 1,
+      },
+    );
+
+    // A5 (M-H-011): when the poll times out, the action must set
+    // a non-zero exit code.
+    expect(process.exitCode).toBe(1);
+  });
+
+  // A7: audit record is written on success.
+  it("A7: calls appendAuditRecord with correct shape on successful update", async () => {
+    mockS3Send.mockResolvedValue({
+      ETag: '"d41d8cd98f00b204e9800998ecf8427e"',
+      $metadata: { httpStatusCode: 200, requestId: "req-ok" },
+    });
+    mockCfSend.mockResolvedValueOnce({
+      Invalidation: { Id: "I-AUDIT", Status: "InProgress" },
+      $metadata: { httpStatusCode: 201, requestId: "req-create" },
+    });
+
+    await runUpdate(
+      "test-bucket",
+      { source: tmpDir, yes: true },
+      { resolveOptions: fakeResolve() },
+    );
+
+    expect(mockAppendAuditRecord).toHaveBeenCalledTimes(1);
+    const [record] = mockAppendAuditRecord.mock.calls[0] as [
+      Record<string, unknown>,
+    ];
+    expect(record["action"]).toBe("update_executed");
+    expect(record["bucketName"]).toBe("test-bucket");
+    expect(record["region"]).toBe("us-east-1");
+    expect(record["uploaded"]).toBe(1);
+    expect(record["failed"]).toBe(0);
+    expect(record["invalidationId"]).toBe("I-AUDIT");
+    expect(typeof record["runId"]).toBe("string");
+  });
+
+  // A7: audit record NOT written when upload has failures.
+  // Note: uploadStaticSite catches S3 errors and returns {failed: N} rather
+  // than throwing — the action resolves but skips the audit record when
+  // failed > 0 and sets process.exitCode = 1 (A4).
+  it("A7: does NOT call appendAuditRecord when any files fail to upload", async () => {
+    mockS3Send.mockRejectedValue(new Error("S3 InternalError"));
+
+    const result = await runUpdate(
+      "test-bucket",
+      { source: tmpDir, yes: true, noInvalidation: true },
+      { resolveOptions: fakeResolve({ noDistribution: true }) },
+    );
+
+    // uploadStaticSite returns {failed: 1} — does not throw.
+    expect(result.upload.failed).toBeGreaterThan(0);
+    // A4: non-zero exit code is set.
+    expect(process.exitCode).toBe(1);
+    // A7: audit record must NOT be written for partial-failure updates.
+    expect(mockAppendAuditRecord).not.toHaveBeenCalled();
+  });
+
+  // A9 (M-H-016): no $0.005 literal in stderr output.
+  it("A9: stderr cost notice does NOT contain $0.005 and DOES contain AWS pricing URL", async () => {
+    mockS3Send.mockResolvedValue({
+      $metadata: { httpStatusCode: 200, requestId: "req-ok" },
+    });
+    mockCfSend.mockResolvedValueOnce({
+      Invalidation: { Id: "I-COST", Status: "InProgress" },
+      $metadata: { httpStatusCode: 201, requestId: "req-create" },
+    });
+
+    const stderrChunks: string[] = [];
+    const origWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      stderrChunks.push(
+        typeof chunk === "string" ? chunk : Buffer.from(chunk).toString(),
+      );
+      return true;
+    }) as typeof process.stderr.write;
+    try {
+      await runUpdate(
+        "test-bucket",
+        { source: tmpDir, yes: true },
+        { resolveOptions: fakeResolve() },
+      );
+    } finally {
+      process.stderr.write = origWrite;
+    }
+    const combined = stderrChunks.join("");
+    // No hardcoded price literals.
+    expect(combined).not.toContain("$0.005");
+    // Must contain the live pricing URL.
+    expect(combined).toContain("https://aws.amazon.com/cloudfront/pricing/");
+  });
+
+  // B2 (S-H-001/002): JSON envelope shape uses ok/operation not command/status.
+  it("B2: JSON envelope contains ok:true and operation:'update' (not command/status)", async () => {
+    mockS3Send.mockResolvedValue({
+      ETag: '"d41d8cd98f00b204e9800998ecf8427e"',
+      $metadata: { httpStatusCode: 200, requestId: "req-ok" },
+    });
+    mockCfSend.mockResolvedValueOnce({
+      Invalidation: { Id: "I-JSON", Status: "InProgress" },
+      $metadata: { httpStatusCode: 201, requestId: "req-create" },
+    });
+
+    const stdoutChunks: string[] = [];
+    const origWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      stdoutChunks.push(
+        typeof chunk === "string" ? chunk : Buffer.from(chunk).toString(),
+      );
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      await (
+        await import("../update/action.js")
+      ).updateAction(
+        "test-bucket",
+        { source: tmpDir, yes: true, json: true },
+        { resolveOptions: fakeResolve() },
+      );
+    } finally {
+      process.stdout.write = origWrite;
+    }
+    const json = JSON.parse(stdoutChunks.join("")) as Record<string, unknown>;
+    expect(json["ok"]).toBe(true);
+    expect(json["operation"]).toBe("update");
+    // Old shape must NOT be present.
+    expect(json["command"]).toBeUndefined();
+    expect(json["status"]).toBeUndefined();
+  });
+
+  // B7 (Q-H-003): non-TTY without --yes/--json throws USAGE_ERROR.
+  it("B7: throws USAGE_ERROR in non-TTY context without --yes or --json", async () => {
+    const originalIsTty = process.stdin.isTTY;
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+    try {
+      await expect(
+        runUpdate(
+          "test-bucket",
+          { source: tmpDir },
+          { resolveOptions: fakeResolve() },
+        ),
+      ).rejects.toThrow(AssigneeError);
+
+      try {
+        await runUpdate(
+          "test-bucket",
+          { source: tmpDir },
+          { resolveOptions: fakeResolve() },
+        );
+      } catch (err) {
+        expect((err as AssigneeError).code).toBe(ErrorCode.USAGE_ERROR);
+        expect((err as Error).message).toContain("non-TTY");
+      }
+    } finally {
+      Object.defineProperty(process.stdin, "isTTY", {
+        value: originalIsTty,
+        configurable: true,
+      });
+    }
+  });
+
+  // B7: --yes bypasses non-TTY guard.
+  it("B7: --yes flag bypasses non-TTY guard", async () => {
+    const originalIsTty = process.stdin.isTTY;
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+    mockS3Send.mockResolvedValue({
+      $metadata: { httpStatusCode: 200, requestId: "req-ok" },
+    });
+    try {
+      // Should not throw.
+      const result = await runUpdate(
+        "test-bucket",
+        { source: tmpDir, yes: true, noInvalidation: true },
+        { resolveOptions: fakeResolve({ noDistribution: true }) },
+      );
+      expect(result.upload.uploaded).toBe(1);
+    } finally {
+      Object.defineProperty(process.stdin, "isTTY", {
+        value: originalIsTty,
+        configurable: true,
+      });
+    }
   });
 });

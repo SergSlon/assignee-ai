@@ -15,12 +15,11 @@
  *
  * Pricing reminder
  * ----------------
- * AWS bills $0.005 per path-invalidated AFTER the first 1000 paths/month
- * (free tier). This service does NOT compute live prices — the
- * `update` command surfaces the published formula in a stderr log line
- * before invoking. All dollar amounts come from the AWS public pricing
- * page; the runtime never looks up a live $ value. See
- * `feedback_no_hardcoded_prices`.
+ * AWS bills a per-path fee after the monthly free tier — see
+ * https://aws.amazon.com/cloudfront/pricing/ for current rates.
+ * This service does NOT compute live prices — the `update` command
+ * surfaces a pricing-page URL in a stderr log line before invoking.
+ * See `feedback_no_hardcoded_prices`.
  *
  * Lazy SDK loading
  * ----------------
@@ -98,23 +97,47 @@ export async function createInvalidation(
     region: args.region ?? AWS_REGION,
     credentials: requireAssigneeCredentials("operator"),
   });
-  const resp = await cf.send(
-    new CreateInvalidationCommand({
-      DistributionId: args.distributionId,
-      InvalidationBatch: {
-        CallerReference: args.callerReference ?? randomUUID(),
-        Paths: {
-          Quantity: paths.length,
-          Items: [...paths],
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let resp: any;
+  try {
+    resp = await cf.send(
+      new CreateInvalidationCommand({
+        DistributionId: args.distributionId,
+        InvalidationBatch: {
+          CallerReference: args.callerReference ?? randomUUID(),
+          Paths: {
+            Quantity: paths.length,
+            Items: [...paths],
+          },
         },
-      },
-    }),
-  );
-  const id = resp.Invalidation?.Id;
-  const status = resp.Invalidation?.Status;
+      }),
+    );
+  } catch (err: unknown) {
+    // B3 (S-H-010): surface an actionable hint on AccessDeniedException
+    // so the operator knows which IAM policy to refresh.
+    const name =
+      err instanceof Error ? ((err as { name?: string }).name ?? "") : "";
+    const msg = err instanceof Error ? err.message : String(err);
+    if (
+      name === "AccessDeniedException" ||
+      msg.includes("cloudfront:CreateInvalidation")
+    ) {
+      throw new AssigneeError(
+        "Operator IAM policy missing cloudfront:CreateInvalidation. Run 'assignee setup' to refresh credentials, or add the grant manually.",
+        ErrorCode.PERMISSION_ERROR,
+      );
+    }
+    throw err;
+  }
+  const respTyped = resp as {
+    Invalidation?: { Id?: string; Status?: string };
+    $metadata?: { requestId?: string };
+  };
+  const id = respTyped.Invalidation?.Id;
+  const status = respTyped.Invalidation?.Status;
   if (!id) {
     throw new AssigneeError(
-      `cloudfront-invalidate: CreateInvalidation returned no Invalidation.Id (request id ${resp.$metadata?.requestId ?? "unknown"})`,
+      `cloudfront-invalidate: CreateInvalidation returned no Invalidation.Id (request id ${respTyped.$metadata?.requestId ?? "unknown"})`,
       ErrorCode.UNKNOWN,
     );
   }
@@ -140,7 +163,7 @@ export async function waitForInvalidation(
     timeoutMs?: number;
     region?: string;
   },
-): Promise<{ status: string; completedAt?: Date }> {
+): Promise<{ status: string; completedAt?: Date; timedOut?: boolean }> {
   const intervalMs = options?.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
@@ -154,20 +177,47 @@ export async function waitForInvalidation(
   const startedAt = Date.now();
   let lastStatus = "InProgress";
   while (Date.now() - startedAt < timeoutMs) {
-    const resp = await cf.send(
-      new GetInvalidationCommand({
-        DistributionId: distributionId,
-        Id: invalidationId,
-      }),
-    );
-    lastStatus = resp.Invalidation?.Status ?? "InProgress";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let resp: any;
+    try {
+      resp = await cf.send(
+        new GetInvalidationCommand({
+          DistributionId: distributionId,
+          Id: invalidationId,
+        }),
+      );
+    } catch (err: unknown) {
+      // B3 (S-H-010): surface an actionable hint on AccessDeniedException
+      // for GetInvalidation so the operator knows which IAM policy to refresh.
+      const name =
+        err instanceof Error ? ((err as { name?: string }).name ?? "") : "";
+      const msg = err instanceof Error ? err.message : String(err);
+      if (
+        name === "AccessDeniedException" ||
+        msg.includes("cloudfront:GetInvalidation")
+      ) {
+        throw new AssigneeError(
+          "Operator IAM policy missing cloudfront:GetInvalidation. Run 'assignee setup' to refresh credentials, or add the grant manually.",
+          ErrorCode.PERMISSION_ERROR,
+        );
+      }
+      throw err;
+    }
+    const respTyped = resp as {
+      Invalidation?: { Status?: string; CreateTime?: Date };
+    };
+    lastStatus = respTyped.Invalidation?.Status ?? "InProgress";
     if (lastStatus === "Completed") {
       return {
         status: lastStatus,
-        completedAt: resp.Invalidation?.CreateTime,
+        completedAt: respTyped.Invalidation?.CreateTime,
       };
     }
     await new Promise((r) => setTimeout(r, intervalMs));
   }
-  return { status: lastStatus };
+  // A5 (M-H-011): return a distinct timedOut flag so callers can
+  // distinguish a timeout from a legitimate non-Completed terminal
+  // status. Previously both paths returned `{ status: lastStatus }`
+  // with no way to tell them apart.
+  return { status: "TimedOut", timedOut: true };
 }

@@ -353,6 +353,16 @@ export async function destroyAction(
     estimatedMonthlyCost,
   });
 
+  // B5 (S-H-017): inform the operator that KMS destroy first disables
+  // the key (kms:DisableKey) before scheduling deletion. If they cancel
+  // after the disable step, they must re-enable manually.
+  if (isKms) {
+    process.stderr.write(
+      "[destroy] Note: this KMS key will be disabled (kms:DisableKey) before scheduling deletion. " +
+        "If you cancel after disabling, run 'aws kms enable-key --key-id <id>' to restore.\n",
+    );
+  }
+
   await confirmDestroy(resolved, opts.yes, opts.noConfirm === true);
 
   if (isKms) {

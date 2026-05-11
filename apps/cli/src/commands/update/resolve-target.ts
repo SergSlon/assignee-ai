@@ -30,6 +30,7 @@ import {
   listProvisionRecords,
   defaultMemoryService,
   type StoredProvisionRecord,
+  withTimeout,
 } from "@assignee/core";
 import { AWS_REGION } from "../../config/constants.js";
 import { ErrorCode } from "../../constants/errors.js";
@@ -201,15 +202,24 @@ async function liveListDistributions(): Promise<CfDistributionSummary[]> {
   const out: CfDistributionSummary[] = [];
   let marker: string | undefined;
   do {
-    const resp = (await cf.send(
+    // A6 (M-H-013): wrap each page call in a 30s timeout to prevent
+    // the resolver from hanging indefinitely when CloudFront is slow.
+    const pagePromise = cf.send(
       new ListDistributionsCommand({ Marker: marker }),
-    )) as {
+    ) as Promise<{
       DistributionList?: {
         Items?: CfDistributionSummary[];
         IsTruncated?: boolean;
         NextMarker?: string;
       };
-    };
+    }>;
+    const resp = await withTimeout(pagePromise, 30_000);
+    if (resp === null) {
+      throw new AssigneeError(
+        "ListDistributions timed out after 30s — check CloudFront connectivity or pass --no-invalidation to skip the lookup.",
+        ErrorCode.USAGE_ERROR,
+      );
+    }
     for (const item of resp.DistributionList?.Items ?? []) out.push(item);
     marker = resp.DistributionList?.IsTruncated
       ? resp.DistributionList?.NextMarker

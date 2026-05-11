@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { getRequiredIamActions } from "./iam-actions.js";
+import { DESTRUCTIVE_SERVICE_ACTIONS } from "./iam-policies/action-collector.js";
+import { operatorPolicy } from "./iam-policies/operator.js";
 
 describe("getRequiredIamActions", () => {
   const BASE_CCAPI_ACTIONS = [
@@ -87,5 +89,65 @@ describe("getRequiredIamActions", () => {
   it("does not include iam:PassRole for S3 buckets", () => {
     const actions = getRequiredIamActions("AWS::S3::Bucket");
     expect(actions).not.toContain("iam:PassRole");
+  });
+});
+
+// A1 (M-H-001): CloudFront invalidation actions must appear ONLY in
+// the `CloudFrontInvalidationTagScoped` statement, NOT in the unscoped
+// ServiceSpecificActionsA/B sweep.
+describe("A1 — CloudFront tag-scoped IAM statement", () => {
+  it("cloudfront:CreateInvalidation and cloudfront:GetInvalidation are in DESTRUCTIVE_SERVICE_ACTIONS (excluded from unscoped sweep)", () => {
+    expect(
+      DESTRUCTIVE_SERVICE_ACTIONS.has("cloudfront:CreateInvalidation"),
+    ).toBe(true);
+    expect(DESTRUCTIVE_SERVICE_ACTIONS.has("cloudfront:GetInvalidation")).toBe(
+      true,
+    );
+  });
+
+  it("operatorPolicy() contains a CloudFrontInvalidationTagScoped statement with tag condition", () => {
+    // operatorPolicy() requires supported types — pass an empty array to get the
+    // core policy shape (the CloudFront statement is always added).
+    const policy = operatorPolicy();
+    const cfStatement = policy.Statement.find(
+      (s: { Sid?: string }) => s.Sid === "CloudFrontInvalidationTagScoped",
+    ) as
+      | {
+          Sid: string;
+          Effect: string;
+          Action: string[];
+          Resource: string;
+          Condition: { StringEquals: Record<string, string> };
+        }
+      | undefined;
+
+    expect(cfStatement).toBeDefined();
+    expect(cfStatement!.Effect).toBe("Allow");
+    expect(cfStatement!.Action).toContain("cloudfront:CreateInvalidation");
+    expect(cfStatement!.Action).toContain("cloudfront:GetInvalidation");
+    expect(cfStatement!.Resource).toMatch(/arn:\*:cloudfront::/);
+    expect(
+      cfStatement!.Condition.StringEquals["aws:ResourceTag/managed-by"],
+    ).toBe("assignee-ai");
+  });
+
+  it("the unscoped ServiceSpecificActionsA/B do NOT contain cloudfront:CreateInvalidation or cloudfront:GetInvalidation", () => {
+    // Collect all actions from unscoped statements (those without a Condition).
+    const policy = operatorPolicy();
+    const unscopedActions: string[] = [];
+    for (const stmt of policy.Statement as Array<{
+      Sid?: string;
+      Action?: string | string[];
+      Condition?: unknown;
+    }>) {
+      if (!stmt.Condition && stmt.Action) {
+        const actions = Array.isArray(stmt.Action)
+          ? stmt.Action
+          : [stmt.Action];
+        unscopedActions.push(...actions);
+      }
+    }
+    expect(unscopedActions).not.toContain("cloudfront:CreateInvalidation");
+    expect(unscopedActions).not.toContain("cloudfront:GetInvalidation");
   });
 });

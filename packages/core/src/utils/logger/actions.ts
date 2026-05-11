@@ -74,6 +74,15 @@ export const LOG_ACTIONS = {
    */
   BILLING_MCP_QUERY_FAILED: "billing_mcp_query_failed",
   /**
+   * M-H-002 (PR #40) / A8 (W-M-008): emitted at warn level when
+   * GetBucketPolicy fails with a non-NoSuchBucketPolicy error
+   * (e.g. ThrottlingException, AccessDenied) during the compensating
+   * bucket-policy merge flow. The attach call returns
+   * `{ attached: false, reason }` rather than falling through to a
+   * legacy PUT that would clobber existing OAC grants.
+   */
+  S3_GET_BUCKET_POLICY_FAILED: "s3_get_bucket_policy_failed",
+  /**
    * Epic 92 uncluster e92.u.a (D-36): emitted at the start of every
    * `assignee status` invocation so `--verbose` users get the same
    * structured-log envelope that `plan` / `optimize` already provide.

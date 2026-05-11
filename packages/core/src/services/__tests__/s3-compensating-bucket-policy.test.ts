@@ -33,10 +33,13 @@ vi.mock("@aws-sdk/client-s3", () => {
 
 // bug-s3-oac-bucket-policy-clobbering: logger writes the warn-fallthrough
 // message — silence it so the test runner output stays clean.
+// A8 / M-H-002: also stub S3_GET_BUCKET_POLICY_FAILED for the new early-
+// return path added in PR #40.
 vi.mock("../../utils/logger/index.js", () => ({
   log: vi.fn(),
   LOG_ACTIONS: {
     MEMORY_WRITE_FAILED: "memory_write_failed",
+    S3_GET_BUCKET_POLICY_FAILED: "s3_get_bucket_policy_failed",
   },
 }));
 
@@ -572,17 +575,17 @@ describe("attachCompensatingBucketPolicy", () => {
       expect((merged.Statement[1]!.Action as string[]).length).toBe(6);
     });
 
-    it("GetBucketPolicy throws non-NoSuch error → log warn, fall through to legacy PUT-only", async () => {
-      // Throttling on GET — operator may also lack `s3:GetBucketPolicy`
-      // IAM permission entirely. The legacy fallback writes ONLY the
-      // compensating statement (back-compat for non-OAC buckets).
+    it("GetBucketPolicy throws non-NoSuch error → returns { attached: false, reason }, NO PUT happens", async () => {
+      // M-H-002 (PR #40 A2): Throttling on GET now causes an early return
+      // instead of falling through to a legacy PUT that would clobber any
+      // existing OAC grant or operator-intended statements. PutBucketPolicy
+      // MUST NOT be called when the GET failed with a non-NoSuch error.
       mockS3Send.mockRejectedValueOnce(
         Object.assign(new Error("Rate exceeded"), {
           name: "ThrottlingException",
           $fault: "client",
         }),
       );
-      mockS3Send.mockResolvedValueOnce({});
 
       const client = new S3Client({ region: REGION });
       const result = await attachCompensatingBucketPolicy(
@@ -594,20 +597,12 @@ describe("attachCompensatingBucketPolicy", () => {
         client,
       );
 
-      expect(result).toEqual({ attached: true });
-      expect(mockS3Send).toHaveBeenCalledTimes(2);
-
-      const putCall = mockS3Send.mock.calls[1] as [
-        { input: { Policy: string } },
-      ];
-      const written = JSON.parse(putCall[0].input.Policy) as {
-        Statement: Array<{ Sid: string }>;
-      };
-      // Legacy behaviour: ONLY the compensating statement.
-      expect(written.Statement).toHaveLength(1);
-      expect(written.Statement[0]!.Sid).toBe(
-        "AssigneeOperatorDestructiveTagScoped",
-      );
+      // Early return: attached=false, reason describes the GET failure.
+      expect(result.attached).toBe(false);
+      expect(result.reason).toContain("GetBucketPolicy failed");
+      expect(result.reason).toContain("Rate exceeded");
+      // Only the GET was attempted — PUT must NOT have been called.
+      expect(mockS3Send).toHaveBeenCalledTimes(1);
     });
 
     it("existing policy is malformed JSON → return { attached: false, reason }, NO PUT happens", async () => {

@@ -314,6 +314,30 @@ export function operatorPolicy(
         },
       },
       {
+        // M-H-001 (PR #40): CloudFront invalidation actions scoped to
+        // distributions tagged `managed-by=assignee-ai`. Previously these
+        // flowed through collectServiceActions() into ServiceSpecificActionsA/B
+        // with Resource "*" — a leaked operator credential could invalidate
+        // ANY CloudFront distribution in the account.
+        //
+        // Resource uses the partition wildcard `*` (same as the IAM role
+        // scoped statements above) so the policy is valid in GovCloud +
+        // China. `${aws:AccountId}` expands at evaluation time.
+        //
+        // aws:ResourceTag is evaluated at authorization time against the
+        // distribution's existing tags — the correct condition key for
+        // operations on already-existing resources (NOT aws:RequestTag).
+        Sid: "CloudFrontInvalidationTagScoped",
+        Effect: IamEffect.ALLOW,
+        Action: ["cloudfront:CreateInvalidation", "cloudfront:GetInvalidation"],
+        Resource: "arn:*:cloudfront::${aws:AccountId}:distribution/*",
+        Condition: {
+          StringEquals: {
+            "aws:ResourceTag/managed-by": "assignee-ai",
+          },
+        },
+      },
+      {
         // Story i (SSH-IAM compound BLOCKER #1): the SSH-bundle
         // pre-provision hook (`ssh-iam.ts`) calls 4 instance-profile
         // verbs (Create / Delete / AddRole / RemoveRole) plus

@@ -25,6 +25,7 @@ const {
   mockClackText,
   mockClackIsCancel,
   mockTryAssigneeCredentials,
+  mockStsSend,
 } = vi.hoisted(() => ({
   mockFetchManagedResources: vi.fn(),
   mockSingleDestroyAction: vi.fn(),
@@ -32,6 +33,7 @@ const {
   mockClackText: vi.fn(),
   mockClackIsCancel: vi.fn().mockReturnValue(false),
   mockTryAssigneeCredentials: vi.fn().mockReturnValue(null),
+  mockStsSend: vi.fn(),
 }));
 
 // ── Mocks ─────────────────────────────────────────────────────────────
@@ -58,6 +60,16 @@ vi.mock("../../config/aws-credentials.js", () => ({
   tryAssigneeCredentials: (...args: unknown[]) =>
     mockTryAssigneeCredentials(...args),
 }));
+
+vi.mock("@aws-sdk/client-sts", () => {
+  class STSClient {
+    send = mockStsSend;
+  }
+  function GetCallerIdentityCommand() {
+    return { _type: "GetCallerIdentityCommand" };
+  }
+  return { STSClient, GetCallerIdentityCommand };
+});
 
 vi.mock("../../utils/display.js", () => ({
   startSpinner: vi.fn(),
@@ -1002,6 +1014,96 @@ describe("runBulkDestroyAction", () => {
       expect(out).toContain("1 failed");
       // Non-zero exit because there's a real failure
       expect(process.exitCode).toBe(1);
+    });
+
+    // ── B1: STS resolveAccountId coverage ──────────────────────────
+
+    describe("B1: resolveAccountId STS path", () => {
+      let originalIsTTY: boolean | undefined;
+
+      beforeEach(() => {
+        // The typed-confirmation gate only fires when stdin.isTTY is truthy.
+        originalIsTTY = process.stdin.isTTY;
+        Object.defineProperty(process.stdin, "isTTY", {
+          value: true,
+          configurable: true,
+        });
+        // Provide real-looking operator credentials so tryAssigneeCredentials
+        // returns a non-null value, allowing resolveAccountId to proceed to
+        // the STS call.
+        mockTryAssigneeCredentials.mockReturnValue({
+          accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+          secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        });
+      });
+
+      afterEach(() => {
+        Object.defineProperty(process.stdin, "isTTY", {
+          value: originalIsTTY,
+          configurable: true,
+        });
+      });
+
+      it("B1-1: STS success — promptTypedAccountConfirmation receives real account ID", async () => {
+        // STS returns a real account ID.
+        mockStsSend.mockResolvedValue({ Account: "112233445566" });
+        // Operator types the exact account ID to confirm.
+        mockClackText.mockResolvedValue("112233445566");
+        mockFetchManagedResources.mockResolvedValue([S3_BUCKET]);
+
+        const runBulkDestroyAction = await getSubject();
+        await runBulkDestroyAction({ yes: true });
+
+        // clack.text was called with a message containing the account ID as
+        // the required phrase — not "DESTROY-EVERYTHING".
+        expect(mockClackText).toHaveBeenCalledOnce();
+        const callArg = mockClackText.mock.calls[0]![0] as { message: string };
+        expect(callArg.message).toContain("112233445566");
+        expect(callArg.message).not.toContain("DESTROY-EVERYTHING");
+        // Destroy ran (confirmation succeeded).
+        expect(mockSingleDestroyAction).toHaveBeenCalledOnce();
+      });
+
+      it("B1-2: STS failure (AccessDenied) — falls back to DESTROY-EVERYTHING phrase", async () => {
+        // Simulate IAM denial on GetCallerIdentity.
+        const accessDenied = Object.assign(
+          new Error("AccessDeniedException: not authorised"),
+          { name: "AccessDeniedException" },
+        );
+        mockStsSend.mockRejectedValue(accessDenied);
+        // Operator types the fallback phrase.
+        mockClackText.mockResolvedValue("DESTROY-EVERYTHING");
+        mockFetchManagedResources.mockResolvedValue([S3_BUCKET]);
+
+        const runBulkDestroyAction = await getSubject();
+        await runBulkDestroyAction({ yes: true });
+
+        // Fallback phrase must have been used, not the account ID.
+        expect(mockClackText).toHaveBeenCalledOnce();
+        const callArg = mockClackText.mock.calls[0]![0] as { message: string };
+        expect(callArg.message).toContain("DESTROY-EVERYTHING");
+        // Destroy still ran (confirmation succeeded with fallback phrase).
+        expect(mockSingleDestroyAction).toHaveBeenCalledOnce();
+      });
+
+      it("B1-3: STS timeout (2 s) — falls back to DESTROY-EVERYTHING phrase", async () => {
+        // STSClient.send never resolves — the Promise.race timeout (2 s) wins.
+        // Use a real promise that never settles so the 2 s internal setTimeout
+        // fires naturally. Test timeout is set to 10 s to accommodate the delay.
+        mockStsSend.mockReturnValue(new Promise<never>(() => {}));
+        // Operator types the fallback phrase.
+        mockClackText.mockResolvedValue("DESTROY-EVERYTHING");
+        mockFetchManagedResources.mockResolvedValue([S3_BUCKET]);
+
+        const runBulkDestroyAction = await getSubject();
+        await runBulkDestroyAction({ yes: true });
+
+        expect(mockClackText).toHaveBeenCalledOnce();
+        const callArg = mockClackText.mock.calls[0]![0] as { message: string };
+        expect(callArg.message).toContain("DESTROY-EVERYTHING");
+        // Destroy ran (operator confirmed with fallback phrase).
+        expect(mockSingleDestroyAction).toHaveBeenCalledOnce();
+      }, 10_000);
     });
 
     it("JSON envelope includes 'outcome' per executed entry", async () => {
