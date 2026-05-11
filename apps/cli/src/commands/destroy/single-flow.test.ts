@@ -30,6 +30,9 @@ vi.mock("@assignee/core", async (importOriginal) => {
     ...real,
     findProvisionRecord: (...args: unknown[]) =>
       mockFindProvisionRecord(...args),
+    // B6 (Q-H-001): stub appendDestroyedArn to prevent live writes to
+    // ~/.assignee/memory.json during unit tests (test-pollution fix).
+    appendDestroyedArn: vi.fn().mockResolvedValue(undefined),
   };
 });
 
@@ -92,7 +95,7 @@ vi.mock("chalk", () => {
 import { singleDestroyAction } from "./single-flow.js";
 
 const EIP_ARN =
-  "arn:aws:ec2:us-east-1:210987654321:elastic-ip/eipalloc-0a4b5c6d7e8f90123";
+  "arn:aws:ec2:us-east-1:112233445566:elastic-ip/eipalloc-0a4b5c6d7e8f90123";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -163,7 +166,7 @@ describe("singleDestroyAction — EIP provision-log ARN fallback (BUG-5)", () =>
     // demo iterations. The cleanup is silent best-effort — non-EC2
     // destroys (asserted in the next test) skip the call entirely.
     const EC2_ARN =
-      "arn:aws:ec2:us-east-1:210987654321:instance/i-0abc123def4567890";
+      "arn:aws:ec2:us-east-1:112233445566:instance/i-0abc123def4567890";
     mockResolveResource.mockResolvedValue({
       arn: EC2_ARN,
       resourceType: "AWS::EC2::Instance",
@@ -236,7 +239,7 @@ describe("singleDestroyAction — EIP provision-log ARN fallback (BUG-5)", () =>
     // never throw, but defensive: if it ever does, the destroy still
     // succeeds.
     const EC2_ARN =
-      "arn:aws:ec2:us-east-1:210987654321:instance/i-0abc123def4567890";
+      "arn:aws:ec2:us-east-1:112233445566:instance/i-0abc123def4567890";
     mockResolveResource.mockResolvedValue({
       arn: EC2_ARN,
       resourceType: "AWS::EC2::Instance",

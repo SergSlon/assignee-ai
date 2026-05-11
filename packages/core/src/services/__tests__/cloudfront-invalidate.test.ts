@@ -235,6 +235,50 @@ describe("createInvalidation", () => {
   });
 });
 
+describe("createInvalidation — B3 AccessDenied hints", () => {
+  it("throws PERMISSION_ERROR with hint when SDK rejects with AccessDeniedException", async () => {
+    mockCfSend.mockRejectedValueOnce(
+      Object.assign(
+        new Error(
+          "User is not authorized to perform: cloudfront:CreateInvalidation",
+        ),
+        {
+          name: "AccessDeniedException",
+          $fault: "client",
+        },
+      ),
+    );
+
+    try {
+      await createInvalidation({ distributionId: DISTRIBUTION_ID });
+      throw new Error("expected to throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(AssigneeError);
+      expect((err as AssigneeError).code).toBe(ErrorCode.PERMISSION_ERROR);
+      expect((err as Error).message).toContain("cloudfront:CreateInvalidation");
+      expect((err as Error).message).toContain("assignee setup");
+    }
+  });
+
+  it("re-throws non-AccessDenied errors without wrapping", async () => {
+    const netError = Object.assign(new Error("Network error"), {
+      name: "NetworkingError",
+    });
+    mockCfSend.mockRejectedValueOnce(netError);
+
+    await expect(
+      createInvalidation({ distributionId: DISTRIBUTION_ID }),
+    ).rejects.toThrow("Network error");
+
+    // Must NOT be wrapped in AssigneeError.
+    try {
+      await createInvalidation({ distributionId: DISTRIBUTION_ID });
+    } catch (err) {
+      expect(err).not.toBeInstanceOf(AssigneeError);
+    }
+  });
+});
+
 describe("waitForInvalidation", () => {
   it("returns immediately when first poll returns Completed", async () => {
     mockCfSend.mockResolvedValueOnce({
@@ -293,8 +337,11 @@ describe("waitForInvalidation", () => {
     expect(mockCfSend).toHaveBeenCalledTimes(3);
   });
 
-  it("returns last-seen status when timeout elapses", async () => {
+  it("returns timedOut:true and status:'TimedOut' when timeout elapses", async () => {
     // Always returns InProgress; the loop must exit on timeout.
+    // A5 (M-H-011): the new contract returns { status: "TimedOut", timedOut: true }
+    // instead of { status: lastStatus } so callers can distinguish a timeout from
+    // a genuine non-Completed terminal status returned by AWS.
     mockCfSend.mockResolvedValue({
       Invalidation: { Id: INVALIDATION_ID, Status: "InProgress" },
       $metadata: { httpStatusCode: 200, requestId: "req-get-stuck" },
@@ -305,9 +352,38 @@ describe("waitForInvalidation", () => {
       timeoutMs: 30,
     });
 
-    expect(result.status).toBe("InProgress");
+    expect(result.status).toBe("TimedOut");
+    expect(result.timedOut).toBe(true);
     expect(result.completedAt).toBeUndefined();
     // At least one poll happened.
     expect(mockCfSend.mock.calls.length).toBeGreaterThanOrEqual(1);
+  });
+
+  // B3 (S-H-010): AccessDenied on GetInvalidation surfaces actionable hint.
+  it("throws PERMISSION_ERROR with hint when GetInvalidation rejects with AccessDeniedException", async () => {
+    mockCfSend.mockRejectedValueOnce(
+      Object.assign(
+        new Error(
+          "User is not authorized to perform: cloudfront:GetInvalidation",
+        ),
+        {
+          name: "AccessDeniedException",
+          $fault: "client",
+        },
+      ),
+    );
+
+    try {
+      await waitForInvalidation(DISTRIBUTION_ID, INVALIDATION_ID, {
+        pollIntervalMs: 10,
+        timeoutMs: 5_000,
+      });
+      throw new Error("expected to throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(AssigneeError);
+      expect((err as AssigneeError).code).toBe(ErrorCode.PERMISSION_ERROR);
+      expect((err as Error).message).toContain("cloudfront:GetInvalidation");
+      expect((err as Error).message).toContain("assignee setup");
+    }
   });
 });

@@ -220,21 +220,40 @@ function sumEstimatedCosts(resources: ManagedResource[]): string {
 // ── Typed account-ID confirmation ─────────────────────────────────────
 
 /**
- * Get the AWS account ID for the current operator credentials.
- * Falls back to "UNKNOWN" when credentials are not configured so the
- * prompt is still rendered (operator must still type something).
+ * Get the AWS account ID for the current operator credentials via STS.
+ *
+ * B1 (C2 / Q-H-002 / S-H-018): previously returned "CONFIRM" always,
+ * making the typed-confirmation phrase meaningless as a real safety
+ * check. Now resolves the real 12-digit account ID so the operator
+ * must type the ACTUAL account ID before any bulk destroy fires.
+ *
+ * Falls back to "CONFIRM" on any failure (network error, IAM denial,
+ * timeout) so the prompt is still rendered — the operator must still
+ * type something, but it degrades gracefully when STS is unreachable.
+ *
+ * Pattern mirrors `init/intro-context.ts:30-46` exactly.
  */
-function resolveAccountId(): string {
+async function resolveAccountId(): Promise<string> {
   const creds = tryAssigneeCredentials("operator");
-  if (!creds) return "UNKNOWN";
-  // Access keys encode the account ID in the first characters, but we
-  // don't have direct access to STS here. Use the region as a proxy
-  // only if nothing else is available. In practice, the user's account
-  // ID is returned by the credential loader if it cached the STS call.
-  // For now emit "CONFIRM" as a safe fallback for non-STS paths.
-  // The operator must type their account ID — if we don't know it,
-  // we display a message explaining where to find it.
-  return "CONFIRM";
+  if (!creds) return "CONFIRM";
+  try {
+    const { STSClient, GetCallerIdentityCommand } =
+      await import("@aws-sdk/client-sts");
+    const client = new STSClient({
+      region: AWS_REGION,
+      credentials: creds,
+    });
+    const timeoutMs = 2000;
+    const identity = (await Promise.race([
+      client.send(new GetCallerIdentityCommand({})),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("STS timeout")), timeoutMs),
+      ),
+    ])) as { Account?: string };
+    return identity.Account ?? "CONFIRM";
+  } catch {
+    return "CONFIRM";
+  }
 }
 
 /**
@@ -247,13 +266,12 @@ function resolveAccountId(): string {
 async function promptTypedAccountConfirmation(
   accountId: string,
 ): Promise<boolean> {
-  const phrase =
-    accountId === "CONFIRM" || accountId === "UNKNOWN"
-      ? "DESTROY-EVERYTHING"
-      : accountId;
+  // "UNKNOWN" sentinel was deprecated in PR #40+#41 when STS GetCallerIdentity
+  // was wired; "CONFIRM" is the only remaining fallback.
+  const phrase = accountId === "CONFIRM" ? "DESTROY-EVERYTHING" : accountId;
 
   const hintLine =
-    accountId === "CONFIRM" || accountId === "UNKNOWN"
+    accountId === "CONFIRM"
       ? `(Your AWS account ID — run \`aws sts get-caller-identity\` to find it, or type DESTROY-EVERYTHING to proceed)`
       : `(Your AWS account ID: ${accountId})`;
 
@@ -606,7 +624,7 @@ export async function runBulkDestroyAction(
         ErrorCode.DESTROY_ERROR,
       );
     }
-    const accountId = resolveAccountId();
+    const accountId = await resolveAccountId();
     const confirmed = await promptTypedAccountConfirmation(accountId);
     if (!confirmed) {
       process.stderr.write(

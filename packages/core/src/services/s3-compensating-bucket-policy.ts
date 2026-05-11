@@ -234,7 +234,6 @@ export async function attachCompensatingBucketPolicy(
 
   // ── Step 1 + 2 + 3: GET the existing bucket policy ─────────────────
   let existingStatements: PolicyStatement[] = [];
-  let mergeMode: "merge" | "legacy" = "merge";
   try {
     const getResp = (await client.send(
       new GetBucketPolicyCommand({ Bucket: args.bucketName }),
@@ -277,18 +276,20 @@ export async function attachCompensatingBucketPolicy(
       code === "NoSuchBucketPolicy" ||
       /NoSuchBucketPolicy/i.test(message);
     if (!isNoSuchPolicy) {
-      // Non-NoSuch error from GET — log a structured warn and fall
-      // through to legacy PUT-only behaviour so this code path
-      // remains compatible with operators that lack
-      // `s3:GetBucketPolicy` IAM permission or are seeing transient
-      // throttling on the GET. The PUT itself is still attempted;
-      // if it ALSO fails, the catch below converts it to
-      // `{ attached: false }` as before.
+      // M-H-002 (PR #40): Non-NoSuch error from GET (e.g. throttling,
+      // AccessDenied, network error) — return early rather than falling
+      // through to a PUT-only legacy path. The legacy fallthrough was the
+      // OAC clobber: it would PUT a policy containing ONLY the compensating
+      // statement, silently destroying any existing OAC grant or other
+      // operator-intended statements on the bucket.
+      //
+      // Early return here means we refuse to PUT when we cannot safely merge.
+      // The caller decides whether to surface a user-visible warning.
       log({
         ts: new Date().toISOString(),
         runId: "compensating-bucket-policy",
         level: "warn",
-        action: LOG_ACTIONS.MEMORY_WRITE_FAILED,
+        action: LOG_ACTIONS.S3_GET_BUCKET_POLICY_FAILED,
         extras: {
           compensatingPolicyGetFailed: true,
           bucket: args.bucketName,
@@ -296,30 +297,28 @@ export async function attachCompensatingBucketPolicy(
           error: message,
         },
       });
-      mergeMode = "legacy";
+      return {
+        attached: false,
+        reason: `GetBucketPolicy failed: ${message}`,
+      };
     }
     // NoSuchBucketPolicy → existingStatements stays [] and we merge.
   }
 
   // ── Step 5: merge by Sid ───────────────────────────────────────────
   let mergedStatements: PolicyStatement[];
-  if (mergeMode === "legacy") {
-    // Legacy PUT-only behaviour: emit ONLY the compensating statement.
-    mergedStatements = [compensatingStatement];
+  const existingSidIndex = existingStatements.findIndex(
+    (s) => s?.Sid === COMPENSATING_POLICY_SID,
+  );
+  if (existingSidIndex >= 0) {
+    // Replace the stale compensating statement in place — preserves
+    // the order of the operator-intended statements (e.g. OAC grant
+    // first, compensating second) so the rewritten policy diffs
+    // cleanly against the pre-PUT version.
+    mergedStatements = [...existingStatements];
+    mergedStatements[existingSidIndex] = compensatingStatement;
   } else {
-    const existingSidIndex = existingStatements.findIndex(
-      (s) => s?.Sid === COMPENSATING_POLICY_SID,
-    );
-    if (existingSidIndex >= 0) {
-      // Replace the stale compensating statement in place — preserves
-      // the order of the operator-intended statements (e.g. OAC grant
-      // first, compensating second) so the rewritten policy diffs
-      // cleanly against the pre-PUT version.
-      mergedStatements = [...existingStatements];
-      mergedStatements[existingSidIndex] = compensatingStatement;
-    } else {
-      mergedStatements = [...existingStatements, compensatingStatement];
-    }
+    mergedStatements = [...existingStatements, compensatingStatement];
   }
 
   const mergedPolicy: PolicyDocument = {

@@ -19,12 +19,36 @@ import {
   parseBucketName,
 } from "./static-site-upload.js";
 
+// ── CloudFront SDK mock (B4 — dynamic GetDistribution fallback) ────────────────
+// The fallback path in printStaticWebsiteCloudFrontUrl now calls
+// GetDistributionCommand when DomainName is absent. We mock the SDK
+// at the module level so individual tests can override it.
+const { mockCfSend } = vi.hoisted(() => ({
+  mockCfSend: vi.fn(),
+}));
+
+vi.mock("@aws-sdk/client-cloudfront", () => {
+  class CloudFrontClient {
+    send = mockCfSend;
+  }
+  function GetDistributionCommand(input: unknown) {
+    return { _type: "GetDistributionCommand", input };
+  }
+  return { CloudFrontClient, GetDistributionCommand };
+});
+
 // ── stdout capture helper ─────────────────────────────────────────────────────
 
 let capturedOutput: string;
 
 beforeEach(() => {
   capturedOutput = "";
+  vi.clearAllMocks();
+  // Default: GetDistribution fails (so tests using the happy-path metadata
+  // don't accidentally trigger the live fallback).
+  mockCfSend.mockRejectedValue(
+    new Error("GetDistribution should not be called in this test"),
+  );
   vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
     capturedOutput += typeof chunk === "string" ? chunk : String(chunk);
     return true;
@@ -63,13 +87,13 @@ function makeS3Result(): ResourceResult {
 
 describe("printStaticWebsiteCloudFrontUrl", () => {
   describe("happy path — DomainName available in metadata", () => {
-    it("prints the real DomainName as the URL, not the distribution ID", () => {
+    it("prints the real DomainName as the URL, not the distribution ID", async () => {
       const resources: ResourceResult[] = [
         makeS3Result(),
         makeDistributionResult(),
       ];
 
-      printStaticWebsiteCloudFrontUrl(resources);
+      await printStaticWebsiteCloudFrontUrl(resources);
 
       // Must contain the real DomainName
       expect(capturedOutput).toContain("d1abcdef.cloudfront.net");
@@ -77,36 +101,36 @@ describe("printStaticWebsiteCloudFrontUrl", () => {
       expect(capturedOutput).not.toContain("E1234567890ABC.cloudfront.net");
     });
 
-    it("prints a cyan announcement line with the correct URL", () => {
-      printStaticWebsiteCloudFrontUrl([makeDistributionResult()]);
+    it("prints a cyan announcement line with the correct URL", async () => {
+      await printStaticWebsiteCloudFrontUrl([makeDistributionResult()]);
 
       expect(capturedOutput).toContain(
         "CloudFront distribution created: https://d1abcdef.cloudfront.net",
       );
     });
 
-    it("prints a green Recommended URL line with the correct URL", () => {
-      printStaticWebsiteCloudFrontUrl([makeDistributionResult()]);
+    it("prints a green Recommended URL line with the correct URL", async () => {
+      await printStaticWebsiteCloudFrontUrl([makeDistributionResult()]);
 
       expect(capturedOutput).toContain(
         "Recommended URL: https://d1abcdef.cloudfront.net",
       );
     });
 
-    it("prints the distribution ID on the Distribution ID line (for reference)", () => {
-      printStaticWebsiteCloudFrontUrl([makeDistributionResult()]);
+    it("prints the distribution ID on the Distribution ID line (for reference)", async () => {
+      await printStaticWebsiteCloudFrontUrl([makeDistributionResult()]);
 
       expect(capturedOutput).toContain("Distribution ID: E1234567890ABC");
     });
 
-    it("prints the propagating status line", () => {
-      printStaticWebsiteCloudFrontUrl([makeDistributionResult()]);
+    it("prints the propagating status line", async () => {
+      await printStaticWebsiteCloudFrontUrl([makeDistributionResult()]);
 
       expect(capturedOutput).toContain("propagating");
       expect(capturedOutput).toContain("5-15 minutes");
     });
 
-    it("the printed hostname matches ^[a-z0-9]+\\.cloudfront\\.net$ (lowercase, no ID)", () => {
+    it("the printed hostname matches ^[a-z0-9]+\\.cloudfront\\.net$ (lowercase, no ID)", async () => {
       // Use a fixture that mirrors the real bug evidence (uppercase distribution ID)
       const resources: ResourceResult[] = [
         makeDistributionResult({
@@ -115,7 +139,7 @@ describe("printStaticWebsiteCloudFrontUrl", () => {
         }),
       ];
 
-      printStaticWebsiteCloudFrontUrl(resources);
+      await printStaticWebsiteCloudFrontUrl(resources);
 
       // Extract the URL from the output and validate the hostname regex
       const urlMatch = capturedOutput.match(/https:\/\/([^\s\n]+)/);
@@ -126,74 +150,92 @@ describe("printStaticWebsiteCloudFrontUrl", () => {
   });
 
   describe("fallback path — DomainName NOT available in metadata", () => {
-    it("prints a fallback hint instead of a broken URL when metadata is missing", () => {
+    it("fetches DomainName via GetDistribution when metadata is missing and prints URL", async () => {
+      // B4 (S-H-012): when DomainName is absent in metadata, the function
+      // calls GetDistribution live and prints the URL on success.
+      mockCfSend.mockResolvedValueOnce({
+        Distribution: {
+          DomainName: "d9xyz999.cloudfront.net",
+          Id: "E1234567890ABC",
+        },
+        $metadata: { httpStatusCode: 200 },
+      });
       const resources: ResourceResult[] = [
         makeDistributionResult({ metadata: undefined }),
       ];
 
-      printStaticWebsiteCloudFrontUrl(resources);
+      await printStaticWebsiteCloudFrontUrl(resources);
 
+      // Must contain the fetched DomainName as URL
+      expect(capturedOutput).toContain("d9xyz999.cloudfront.net");
       // Must NOT produce a broken <id>.cloudfront.net URL
       expect(capturedOutput).not.toContain("E1234567890ABC.cloudfront.net");
-      // Must contain a fallback hint with the aws cli command
-      expect(capturedOutput).toContain("aws cloudfront get-distribution");
-      expect(capturedOutput).toContain("E1234567890ABC");
+      // Must NOT contain the aws CLI command — that was the old leak
+      expect(capturedOutput).not.toContain("aws cloudfront get-distribution");
     });
 
-    it("prints a fallback hint when cloudFrontDomainName is undefined", () => {
+    it("prints 'URL not yet available' when GetDistribution fails (no aws CLI leak)", async () => {
+      // B4 (S-H-012): when GetDistribution throws, print a clean degraded
+      // message — do NOT leak the internal `aws cloudfront get-distribution`
+      // CLI fragment (that exposes dev-internal tooling to the user).
+      mockCfSend.mockRejectedValueOnce(new Error("AccessDeniedException"));
+      const resources: ResourceResult[] = [
+        makeDistributionResult({ metadata: undefined }),
+      ];
+
+      await printStaticWebsiteCloudFrontUrl(resources);
+
+      expect(capturedOutput).toContain("URL not yet available");
+      expect(capturedOutput).toContain("E1234567890ABC");
+      // Must NOT leak the aws CLI command
+      expect(capturedOutput).not.toContain("aws cloudfront get-distribution");
+    });
+
+    it("prints degraded message when cloudFrontDomainName is undefined and GetDistribution returns no DomainName", async () => {
+      // GetDistribution returns a response but Distribution.DomainName is absent.
+      mockCfSend.mockResolvedValueOnce({
+        Distribution: { Id: "E1234567890ABC" }, // no DomainName
+        $metadata: { httpStatusCode: 200 },
+      });
       const resources: ResourceResult[] = [
         makeDistributionResult({
           metadata: { cloudFrontDomainName: undefined },
         }),
       ];
 
-      printStaticWebsiteCloudFrontUrl(resources);
+      await printStaticWebsiteCloudFrontUrl(resources);
 
-      expect(capturedOutput).toContain("aws cloudfront get-distribution");
-      expect(capturedOutput).not.toContain(".cloudfront.net\n"); // no broken URL line ending
-    });
-
-    it("prints fallback hint including the distribution ID for manual lookup", () => {
-      const resources: ResourceResult[] = [
-        makeDistributionResult({
-          resourceArn: "EABCDEF123456",
-          metadata: undefined,
-        }),
-      ];
-
-      printStaticWebsiteCloudFrontUrl(resources);
-
-      expect(capturedOutput).toContain("EABCDEF123456");
-      expect(capturedOutput).toContain("Distribution.DomainName");
+      expect(capturedOutput).toContain("URL not yet available");
+      expect(capturedOutput).not.toContain(".cloudfront.net\n"); // no broken URL
     });
   });
 
   describe("edge cases", () => {
-    it("returns early without output if no CloudFront distribution in completedResources", () => {
+    it("returns early without output if no CloudFront distribution in completedResources", async () => {
       const resources: ResourceResult[] = [makeS3Result()];
 
-      printStaticWebsiteCloudFrontUrl(resources);
+      await printStaticWebsiteCloudFrontUrl(resources);
 
       expect(capturedOutput).toBe("");
     });
 
-    it("returns early without output if completedResources is empty", () => {
-      printStaticWebsiteCloudFrontUrl([]);
+    it("returns early without output if completedResources is empty", async () => {
+      await printStaticWebsiteCloudFrontUrl([]);
 
       expect(capturedOutput).toBe("");
     });
 
-    it("returns early if the CloudFront entry has no resourceArn", () => {
+    it("returns early if the CloudFront entry has no resourceArn", async () => {
       const resources: ResourceResult[] = [
         makeDistributionResult({ resourceArn: undefined }),
       ];
 
-      printStaticWebsiteCloudFrontUrl(resources);
+      await printStaticWebsiteCloudFrontUrl(resources);
 
       expect(capturedOutput).toBe("");
     });
 
-    it("uses the first CloudFront distribution found when multiple are present", () => {
+    it("uses the first CloudFront distribution found when multiple are present", async () => {
       const resources: ResourceResult[] = [
         makeDistributionResult({
           resourceId: "cf-dist-1",
@@ -207,7 +249,7 @@ describe("printStaticWebsiteCloudFrontUrl", () => {
         }),
       ];
 
-      printStaticWebsiteCloudFrontUrl(resources);
+      await printStaticWebsiteCloudFrontUrl(resources);
 
       expect(capturedOutput).toContain("dfirst.cloudfront.net");
       // Second distribution should not appear in URL lines

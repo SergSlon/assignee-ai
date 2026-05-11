@@ -156,6 +156,15 @@ export const DESTRUCTIVE_SERVICE_ACTIONS = new Set<string>([
   // bucket-level operations). These correctly remain tag-scoped.
   "s3:DeleteObject",
   "s3:DeleteObjectVersion",
+  // M-H-001 (PR #40): CloudFront invalidation actions must be excluded from
+  // the unscoped ServiceSpecificActionsA/B sweep and emitted instead via the
+  // dedicated `CloudFrontInvalidationTagScoped` statement scoped to
+  // `distribution/*` under the caller's account with
+  // `aws:ResourceTag/managed-by = assignee-ai`. Without this exclusion, a
+  // leaked operator credential could invalidate ANY CloudFront distribution in
+  // the account, not just Assignee-managed ones.
+  "cloudfront:CreateInvalidation",
+  "cloudfront:GetInvalidation",
 ]);
 
 /**

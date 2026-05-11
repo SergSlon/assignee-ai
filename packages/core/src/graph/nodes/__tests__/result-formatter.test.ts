@@ -1680,7 +1680,8 @@ describe("resultFormatterNode — Story 37.4 static site upload", () => {
     const allStderr = stderrSpy.mock.calls
       .map((c: unknown[]) => String(c[0]))
       .join("");
-    expect(allStderr).toContain("1 files failed to upload");
+    // B9 (S-H-014): singular "file" for count 1.
+    expect(allStderr).toContain("1 file failed to upload");
     expect(allStderr).toContain("broken.html");
     expect(allStderr).toContain("Permission denied");
   });
