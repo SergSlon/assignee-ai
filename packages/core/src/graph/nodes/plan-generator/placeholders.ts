@@ -9,13 +9,15 @@
  *   2. `stripEmpty` — recursively delete empty strings / null / empty
  *      arrays and exact plugin-placeholder string matches.
  *   3. `stripPlaceholderArns` — remove LLM-hallucinated canonical AWS
- *      docs account-id ARNs from top-level array fields.
+ *      docs account-id ARNs AND template-token ARNs (e.g.
+ *      `arn:aws:sqs:REGION:ACCOUNT_ID:DLQ_NAME`) from nested desiredState.
  */
 import { defaultPluginRegistry } from "@/index.js";
 import {
   PLACEHOLDER_AWS_ACCOUNT_IDS,
   ARN_ACCOUNT_REGEX,
 } from "@/constants/placeholder-accounts.js";
+import { findTemplateTokenInArn } from "@/graph/nodes/preflight-guard/guards/placeholder-arn.js";
 
 /**
  * Heuristic markers that identify a plugin placeholder as an OBVIOUSLY
@@ -170,15 +172,18 @@ export const PLACEHOLDER_STRIP_MAX_DEPTH = 32;
 
 /**
  * True iff the string is an ARN whose account-ID segment matches a
- * canonical AWS docs example. Shared between the stripper below and
- * the preflight guard's detector so both agree on what "placeholder"
- * means.
+ * canonical AWS docs example OR contains a template-token placeholder
+ * (e.g. `arn:aws:sqs:REGION:ACCOUNT_ID:DLQ_NAME`). Shared between the
+ * stripper below and the preflight guard's detector so both agree on
+ * what "placeholder" means.
  */
 export function isPlaceholderArn(value: unknown): boolean {
   if (typeof value !== "string") return false;
   const match = ARN_ACCOUNT_REGEX.exec(value);
-  if (!match) return false;
-  return PLACEHOLDER_AWS_ACCOUNT_IDS.has(match[1]!);
+  if (match && PLACEHOLDER_AWS_ACCOUNT_IDS.has(match[1]!)) return true;
+  // Also treat template-token ARNs (REGION, ACCOUNT_ID, DLQ_NAME, etc.)
+  // as placeholder ARNs so the stripper removes them before preflight.
+  return findTemplateTokenInArn(value) !== undefined;
 }
 
 export function stripPlaceholderArns(

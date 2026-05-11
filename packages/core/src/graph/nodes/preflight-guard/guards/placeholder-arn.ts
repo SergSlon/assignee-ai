@@ -6,7 +6,10 @@
  * and returns a friendly error when an ARN's account-ID segment matches
  * one of the known AWS docs example account IDs (123456789012 et al)
  * OR an angle-bracketed wizard placeholder (`<your-12-digit-account-id>`
- * — the wizard hint shape introduced by audit cluster E).
+ * — the wizard hint shape introduced by audit cluster E)
+ * OR a template-token ARN (e.g. `arn:aws:sqs:REGION:ACCOUNT_ID:DLQ_NAME`
+ * or `arn:aws:sqs:region:account-id:dlq-name`) where the LLM hallucinates
+ * uppercase or lowercase token words instead of real values.
  *
  * Partition-aware: relies on `ARN_ACCOUNT_REGEX` which anchors on
  * `^arn:aws[\w-]*:` so `arn:aws-us-gov:...` and `arn:aws-cn:...` ARNs
@@ -53,6 +56,64 @@ const PLACEHOLDER_WALK_MAX_DEPTH = 32;
 const ARN_ANGLE_BRACKET_PLACEHOLDER_REGEX =
   /arn:aws[\w-]*:[\w-]+:(?:[a-z]{2}-(?:[a-z0-9]+-)+[a-z0-9]+|):<[^>]+>:/;
 
+/**
+ * Template-token ARN placeholders: the LLM emits ARNs like
+ *   `arn:aws:sqs:REGION:ACCOUNT_ID:DLQ_NAME`
+ *   `arn:aws:sqs:region:account-id:dlq-name`
+ *   `arn:aws:sqs:region:account-id:queue-name`
+ * where the region, account, or resource segments contain ALL-CAPS or
+ * all-lowercase token words that are clearly template stubs rather than
+ * real AWS values.
+ *
+ * Detection strategy: parse the ARN into colon-delimited segments and
+ * check whether any segment EXACTLY equals a known template token
+ * (case-insensitive). Exact-segment matching avoids false-positives on
+ * resource names that happen to contain token words as substrings, e.g.
+ * `arn:aws:sqs:us-east-1:112233445566:my-regional-queue` must NOT be
+ * flagged because "regional" contains "REGION" but `us-east-1` != `REGION`
+ * and `my-regional-queue` != `REGION`.
+ *
+ * Known template tokens (case-insensitive, exact segment match):
+ *   - `REGION` / `region`                   — region segment
+ *   - `ACCOUNT_ID` / `account_id`           — account segment (underscore)
+ *   - `ACCOUNT-ID` / `account-id`           — account segment (hyphen)
+ *   - `DLQ_NAME` / `dlq_name`               — DLQ resource name (underscore)
+ *   - `DLQ-NAME` / `dlq-name`               — DLQ resource name (hyphen)
+ *   - `QUEUE_NAME` / `queue_name`           — generic queue name (underscore)
+ *   - `QUEUE-NAME` / `queue-name`           — generic queue name (hyphen)
+ *
+ * The string is split on `:` so JSON-wrapped strings like
+ * `{"deadLetterTargetArn":"arn:aws:sqs:REGION:ACCOUNT_ID:DLQ_NAME"}`
+ * still match (the non-ARN prefix and the JSON braces become segments
+ * that don't equal any token).
+ */
+const TEMPLATE_TOKEN_SET = new Set([
+  "REGION",
+  "ACCOUNT_ID",
+  "ACCOUNT-ID",
+  "DLQ_NAME",
+  "DLQ-NAME",
+  "QUEUE_NAME",
+  "QUEUE-NAME",
+]);
+
+/**
+ * Returns the first matching template-token found as an exact colon-
+ * delimited segment in an ARN-shaped string, or `undefined` if none found.
+ *
+ * Exported for use by isPlaceholderArn() in plan-generator/placeholders.ts.
+ */
+export function findTemplateTokenInArn(value: string): string | undefined {
+  // Quick early-exit: must look like a partition-aware ARN
+  if (!/arn:aws[\w-]*:/i.test(value)) return undefined;
+  // Split on colon and check each segment for an exact token match
+  for (const segment of value.split(":")) {
+    const upper = segment.toUpperCase();
+    if (TEMPLATE_TOKEN_SET.has(upper)) return upper;
+  }
+  return undefined;
+}
+
 export function detectPlaceholderArn(
   desiredState: Record<string, unknown>,
 ): string | undefined {
@@ -72,6 +133,14 @@ export function detectPlaceholderArn(
           field: path,
           arn: value,
           account: "<angle-bracket-placeholder>",
+        };
+      }
+      const templateToken = findTemplateTokenInArn(value);
+      if (templateToken) {
+        return {
+          field: path,
+          arn: value,
+          account: `<template-token:${templateToken}>`,
         };
       }
       return undefined;
@@ -100,6 +169,18 @@ export function detectPlaceholderArn(
       `(${hit.arn}). The angle-bracketed segment is a hint, not a real ` +
       `account ID. Replace it with your 12-digit AWS account ID, or omit ` +
       `the field entirely if the resource type allows it.`
+    );
+  }
+  if (hit.account.startsWith("<template-token:")) {
+    const token = hit.account.slice("<template-token:".length, -1);
+    return (
+      `Field "${hit.field}" contains a template-token placeholder ARN ` +
+      `(${hit.arn}). The segment "${token}" is a template stub, not a real ` +
+      `AWS value. To fix:\n` +
+      `  1. Provide a real ARN: --set ${hit.field}=arn:aws:<service>:<region>:<account-id>:<resource>\n` +
+      `  2. Or describe the full topology in your intent (e.g. "Create an SQS ` +
+      `queue named my-queue with a dead-letter queue named my-dlq") so the ` +
+      `compound pattern creates both resources automatically.`
     );
   }
   return (

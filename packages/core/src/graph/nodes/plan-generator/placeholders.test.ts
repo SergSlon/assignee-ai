@@ -107,6 +107,36 @@ describe("placeholders direct import", () => {
       expect(isPlaceholderArn(42)).toBe(false);
       expect(isPlaceholderArn(undefined)).toBe(false);
     });
+
+    // fix/sqs-placeholder-arn-guard: template-token ARNs must be detected
+    it("true for template-token ARN with REGION:ACCOUNT_ID segments (uppercase)", () => {
+      expect(isPlaceholderArn("arn:aws:sqs:REGION:ACCOUNT_ID:DLQ_NAME")).toBe(
+        true,
+      );
+    });
+
+    it("true for template-token ARN with lowercase region:account-id", () => {
+      expect(
+        isPlaceholderArn(
+          "arn:aws:sqs:region:account-id:dlq-genai-dogfood-jobs",
+        ),
+      ).toBe(true);
+    });
+
+    it("false for real partition-aware ARN that has 'region' as a word part in queue name", () => {
+      // 'my-regional-queue' must NOT trigger the template-token guard
+      expect(
+        isPlaceholderArn(
+          "arn:aws:sqs:us-east-1:112233445566:my-regional-queue",
+        ),
+      ).toBe(false);
+    });
+
+    it("false for valid China-partition DLQ ARN", () => {
+      expect(
+        isPlaceholderArn("arn:aws-cn:sqs:cn-north-1:123412341234:my-dlq"),
+      ).toBe(false);
+    });
   });
 
   describe("stripPlaceholderArns", () => {
@@ -263,6 +293,64 @@ describe("placeholders direct import", () => {
       }
       cursor["Arn"] = "arn:aws:kms:us-east-1:123456789012:key/deep";
       expect(() => stripPlaceholderArns(root)).not.toThrow();
+    });
+
+    // fix/sqs-placeholder-arn-guard: template-token ARNs must be stripped
+    // at the LLM-output stage (first line of defense) so they never reach
+    // preflight as user-supplied values.
+    it("strips template-token DLQ ARN from nested RedrivePolicy (SQS bug shape)", () => {
+      const state: Record<string, unknown> = {
+        QueueName: "genai-dogfood-jobs",
+        RedrivePolicy: {
+          maxReceiveCount: 5,
+          deadLetterTargetArn: "arn:aws:sqs:REGION:ACCOUNT_ID:DLQ_NAME",
+        },
+      };
+      stripPlaceholderArns(state);
+      // deadLetterTargetArn should be stripped; maxReceiveCount preserved
+      expect(
+        (state["RedrivePolicy"] as Record<string, unknown>)[
+          "deadLetterTargetArn"
+        ],
+      ).toBeUndefined();
+      expect(
+        (state["RedrivePolicy"] as Record<string, unknown>)["maxReceiveCount"],
+      ).toBe(5);
+      // QueueName untouched
+      expect(state["QueueName"]).toBe("genai-dogfood-jobs");
+    });
+
+    it("strips lowercase template-token DLQ ARN (region:account-id shape)", () => {
+      const state: Record<string, unknown> = {
+        QueueName: "my-queue",
+        RedrivePolicy: {
+          maxReceiveCount: 3,
+          deadLetterTargetArn:
+            "arn:aws:sqs:region:account-id:dlq-genai-dogfood-jobs",
+        },
+      };
+      stripPlaceholderArns(state);
+      expect(
+        (state["RedrivePolicy"] as Record<string, unknown>)[
+          "deadLetterTargetArn"
+        ],
+      ).toBeUndefined();
+    });
+
+    it("preserves real DLQ ARN with non-placeholder account ID", () => {
+      const state: Record<string, unknown> = {
+        QueueName: "my-queue",
+        RedrivePolicy: {
+          maxReceiveCount: 3,
+          deadLetterTargetArn: "arn:aws:sqs:us-east-1:112233445566:my-dlq",
+        },
+      };
+      stripPlaceholderArns(state);
+      expect(
+        (state["RedrivePolicy"] as Record<string, unknown>)[
+          "deadLetterTargetArn"
+        ],
+      ).toBe("arn:aws:sqs:us-east-1:112233445566:my-dlq");
     });
   });
 });
