@@ -178,7 +178,21 @@ function dynamodbSecurity(ds: Record<string, unknown>, hints: string[]): void {
       `${AdviceIcon.SECURITY_OK} DynamoDB encrypts all data at rest by default using AWS-owned keys \u2014 for compliance, consider specifying SSESpecification with a CMK`,
     );
   }
-  if (!ds["PointInTimeRecoverySpecification"]) {
+  // PITR is considered enabled when ANY of the following shapes are present:
+  //   { PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true } }
+  //   { PointInTimeRecoverySpecification: true }           (shorthand)
+  //   { PointInTimeRecoveryEnabled: true }                 (flat \u2014 observed in practice)
+  const pitrSpec = ds["PointInTimeRecoverySpecification"];
+  const pitrEnabled =
+    pitrSpec === true ||
+    (pitrSpec !== null &&
+      pitrSpec !== undefined &&
+      typeof pitrSpec === "object" &&
+      (pitrSpec as Record<string, unknown>)["PointInTimeRecoveryEnabled"] ===
+        true) ||
+    ds["PointInTimeRecoveryEnabled"] === true;
+
+  if (!pitrEnabled) {
     hints.push(
       `${AdviceIcon.WARNING} Point-in-time recovery (PITR) not enabled \u2014 without it, accidental deletes cannot be undone`,
     );
