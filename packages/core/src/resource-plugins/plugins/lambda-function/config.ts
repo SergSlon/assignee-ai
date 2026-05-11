@@ -23,7 +23,7 @@ export const defaults: ResourcePlugin["defaults"] = {
   // LLM omits it.
   [CfnKey.CODE]: {
     ZipFile:
-      "exports.handler = async (event) => ({ statusCode: 200, body: 'placeholder' });",
+      "exports.handler = async (event) => ({ statusCode: 200, body: 'Hello World' });",
   },
 };
 
@@ -59,6 +59,7 @@ export function companionResources(
 export const configHints: ResourcePlugin["configHints"] = [
   buildRuntimeHint(runtimeOptions),
   "Lambda Role: if the user did not provide a specific IAM role ARN, OMIT the Role property — do NOT invent placeholder ARNs",
+  "Code: ALWAYS emit a Code object with a ZipFile property containing an inline handler. Match the runtime declared in the plan (default nodejs22.x). The handler MUST return { statusCode: 200, body: <value> }. If the user intent specifies a return value or response body (e.g. 'returns Hello World', 'responds with X', 'returns JSON object'), embed that exact value as the body string. If no return value is specified, default to body: 'Hello World'. Never emit the literal word 'placeholder'.",
   "Environment: must be a CloudFormation Environment object with a Variables map, e.g. { Variables: { KEY: 'value' } }. Parse comma-separated KEY=VALUE input.",
   "Architectures: must be an array with exactly one element — either ['x86_64'] or ['arm64']. arm64 (Graviton) is ~20% cheaper.",
   "EphemeralStorage: must be an object { Size: <number> } where Size is one of 512, 1024, 2048, 4096, 10240 MB. Default 512 MB is free.",
