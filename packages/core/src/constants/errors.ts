@@ -129,6 +129,14 @@ export const ErrorCode = {
   // should match against this code rather than string-matching
   // the human error message.
   INVALID_DESIRED_STATE: "INVALID_DESIRED_STATE",
+
+  // ── IAM / access-control errors ──────────────────────────────
+  // Emitted when an AWS API call is rejected with AccessDeniedException
+  // and the caller surfaces an actionable hint about which IAM grant is
+  // missing. Distinct from USAGE_ERROR (user config mistake) so scripts
+  // can distinguish "missing IAM permission" from "wrong flag". Added in
+  // PR #40 B3 (S-H-010) for CloudFront invalidation AccessDenied hints.
+  PERMISSION_ERROR: "PERMISSION_ERROR",
 } as const;
 
 export type ErrorCodeType = (typeof ErrorCode)[keyof typeof ErrorCode];

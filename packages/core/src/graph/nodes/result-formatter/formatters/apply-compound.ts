@@ -333,7 +333,7 @@ export async function formatApplyCompoundSuccess(
 
   // Task 4b (2026-04-09) — static-website CloudFront URL.
   if (pattern.patternId === PatternId.STATIC_WEBSITE) {
-    printStaticWebsiteCloudFrontUrl(updatedCompleted);
+    await printStaticWebsiteCloudFrontUrl(updatedCompleted);
   }
 
   return { completedResources: updatedCompleted };

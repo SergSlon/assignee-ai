@@ -18,6 +18,7 @@ import {
   createInvalidation,
   waitForInvalidation,
 } from "@assignee/core";
+import { appendAuditRecord } from "@assignee/core/audit";
 import { ErrorCode, ProcessExitCode } from "../../constants/errors.js";
 import { resolveUpdateArgs } from "./arg-parser.js";
 import type { UpdateOpts } from "./arg-parser.js";
@@ -60,6 +61,12 @@ interface RunOptions {
    * touching the global memory service / SDK.
    */
   resolveOptions?: ResolveOptions;
+  /**
+   * Test seam — overrides the --wait poll timeout (ms) passed to
+   * `waitForInvalidation`. Defaults to the service's built-in 10-min
+   * timeout. Inject a small value (e.g. 50) in tests to avoid long waits.
+   */
+  waitTimeoutMs?: number;
 }
 
 /**
@@ -142,6 +149,17 @@ export async function runUpdate(
   }
 
   // ── 3. Confirmation gate ─────────────────────────────────────────
+  // B7 (Q-H-003): when in a non-TTY context without --yes or --json,
+  // the prompt would be silently skipped — the command would proceed
+  // without any confirmation, which is surprising for operators piping
+  // output. Mirror bulk-action.ts:603-607: throw USAGE_ERROR so the
+  // operator knows they need to add --yes or --json.
+  if (!args.yes && !args.jsonMode && !process.stdin.isTTY) {
+    throw new AssigneeError(
+      "Cannot update interactively in a non-TTY context — pass --yes to confirm or --json to use JSON envelope.",
+      ErrorCode.USAGE_ERROR,
+    );
+  }
   if (!args.yes && !args.jsonMode && process.stdin.isTTY) {
     const summary =
       `Update s3://${resolved.bucketName} from ${args.resolvedSourceDir} (${args.sourceFileCount} file${args.sourceFileCount === 1 ? "" : "s"})` +
@@ -164,10 +182,12 @@ export async function runUpdate(
     }
   }
 
-  // ── 4. Cost-guard log (formula only, no live $) ──────────────────
+  // ── 4. Cost-guard log (pricing URL, no hardcoded $) ─────────────
+  // A9 (M-H-016): hardcoded price literals violate feedback_no_hardcoded_prices.
+  // Direct operators to the live AWS pricing page instead.
   if (!args.jsonMode && !args.noInvalidation && resolved.distributionId) {
     process.stderr.write(
-      `[update] invalidating ${args.invalidationPaths.length} path(s) — AWS bills $0.005 per path-invalidated after the first 1000 paths/month free (formula only, no live billing lookup).\n`,
+      `[update] invalidating ${args.invalidationPaths.length} path(s) — CloudFront invalidation has a per-path AWS fee after the monthly free tier; see https://aws.amazon.com/cloudfront/pricing/ for current rates.\n`,
     );
   }
 
@@ -185,16 +205,28 @@ export async function runUpdate(
       },
     },
   );
+  // B9 (S-H-014/015/016): use singular/plural grammar correctly.
   spinner?.stop(
-    `Uploaded ${uploadResult.uploaded} files (${formatBytes(uploadResult.totalBytes)})` +
-      (args.deleteOrphans ? `, deleted ${uploadResult.deleted} orphan(s)` : ""),
+    `Uploaded ${uploadResult.uploaded} ${uploadResult.uploaded === 1 ? "file" : "files"} (${formatBytes(uploadResult.totalBytes)})` +
+      (args.deleteOrphans
+        ? `, deleted ${uploadResult.deleted} ${uploadResult.deleted === 1 ? "orphan" : "orphans"}`
+        : ""),
   );
-  if (uploadResult.failed > 0 && !args.jsonMode) {
-    process.stderr.write(
-      chalk.yellow(`⚠ ${uploadResult.failed} file(s) failed to upload\n`),
-    );
-    for (const e of uploadResult.errors) {
-      process.stderr.write(chalk.dim(`  ${e.file}: ${e.error}\n`));
+  if (uploadResult.failed > 0) {
+    // A4 (M-H-010): set non-zero exit code when any files fail to upload.
+    // Previously the command exited 0 even on partial failures, making
+    // CI pipelines silently succeed while files were missing from the
+    // deployed bucket.
+    process.exitCode = ProcessExitCode.GENERIC_ERROR;
+    if (!args.jsonMode) {
+      process.stderr.write(
+        chalk.yellow(
+          `⚠ ${uploadResult.failed} ${uploadResult.failed === 1 ? "file" : "files"} failed to upload\n`,
+        ),
+      );
+      for (const e of uploadResult.errors) {
+        process.stderr.write(chalk.dim(`  ${e.file}: ${e.error}\n`));
+      }
     }
   }
 
@@ -221,10 +253,25 @@ export async function runUpdate(
       const polled = await waitForInvalidation(
         resolved.distributionId,
         created.invalidationId,
-        { region: resolved.region },
+        {
+          region: resolved.region,
+          ...(options.waitTimeoutMs !== undefined
+            ? { timeoutMs: options.waitTimeoutMs }
+            : {}),
+        },
       );
       invalidation.status = polled.status;
-      if (!args.jsonMode) {
+      if (polled.timedOut === true) {
+        // A5 (M-H-011): surface a distinct non-zero exit code and
+        // stderr line when the wait times out rather than treating it
+        // the same as a successful complete.
+        process.exitCode = ProcessExitCode.GENERIC_ERROR;
+        if (!args.jsonMode) {
+          process.stderr.write(
+            `[update] invalidation ${created.invalidationId} did not complete within the wait timeout — status: ${polled.status}\n`,
+          );
+        }
+      } else if (!args.jsonMode) {
         process.stderr.write(
           `[update] invalidation final status: ${polled.status}` +
             (polled.completedAt
@@ -261,6 +308,36 @@ export async function runUpdate(
     }
   }
 
+  // ── 8. Audit log (best-effort; only on full success) ─────────────────
+  // Skip the audit record when any files failed to upload — partial
+  // failure state is ambiguous and the caller already set a non-zero
+  // exit code. Audit intent: record successful updates for compliance
+  // and operator review.
+  if (uploadResult.failed === 0) {
+    try {
+      await appendAuditRecord({
+        action: "update_executed",
+        bucketName: resolved.bucketName,
+        region: resolved.region,
+        uploaded: uploadResult.uploaded,
+        deleted: uploadResult.deleted,
+        failed: uploadResult.failed,
+        runId,
+        ...(invalidation
+          ? { invalidationId: invalidation.invalidationId }
+          : {}),
+      });
+    } catch (err) {
+      // Audit write failure must NOT abort the command — mirror the
+      // bulk-destroy pattern (bulk-action.ts:857-866).
+      process.stderr.write(
+        `[update] WARNING: Failed to write audit log entry: ` +
+          `${err instanceof Error ? err.message : String(err)}\n` +
+          `  Check ~/.assignee/audit/ permissions.\n`,
+      );
+    }
+  }
+
   return {
     runId,
     target: resolved,
@@ -279,10 +356,15 @@ export async function runUpdate(
  * Top-level command entrypoint — owns the JSON envelope + exit-code
  * mapping. The Commander wrapper calls into this; the action above is
  * test-callable on its own.
+ *
+ * The optional `options` parameter mirrors `runUpdate`'s test-seam
+ * interface so tests can inject `resolveOptions` without going through
+ * Commander `parseAsync`.
  */
 export async function updateAction(
   target: string | undefined,
   rawOpts: UpdateOpts,
+  options: RunOptions = {},
 ): Promise<void> {
   const jsonMode =
     rawOpts.json === true ||
@@ -290,11 +372,16 @@ export async function updateAction(
       rawOpts.output.toLowerCase() === "json");
 
   try {
-    const result = await runUpdate(target, rawOpts);
+    const result = await runUpdate(target, rawOpts, options);
     if (jsonMode) {
+      // B2 (S-H-001 / S-H-002): align JSON envelope shape with the
+      // `apply` command (apps/cli/src/commands/apply.ts:267):
+      //   { ok: boolean, operation: string, runId, ...result }
+      // Replaces the previous `command`/`status` shape which was
+      // incompatible with downstream consumers expecting `ok`/`operation`.
       const envelope = {
-        command: "update",
-        status: "SUCCESS",
+        ok: result.upload.failed === 0,
+        operation: "update",
         runId: result.runId,
         result: {
           bucketName: result.target.bucketName,

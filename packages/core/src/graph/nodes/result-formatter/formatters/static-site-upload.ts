@@ -33,13 +33,16 @@ export async function uploadStaticSiteFiles(
     },
   });
 
+  // B9 (S-H-014/015/016): use singular/plural grammar correctly.
   spinner.stop(
-    `Uploaded ${result.uploaded} files (${formatBytes(result.totalBytes)})`,
+    `Uploaded ${result.uploaded} ${result.uploaded === 1 ? "file" : "files"} (${formatBytes(result.totalBytes)})`,
   );
 
   if (result.failed > 0) {
     process.stderr.write(
-      chalk.yellow(`⚠ ${result.failed} files failed to upload\n`),
+      chalk.yellow(
+        `⚠ ${result.failed} ${result.failed === 1 ? "file" : "files"} failed to upload\n`,
+      ),
     );
     for (const err of result.errors) {
       process.stderr.write(chalk.dim(`  ${err.file}: ${err.error}\n`));
@@ -71,12 +74,12 @@ export function parseBucketName(resourceArn: string): string {
  * distribution ID as a hostname produces a broken URL that NXDOMAIN-fails in DNS.
  *
  * If `DomainName` is unavailable (e.g. provisioned by an older version or CCAPI did
- * not return ResourceModel), a fallback hint is printed with the manual
- * `aws cloudfront get-distribution` command instead of a broken URL.
+ * not return ResourceModel), attempts a CloudFront GetDistribution API call to
+ * resolve the URL; falls back to "URL not yet available" if the SDK call also fails.
  */
-export function printStaticWebsiteCloudFrontUrl(
+export async function printStaticWebsiteCloudFrontUrl(
   completedResources: readonly ResourceResult[],
-): void {
+): Promise<void> {
   const distribution = completedResources.find(
     (r) =>
       r.resourceType === RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION &&
@@ -99,8 +102,11 @@ export function printStaticWebsiteCloudFrontUrl(
     );
     process.stdout.write(chalk.green(`  Recommended URL: ${cfUrl}\n`));
   } else {
-    // Fallback: DomainName not captured (CCAPI did not return ResourceModel).
-    // Print a clear diagnostic instead of a broken <id>.cloudfront.net URL.
+    // B4 (S-H-012): DomainName not captured (CCAPI did not return
+    // ResourceModel). Try to fetch it live from GetDistribution before
+    // falling back to a degraded message. This covers the case where
+    // CCAPI returned no ResourceModel but the distribution was
+    // successfully created and is now accessible.
     process.stdout.write(
       chalk.cyan(`\n☁ CloudFront distribution created: ${distributionId}\n`),
     );
@@ -110,11 +116,29 @@ export function printStaticWebsiteCloudFrontUrl(
         "  Status: propagating (may take 5-15 minutes before traffic flows)\n",
       ),
     );
-    process.stdout.write(
-      chalk.yellow(
-        `  URL unavailable — run: aws cloudfront get-distribution --id ${distributionId} --query Distribution.DomainName --output text\n`,
-      ),
-    );
+    let fetchedDomain: string | undefined;
+    try {
+      const { CloudFrontClient, GetDistributionCommand } =
+        await import("@aws-sdk/client-cloudfront");
+      const cfClient = new CloudFrontClient({});
+      const distResp = (await cfClient.send(
+        new GetDistributionCommand({ Id: distributionId }),
+      )) as { Distribution?: { DomainName?: string } };
+      fetchedDomain = distResp.Distribution?.DomainName;
+    } catch {
+      // Best-effort — fall through to degraded message.
+    }
+    if (fetchedDomain) {
+      process.stdout.write(
+        chalk.green(`  Recommended URL: https://${fetchedDomain}\n`),
+      );
+    } else {
+      process.stdout.write(
+        chalk.yellow(
+          "  URL not yet available; CloudFront distribution may still be propagating.\n",
+        ),
+      );
+    }
   }
 }
 
