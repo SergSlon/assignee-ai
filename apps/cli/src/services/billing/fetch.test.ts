@@ -368,6 +368,148 @@ describe("getCostSavingsEstimate (Epic 92 Wave 4.a)", () => {
   });
 });
 
+// T1-4 (Q-M-006): fetchBillingData direct-coverage tests.
+//
+// `fetch.ts:114-153` had zero direct tests — the "MCP returns zero results,
+// fall through to provision log" and "provision log has estimatedMonthlyCost,
+// returned as offline" branches were entirely uncovered.  These four tests
+// cover each of the four meaningful paths through the function:
+//   (a) MCP returns valid cost → source: "mcp"
+//   (b) MCP returns empty → falls through to provision log (source: "offline")
+//   (c) MCP throws → falls through to provision log gracefully
+//   (d) Both MCP and provision log empty → returns empty map (size 0)
+describe("fetchBillingData direct coverage (T1-4)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockReadProvisions.mockResolvedValue([]);
+    mockEnricher.mockResolvedValue(new Map<string, string>());
+  });
+
+  const ec2Resource: ManagedResource = {
+    resourceType: "AWS::EC2::Instance",
+    arn: "arn:aws:ec2:us-east-1:112233445566:instance/i-0abc123def4567890",
+    region: "us-east-1",
+    createdDate: "2026-04-01",
+    estimatedMonthlyCost: "N/A",
+  };
+
+  it("(a) MCP returns valid cost → map entry has source: 'mcp'", async () => {
+    // The CE service name for EC2 is "Amazon Elastic Compute Cloud - Compute"
+    // (from arn-service-map.ts:17 `ec2: "Amazon Elastic Compute Cloud - Compute"`).
+    // The MCP response Groups key MUST match that exact string for the
+    // distributeCostsAcrossResources function to associate the cost with the ARN.
+    const mcpResponse = {
+      status: "success",
+      data: {
+        status: "success",
+        data_stored: true,
+        table_name: "getCostAndUsage_mock",
+        schema: ["key", "value"],
+        preview: [
+          {
+            key: "ResultsByTime",
+            value: JSON.stringify([
+              {
+                TimePeriod: { Start: "2026-04-01", End: "2026-05-01" },
+                Groups: [
+                  {
+                    Keys: ["Amazon Elastic Compute Cloud - Compute"],
+                    Metrics: {
+                      UnblendedCost: { Amount: "7.20", Unit: "USD" },
+                    },
+                  },
+                ],
+                Total: {},
+                Estimated: true,
+              },
+            ]),
+          },
+        ],
+      },
+    };
+    const tools = [createBillingMockTool(mcpResponse)];
+    const result = await fetchBillingData([ec2Resource], tools);
+
+    expect(result.size).toBe(1);
+    const entry = result.get(ec2Resource.arn)!;
+    expect(entry).toBeDefined();
+    expect(entry.source).toBe("mcp");
+    expect(entry.actualMonthlyCost).toBe("$7.20/month");
+    expect(entry.currency).toBe("USD");
+  });
+
+  it("(b) MCP returns zero results → falls through to provision log → source: 'offline'", async () => {
+    // MCP returns a valid but empty Groups array (noCostData fixture shape).
+    // fetchBillingData sees costMap.size === 0 after the MCP pass and falls
+    // through to the provision-log memory fallback.
+    const tools = [createBillingMockTool(McpMocks.billing.noCostData.success)];
+    mockReadProvisions.mockResolvedValue([
+      {
+        runId: "00000000-0000-0000-0000-000000000020",
+        resourceType: "AWS::EC2::Instance",
+        resourceArn: ec2Resource.arn,
+        region: "us-east-1",
+        desiredStateHash: "ec2-instance",
+        estimatedMonthlyCost: "$7.00/mo",
+        timestamp: "2026-04-01T00:00:00.000Z",
+      },
+    ]);
+
+    const result = await fetchBillingData([ec2Resource], tools);
+
+    expect(result.size).toBe(1);
+    const entry = result.get(ec2Resource.arn)!;
+    expect(entry).toBeDefined();
+    // Story 46.2: fallback rows are tagged "offline" so the user sees
+    // they're looking at historical estimates, not live AWS data.
+    expect(entry.source).toBe("offline");
+    expect(entry.actualMonthlyCost).toBe("$7.00/mo");
+  });
+
+  it("(c) MCP throws → falls through to provision log gracefully", async () => {
+    // Simulate the Billing MCP server being unavailable (network error or
+    // the server process died). fetchBillingData must NOT rethrow — it must
+    // fall through to the provision-log fallback and return "offline" rows.
+    const erroringTool = {
+      name: "cost-explorer",
+      invoke: async () => {
+        throw new Error("MCP server connection refused");
+      },
+    } as unknown as import("@langchain/core/tools").StructuredTool;
+
+    mockReadProvisions.mockResolvedValue([
+      {
+        runId: "00000000-0000-0000-0000-000000000021",
+        resourceType: "AWS::EC2::Instance",
+        resourceArn: ec2Resource.arn,
+        region: "us-east-1",
+        desiredStateHash: "ec2-instance",
+        estimatedMonthlyCost: "$7.00/mo",
+        timestamp: "2026-04-01T00:00:00.000Z",
+      },
+    ]);
+
+    // Must not throw even though the MCP tool throws.
+    const result = await fetchBillingData([ec2Resource], [erroringTool]);
+
+    expect(result.size).toBe(1);
+    const entry = result.get(ec2Resource.arn)!;
+    expect(entry).toBeDefined();
+    expect(entry.source).toBe("offline");
+  });
+
+  it("(d) Both MCP and provision log empty → returns empty map", async () => {
+    // No MCP tools at all AND provision log has no records with a
+    // resourceArn+estimatedMonthlyCost. The result must be an empty map
+    // (callers interpret this as "cost shows N/A").
+    mockReadProvisions.mockResolvedValue([]);
+
+    const result = await fetchBillingData([ec2Resource]);
+
+    expect(result.size).toBe(0);
+  });
+});
+
 const snsResource: ManagedResource = {
   resourceType: "AWS::SNS::Topic",
   arn: "arn:aws:sns:us-east-1:112233445566:alerts",

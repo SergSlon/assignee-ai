@@ -650,4 +650,76 @@ describe("uploadStaticSite — deleteOrphans", () => {
     expect(result.errors[0]!.file).toBe("orphan-2");
     expect(result.errors[0]!.error).toMatch(/policy denies/);
   });
+
+  // T3-2: localKeys is snapshotted at upload-start, not recomputed at
+  // orphan-sweep time. If a local file is removed mid-flight (between
+  // collectFiles and the orphan sweep), the corresponding remote object
+  // must NOT be treated as an orphan.
+  it("T3-2: local file deleted mid-flight does NOT cause the remote object to be treated as an orphan", async () => {
+    // Two local files: index.html and ephemeral.css.
+    writeFileSync(join(tmpDir, "index.html"), "<h1>hi</h1>");
+    writeFileSync(join(tmpDir, "ephemeral.css"), "body {}");
+
+    // Simulate the race: uploadStaticSite starts, both files are
+    // collected by collectFiles. During the upload of ephemeral.css,
+    // the OS removes it (upload fails for that file). The remote bucket
+    // already contains a prior-run version of ephemeral.css. If localKeys
+    // were recomputed AFTER the upload loop, ephemeral.css would be absent
+    // (collectFiles re-runs and misses it) and the orphan sweep would
+    // delete the still-valid remote object. With T3-2's start-snapshot,
+    // ephemeral.css is in localKeys from the initial scan and is not
+    // treated as an orphan.
+    //
+    // Test implementation: wire the second PUT (ephemeral.css) to fail —
+    // simulating the upload failure due to the file being removed mid-flight.
+    // The remote bucket is wired to contain BOTH index.html and ephemeral.css
+    // (prior-run version). The orphan sweep must NOT include ephemeral.css
+    // in the DeleteObjectsCommand.
+    mockSend
+      .mockResolvedValueOnce({
+        // PUT index.html succeeds
+        ETag: '"a3cca2b2aa1e3b5b3b5aa5b5aa5aa5aa"',
+        $metadata: { httpStatusCode: 200, requestId: "req-put-1" },
+      })
+      .mockRejectedValueOnce(new Error("NoSuchKey: ephemeral.css disappeared"))
+      // LIST returns both objects (prior-run ephemeral.css still in bucket)
+      .mockResolvedValueOnce({
+        Contents: [
+          { Key: "index.html", Size: 100 },
+          { Key: "ephemeral.css", Size: 200 }, // prior-run version, valid!
+          { Key: "old-orphan.txt", Size: 50 }, // genuine orphan
+        ],
+        IsTruncated: false,
+        $metadata: { httpStatusCode: 200, requestId: "req-list" },
+      })
+      // DELETE — only old-orphan.txt
+      .mockResolvedValueOnce({
+        Errors: [],
+        Deleted: [{ Key: "old-orphan.txt" }],
+        $metadata: { httpStatusCode: 200, requestId: "req-delete" },
+      });
+
+    const result = await uploadStaticSite("my-bucket", tmpDir, {
+      deleteOrphans: true,
+    });
+
+    expect(result.uploaded).toBe(1); // index.html only
+    expect(result.failed).toBe(1); // ephemeral.css
+    // Only the genuine orphan (old-orphan.txt) was deleted — NOT ephemeral.css.
+    expect(result.deleted).toBe(1);
+
+    // Confirm the DeleteObjectsCommand carried only old-orphan.txt.
+    type DelCmd = {
+      _type: string;
+      Delete: { Objects: Array<{ Key: string }> };
+    };
+    const deleteCalls = mockSend.mock.calls
+      .map((c) => c[0] as DelCmd)
+      .filter((c) => c._type === "DeleteObjectsCommand");
+    expect(deleteCalls).toHaveLength(1);
+    const deletedKeys = deleteCalls[0]!.Delete.Objects.map((o) => o.Key);
+    expect(deletedKeys).toEqual(["old-orphan.txt"]);
+    // ephemeral.css must NOT appear in the delete set.
+    expect(deletedKeys).not.toContain("ephemeral.css");
+  });
 });

@@ -34,6 +34,8 @@ import { AssigneeError } from "../errors.js";
 import { ErrorCode } from "../constants/errors.js";
 import { requireAssigneeCredentials } from "../config/aws-credentials.js";
 import { AWS_REGION } from "../config/constants/aws.js";
+import { log, LOG_ACTIONS } from "../utils/logger/index.js";
+import { AwsErrorName } from "../constants/aws-error-names.js";
 
 export interface InvalidationArgs {
   distributionId: string;
@@ -79,9 +81,14 @@ export const DEFAULT_TIMEOUT_MS = 10 * 60 * 1_000; // 10 minutes
  *
  * Idempotency: passing the same `callerReference` twice returns the
  * same invalidation (AWS's documented behaviour).
+ *
+ * T2-3: accepts an optional pre-constructed `cloudFrontClient` so callers
+ * that also invoke `waitForInvalidation` for the same distribution can
+ * share one SDK client (one TLS handshake instead of two).
  */
 export async function createInvalidation(
   args: InvalidationArgs,
+  cloudFrontClient?: unknown,
 ): Promise<InvalidationResult> {
   const paths = args.paths && args.paths.length > 0 ? args.paths : ["/*"];
   if (paths.length > MAX_INVALIDATION_PATHS) {
@@ -93,14 +100,18 @@ export async function createInvalidation(
 
   const { CloudFrontClient, CreateInvalidationCommand } =
     await import("@aws-sdk/client-cloudfront");
-  const cf = new CloudFrontClient({
-    region: args.region ?? AWS_REGION,
-    credentials: requireAssigneeCredentials("operator"),
-  });
+  // T2-3: use injected client when provided; construct internally otherwise.
+  const cf =
+    cloudFrontClient ??
+    new CloudFrontClient({
+      region: args.region ?? AWS_REGION,
+      credentials: requireAssigneeCredentials("operator"),
+    });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let resp: any;
   try {
-    resp = await cf.send(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    resp = await (cf as any).send(
       new CreateInvalidationCommand({
         DistributionId: args.distributionId,
         InvalidationBatch: {
@@ -119,7 +130,7 @@ export async function createInvalidation(
       err instanceof Error ? ((err as { name?: string }).name ?? "") : "";
     const msg = err instanceof Error ? err.message : String(err);
     if (
-      name === "AccessDeniedException" ||
+      name === AwsErrorName.ACCESS_DENIED ||
       msg.includes("cloudfront:CreateInvalidation")
     ) {
       throw new AssigneeError(
@@ -127,6 +138,17 @@ export async function createInvalidation(
         ErrorCode.PERMISSION_ERROR,
       );
     }
+    // T3-3: emit a structured WARN so operators can grep the NDJSON log.
+    log({
+      ts: new Date().toISOString(),
+      runId: "system",
+      level: "warn",
+      action: LOG_ACTIONS.CLOUDFRONT_INVALIDATION_FAILED,
+      extras: {
+        distributionId: args.distributionId,
+        error: err instanceof Error ? err.message : String(err),
+      },
+    });
     throw err;
   }
   const respTyped = resp as {
@@ -145,6 +167,25 @@ export async function createInvalidation(
 }
 
 /**
+ * T3-1: Exponential backoff on ThrottlingException for the poll loop.
+ * CloudFront GetInvalidation is rate-limited at 30 req/s per distribution;
+ * under concurrent invalidations a burst can trigger ThrottlingException.
+ * Doubles from `baseMs` each retry up to `maxMs`, with ±25% jitter.
+ */
+const THROTTLE_BACKOFF_BASE_MS = 1_000;
+const THROTTLE_BACKOFF_MAX_MS = 30_000;
+
+function throttleBackoffMs(attempt: number): number {
+  const base = Math.min(
+    THROTTLE_BACKOFF_BASE_MS * Math.pow(2, attempt),
+    THROTTLE_BACKOFF_MAX_MS,
+  );
+  // ±25% jitter to spread retries under concurrent callers
+  const jitter = base * 0.25 * (2 * Math.random() - 1);
+  return Math.max(0, Math.round(base + jitter));
+}
+
+/**
  * Poll `GetInvalidation` until `Status === "Completed"` or the timeout
  * elapses. Default 5s interval, 10 minute hard cap (typical
  * invalidations complete in 1-5 min; the cap protects against hung
@@ -154,6 +195,13 @@ export async function createInvalidation(
  * `destroy-strategies/strategies/cloudfront-distribution.ts` (the
  * disable poll), with shorter intervals because invalidations
  * complete much faster than distribution disables.
+ *
+ * T2-3: accepts an optional pre-constructed `cloudFrontClient` so callers
+ * that also invoke `createInvalidation` for the same distribution can
+ * share one SDK client (one TLS handshake instead of two).
+ *
+ * T3-1: applies exponential backoff on ThrottlingException instead of
+ * rethrowing immediately.
  */
 export async function waitForInvalidation(
   distributionId: string,
@@ -162,6 +210,8 @@ export async function waitForInvalidation(
     pollIntervalMs?: number;
     timeoutMs?: number;
     region?: string;
+    /** T2-3: optional pre-constructed CloudFrontClient to share with createInvalidation. */
+    cloudFrontClient?: unknown;
   },
 ): Promise<{ status: string; completedAt?: Date; timedOut?: boolean }> {
   const intervalMs = options?.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
@@ -169,23 +219,30 @@ export async function waitForInvalidation(
 
   const { CloudFrontClient, GetInvalidationCommand } =
     await import("@aws-sdk/client-cloudfront");
-  const cf = new CloudFrontClient({
-    region: options?.region ?? AWS_REGION,
-    credentials: requireAssigneeCredentials("operator"),
-  });
+  // T2-3: use injected client when provided; construct internally otherwise.
+  const cf =
+    options?.cloudFrontClient ??
+    new CloudFrontClient({
+      region: options?.region ?? AWS_REGION,
+      credentials: requireAssigneeCredentials("operator"),
+    });
 
   const startedAt = Date.now();
   let lastStatus = "InProgress";
+  let throttleAttempt = 0;
   while (Date.now() - startedAt < timeoutMs) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let resp: any;
     try {
-      resp = await cf.send(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      resp = await (cf as any).send(
         new GetInvalidationCommand({
           DistributionId: distributionId,
           Id: invalidationId,
         }),
       );
+      // Successful poll resets the throttle counter.
+      throttleAttempt = 0;
     } catch (err: unknown) {
       // B3 (S-H-010): surface an actionable hint on AccessDeniedException
       // for GetInvalidation so the operator knows which IAM policy to refresh.
@@ -193,13 +250,23 @@ export async function waitForInvalidation(
         err instanceof Error ? ((err as { name?: string }).name ?? "") : "";
       const msg = err instanceof Error ? err.message : String(err);
       if (
-        name === "AccessDeniedException" ||
+        name === AwsErrorName.ACCESS_DENIED ||
         msg.includes("cloudfront:GetInvalidation")
       ) {
         throw new AssigneeError(
           "Operator IAM policy missing cloudfront:GetInvalidation. Run 'assignee setup' to refresh credentials, or add the grant manually.",
           ErrorCode.PERMISSION_ERROR,
         );
+      }
+      // T3-1: on ThrottlingException apply exponential backoff and continue
+      // polling instead of hard-rethrowing. Non-throttle errors rethrow.
+      if (
+        name === AwsErrorName.THROTTLING ||
+        name === AwsErrorName.TOO_MANY_REQUESTS
+      ) {
+        const backoff = throttleBackoffMs(throttleAttempt++);
+        await new Promise((r) => setTimeout(r, backoff));
+        continue;
       }
       throw err;
     }
@@ -219,5 +286,18 @@ export async function waitForInvalidation(
   // distinguish a timeout from a legitimate non-Completed terminal
   // status. Previously both paths returned `{ status: lastStatus }`
   // with no way to tell them apart.
+  // T3-3: emit a structured WARN before returning so operators can grep logs.
+  log({
+    ts: new Date().toISOString(),
+    runId: "system",
+    level: "warn",
+    action: LOG_ACTIONS.CLOUDFRONT_INVALIDATION_TIMEOUT,
+    extras: {
+      distributionId,
+      invalidationId,
+      timeoutMs,
+      lastStatus,
+    },
+  });
   return { status: "TimedOut", timedOut: true };
 }

@@ -55,8 +55,13 @@ vi.mock("../../services/destroy-service.js", () => ({
     mockDestroySingleResource(...args),
 }));
 
+const { mockGetCostSavingsEstimate } = vi.hoisted(() => ({
+  mockGetCostSavingsEstimate: vi.fn().mockResolvedValue("$3.60/mo"),
+}));
+
 vi.mock("../../services/billing.js", () => ({
-  getCostSavingsEstimate: vi.fn().mockResolvedValue("$3.60/mo"),
+  getCostSavingsEstimate: (...args: unknown[]) =>
+    mockGetCostSavingsEstimate(...args),
 }));
 
 vi.mock("../../services/mcp-client.js", () => ({
@@ -297,5 +302,51 @@ describe("singleDestroyAction — EIP provision-log ARN fallback (BUG-5)", () =>
     expect(callArg.resourceType).toBe("AWS::EC2::Route");
     expect(callArg.identifier).toBe(ROUTE_ID);
     expect(callArg.arn).toBe("");
+  });
+
+  // T1-1 (Q-M-001): getCostSavingsEstimate 3-arg signature regression guard.
+  //
+  // PR #37 Defect 3 introduced a `resourceType` arg at position [1] of
+  // getCostSavingsEstimate so the destroy path can fall back to the
+  // pricing-decomposer registry for KMS/Lambda/etc. when the cost-explorer
+  // MCP and provision-log are both silent.  The previous vi.fn stub in this
+  // file accepted ANY call shape — so if a future refactor silently dropped
+  // the resourceType arg, all tests would stay green while the decomposer
+  // fallback would silently break.
+  //
+  // This test pins the 3-arg call signature by asserting that arg[1] (the
+  // resourceType) is a non-empty AWS:: string. It covers the S3 happy-path
+  // (RGTA resolves the resource, destroy succeeds) because that path is the
+  // primary caller of getCostSavingsEstimate with a known resourceType.
+  it("T1-1: getCostSavingsEstimate receives the correct resourceType as arg[1] (3-arg signature guard)", async () => {
+    const S3_ARN = "arn:aws:s3:::my-bucket-1234567890";
+    mockResolveResource.mockResolvedValue({
+      arn: S3_ARN,
+      resourceType: "AWS::S3::Bucket",
+      region: "us-east-1",
+      tags: { "managed-by": "assignee-ai" },
+      identifier: "my-bucket-1234567890",
+    });
+    mockDestroySingleResource.mockResolvedValue({
+      success: true,
+      resourceType: "AWS::S3::Bucket",
+      identifier: "my-bucket-1234567890",
+      arn: S3_ARN,
+    });
+
+    await singleDestroyAction(S3_ARN, { yes: true });
+
+    // Verify getCostSavingsEstimate was called.
+    expect(mockGetCostSavingsEstimate).toHaveBeenCalled();
+
+    // arg[1] must be the AWS CloudFormation resource type string — NOT an
+    // array (which would indicate the legacy 2-arg form without resourceType).
+    // If the destroy flow regresses to passing mcpTools as arg[1] (dropping
+    // resourceType), this assertion fires and catches the regression.
+    const callArgs = mockGetCostSavingsEstimate.mock.calls[0]!;
+    const resourceTypeArg = callArgs[1];
+    expect(typeof resourceTypeArg).toBe("string");
+    expect(resourceTypeArg as string).toMatch(/^AWS::/);
+    expect(resourceTypeArg).toBe("AWS::S3::Bucket");
   });
 });
