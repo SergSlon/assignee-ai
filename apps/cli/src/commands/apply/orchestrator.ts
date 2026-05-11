@@ -151,10 +151,24 @@ export async function runApply(
   // Epic 98 e98.W5.P2 (Epic 97 A-03 + A-07): inform the timing layer
   // which resourceType this apply targeted so the `total` budget can
   // be overridden for types with AWS-inherent long completion windows
-  // (SQS is currently 73-74s vs the 60s rule). Runs BEFORE
+  // (SQS 73-74s, CloudFront Distribution 3-5min). Runs BEFORE
   // `persistTimings` fires at the outer runCommand finally, so the
   // budget check sees the override.
-  setApplyBudgetContext(finalState.resourceType);
+  //
+  // Compound apply: pass the FULL list of completed resource types so
+  // the MAX override across all of them wins. The compound's terminal
+  // resourceType is NOT necessarily the bottleneck — static-website
+  // terminates on BucketPolicy (no override) but the CloudFront step
+  // is what eats 5 minutes. Walking completedResources catches that;
+  // a single-type call would still spurious-fire the 60s warning.
+  const completedTypes = finalState.completedResources
+    ?.map((entry) => entry.resourceType)
+    .filter((t): t is string => typeof t === "string" && t.length > 0);
+  if (completedTypes && completedTypes.length > 0) {
+    setApplyBudgetContext(completedTypes);
+  } else {
+    setApplyBudgetContext(finalState.resourceType);
+  }
 
   log({
     ts: new Date().toISOString(),
