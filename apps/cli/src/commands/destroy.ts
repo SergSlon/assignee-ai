@@ -57,7 +57,6 @@ import {
   UserCancelledError,
   CostEstimateLabel,
   UserMessage,
-  serializeErrorEnvelope,
 } from "@assignee/core";
 import * as clack from "@clack/prompts";
 import {
@@ -110,8 +109,9 @@ import {
 import { pickFromMatches } from "./destroy/multi-match-prompt.js";
 import { startSpinner, stopSpinner } from "../utils/display.js";
 import { installJsonStderrFilter } from "./json-stderr-filter.js";
-import { redactAccountIdIfDemoMode } from "./output-format.js";
 import { redactSensitive } from "../utils/error-messages.js";
+import { installJsonStdoutSuppressor } from "../utils/stdio/json-stdout-suppressor.js";
+import { buildOperatorClientConfig } from "../utils/aws/operator-client-config.js";
 import { validateAccountId } from "../utils/account-id-validator.js";
 import { ProcessExitCode } from "../constants/errors.js";
 import { EnvVar } from "../constants/env-vars.js";
@@ -564,9 +564,7 @@ async function scheduleKmsKeyDeletion(
   resolved: ResolvedResource,
   pendingWindowInDays: number,
 ): Promise<{ scheduledAt: Date | undefined; outcome: KmsDestroyOutcome }> {
-  const awsCreds = tryAssigneeCredentials("operator");
-  const region = resolved.region || AWS_REGION;
-  const kms = createKmsClient(awsCreds ? { ...awsCreds, region } : { region });
+  const kms = createKmsClient(buildOperatorClientConfig(resolved));
 
   startSpinner("Scheduling KMS key for deletion...");
   // Defense-in-depth (2026-05-09): pre-disable the key BEFORE scheduling
@@ -718,10 +716,8 @@ async function tryDescribeKmsDeletionDate(
 async function tryDescribeSecretDeletionDate(
   resolved: ResolvedResource,
 ): Promise<Date | undefined> {
-  const awsCreds = tryAssigneeCredentials("operator");
-  const region = resolved.region || AWS_REGION;
   const client = createSecretsManagerClient(
-    awsCreds ? { ...awsCreds, region } : { region },
+    buildOperatorClientConfig(resolved),
   );
   try {
     const response = await client.send(
@@ -764,10 +760,8 @@ async function deleteSecret(
   resolved: ResolvedResource,
   opts: { force?: boolean; recoveryDays?: number },
 ): Promise<{ scheduledAt: Date | undefined; outcome: SecretDestroyOutcome }> {
-  const awsCreds = tryAssigneeCredentials("operator");
-  const region = resolved.region || AWS_REGION;
   const client = createSecretsManagerClient(
-    awsCreds ? { ...awsCreds, region } : { region },
+    buildOperatorClientConfig(resolved),
   );
 
   startSpinner(
@@ -822,11 +816,7 @@ async function deleteSecret(
  * mis-routes EventBus ARNs to DeleteRule (D-19).
  */
 async function deleteEventBus(resolved: ResolvedResource): Promise<void> {
-  const awsCreds = tryAssigneeCredentials("operator");
-  const region = resolved.region || AWS_REGION;
-  const client = createEventBridgeClient(
-    awsCreds ? { ...awsCreds, region } : { region },
-  );
+  const client = createEventBridgeClient(buildOperatorClientConfig(resolved));
 
   // EventBus Name is the primary identifier; if the ARN is what we
   // have, parse the `event-bus/<name>` tail.
@@ -885,56 +875,6 @@ interface DestroySuccessEnvelope {
   arn?: string;
   identifier?: string;
   cost?: string;
-}
-
-function installJsonStdoutSuppressor(enabled: boolean): {
-  flushSuccess: (envelope: DestroySuccessEnvelope) => void;
-  flushError: (code: string, message: string, hint?: string) => void;
-  restore: () => void;
-} {
-  if (!enabled) {
-    return {
-      flushSuccess: () => {},
-      flushError: () => {},
-      restore: () => {},
-    };
-  }
-  const originalWrite = process.stdout.write;
-  process.stdout.write = ((
-    _chunk: string | Uint8Array,
-    ...rest: unknown[]
-  ): boolean => {
-    const cb = rest.find((r) => typeof r === "function") as
-      | ((err?: Error | null) => void)
-      | undefined;
-    if (cb) cb();
-    return true;
-  }) as typeof process.stdout.write;
-
-  let restored = false;
-  const restore = (): void => {
-    if (restored) return;
-    process.stdout.write = originalWrite;
-    restored = true;
-  };
-
-  return {
-    flushSuccess: (envelope) => {
-      restore();
-      originalWrite.call(
-        process.stdout,
-        redactAccountIdIfDemoMode(JSON.stringify(envelope, null, 2) + "\n"),
-      );
-    },
-    flushError: (code, message, hint) => {
-      restore();
-      originalWrite.call(
-        process.stdout,
-        redactAccountIdIfDemoMode(serializeErrorEnvelope(code, message, hint)),
-      );
-    },
-    restore,
-  };
 }
 
 // ── SEC-047: demo-mode stderr redactor ────────────────────────────────
@@ -1158,7 +1098,8 @@ the resource is still billing and recoverable during the window.
 
       // Normalise `--json` → `--output json`.
       const json = rawOpts.json === true || rawOpts.output === "json";
-      const suppressor = installJsonStdoutSuppressor(json);
+      const suppressor =
+        installJsonStdoutSuppressor<DestroySuccessEnvelope>(json);
       // Epic 96 Wave 3 N4 (D-04): suppress renderError human blocks on
       // stderr under JSON mode. The same code/message/hint payload
       // lands on stdout as the error envelope; duplicating it on

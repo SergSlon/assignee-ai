@@ -41,11 +41,7 @@
  */
 
 import { Command } from "commander";
-import {
-  AssigneeError,
-  serializeErrorEnvelope,
-  type JsonErrorDetail,
-} from "@assignee/core";
+import { AssigneeError, type JsonErrorDetail } from "@assignee/core";
 import {
   CommandName,
   CommandDescription,
@@ -62,22 +58,10 @@ import { resolveIntroContext, formatIntroContext } from "./init.js";
 import { resolveApplyArgs, type ApplyOpts } from "./apply/arg-parser.js";
 import { runApply, type ApplyRunResult } from "./apply/orchestrator.js";
 import { installJsonStderrFilter } from "./json-stderr-filter.js";
-import { redactAccountIdIfDemoMode } from "./output-format.js";
 import { validateAccountId } from "../utils/account-id-validator.js";
+import { installJsonStdoutSuppressor } from "../utils/stdio/json-stdout-suppressor.js";
 import { ProcessExitCode } from "../constants/errors.js";
 
-/**
- * Buffering stdout suppressor used when `--output json` is active.
- *
- * Replaces `process.stdout.write` with a black-hole function so the
- * inner action's text renderers (`renderPlanBox`, `renderApplySuccess`,
- * etc.) do not pollute the machine stream. On `flushSuccess()` /
- * `flushError()` we restore the original writer and emit exactly one
- * top-level envelope through it.
- *
- * Mirrors the pattern used by `plan.ts` (Wave 92.2.c) but cheaper — we
- * don't need per-resource NDJSON aggregation, just a single envelope.
- */
 /**
  * Epic 96 Wave 1 B2: success envelope is enriched with optional
  * `runId` / `arn` / `cost` fields so CI pipelines can thread the
@@ -106,70 +90,6 @@ interface ApplySuccessEnvelope {
   arn?: string | null;
   primaryIdentifier?: string;
   cost?: string;
-}
-
-function installJsonStdoutSuppressor(enabled: boolean): {
-  flushSuccess: (envelope: ApplySuccessEnvelope) => void;
-  flushError: (
-    code: string,
-    message: string,
-    hint?: string,
-    detail?: JsonErrorDetail,
-  ) => void;
-  restore: () => void;
-} {
-  if (!enabled) {
-    return {
-      flushSuccess: () => {},
-      flushError: () => {},
-      restore: () => {},
-    };
-  }
-  // Capture the original by reference (NOT `.bind(...)`) so restore()
-  // puts back the exact function-identity the test harness may have
-  // spied on.
-  const originalWrite = process.stdout.write;
-  // Suppress all stdout writes while JSON mode is active. Any byte
-  // that would otherwise appear on stdout gets dropped; the inner
-  // action's callers see a successful synchronous write. Stderr is
-  // untouched so log events + human error blocks still render.
-  process.stdout.write = ((
-    _chunk: string | Uint8Array,
-    ...rest: unknown[]
-  ): boolean => {
-    const cb = rest.find((r) => typeof r === "function") as
-      | ((err?: Error | null) => void)
-      | undefined;
-    if (cb) cb();
-    return true;
-  }) as typeof process.stdout.write;
-
-  let restored = false;
-  const restore = (): void => {
-    if (restored) return;
-    process.stdout.write = originalWrite;
-    restored = true;
-  };
-
-  return {
-    flushSuccess: (envelope) => {
-      restore();
-      const payload = redactAccountIdIfDemoMode(
-        JSON.stringify(envelope, null, 2) + "\n",
-      );
-      originalWrite.call(process.stdout, payload);
-    },
-    flushError: (code, message, hint, detail) => {
-      restore();
-      originalWrite.call(
-        process.stdout,
-        redactAccountIdIfDemoMode(
-          serializeErrorEnvelope(code, message, hint, detail),
-        ),
-      );
-    },
-    restore,
-  };
 }
 
 /**
@@ -385,7 +305,8 @@ export const applyCommand = new Command(CommandName.APPLY)
       );
     }
 
-    const suppressor = installJsonStdoutSuppressor(jsonMode);
+    const suppressor =
+      installJsonStdoutSuppressor<ApplySuccessEnvelope>(jsonMode);
     // Epic 96 Wave 3 N4 (D-04): under `--json`, suppress the human
     // `[ERROR]/[CONTEXT]/[FIX]` blocks that renderError emits on stderr.
     // Structured JSON log lines stay visible; only prefix-matched
