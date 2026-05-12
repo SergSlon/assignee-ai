@@ -90,6 +90,23 @@ describe("getRequiredIamActions", () => {
     const actions = getRequiredIamActions("AWS::S3::Bucket");
     expect(actions).not.toContain("iam:PassRole");
   });
+
+  // DF-DDB-TTL-IAM-MISSING (live dogfood 2026-05-11): `assignee apply
+  // "Create a DDB table ... with TTL on expiresAt"` failed at the
+  // post-create UpdateTimeToLive step with "is not authorized to
+  // perform: dynamodb:UpdateTimeToLive" — the table was created
+  // successfully but TTL never got enabled. Locks the fix.
+  it("includes DDB TTL actions (UpdateTimeToLive + DescribeTimeToLive) for AWS::DynamoDB::Table", () => {
+    const actions = getRequiredIamActions("AWS::DynamoDB::Table");
+    expect(actions).toContain("dynamodb:UpdateTimeToLive");
+    expect(actions).toContain("dynamodb:DescribeTimeToLive");
+    // The other DDB modifier actions should still be present (regression
+    // guard) — UpdateContinuousBackups is the closest analogue and was
+    // there from W5.
+    expect(actions).toContain("dynamodb:UpdateContinuousBackups");
+    expect(actions).toContain("dynamodb:CreateTable");
+    expect(actions).toContain("dynamodb:DeleteTable");
+  });
 });
 
 // A1 (M-H-001): CloudFront invalidation actions must appear ONLY in

@@ -115,22 +115,56 @@ describe("classifyCreateError", () => {
       expect(result.shortMessage).toBe("Unable to locate credentials.");
     });
 
-    it("maps ACCESS_DENIED to UNKNOWN code with raw message (no friendly prefix)", () => {
-      // ACCESS_DENIED is treated as UNKNOWN by the current dispatch
-      // contract — the adapter's raw message (e.g. full IAM deny
-      // diagnostic) is the most useful thing to surface to the user.
+    it("maps ACCESS_DENIED with 'not authorized' to UNKNOWN code with `assignee setup` hint + raw", () => {
+      // DF-A4-partial / DF-D5: AWS denials from a stale operator policy
+      // (or a truly-missing action) used to show "An unclassified error
+      // was encountered" — useless for the user. The classifier now
+      // routes any UNKNOWN-mapped kind whose raw message contains
+      // "is not authorized to perform" through enrichForUserPrefix /
+      // enrichForShortMessage, which prepends an `assignee setup` hint
+      // AND preserves the original AWS message for grep / support
+      // tickets.
+      const rawMsg =
+        "User: arn:aws:iam::112233445566:user/dev is not authorized to perform: ec2:RunInstances";
       const result = classifyCreateError(
         {
           kind: ProvisioningErrorKind.ACCESS_DENIED,
-          message:
-            "User: arn:aws:iam::123456789012:user/dev is not authorized to perform: ec2:RunInstances",
+          message: rawMsg,
         },
         "AWS::EC2::Instance",
       );
 
       expect(result.errorCode).toBe(PROVISIONING_ERROR_CODES.UNKNOWN);
-      expect(result.userPrefix).toContain("not authorized to perform");
-      expect(result.shortMessage).toContain("not authorized to perform");
+      // Actionable guidance present in both surfaces.
+      expect(result.userPrefix).toContain("assignee setup");
+      expect(result.userPrefix).toContain("CreatePolicyVersion");
+      expect(result.shortMessage).toContain("assignee setup");
+      // Raw AWS message preserved in both surfaces.
+      expect(result.userPrefix).toContain(rawMsg);
+      expect(result.shortMessage).toContain(rawMsg);
+      // userPrefix is now the enriched form, NOT the raw string.
+      expect(result.userPrefix).not.toBe(rawMsg);
+    });
+
+    it("enriches SERVICE_ERROR-classified 'not authorized' messages the same way", () => {
+      // AWS reports the same logical error under different
+      // ProvisioningErrorKinds depending on which SDK pathway hit it.
+      // DDB UpdateTimeToLive 'not authorized' arrived as SERVICE_ERROR
+      // in the live dogfood 2026-05-11 — the hint must surface there
+      // too, not only on ACCESS_DENIED.
+      const rawMsg =
+        "User: arn:aws:iam::112233445566:user/assignee-operator is not authorized to perform: dynamodb:UpdateTimeToLive";
+      const result = classifyCreateError(
+        {
+          kind: ProvisioningErrorKind.SERVICE_ERROR,
+          message: rawMsg,
+        },
+        "AWS::DynamoDB::Table",
+      );
+
+      expect(result.userPrefix).toContain("assignee setup");
+      expect(result.userPrefix).toContain(rawMsg);
+      expect(result.shortMessage).toContain("assignee setup");
     });
 
     it("maps NOT_FOUND (on create, e.g. VPC dependency) to raw message + UNKNOWN code", () => {
