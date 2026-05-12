@@ -80,6 +80,36 @@ const DDB_ATTR_DEFS_HINT =
   "Re-run the intent; the sanitizer should now drop those extra entries automatically.";
 
 /**
+ * DF-A4-partial / DF-D5 / DF-DDB-TTL-IAM-MISSING (live dogfood 2026-05-11):
+ * AWS returns "is not authorized to perform" when the operator's
+ * attached IAM policy lacks an action that the apply flow requires.
+ * Two distinct sub-causes:
+ *
+ *   1. The action is missing from the operator policy IN CODE (true
+ *      gap — needs a code change to add to iam-actions/*.ts). Example:
+ *      `dynamodb:UpdateTimeToLive` until the fix that ships alongside
+ *      this hint.
+ *
+ *   2. The action is in CODE but the user's attached AWS policy is an
+ *      OLDER version that predates it. `assignee setup` re-runs the
+ *      `ensurePolicy()` helper which calls `CreatePolicyVersion` to
+ *      refresh the policy in-place — no user-or-role recreation needed.
+ *      Example: `iam:CreateRole` (in code since Story 50-5 but absent
+ *      from operator users provisioned earlier).
+ *
+ * The hint covers both — re-run setup first, file an issue if that
+ * doesn't fix it (then it's case 1).
+ */
+const NOT_AUTHORIZED_SUBSTRING = "is not authorized to perform";
+
+const NOT_AUTHORIZED_HINT =
+  "AWS denied the action because the operator IAM policy lacks the permission. " +
+  "Most often this means the operator user was provisioned by an older version of assignee; " +
+  "run `assignee setup` to refresh the operator policy via CreatePolicyVersion (no user recreation needed). " +
+  "If the error persists after re-running setup, the action is missing from the codebase — " +
+  "file an issue with the AWS message below.";
+
+/**
  * Shared base for ALREADY_EXISTS / THROTTLED / UNKNOWN (and any future
  * kinds we add) — promotes a string literal prefix to a dispatch entry.
  */
@@ -93,6 +123,37 @@ function staticEntry(
     userPrefix: () => prefix,
     shortMessage: () => shortMessage,
   };
+}
+
+/**
+ * Apply registered substring → hint mappings to a raw AWS error
+ * message. Returns the enriched string if any pattern matches, or the
+ * raw string unchanged otherwise. Centralised here so every dispatch
+ * branch that surfaces a raw AWS message gets the same enrichments —
+ * AWS reports the same logical error under different kinds depending
+ * on which SDK pathway hit it, and we don't want classification noise
+ * to suppress an actionable hint.
+ */
+function enrichForUserPrefix(raw: string): string {
+  const lower = raw.toLowerCase();
+  if (lower.includes(DDB_ATTR_DEFS_MISMATCH_SUBSTRING)) {
+    return `${DDB_ATTR_DEFS_HINT}\n\nAWS message: ${raw}`;
+  }
+  if (lower.includes(NOT_AUTHORIZED_SUBSTRING)) {
+    return `${NOT_AUTHORIZED_HINT}\n\nAWS message: ${raw}`;
+  }
+  return raw;
+}
+
+function enrichForShortMessage(raw: string): string {
+  const lower = raw.toLowerCase();
+  if (lower.includes(DDB_ATTR_DEFS_MISMATCH_SUBSTRING)) {
+    return `${DDB_ATTR_DEFS_HINT} (raw: ${raw})`;
+  }
+  if (lower.includes(NOT_AUTHORIZED_SUBSTRING)) {
+    return `${NOT_AUTHORIZED_HINT} (raw: ${raw})`;
+  }
+  return raw;
 }
 
 /**
@@ -118,38 +179,36 @@ const ERROR_DISPATCH: Record<
     "Request throttled by AWS",
   ),
   // Remaining kinds all fall through to UNKNOWN semantics: surface the
-  // adapter's raw message verbatim so the user sees the underlying AWS
-  // reason (e.g. "Unable to locate credentials.", "AccessDenied:
-  // User: arn:aws:iam::…").
+  // adapter's raw message verbatim (with enrichments for known
+  // patterns — see enrichForUserPrefix/enrichForShortMessage above) so
+  // the user sees the underlying AWS reason (e.g. "Unable to locate
+  // credentials.", "AccessDenied: User: arn:aws:iam::…").
+  //
+  // Same enricher applied to ALL UNKNOWN branches: AWS reports the
+  // same logical error under different ProvisioningErrorKinds
+  // depending on which SDK pathway hit it (the DDB UpdateTimeToLive
+  // "not authorized" today surfaced as SERVICE_ERROR, but the Lambda
+  // iam:CreateRole "not authorized" comes through as ACCESS_DENIED).
+  // Routing the hint through one helper keeps them in sync.
   [ProvisioningErrorKind.NOT_FOUND]: {
     errorCode: PROVISIONING_ERROR_CODES.UNKNOWN,
-    userPrefix: (raw) => raw,
-    shortMessage: (raw) => raw,
+    userPrefix: enrichForUserPrefix,
+    shortMessage: enrichForShortMessage,
   },
   [ProvisioningErrorKind.ACCESS_DENIED]: {
     errorCode: PROVISIONING_ERROR_CODES.UNKNOWN,
-    userPrefix: (raw) => raw,
-    shortMessage: (raw) => raw,
+    userPrefix: enrichForUserPrefix,
+    shortMessage: enrichForShortMessage,
   },
   [ProvisioningErrorKind.SERVICE_ERROR]: {
     errorCode: PROVISIONING_ERROR_CODES.UNKNOWN,
-    userPrefix: (raw) => {
-      if (raw.toLowerCase().includes(DDB_ATTR_DEFS_MISMATCH_SUBSTRING)) {
-        return `${DDB_ATTR_DEFS_HINT}\n\nAWS message: ${raw}`;
-      }
-      return raw;
-    },
-    shortMessage: (raw) => {
-      if (raw.toLowerCase().includes(DDB_ATTR_DEFS_MISMATCH_SUBSTRING)) {
-        return `${DDB_ATTR_DEFS_HINT} (raw: ${raw})`;
-      }
-      return raw;
-    },
+    userPrefix: enrichForUserPrefix,
+    shortMessage: enrichForShortMessage,
   },
   [ProvisioningErrorKind.UNKNOWN]: {
     errorCode: PROVISIONING_ERROR_CODES.UNKNOWN,
-    userPrefix: (raw) => raw,
-    shortMessage: (raw) => raw,
+    userPrefix: enrichForUserPrefix,
+    shortMessage: enrichForShortMessage,
   },
 };
 

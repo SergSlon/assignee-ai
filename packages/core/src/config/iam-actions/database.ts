@@ -15,6 +15,15 @@ export const DATABASE_ACTIONS: Record<string, string[]> = {
     "dynamodb:UpdateTable",
     "dynamodb:UpdateContinuousBackups",
     "dynamodb:DescribeContinuousBackups",
+    // DF-DDB-TTL-IAM-MISSING (live dogfood 2026-05-11): CCAPI creates
+    // the table successfully, then issues a separate UpdateTimeToLive
+    // API call when the intent declares TimeToLiveSpecification. The
+    // create succeeds; the TTL enable fails with "is not authorized to
+    // perform: dynamodb:UpdateTimeToLive" → table is leaked
+    // half-configured. DescribeTimeToLive is paired so describe-then-
+    // update flows work for idempotent re-runs.
+    "dynamodb:UpdateTimeToLive",
+    "dynamodb:DescribeTimeToLive",
     "dynamodb:TagResource",
     "dynamodb:ListTagsOfResource",
   ],
