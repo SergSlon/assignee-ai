@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "hash": "06596b5863db5534aff8aecadb9c24faddcb7de5717398343914e4b3b4cbdb6d",
+  "hash": "ff4524eaa3b26f5eb605c96f71044539c0efebad4d77dccb532bbf8e4fa2db2e",
   "files": {
     "apigateway/BP-APIGW-001.yaml": "bec1fb5d3e88707c41e07e4066bee54bc8290f7886ef02fe8054f89199d59267",
     "apigateway/BP-APIGW-002.yaml": "f0b8df494b6fbb8b1a7793a9e408d692fc01355122692bd6af0099f3bc1767f5",
@@ -25,7 +25,7 @@
     "dynamodb/BP-DYNAMODB-003.yaml": "3770e666589fca0cc6373e4804d186fb4d61346ae2306f434771b5b20d6ef164",
     "dynamodb/BP-DYNAMODB-004.yaml": "fdfa8499e0561a2dc55e4641f5f25a617737c34e82d848f2a4ac38e59f945c24",
     "dynamodb/BP-DYNAMODB-005.yaml": "35bc8732d46c4f0f922d410944165d83c1c08425128adc7995df7ba06b98b28d",
-    "dynamodb/BP-DYNAMODB-006.yaml": "a777922538874c7fadb6d86594018ee79156d6f9a8da056ded00510001cf60b4",
+    "dynamodb/BP-DYNAMODB-006.yaml": "4548869f2918e2c335a6b586621ef98c27f56a10c9f779169c2def8dcf3aeb41",
     "ec2/BP-EC2-001.yaml": "44b690a713debc6b7e22f117e3173e925aa7945cef7afae414bf51f2dfe48caa",
     "ec2/BP-EC2-002.yaml": "9b8b94f4a92c61379fffea35403ee5f2ce77f4dc557eb00b93d9f8e49eb0adf7",
     "ec2/BP-EC2-003.yaml": "2b6ee3595303a7d0e72d2bbf0f55825b1b147d9273e668e2edf8a44538429797",
@@ -189,5 +189,5 @@
     "vpc/BP-VPC-002.yaml": "f7c720a24811610df4bac22b00485c0d779ba5452c334bb7266b84afd7160e5f"
   },
   "count": 185,
-  "generatedAt": "2026-05-11T22:05:07.300Z"
+  "generatedAt": "2026-05-13T07:32:48.436Z"
 }

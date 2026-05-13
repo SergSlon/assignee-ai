@@ -459,3 +459,99 @@ describe("createListPricingEnricher — edge cases", () => {
     expect(result.get(kmsArn)).toBe("$1.00/mo");
   });
 });
+
+// ---------------------------------------------------------------------------
+// DF-COST-LABEL-DDB-DESTROY-DUP — usage-based displayPrice must not
+// double the unit suffix. extractFirstTierPrice already returns
+// `$<scaled><unit>`; the enricher previously appended `${item.priceUnit}`
+// again, producing labels like `$0.0000001250/M read reqs/M read reqs`
+// rendered through the destroy flow as
+//   "Estimated savings: $0.0000001250/M read reqs/M read reqs saved"
+// Live verify 2026-05-12.
+// ---------------------------------------------------------------------------
+
+describe("createListPricingEnricher — usage-based unit suffix not doubled (DF-COST-LABEL-DDB-DESTROY-DUP)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockInitConnections.mockResolvedValue(undefined);
+    mockClose.mockResolvedValue(undefined);
+    mockGetTools.mockResolvedValue([
+      { name: "get_pricing", invoke: mockToolInvoke },
+    ]);
+    vi.mocked(getMcpServerConfigs).mockReturnValue({
+      "aws-pricing-mcp-server": {
+        command: "uvx",
+        args: [
+          "--with",
+          "botocore[crt]",
+          "awslabs.aws-pricing-mcp-server@1.0.27",
+        ],
+        env: {
+          AWS_ACCESS_KEY_ID: "AKIAIOSFODNN7EXAMPLE",
+          AWS_SECRET_ACCESS_KEY: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+          AWS_DEFAULT_REGION: "us-east-1",
+          FASTMCP_LOG_LEVEL: "ERROR",
+        },
+      },
+    });
+  });
+
+  it("emits exactly ONE /M read reqs suffix for PAY_PER_REQUEST DDB tables", async () => {
+    const ddbArn = "arn:aws:dynamodb:us-east-1:112233445566:table/UserSessions";
+    // Minimal MCP fixture for the read-request-units rate. The
+    // pricing-enricher's DDB decomposer issues separate calls for
+    // read, write, and storage; we mock the same response shape for
+    // all (the storage and write calls will resolve to the same value,
+    // which is fine — this test only checks suffix duplication, not
+    // dollar accuracy).
+    mockToolInvoke.mockResolvedValue(
+      wrapMcpText(
+        JSON.stringify({
+          status: "success",
+          service_name: "AmazonDynamoDB",
+          data: [
+            {
+              product: {
+                productFamily: "Amazon DynamoDB PayPerRequest Throughput",
+                attributes: {
+                  group: "DDB-ReadUnits",
+                  servicecode: "AmazonDynamoDB",
+                },
+              },
+              terms: {
+                OnDemand: {
+                  "term-1": {
+                    priceDimensions: {
+                      "pd-1": {
+                        rateCode: "pd-1",
+                        beginRange: "0",
+                        endRange: "Inf",
+                        unit: "ReadRequestUnits",
+                        pricePerUnit: { USD: "0.2500000000" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        }),
+      ),
+    );
+
+    const enricher = createListPricingEnricher();
+    const result = await enricher([
+      makeResource(ddbArn, "AWS::DynamoDB::Table"),
+    ]);
+
+    const label = result.get(ddbArn);
+    expect(label).toBeDefined();
+    // Pre-fix this would be "$0.2500/M read reqs/M read reqs" — the
+    // /M read reqs suffix must appear AT MOST ONCE.
+    const readReqsMatches = (label!.match(/\/M read reqs/g) ?? []).length;
+    expect(readReqsMatches).toBeLessThanOrEqual(1);
+    // And the doubled-suffix substring must never appear.
+    expect(label).not.toContain("/M read reqs/M read reqs");
+    expect(label).not.toContain("/M write reqs/M write reqs");
+  });
+});

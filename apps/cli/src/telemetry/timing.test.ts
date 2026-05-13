@@ -10,6 +10,7 @@ import {
   resetTimings,
   checkTimingsAgainstBudgets,
   setApplyBudgetContext,
+  setCommandResult,
 } from "./timing.js";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -618,6 +619,139 @@ describe("timing", () => {
       const mcpWarnings = warnings.filter((w) => w.includes("MCP startup"));
       expect(mcpWarnings).toHaveLength(1);
       expect(mcpWarnings[0]).toContain("budget: 5000ms");
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Wave 3 (DF-PLAN-BUDGET-WARNING-AFTER-SUCCESS): suppress the `total`
+  // budget warning when the command succeeded. Live verify 2026-05-12:
+  // `assignee plan` succeeded in 81s and showed BOTH a green outro AND
+  // `[assignee] WARNING: BUDGET EXCEEDED: Total command runtime took
+  // 81569ms (budget: 60000ms)` — contradictory UX. Per-phase warnings
+  // (mcp-startup etc.) keep firing because they measure cold-start
+  // regardless of command outcome.
+  // ---------------------------------------------------------------------------
+
+  describe("Wave 3 — `setCommandResult(true)` suppresses total-budget warning", () => {
+    const realWrite = process.stderr.write.bind(process.stderr);
+    let warnings: string[] = [];
+
+    beforeEach(() => {
+      warnings = [];
+      process.stderr.write = vi.fn((chunk: unknown) => {
+        warnings.push(String(chunk));
+        return true;
+      }) as unknown as typeof process.stderr.write;
+      vi.stubEnv("CI", "");
+    });
+
+    afterEach(() => {
+      process.stderr.write = realWrite;
+      vi.unstubAllEnvs();
+    });
+
+    function synthesiseTotalMs(elapsedMs: number): void {
+      const hrtimeSpy = vi
+        .spyOn(process.hrtime, "bigint")
+        .mockReturnValueOnce(0n)
+        .mockReturnValueOnce(BigInt(elapsedMs) * 1_000_000n);
+      startTimer("total");
+      endTimer("total");
+      hrtimeSpy.mockRestore();
+    }
+
+    it("suppresses the total warning on a slow successful command (81s plan)", () => {
+      synthesiseTotalMs(81_000);
+      setCommandResult(true);
+
+      checkTimingsAgainstBudgets();
+
+      const totalWarnings = warnings.filter((w) =>
+        w.includes("Total command runtime"),
+      );
+      expect(totalWarnings).toHaveLength(0);
+    });
+
+    it("still emits the total warning on a slow FAILED command (silent-hang signal preserved)", () => {
+      synthesiseTotalMs(81_000);
+      setCommandResult(false);
+
+      checkTimingsAgainstBudgets();
+
+      const totalWarnings = warnings.filter((w) =>
+        w.includes("Total command runtime"),
+      );
+      expect(totalWarnings).toHaveLength(1);
+    });
+
+    it("still emits the total warning when the result is undefined (defensive: no setCommandResult call)", () => {
+      // Pre-Wave-3 behavior must be preserved for any callsite that
+      // forgets to thread the success flag — better to over-warn than
+      // silently hide a real performance regression.
+      synthesiseTotalMs(81_000);
+      // Deliberately DON'T call setCommandResult.
+
+      checkTimingsAgainstBudgets();
+
+      const totalWarnings = warnings.filter((w) =>
+        w.includes("Total command runtime"),
+      );
+      expect(totalWarnings).toHaveLength(1);
+    });
+
+    it("does NOT suppress per-phase warnings (mcp-startup) on success", () => {
+      // The success flag only mutes the `total` warning. Cold-start
+      // sub-phase budgets keep firing because they measure things the
+      // user can't see (and that don't co-exist with the success
+      // outro line).
+      const hrtimeSpy = vi
+        .spyOn(process.hrtime, "bigint")
+        .mockReturnValueOnce(0n)
+        .mockReturnValueOnce(6_000_000_000n);
+      startTimer("mcp-startup");
+      endTimer("mcp-startup");
+      hrtimeSpy.mockRestore();
+      setCommandResult(true);
+
+      checkTimingsAgainstBudgets();
+
+      const mcpWarnings = warnings.filter((w) => w.includes("MCP startup"));
+      expect(mcpWarnings).toHaveLength(1);
+    });
+
+    it("resetTimings() clears the success flag (no leak between runs)", () => {
+      // A prior successful run sets the flag → its warning is muted.
+      // A subsequent failing run MUST see the warning re-fire. The
+      // runner calls resetTimings() at the start of every command.
+      setCommandResult(true);
+      resetTimings();
+      synthesiseTotalMs(81_000);
+      // Deliberately don't call setCommandResult — simulates a failure
+      // path that exits before threading the result back.
+
+      checkTimingsAgainstBudgets();
+
+      const totalWarnings = warnings.filter((w) =>
+        w.includes("Total command runtime"),
+      );
+      expect(totalWarnings).toHaveLength(1);
+    });
+
+    it("Wave 3 stacks with Wave 2 (PR #51) — CloudFront compound apply that succeeds skips warning via BOTH paths", () => {
+      // 5min successful CloudFront compound apply: the W5.P2 override
+      // raises the budget to 360s (Wave 2 / PR #51) AND the success
+      // flag suppresses the warning (Wave 3). Either alone would
+      // suppress it; both together is defense in depth.
+      synthesiseTotalMs(303_710);
+      setApplyBudgetContext("AWS::CloudFront::Distribution");
+      setCommandResult(true);
+
+      checkTimingsAgainstBudgets();
+
+      const totalWarnings = warnings.filter((w) =>
+        w.includes("Total command runtime"),
+      );
+      expect(totalWarnings).toHaveLength(0);
     });
   });
 });
