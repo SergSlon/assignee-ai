@@ -200,6 +200,39 @@ function effectiveTotalBudgetMs(): number {
 }
 
 /**
+ * DF-PLAN-BUDGET-WARNING-AFTER-SUCCESS (live verify 2026-05-12): the
+ * `total` timer fires its BUDGET EXCEEDED warning after a successful
+ * `assignee plan` that genuinely took 81s due to slow MCP cold-start
+ * + LLM latency. The original "60s rule" intent was to catch silent
+ * hangs — when the command succeeded, the user already got their
+ * answer; the warning is pure noise (and contradicts the ✓ Operation
+ * completed successfully line directly above it).
+ *
+ * Setter is called from the runner's finally block once the
+ * command-level outcome is known, BEFORE persistTimings →
+ * checkTimingsAgainstBudgets fires. Only the `total` warning is
+ * suppressed on success; the per-phase warnings (cli-parse,
+ * mcp-startup, first-llm-call) keep firing because they measure
+ * cold-start independent of command outcome.
+ *
+ * Apply context overrides (PR #51) stack with this: a CloudFront
+ * compound apply that takes 5min AND succeeds skips the warning via
+ * BOTH paths.
+ */
+let commandSucceeded: boolean | undefined;
+
+/**
+ * Set the command-level success flag for the budget check. Pass
+ * `true` from the runner's success path, `false` from the failure
+ * path. When set to `true`, `checkTimingsAgainstBudgets` suppresses
+ * the `total` warning regardless of overrun (other phase warnings
+ * still fire). When unset or `false`, the previous behavior holds.
+ */
+export function setCommandResult(succeeded: boolean | undefined): void {
+  commandSucceeded = succeeded;
+}
+
+/**
  * Check completed timings against budgets and emit warnings to stderr
  * for any phase that exceeds its budget. Called automatically after
  * persisting timings.
@@ -209,11 +242,24 @@ function effectiveTotalBudgetMs(): number {
  * long completion windows (e.g. SQS apply at 73-74s) don't trip the
  * 60s rule. Other phases (mcp-startup, cli-parse, etc.) are
  * unchanged — they measure CLI cold-start, not AWS-side latency.
+ *
+ * Wave 3 (DF-PLAN-BUDGET-WARNING-AFTER-SUCCESS): the `total` warning
+ * is also suppressed when `commandSucceeded === true` — a slow but
+ * successful command is not a UX failure the user needs reminding
+ * about (the success message itself is the proof of life).
  */
 export function checkTimingsAgainstBudgets(): void {
   for (const [timerLabel, budget] of Object.entries(LABEL_TO_BUDGET)) {
     const actualMs = completed.get(timerLabel);
     if (actualMs === undefined) continue;
+
+    // Suppress the `total` warning on successful commands — the only
+    // thing a slow success tells the user is "this could be faster",
+    // which is not worth a stderr WARNING line above a green outro.
+    // Failed / unknown-outcome commands keep the warning so silent
+    // hangs / timeouts are still surfaced (the original 60s-rule
+    // intent).
+    if (timerLabel === "total" && commandSucceeded === true) continue;
 
     const effectiveBudget =
       timerLabel === "total" ? effectiveTotalBudgetMs() : budget.budgetMs;
@@ -309,4 +355,5 @@ export function resetTimings(): void {
   pending.clear();
   completed.clear();
   applyResourceTypes = undefined;
+  commandSucceeded = undefined;
 }

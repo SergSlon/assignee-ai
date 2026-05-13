@@ -37,6 +37,7 @@ import {
   endTimer,
   persistTimings,
   resetTimings,
+  setCommandResult,
 } from "../../telemetry/timing.js";
 import { resolveCredentials } from "./credentials.js";
 import { buildLlmClient } from "./llm-factory.js";
@@ -148,6 +149,13 @@ export async function runCommand(opts: RunCommandOptions): Promise<void> {
 
         if (!opts.silent) renderOutro(result.success);
         await closeMcpClient().catch(() => {});
+        // DF-PLAN-BUDGET-WARNING-AFTER-SUCCESS: thread the result into
+        // the timing layer so `checkTimingsAgainstBudgets` (called from
+        // `persistTimings` in the outer finally) suppresses the noisy
+        // BUDGET EXCEEDED line on the `total` timer when the user
+        // already saw a successful outcome above. Failed runs still
+        // get the warning so silent-hang regressions are still caught.
+        setCommandResult(result.success);
         if (!result.success) return;
       } catch (err: unknown) {
         stopSpinner();
@@ -170,6 +178,7 @@ export async function runCommand(opts: RunCommandOptions): Promise<void> {
           renderOutro(false);
         }
         await closeMcpClient().catch(() => {});
+        setCommandResult(false);
         if (err instanceof AssigneeError) throw err;
         throw new AssigneeError(
           `${opts.errorPrefix}: ${errMsg}`,

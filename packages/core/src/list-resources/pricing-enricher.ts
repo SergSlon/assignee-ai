@@ -446,8 +446,17 @@ export function createListPricingEnricher(): PricingEnricher {
                     item.filters,
                   );
                   if (priceStr) {
+                    // DF-COST-LABEL-DDB-DESTROY-DUP (live verify 2026-05-12):
+                    // extractFirstTierPrice already returns
+                    // `$<scaled><priceUnit>` (e.g. `$0.0000001250/M read reqs`)
+                    // because it appends `${unit}` itself. The previous
+                    // template here re-appended `${item.priceUnit}`,
+                    // producing the doubled suffix observed on
+                    // `assignee destroy <ddb-table-arn>`:
+                    //   "Estimated savings: $0.0000001250/M read reqs/M read reqs saved"
+                    // Push priceStr directly — the unit is already in there.
                     usageResults.push({
-                      displayPrice: `${priceStr}${item.priceUnit}`,
+                      displayPrice: priceStr,
                     });
                   }
                 }
