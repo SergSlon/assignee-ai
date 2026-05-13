@@ -17,6 +17,25 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### EventBridge bare-Rule routing + no-target advisory (SX-1 / PH1-H-1 BLOCKER, 2026-05-13)
+
+- core `pattern-templates/patterns/scheduled-lambda.ts`: extend the keyword
+  list with four bare-Rule phrasings — `"EventBridge rule"`, `"fires every"`,
+  `"fires at"`, `"trigger every"`. Intent `"Create an EventBridge rule that
+fires every 5 minutes"` now routes to the `scheduled-lambda` compound
+  (4 resources with a wired Lambda target) instead of producing a target-less
+  `AWS::Events::Rule` with a CRITICAL finding and no path forward.
+- core: NEW `graph/nodes/advice/eventbridge-no-target-hint.ts` advisor helper
+  - wired into `advice-generator.ts`. When the planner still produces a bare
+    `AWS::Events::Rule` with no Targets (keyword routing miss), an actionable
+    HIGH advisory now suggests `assignee plan "scheduled lambda <schedule>"`
+    or `--set Targets=...` to recover.
+- Per Winston's compound-pattern architectural memo (`arch-compound-pattern-coverage-2026-05-13.md`),
+  the long-tail fix (LLM-fallback compound classifier) is filed in
+  `_bmad-output/implementation-artifacts/sprint-status.yaml` under
+  `deferred-backlog.deferred-llm-fallback-compound-classifier` with rationale
+  `"needs planner-fallback architecture, not keyword whack-a-mole"`.
+
 ### Security: bump langsmith pnpm override to ^0.6.0 — GHSA-3644-q5cj-c5c7 (2026-05-13)
 
 - **CVE fix**: GHSA-3644-q5cj-c5c7 (langsmith <0.6.0 deserializes untrusted prompt

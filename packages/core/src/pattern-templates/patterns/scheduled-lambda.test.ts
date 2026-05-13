@@ -185,6 +185,13 @@ describe("scheduledLambdaPattern — registry detection & ordering", () => {
     "lambda on-a-schedule triggered by cron",
     "hourly lambda for metric roll-up",
     "daily lambda for report generation",
+    // SX-1 (2026-05-13, PH1-H-1 BLOCKER) — bare EventBridge rule phrasing
+    // that previously routed to a single-resource Events::Rule with no Targets
+    "Create an EventBridge rule that fires every 5 minutes",
+    "Create an EventBridge rule with rate(5 minutes)",
+    "trigger every 15 minutes via EventBridge",
+    "fires every hour for log processing",
+    "fires at cron(0 12 * * ? *) daily noon",
   ];
 
   for (const intent of positiveCases) {
