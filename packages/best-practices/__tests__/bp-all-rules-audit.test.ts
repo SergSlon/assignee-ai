@@ -1529,6 +1529,10 @@ const sqsRules: RuleSpec[] = [
     propertyPath: "KmsMasterKeyId",
     checkType: "exists",
     expectedValue: true,
+    // BR-1 / PH1-B-2: demoted from HIGH to MEDIUM — SqsManagedSseEnabled already
+    // satisfies FSBP SQS.1. KMS-CMK is a compliance-workload recommendation, not
+    // a universal HIGH finding. Severity lock prevents future regression.
+    severity: "MEDIUM",
   },
   {
     id: "BP-SQS-004",
