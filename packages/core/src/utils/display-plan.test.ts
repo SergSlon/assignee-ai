@@ -6,7 +6,7 @@
  * value, and that the legacy callers (no source) still work unchanged.
  */
 
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import {
   formatCostLine,
   formatPricingBreakdown,
@@ -15,6 +15,7 @@ import {
   serializePlanEnvelope,
   serializeErrorEnvelope,
 } from "./display-plan.js";
+import { formatDesiredState } from "./display-helpers/format-desired-state.js";
 import type { DataSource } from "../pricing/types.js";
 import type { RenderableState } from "./display-helpers/renderable-state.js";
 import type { PricingBreakdown } from "../pricing/decomposer-types.js";
@@ -557,5 +558,164 @@ describe("formatPricingBreakdown — tiered rate display (feature-pricing-tiered
         (l.includes("GB") && l.includes("TB") && l.includes("$")),
     );
     expect(transferLines.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ── SX-5 / PH1-F-2: empty-row suppression in configBlock rendering ────────────
+//
+// Probe plan variations A-D test formatDesiredState directly (the function
+// that populates the Config: block). This avoids TTY/boxen complexity while
+// testing the canonical render logic. renderPlanBox is separately tested below
+// for a lightweight integration path.
+
+describe("formatDesiredState — empty-row suppression (SX-5 / PH1-F-2)", () => {
+  // Variation A — VPCSecurityGroupIds: [] (empty array)
+  // The row should be suppressed entirely (no blank "VPC Security Groups" line).
+  it("Variation A — VPCSecurityGroupIds: [] is suppressed (no blank security group row)", () => {
+    const result = formatDesiredState(
+      {
+        DBInstanceIdentifier: "my-rds-instance",
+        DBInstanceClass: "db.t3.micro",
+        Engine: "mysql",
+        VPCSecurityGroupIds: [],
+      },
+      "AWS::RDS::DBInstance",
+    );
+    // The row "VPC Security Groups" (or any label for VPCSecurityGroupIds)
+    // must NOT be present because the value renders as an empty string.
+    expect(result).not.toMatch(/VPCSecurityGroupIds/i);
+    expect(result).not.toMatch(/VPC Security Groups/i);
+    // Other non-empty rows must still appear.
+    expect(result).toContain("my-rds-instance");
+    expect(result).toContain("db.t3.micro");
+  });
+
+  // Variation B — non-empty VPCSecurityGroupIds: ["sg-12345"] is preserved
+  it("Variation B — VPCSecurityGroupIds: [sg-12345] is preserved (row renders normally)", () => {
+    const result = formatDesiredState(
+      {
+        DBInstanceIdentifier: "my-rds-instance",
+        DBInstanceClass: "db.t3.micro",
+        Engine: "mysql",
+        VPCSecurityGroupIds: ["sg-12345"],
+      },
+      "AWS::RDS::DBInstance",
+    );
+    // Row must appear with the sg- value.
+    expect(result).toContain("sg-12345");
+    // Other rows preserved too.
+    expect(result).toContain("my-rds-instance");
+  });
+
+  // Variation C — empty string value (Comment: "")
+  it("Variation C — Comment: empty string is suppressed", () => {
+    const result = formatDesiredState({
+      FunctionName: "my-lambda",
+      Runtime: "nodejs20.x",
+      Comment: "",
+    });
+    // Row must NOT be present because value is an empty string.
+    expect(result).not.toMatch(/Comment/i);
+    // Other rows preserved.
+    expect(result).toContain("my-lambda");
+    expect(result).toContain("nodejs20.x");
+  });
+
+  // Variation D — null / undefined value is NOT suppressed (renders as "-")
+  // The null/undefined path in formatValue returns "-" (non-empty), so the row
+  // should remain visible. This verifies we only suppress truly empty-string
+  // renders, not missing/null values.
+  it("Variation D — null value renders as dash, row is NOT suppressed", () => {
+    const result = formatDesiredState({
+      BucketName: "my-bucket",
+      OptionalField: null,
+    });
+    // null → "-" which is non-empty, so the row should remain.
+    // The friendly-names resolver may humanize the key (e.g. "Optional Field"),
+    // so we check for the dash value rather than the raw key name.
+    expect(result).toContain("-");
+    expect(result).toContain("my-bucket");
+    // The raw key OR its humanized variant must appear (not suppressed).
+    expect(result).toMatch(/Optional\s*Field/i);
+  });
+
+  // Non-regression: an entirely empty desiredState object → "(none)"
+  it("entirely empty state object → returns (none)", () => {
+    const result = formatDesiredState({});
+    expect(result).toBe("(none)");
+  });
+
+  // Non-regression: a state where the ONLY field is an empty array produces
+  // an empty-string result (all rows suppressed, join gives "").
+  it("only field is an empty array → all rows suppressed → join returns empty string", () => {
+    const result = formatDesiredState({ Tags: [] });
+    expect(result).toBe("");
+  });
+});
+
+// ── SX-5: renderPlanBox non-TTY integration for empty-row suppression ─────────
+
+describe("renderPlanBox — empty-row suppression integration (SX-5)", () => {
+  let captured: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let stdoutSpy: any;
+
+  beforeEach(() => {
+    captured = "";
+    stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(((
+      chunk: unknown,
+    ) => {
+      captured +=
+        typeof chunk === "string"
+          ? chunk
+          : Buffer.from(chunk as Uint8Array).toString("utf8");
+      return true;
+    }) as typeof process.stdout.write);
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+  });
+
+  afterEach(() => {
+    stdoutSpy.mockRestore();
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  const baseRdsState: RenderableState = {
+    resourceType: "AWS::RDS::DBInstance",
+    runId: "run-sx5-a",
+    desiredState: {
+      DBInstanceIdentifier: "staging-db",
+      DBInstanceClass: "db.t3.micro",
+      Engine: "mysql",
+      VPCSecurityGroupIds: [],
+    },
+    estimatedMonthlyCost: "~$15.00/mo",
+  };
+
+  it("plan box with VPCSecurityGroupIds: [] does not render a blank security-group row", () => {
+    renderPlanBox(baseRdsState);
+    // No blank VPCSecurityGroupIds row in the rendered plan box.
+    expect(captured).not.toMatch(/VPC Security Groups\s*\n/);
+    expect(captured).not.toMatch(/VPCSecurityGroupIds\s*\n/);
+    // Other key fields still visible.
+    expect(captured).toContain("staging-db");
+    expect(captured).toContain("db.t3.micro");
+  });
+
+  it("plan box with VPCSecurityGroupIds: [sg-abc] renders the row normally", () => {
+    renderPlanBox({
+      ...baseRdsState,
+      runId: "run-sx5-b",
+      desiredState: {
+        ...baseRdsState.desiredState,
+        VPCSecurityGroupIds: ["sg-abc123"],
+      },
+    });
+    expect(captured).toContain("sg-abc123");
   });
 });
