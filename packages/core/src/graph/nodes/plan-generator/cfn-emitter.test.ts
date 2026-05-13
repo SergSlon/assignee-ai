@@ -56,6 +56,117 @@ describe("cfn-emitter direct import", () => {
       });
       expect(transformed[CfnKey.BUCKET_ENCRYPTION]).toBeUndefined();
     });
+
+    // ── PD-4 lifecycle tests ─────────────────────────────────────────────
+    describe("lifecycle — PD-4 expire-only path (LifecycleExpireOnly=true)", () => {
+      it("Variation A — bare 'lifecycle 30d': emits expire-only rule, no Transitions", () => {
+        // Simulates what the s3-lifecycle-extractor sets for "Create an S3 bucket with lifecycle 30d"
+        const transformed: Record<string, unknown> = {};
+        assembleS3Composites(transformed, {
+          [CfnKey.ENABLE_LIFECYCLE]: true,
+          [CfnKey.LIFECYCLE_EXPIRE_ONLY]: true,
+          [CfnKey.LIFECYCLE_EXPIRATION_DAYS]: "30",
+        });
+        const lc = transformed[CfnKey.LIFECYCLE_CONFIGURATION] as {
+          Rules: Array<Record<string, unknown>>;
+        };
+        expect(lc).toBeDefined();
+        expect(lc.Rules).toHaveLength(1);
+        const rule = lc.Rules[0]!;
+        expect(rule[CfnKey.EXPIRATION_IN_DAYS]).toBe(30);
+        expect(rule["Transitions"]).toBeUndefined();
+      });
+
+      it("Variation D — lifecycle 90d: emits ExpirationInDays=90, no Transitions", () => {
+        const transformed: Record<string, unknown> = {};
+        assembleS3Composites(transformed, {
+          [CfnKey.ENABLE_LIFECYCLE]: true,
+          [CfnKey.LIFECYCLE_EXPIRE_ONLY]: true,
+          [CfnKey.LIFECYCLE_EXPIRATION_DAYS]: "90",
+        });
+        const lc = transformed[CfnKey.LIFECYCLE_CONFIGURATION] as {
+          Rules: Array<Record<string, unknown>>;
+        };
+        expect(lc.Rules[0]![CfnKey.EXPIRATION_IN_DAYS]).toBe(90);
+        expect(lc.Rules[0]!["Transitions"]).toBeUndefined();
+      });
+
+      it("expire-only path cleans up wizard-only keys from transformed", () => {
+        const transformed: Record<string, unknown> = {
+          [CfnKey.ENABLE_LIFECYCLE]: true,
+          [CfnKey.LIFECYCLE_EXPIRE_ONLY]: true,
+          [CfnKey.LIFECYCLE_EXPIRATION_DAYS]: "30",
+        };
+        assembleS3Composites(transformed, {
+          [CfnKey.ENABLE_LIFECYCLE]: true,
+          [CfnKey.LIFECYCLE_EXPIRE_ONLY]: true,
+          [CfnKey.LIFECYCLE_EXPIRATION_DAYS]: "30",
+        });
+        expect(transformed[CfnKey.ENABLE_LIFECYCLE]).toBeUndefined();
+        expect(transformed[CfnKey.LIFECYCLE_EXPIRE_ONLY]).toBeUndefined();
+        expect(transformed[CfnKey.LIFECYCLE_EXPIRATION_DAYS]).toBeUndefined();
+      });
+    });
+
+    describe("lifecycle — Variation B: explicit transition + expire ladder", () => {
+      it("emits Transitions + ExpirationInDays when LifecycleExpireOnly is absent", () => {
+        // Simulates: "transition to IA after 30 days then expire after 90 days"
+        // No LifecycleExpireOnly flag → full multi-rule path.
+        const transformed: Record<string, unknown> = {};
+        assembleS3Composites(transformed, {
+          [CfnKey.ENABLE_LIFECYCLE]: true,
+          [CfnKey.LIFECYCLE_TRANSITION_DAYS]: "30",
+          [CfnKey.LIFECYCLE_EXPIRATION_DAYS]: "90",
+        });
+        const lc = transformed[CfnKey.LIFECYCLE_CONFIGURATION] as {
+          Rules: Array<Record<string, unknown>>;
+        };
+        expect(lc).toBeDefined();
+        const rule = lc.Rules[0]!;
+        const transitions = rule["Transitions"] as Array<{
+          StorageClass: string;
+          TransitionInDays: number;
+        }>;
+        expect(transitions).toHaveLength(1);
+        expect(transitions[0]!.StorageClass).toBe("STANDARD_IA");
+        expect(transitions[0]!.TransitionInDays).toBe(30);
+        expect(rule[CfnKey.EXPIRATION_IN_DAYS]).toBe(90);
+      });
+    });
+
+    describe("lifecycle — Variation C: no lifecycle keyword", () => {
+      it("emits no LifecycleConfiguration when EnableLifecycle is absent", () => {
+        const transformed: Record<string, unknown> = {};
+        assembleS3Composites(transformed, {
+          [CfnKey.BUCKET_ENCRYPTION]: false,
+        });
+        expect(transformed[CfnKey.LIFECYCLE_CONFIGURATION]).toBeUndefined();
+      });
+    });
+
+    describe("lifecycle — Variation E: explicit --set Transitions override", () => {
+      it("full multi-rule path when LifecycleExpireOnly is explicitly false", () => {
+        // Simulates --set with explicit Transitions override
+        const transformed: Record<string, unknown> = {};
+        assembleS3Composites(transformed, {
+          [CfnKey.ENABLE_LIFECYCLE]: true,
+          [CfnKey.LIFECYCLE_EXPIRE_ONLY]: false,
+          [CfnKey.LIFECYCLE_TRANSITION_DAYS]: "60",
+          [CfnKey.LIFECYCLE_EXPIRATION_DAYS]: "180",
+        });
+        const lc = transformed[CfnKey.LIFECYCLE_CONFIGURATION] as {
+          Rules: Array<Record<string, unknown>>;
+        };
+        const rule = lc.Rules[0]!;
+        const transitions = rule["Transitions"] as Array<{
+          StorageClass: string;
+          TransitionInDays: number;
+        }>;
+        expect(transitions[0]!.StorageClass).toBe("STANDARD_IA");
+        expect(transitions[0]!.TransitionInDays).toBe(60);
+        expect(rule[CfnKey.EXPIRATION_IN_DAYS]).toBe(180);
+      });
+    });
   });
 
   describe("assembleEc2Storage", () => {

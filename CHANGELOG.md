@@ -84,6 +84,30 @@ with KMS`) demoted from HIGH → MEDIUM severity. The rule previously fired
   no over-clearing on back-to-back priced resources), Variation E (direct
   reducer contract test).
 
+### S3 lifecycle "30d" contradiction fix (PD-4 / PH1-E-1, 2026-05-13)
+
+- core: **fix** — intent `"Create an S3 bucket with lifecycle 30d"` now emits
+  an **expire-only** LifecycleConfiguration (no STANDARD_IA transition). The
+  previous behaviour emitted both an IA transition and a 30-day expiration at
+  the same boundary, making the transition pointless (objects are deleted
+  before they can benefit from the IA-tier price reduction). A non-blocking
+  advisory is added to the plan envelope:
+  `"Lifecycle simplified to expire-after-<N>d. Use 'transition to IA after Nd
+then expire after Md' for a multi-tier ladder."`
+- core: NEW `intent-parser/extractors/s3-lifecycle-extractor.ts` — detects
+  bare `"lifecycle Nd"` / `"lifecycle N days"` phrases for S3 buckets and sets
+  `LifecycleExpireOnly=true` + `LifecycleExpirationDays=N` on `elicitedOptions`.
+  When the intent contains BOTH `"transition"` AND `"expire"` keywords the
+  extractor defers to the full multi-rule lifecycle path unchanged.
+- core: NEW `CfnKey.LIFECYCLE_EXPIRE_ONLY` wizard-only key —
+  `"LifecycleExpireOnly"` — consumed by `assembleS3Composites` in
+  `plan-generator/cfn-emitter.ts` to select the expire-only rule shape.
+- core: `assembleS3Composites` updated to branch on `LifecycleExpireOnly`:
+  `true` → `{ Id, Status, ExpirationInDays }` (no `Transitions`);
+  falsy → existing full-ladder path preserved.
+- tests: 21 new unit tests in `s3-lifecycle-extractor.test.ts` (5 probe
+  variations A–E) + 8 new lifecycle-specific tests in `cfn-emitter.test.ts`.
+
 ### KMS alias-based default-CMK resolver (epic-104 Wave C, 2026-05-08)
 
 - core: NEW `services/kms-alias-resolver.ts` exports

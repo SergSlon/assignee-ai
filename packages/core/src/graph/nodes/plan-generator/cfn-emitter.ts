@@ -107,57 +107,89 @@ export function assembleS3Composites(
 
   // ── Lifecycle ──
   if (options[CfnKey.ENABLE_LIFECYCLE] === true) {
-    // M-R9: `parseInt(...) || 30` swallows a deliberate `0` from the user.
-    // Validate the parsed integer is finite AND non-negative; otherwise fall
-    // back to the 30-day default. `0` for transition days is meaningful
-    // (immediate transition) and must not be silently rewritten.
-    const parsedTransition = parseInt(
-      String(options[CfnKey.LIFECYCLE_TRANSITION_DAYS] ?? "30"),
-      10,
-    );
-    const transitionDays =
-      Number.isFinite(parsedTransition) && parsedTransition >= 0
-        ? parsedTransition
-        : 30;
-    // V1 PARTIAL: same Number.isFinite-based parse as transitionDays above.
-    // The previous `parseInt(...) ?` antipattern silently swallowed
-    // non-numeric input. 0 is still treated as "no expiration" because the
-    // downstream `expirationDays && expirationDays > 0` check requires a
-    // strictly positive value (AWS rejects 0-day expirations).
-    const expirationDaysRaw = options[CfnKey.LIFECYCLE_EXPIRATION_DAYS];
-    let expirationDays: number | undefined;
-    if (expirationDaysRaw !== undefined && expirationDaysRaw !== null) {
-      const trimmed = String(expirationDaysRaw).trim();
-      if (trimmed.length > 0) {
-        const parsed = parseInt(trimmed, 10);
-        expirationDays = Number.isFinite(parsed) ? parsed : undefined;
-      }
-    }
+    // PD-4: when the extractor set LIFECYCLE_EXPIRE_ONLY=true the user
+    // asked for a bare "lifecycle Nd" — emit an expire-only rule with no
+    // IA transition. An IA transition at the same boundary as expiration
+    // is pointless (object is deleted before any IA savings accrue).
+    const expireOnly = options[CfnKey.LIFECYCLE_EXPIRE_ONLY] === true;
 
-    const rule: Record<string, unknown> = {
-      Id: "assignee-default-lifecycle",
-      Status: CfnKey.ENABLED,
-      Transitions: [
-        { StorageClass: "STANDARD_IA", TransitionInDays: transitionDays },
-      ],
-    };
-    if (expirationDays && expirationDays > 0) {
-      // AWS requires expiration > transition days; clamp to transitionDays + 1 minimum
-      if (expirationDays <= transitionDays) {
-        process.stderr.write(
-          `Warning: Expiration (${expirationDays}d) must be greater than transition (${transitionDays}d). Adjusted to ${transitionDays + 1}d.\n`,
+    if (expireOnly) {
+      // Parse expiration days set by the extractor (required when expireOnly).
+      const expirationDaysRaw = options[CfnKey.LIFECYCLE_EXPIRATION_DAYS];
+      let expirationDays = 30; // safe default matching the "lifecycle 30d" bare phrase
+      if (expirationDaysRaw !== undefined && expirationDaysRaw !== null) {
+        const trimmed = String(expirationDaysRaw).trim();
+        if (trimmed.length > 0) {
+          const parsed = parseInt(trimmed, 10);
+          if (Number.isFinite(parsed) && parsed >= 1) expirationDays = parsed;
+        }
+      }
+      transformed[CfnKey.LIFECYCLE_CONFIGURATION] = {
+        Rules: [
+          {
+            Id: "assignee-default-lifecycle",
+            Status: CfnKey.ENABLED,
+            ExpirationInDays: expirationDays,
+            // No Transitions — IA tier is pointless when expiration fires
+            // at the same boundary (PD-4 / PH1-E-1).
+          },
+        ],
+      };
+    } else {
+      // Full multi-rule lifecycle (transition + optional expiration).
+      // M-R9: `parseInt(...) || 30` swallows a deliberate `0` from the user.
+      // Validate the parsed integer is finite AND non-negative; otherwise fall
+      // back to the 30-day default. `0` for transition days is meaningful
+      // (immediate transition) and must not be silently rewritten.
+      const parsedTransition = parseInt(
+        String(options[CfnKey.LIFECYCLE_TRANSITION_DAYS] ?? "30"),
+        10,
+      );
+      const transitionDays =
+        Number.isFinite(parsedTransition) && parsedTransition >= 0
+          ? parsedTransition
+          : 30;
+      // V1 PARTIAL: same Number.isFinite-based parse as transitionDays above.
+      // The previous `parseInt(...) ?` antipattern silently swallowed
+      // non-numeric input. 0 is still treated as "no expiration" because the
+      // downstream `expirationDays && expirationDays > 0` check requires a
+      // strictly positive value (AWS rejects 0-day expirations).
+      const expirationDaysRaw = options[CfnKey.LIFECYCLE_EXPIRATION_DAYS];
+      let expirationDays: number | undefined;
+      if (expirationDaysRaw !== undefined && expirationDaysRaw !== null) {
+        const trimmed = String(expirationDaysRaw).trim();
+        if (trimmed.length > 0) {
+          const parsed = parseInt(trimmed, 10);
+          expirationDays = Number.isFinite(parsed) ? parsed : undefined;
+        }
+      }
+
+      const rule: Record<string, unknown> = {
+        Id: "assignee-default-lifecycle",
+        Status: CfnKey.ENABLED,
+        Transitions: [
+          { StorageClass: "STANDARD_IA", TransitionInDays: transitionDays },
+        ],
+      };
+      if (expirationDays && expirationDays > 0) {
+        // AWS requires expiration > transition days; clamp to transitionDays + 1 minimum
+        if (expirationDays <= transitionDays) {
+          process.stderr.write(
+            `Warning: Expiration (${expirationDays}d) must be greater than transition (${transitionDays}d). Adjusted to ${transitionDays + 1}d.\n`,
+          );
+        }
+        rule[CfnKey.EXPIRATION_IN_DAYS] = Math.max(
+          expirationDays,
+          transitionDays + 1,
         );
       }
-      rule[CfnKey.EXPIRATION_IN_DAYS] = Math.max(
-        expirationDays,
-        transitionDays + 1,
-      );
+      transformed[CfnKey.LIFECYCLE_CONFIGURATION] = { Rules: [rule] };
     }
-    transformed[CfnKey.LIFECYCLE_CONFIGURATION] = { Rules: [rule] };
   }
   delete transformed[CfnKey.ENABLE_LIFECYCLE];
   delete transformed[CfnKey.LIFECYCLE_TRANSITION_DAYS];
   delete transformed[CfnKey.LIFECYCLE_EXPIRATION_DAYS];
+  delete transformed[CfnKey.LIFECYCLE_EXPIRE_ONLY];
 
   // ── CORS ──
   if (options[CfnKey.ENABLE_CORS] === true) {
