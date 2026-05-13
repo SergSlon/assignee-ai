@@ -12,6 +12,33 @@ import {
 } from "@/pricing/advisory-prices.js";
 import { enrichedLabel } from "./enriched-label.js";
 
+/**
+ * Calculates the approximate number of times a `rate(N unit)` schedule
+ * fires per calendar month (30.44-day average). Returns 0 if the
+ * expression is not a parseable `rate()` expression (e.g. cron).
+ *
+ * Single source of truth for the fire-count wording used in
+ * cost-advisor hints and BP-EVR-XXX INFO lines.
+ *
+ * Examples:
+ *   approxFirePerMonth("rate(5 minutes)")  → 8,767  (30.44 × 24 × 12)
+ *   approxFirePerMonth("rate(1 hour)")     → 731    (30.44 × 24)
+ *   approxFirePerMonth("rate(1 day)")      → 30     (30.44 / 1)
+ *   approxFirePerMonth("cron(0 12 * * ? *)") → 0    (not a rate expression)
+ */
+export function approxFirePerMonth(scheduleExpression: string): number {
+  const rateMatch = scheduleExpression.match(
+    /^rate\(\s*(\d+)\s*(minute|hour|day)s?\s*\)$/,
+  );
+  if (!rateMatch) return 0;
+  const n = Number(rateMatch[1]);
+  const unit = rateMatch[2];
+  if (unit === "minute") return Math.round((60 * 24 * 30.44) / n);
+  if (unit === "hour") return Math.round((24 * 30.44) / n);
+  if (unit === "day") return Math.round(30.44 / n);
+  return 0;
+}
+
 export function eventsRuleCostHints(
   ds: Record<string, unknown>,
   hints: string[],
@@ -44,21 +71,11 @@ export function eventsRuleCostHints(
   // invocations fast. rate(1 minute) = 43,800/month; rate(10 seconds)
   // via cron = 262,800/month.
   if (typeof schedule === "string") {
-    const rateMatch = schedule.match(
-      /^rate\(\s*(\d+)\s*(minute|hour|day)s?\s*\)$/,
-    );
-    if (rateMatch) {
-      const n = Number(rateMatch[1]);
-      const unit = rateMatch[2];
-      let perMonth = 0;
-      if (unit === "minute") perMonth = Math.round((60 * 24 * 30.44) / n);
-      else if (unit === "hour") perMonth = Math.round((24 * 30.44) / n);
-      else if (unit === "day") perMonth = Math.round(30.44 / n);
-      if (perMonth > 0) {
-        hints.push(
-          `${AdviceIcon.COST} ${schedule} fires approximately ${perMonth.toLocaleString("en-US")} times per month — budget the target invocation cost against this rate before shipping.`,
-        );
-      }
+    const perMonth = approxFirePerMonth(schedule);
+    if (perMonth > 0) {
+      hints.push(
+        `${AdviceIcon.COST} ${schedule} fires approximately ${perMonth.toLocaleString("en-US")} times per month — budget the target invocation cost against this rate before shipping.`,
+      );
     }
   }
 

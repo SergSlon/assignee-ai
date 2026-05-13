@@ -37,6 +37,10 @@ export function formatDesiredState(
       continue;
     }
     const formatted = formatSpecialValue(key, value) ?? formatValue(value);
+    // SX-5 / PH1-F-2: suppress rows whose rendered value is an empty string
+    // (e.g. VPCSecurityGroupIds: [], Comment: ""). An empty render looks like
+    // a corruption artefact; the user gains nothing from seeing a blank row.
+    if (formatted === "") continue;
     lines.push(`  ${padded}   ${formatted}`);
   }
 

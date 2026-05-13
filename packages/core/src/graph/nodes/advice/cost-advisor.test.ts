@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { RESOURCE_TYPES } from "@/index.js";
 import { costAlternatives } from "./cost-advisor/orchestrator.js";
+import { approxFirePerMonth } from "./cost-advisor/events-rule-hints.js";
 
 describe("costAlternatives", () => {
   describe("EC2", () => {
@@ -421,5 +422,92 @@ describe("costAlternatives", () => {
         ),
       ).toBe(true);
     });
+  });
+});
+
+// ── SX-5 / PH1-H-2: approxFirePerMonth — single source of truth ─────────────
+//
+// These tests pin the helper's contract so the cost-advisor hint wording
+// and any future BP-EVR-XXX INFO lines both derive the same count value.
+
+describe("approxFirePerMonth — fire-count helper (SX-5)", () => {
+  // Variation E: rate(5 minutes) — the 8,767/mo figure cited in the story
+  it("Variation E — rate(5 minutes) → ~8,767 fires/month", () => {
+    // 30.44 days/mo × 24 h/day × 60 min/h ÷ 5 min = 8,766.72 → 8,767
+    const result = approxFirePerMonth("rate(5 minutes)");
+    expect(result).toBe(8767);
+  });
+
+  // Variation F: rate(1 hour) — must be consistent with hint wording
+  it("Variation F — rate(1 hour) → ~731 fires/month", () => {
+    // 30.44 × 24 = 730.56 → 731
+    const result = approxFirePerMonth("rate(1 hour)");
+    expect(result).toBe(731);
+  });
+
+  it("rate(1 minute) → ~43,834 fires/month", () => {
+    // 30.44 × 24 × 60 = 43,833.6 → 43,834
+    const result = approxFirePerMonth("rate(1 minute)");
+    expect(result).toBe(43834);
+  });
+
+  it("rate(1 day) → ~30 fires/month", () => {
+    // 30.44 / 1 = 30.44 → 30
+    const result = approxFirePerMonth("rate(1 day)");
+    expect(result).toBe(30);
+  });
+
+  it("rate(2 hours) → ~365 fires/month", () => {
+    // 30.44 × 24 / 2 = 365.28 → 365
+    const result = approxFirePerMonth("rate(2 hours)");
+    expect(result).toBe(365);
+  });
+
+  it("cron expression → 0 (not a rate expression)", () => {
+    expect(approxFirePerMonth("cron(0 12 * * ? *)")).toBe(0);
+  });
+
+  it("empty string → 0", () => {
+    expect(approxFirePerMonth("")).toBe(0);
+  });
+
+  it("partial match (missing closing paren) → 0", () => {
+    expect(approxFirePerMonth("rate(5 minutes")).toBe(0);
+  });
+
+  // Verify the hint wording in costAlternatives uses the same count value
+  // (single source of truth check — Variation E)
+  it("Variation E wording: cost-advisor hint for rate(5 minutes) contains the helper-derived count", () => {
+    const hints = costAlternatives("AWS::Events::Rule", {
+      ScheduleExpression: "rate(5 minutes)",
+    });
+    const count = approxFirePerMonth("rate(5 minutes)");
+    const countStr = count.toLocaleString("en-US"); // "8,767"
+    expect(
+      hints.some(
+        (h) =>
+          h.includes("rate(5 minutes)") &&
+          h.includes(countStr) &&
+          h.includes("fires approximately"),
+      ),
+    ).toBe(true);
+  });
+
+  // Verify the hint wording in costAlternatives uses the same count value
+  // (single source of truth check — Variation F)
+  it("Variation F wording: cost-advisor hint for rate(1 hour) contains the helper-derived count", () => {
+    const hints = costAlternatives("AWS::Events::Rule", {
+      ScheduleExpression: "rate(1 hour)",
+    });
+    const count = approxFirePerMonth("rate(1 hour)");
+    const countStr = count.toLocaleString("en-US"); // "731"
+    expect(
+      hints.some(
+        (h) =>
+          h.includes("rate(1 hour)") &&
+          h.includes(countStr) &&
+          h.includes("fires approximately"),
+      ),
+    ).toBe(true);
   });
 });
