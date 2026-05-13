@@ -19,7 +19,7 @@ overrides:
   flatted@<3.4.2: ^3.4.2
   vite@>=7.0.0 <7.3.2: ^7.3.2
   ajv@<6.14.0: ^6.14.0
-  langsmith: ^0.5.19
+  langsmith: ^0.6.0
   hono: ^4.12.16
   '@hono/node-server': ^1.19.13
   uuid@<14.0.0: ^14.0.0
@@ -2383,8 +2383,8 @@ packages:
     resolution: {integrity: sha512-9zy9lkjac+TR1c2tG+mkNSVlyOpInnWdSMiue4F+kq8TwJSgv6o8jhLRg8Ho6SnZ9wOYUq/yozts9qQCfk7bIw==}
     engines: {node: '>=18'}
 
-  langsmith@0.5.26:
-    resolution: {integrity: sha512-HmmFgeQR2n9x1Kq8NiVaNL/j72ta71qN11hYjbyePJ/QuYEnOMhQjbNv9KeyKB3bOetpIzNalQbhHm+RyKoPRQ==}
+  langsmith@0.6.3:
+    resolution: {integrity: sha512-pXrQ4/4myQvjFFOAUmt5pWRrLEZR20gzIJD7MNdUH+5/S5nLI4ZRBo/SYKC6coaYj9pYTfQdBIzcs+3kfJ5uDA==}
     peerDependencies:
       '@opentelemetry/api': '*'
       '@opentelemetry/exporter-trace-otlp-proto': '*'
@@ -5004,7 +5004,7 @@ snapshots:
       camelcase: 6.3.0
       decamelize: 1.2.0
       js-tiktoken: 1.0.21
-      langsmith: 0.5.26(@opentelemetry/api@1.9.0)
+      langsmith: 0.6.3(@opentelemetry/api@1.9.0)
       mustache: 4.2.0
       p-queue: 6.6.2
       zod: 3.25.76
@@ -6511,7 +6511,7 @@ snapshots:
 
   ky@1.14.3: {}
 
-  langsmith@0.5.26(@opentelemetry/api@1.9.0):
+  langsmith@0.6.3(@opentelemetry/api@1.9.0):
     dependencies:
       p-queue: 6.6.2
     optionalDependencies:
