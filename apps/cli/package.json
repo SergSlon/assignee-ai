@@ -110,9 +110,9 @@
     "@assignee/eslint-config": "workspace:*",
     "@assignee/tsconfig": "workspace:*",
     "@aws-sdk/client-efs": "^3.1045.0",
-    "@types/node": "^25.5.0",
-    "eslint": "^9.39.1",
+    "@types/node": "^25.7.0",
+    "eslint": "^10.3.0",
     "typescript": "^5.9.2",
-    "vitest": "^3.1.0"
+    "vitest": "^4.1.6"
   }
 }

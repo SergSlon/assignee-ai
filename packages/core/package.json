@@ -128,11 +128,11 @@
   "devDependencies": {
     "@assignee/eslint-config": "workspace:*",
     "@assignee/tsconfig": "workspace:*",
-    "@types/node": "^25.5.0",
-    "eslint": "^9.39.1",
+    "@types/node": "^25.7.0",
+    "eslint": "^10.3.0",
     "tsc-alias": "^1.8.16",
     "typescript": "^5.9.2",
     "vite-tsconfig-paths": "^6.1.1",
-    "vitest": "^3.1.0"
+    "vitest": "^4.1.6"
   }
 }
