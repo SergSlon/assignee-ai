@@ -121,6 +121,91 @@ describe("BP-DYNAMODB-005 evaluateTriggers — positive fixtures (must fire)", (
 });
 
 // ---------------------------------------------------------------------------
+// BP-DYNAMODB-006 — same class as BP-DYNAMODB-005; Wave 3 conversion
+// from check_type:awareness → check_type:equals so PAY_PER_REQUEST plans
+// no longer false-positive. Live verify on commit 0341d856 still showed
+// this INFO-severity rule firing on PAY_PER_REQUEST plans with the
+// "Switch to PAY_PER_REQUEST billing mode" remediation (useless when
+// already on-demand) — DF-BP-006-PAY-PER-REQUEST.
+// ---------------------------------------------------------------------------
+
+describe("BP-DYNAMODB-006 YAML manifest", () => {
+  it("declares check_type: equals (no longer awareness)", () => {
+    const bp = loadBp("../dynamodb/BP-DYNAMODB-006.yaml");
+    expect(bp.check_type).toBe("equals");
+  });
+
+  it('declares expected_value: "PAY_PER_REQUEST"', () => {
+    const bp = loadBp("../dynamodb/BP-DYNAMODB-006.yaml");
+    expect(bp.expected_value).toBe("PAY_PER_REQUEST");
+  });
+});
+
+describe("BP-DYNAMODB-006 evaluateTriggers — negative fixtures (must NOT fire)", () => {
+  const bp = loadBp("../dynamodb/BP-DYNAMODB-006.yaml");
+  const practices = [bp];
+
+  it("does NOT fire when BillingMode is PAY_PER_REQUEST (on-demand — the recommended state)", () => {
+    const context: EvalContext = {
+      resourceType: "AWS::DynamoDB::Table",
+      desiredState: {
+        TableName: "UserSessions",
+        BillingMode: "PAY_PER_REQUEST",
+        AttributeDefinitions: [{ AttributeName: "pk", AttributeType: "S" }],
+        KeySchema: [{ AttributeName: "pk", KeyType: "HASH" }],
+      },
+    };
+    const findings = evaluateTriggers(context, practices);
+    expect(
+      findings.find((f) => f.practiceId === "BP-DYNAMODB-006"),
+    ).toBeUndefined();
+  });
+});
+
+describe("BP-DYNAMODB-006 evaluateTriggers — positive fixtures (must fire)", () => {
+  const bp = loadBp("../dynamodb/BP-DYNAMODB-006.yaml");
+  const practices = [bp];
+
+  it("DOES fire when BillingMode is PROVISIONED (the multi-day-metrics caveat still applies — INFO severity)", () => {
+    const context: EvalContext = {
+      resourceType: "AWS::DynamoDB::Table",
+      desiredState: {
+        TableName: "OrdersTable",
+        BillingMode: "PROVISIONED",
+        ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 },
+        AttributeDefinitions: [
+          { AttributeName: "orderId", AttributeType: "S" },
+        ],
+        KeySchema: [{ AttributeName: "orderId", KeyType: "HASH" }],
+      },
+    };
+    const findings = evaluateTriggers(context, practices);
+    expect(
+      findings.find((f) => f.practiceId === "BP-DYNAMODB-006"),
+    ).toBeDefined();
+  });
+
+  it("DOES fire when BillingMode is absent (default = PROVISIONED)", () => {
+    const context: EvalContext = {
+      resourceType: "AWS::DynamoDB::Table",
+      desiredState: {
+        TableName: "LegacyTable",
+        ProvisionedThroughput: {
+          ReadCapacityUnits: 10,
+          WriteCapacityUnits: 10,
+        },
+        AttributeDefinitions: [{ AttributeName: "id", AttributeType: "S" }],
+        KeySchema: [{ AttributeName: "id", KeyType: "HASH" }],
+      },
+    };
+    const findings = evaluateTriggers(context, practices);
+    expect(
+      findings.find((f) => f.practiceId === "BP-DYNAMODB-006"),
+    ).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // BP-RDS-014 — RDS Multi-AZ
 // ---------------------------------------------------------------------------
 

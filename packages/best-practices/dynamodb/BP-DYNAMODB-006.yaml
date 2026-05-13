@@ -1,19 +1,23 @@
-# RUNTIME-ONLY RULE — unreachable from CLI plan-time evaluation.
-# This rule requires multi-day CloudWatch throughput metrics (capacity utilization
-# < 50% consistently) that are unavailable at plan time. It is informational only
-# and will never fire during `assignee plan`. Kept in the registry as documentation;
-# excluded from the plan-time reachable count. (F021, full-audit-2026-05-02)
+# Wave 3 (DF-BP-006-PAY-PER-REQUEST): converted from check_type:awareness
+# to check_type:equals so PAY_PER_REQUEST plans no longer false-positive
+# (mirror of the BP-DYNAMODB-005 / BP-RDS-014 / BP-SSM-003 fix in PR #53).
+# Live verify 2026-05-12: a PAY_PER_REQUEST plan still showed this rule
+# firing with "Switch to PAY_PER_REQUEST billing mode" as the remediation
+# — useless and confusing when the plan is already on-demand. The
+# remaining PROVISIONED-case multi-day-metrics caveat still applies, but
+# that case is informational; the PAY_PER_REQUEST case is a clean
+# suppression.
 id: BP-DYNAMODB-006
 title: "DynamoDB table should have on-demand or auto-scaled capacity"
 severity: INFO
 resource_type: "AWS::DynamoDB::Table"
 property_path: "BillingMode"
-check_type: "awareness"
-expected_value: true
+check_type: "equals"
+expected_value: "PAY_PER_REQUEST"
 source: "TrustedAdvisor"
 source_id: "TA-dynamodb-capacity"
-description: "Trusted Advisor identifies DynamoDB tables with provisioned capacity that consistently use less than 50% of their provisioned throughput. This represents wasted capacity costs. Epic 98 W5.P1: severity normalised MEDIUM → INFO because the check requires multi-day CloudWatch throughput metrics the plan-time evaluator cannot access — the rule is informational until the table has accumulated usage data."
+description: "Trusted Advisor identifies DynamoDB tables with provisioned capacity that consistently use less than 50% of their provisioned throughput. This represents wasted capacity costs. Epic 98 W5.P1: severity normalised MEDIUM → INFO because the check requires multi-day CloudWatch throughput metrics the plan-time evaluator cannot access — the rule is informational until the table has accumulated usage data. Wave 3: equals-PAY_PER_REQUEST suppresses the false positive on already-on-demand plans; the PROVISIONED case still fires (correctly) as a heads-up that auto-scaling is needed."
 remediation: "Switch to PAY_PER_REQUEST billing mode for unpredictable workloads, or configure auto-scaling policies to match capacity to actual usage."
 consequence: "Over 50% of provisioned throughput is wasted — you are paying double what the actual usage requires every month."
 category: cost
-lastVerified: "2026-04-23"
+lastVerified: "2026-05-12"
