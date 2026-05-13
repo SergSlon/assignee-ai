@@ -15,6 +15,8 @@ export const CFN_KEYS_WIZARD = {
   ENABLE_LIFECYCLE: "EnableLifecycle",
   LIFECYCLE_TRANSITION_DAYS: "LifecycleTransitionDays",
   LIFECYCLE_EXPIRATION_DAYS: "LifecycleExpirationDays",
+  /** Set by s3-lifecycle-extractor when intent is bare "lifecycle Nd" — suppresses the IA transition. */
+  LIFECYCLE_EXPIRE_ONLY: "LifecycleExpireOnly",
   ENABLE_CORS: "EnableCors",
   CORS_ALLOWED_ORIGINS: "CorsAllowedOrigins",
   CORS_ALLOWED_METHODS: "CorsAllowedMethods",
