@@ -36,6 +36,35 @@ fires every 5 minutes"` now routes to the `scheduled-lambda` compound
   `deferred-backlog.deferred-llm-fallback-compound-classifier` with rationale
   `"needs planner-fallback architecture, not keyword whack-a-mole"`.
 
+### Tier-ladder unit-aware formatRange — 3-for-1 cost-rendering fix (PD-1 / PH1-A-1 + PH1-C-3 + PH1-D-3, 2026-05-13)
+
+- core `pricing/tier-ladder.ts`: `formatRange(value, unit)` now switches on
+  unit family instead of unconditionally rendering `GB→TB`:
+  - **Byte units** (`GB-Mo`, `GB-month`, `GB`): keep `GB→TB` at ≥512 GB
+    (unchanged behaviour — DDB Storage tier still renders `25 GB` /
+    `40 TB` correctly).
+  - **Count units** (`Requests`, `Notifications`, `Publishes`, `Messages`,
+    `Invocations`, etc.): render with `k` / `M` / `B` suffix and append
+    the unit name. SNS publishes that used to render as
+    `"free up to 98 TB"` now correctly render as `"free up to 98B Publishes"`.
+  - **Compute-second units** (`Lambda-GB-Second`, `GB-Second`): render with
+    `M` / `B` suffix and append `"GB-Seconds"`. Lambda Duration tiers that
+    used to render as `"$0.00001667/Lambda-GB-Second up to 5859375 TB"` now
+    correctly render as `"... up to 5.86B GB-Seconds"`.
+  - **Unknown units**: raw locale-formatted value + unit string, NO TB
+    conversion (previously fell through to `GB→TB` which produced gibberish
+    for non-storage units).
+- `formatCount` helper handles the `toPrecision` round-up at the k → M
+  boundary: `999_999 / 1000 = 999.999` no longer renders as `"1000k Requests"`
+  but promotes to `"1M Requests"`. Same guard for M → B.
+- 8 probe variations (A-H) cover byte preservation, byte small,
+  Notifications, Publishes, Lambda-GB-Second, unknown unit fallback, k/M/B
+  boundary cases, and case-insensitive unit family detection.
+- Closes three Phase-1 dogfood findings with one fix:
+  - PH1-A-1 — DDB Storage mixed unit suffix (LOW)
+  - PH1-C-3 — SNS publishes "98 TB" drift (MED)
+  - PH1-D-3 — Lambda GB-Seconds "5859375 TB" drift (MED)
+
 ### Security: bump langsmith pnpm override to ^0.6.0 — GHSA-3644-q5cj-c5c7 (2026-05-13)
 
 - **CVE fix**: GHSA-3644-q5cj-c5c7 (langsmith <0.6.0 deserializes untrusted prompt
