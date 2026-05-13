@@ -224,7 +224,7 @@ export async function preflightGuardNode(
       placeholderDowngradeAdvisory !== undefined ? false : !bpBlocked,
     freeTierNote: freeTierNote ?? undefined,
     ...(perResourceCosts !== undefined ? { perResourceCosts } : {}),
-    ...(pricingBreakdown !== undefined ? { pricingBreakdown } : {}),
+    pricingBreakdown: pricingBreakdown ?? undefined,
     ...(mergedAdvisories !== undefined ? { advisories: mergedAdvisories } : {}),
   };
 }

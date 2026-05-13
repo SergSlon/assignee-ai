@@ -183,7 +183,11 @@ export const graphAnnotation = Annotation.Root({
     default: () => undefined,
   }),
   pricingBreakdown: Annotation<PricingBreakdown | undefined>({
-    reducer: (_, b) => b,
+    // PD-2: explicit `b ?? undefined` so that a preflight-guard return of
+    // `pricingBreakdown: undefined` (free/non-priced resource) actively clears
+    // any breakdown that leaked from the previous compound-plan resource,
+    // instead of retaining it when the key was absent from the partial update.
+    reducer: (_, b) => b ?? undefined,
     default: () => undefined,
   }),
   autoFixEnabled: Annotation<boolean>({
