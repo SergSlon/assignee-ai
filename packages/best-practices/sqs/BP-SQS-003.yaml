@@ -1,14 +1,14 @@
 id: BP-SQS-003
-title: "SQS queue should have server-side encryption with KMS"
-severity: HIGH
+title: "Compliance workloads should use SSE-KMS with a customer-managed CMK for SQS"
+severity: MEDIUM
 resource_type: "AWS::SQS::Queue"
 property_path: "KmsMasterKeyId"
 check_type: "exists"
 expected_value: true
-source: "FSBP"
-source_id: "SQS.1"
-description: "SQS queues should use KMS server-side encryption to protect message contents at rest. Without encryption, messages stored in the queue can be read if underlying storage is accessed."
-remediation: "Set KmsMasterKeyId to a KMS key ARN or alias for encryption at rest. Use 'alias/aws/sqs' for the default AWS managed key."
-consequence: "Messages at rest are unencrypted — underlying storage compromise exposes all queued message payloads in plaintext."
+source: "AWS Security Best Practices"
+source_id: "SQS.KMS"
+description: "For compliance-sensitive workloads, SQS queues should use SSE-KMS with a customer-managed CMK to satisfy regulatory requirements (PCI-DSS, HIPAA) that mandate key ownership and audit trails. SQS-managed SSE (SqsManagedSseEnabled) already satisfies FSBP SQS.1 and provides encryption at rest for standard workloads — this rule is an additional recommendation for workloads with stricter key-management requirements."
+remediation: "Set KmsMasterKeyId to a customer-managed KMS key ARN or alias (e.g. 'alias/my-sqs-key'). For most workloads, SqsManagedSseEnabled: true is sufficient and satisfies FSBP SQS.1."
+consequence: "Without a customer-managed CMK, compliance workloads may lack the key ownership and CloudTrail audit trail required by PCI-DSS, HIPAA, and similar frameworks."
 category: security
-lastVerified: "2026-03-24"
+lastVerified: "2026-05-13"

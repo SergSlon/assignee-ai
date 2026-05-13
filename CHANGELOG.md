@@ -27,6 +27,25 @@ review methodology notes, see
 - `pnpm audit --audit-level=moderate --prod` now reports 0 un-ignored advisories;
   the pre-existing `CVE-2026-41650` remains in `auditConfig.ignoreCves`.
 
+### BP-SQS-003 false-positive reduction — demote to MEDIUM (BR-1 / PH1-B-2, 2026-05-13)
+
+- best-practices: BP-SQS-003 (`SQS queue should have server-side encryption
+with KMS`) demoted from HIGH → MEDIUM severity. The rule previously fired
+  HIGH on every plan that set `SqsManagedSseEnabled: true`, conflating "SSE
+  enabled in any flavour" (satisfied by SQS-managed SSE) with "SSE-KMS with
+  a customer-managed CMK" (a compliance-workload preference). BP-SQS-001
+  already covers FSBP SQS.1 (SSE enabled, any flavour) at HIGH; BP-SQS-003
+  is now correctly positioned as a compliance recommendation rather than a
+  universal HIGH finding.
+- best-practices: BP-SQS-003 title, description, and remediation reworded to
+  "compliance workloads should use SSE-KMS with a customer-managed CMK",
+  mirroring the BP-S3 SSE-KMS convention. `source_id` updated to `SQS.KMS`
+  to eliminate the duplicate `SQS.1` reference shared with BP-SQS-001.
+- best-practices: new test file `__tests__/bp-sqs-003-scope.test.ts` covers
+  all 4 combinations of `SqsManagedSseEnabled` × `KmsMasterKeyId` (Variations
+  A–F from the probe plan) plus a severity-lock in `bp-all-rules-audit.test.ts`
+  that prevents regression back to HIGH.
+
 ### KMS alias-based default-CMK resolver (epic-104 Wave C, 2026-05-08)
 
 - core: NEW `services/kms-alias-resolver.ts` exports
