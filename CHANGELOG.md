@@ -46,6 +46,22 @@ with KMS`) demoted from HIGH → MEDIUM severity. The rule previously fired
   A–F from the probe plan) plus a severity-lock in `bp-all-rules-audit.test.ts`
   that prevents regression back to HIGH.
 
+### Display polish: empty-row suppression + approxFirePerMonth helper (SX-5 / PH1-F-2+H-2, 2026-05-13)
+
+- core `utils/display-helpers/format-desired-state.ts`: suppress config-block
+  rows whose rendered value is an empty string (e.g. `VPCSecurityGroupIds: []`,
+  `Comment: ""`). Previously these rows rendered as a blank label+value pair that
+  looked like a corruption artefact. `null`/`undefined` values continue to render
+  as `"-"` (non-empty) and are not suppressed. Both RDS empty-SG and generic
+  empty-string cases are covered by new tests (probe variations A–D).
+- core `graph/nodes/advice/cost-advisor/events-rule-hints.ts`: extract the
+  inline rate-calculation block as the named `approxFirePerMonth(expression)`
+  helper. `eventsRuleCostHints` now delegates to the helper — a single source of
+  truth for the fire-count figure (8,767/mo for `rate(5 minutes)`, 731/mo for
+  `rate(1 hour)`) so any future BP-EVR-XXX INFO line that needs the same count
+  imports from one place. Helper is exported and covered by a dedicated test
+  suite (probe variations E–F + boundary cases).
+
 ### KMS alias-based default-CMK resolver (epic-104 Wave C, 2026-05-08)
 
 - core: NEW `services/kms-alias-resolver.ts` exports
