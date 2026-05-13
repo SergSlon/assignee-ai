@@ -17,6 +17,16 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### Security: bump langsmith pnpm override to ^0.6.0 — GHSA-3644-q5cj-c5c7 (2026-05-13)
+
+- **CVE fix**: GHSA-3644-q5cj-c5c7 (langsmith <0.6.0 deserializes untrusted prompt
+  manifests) resolved by bumping `pnpm.overrides.langsmith` from `^0.5.19` to
+  `^0.6.0`; resolves to `0.6.3` (npm latest at time of fix).
+- **Compatibility**: `@langchain/core@1.1.45` declares `langsmith: >=0.5.0 <1.0.0`,
+  so `0.6.x` is fully within the accepted range. No code changes required.
+- `pnpm audit --audit-level=moderate --prod` now reports 0 un-ignored advisories;
+  the pre-existing `CVE-2026-41650` remains in `auditConfig.ignoreCves`.
+
 ### KMS alias-based default-CMK resolver (epic-104 Wave C, 2026-05-08)
 
 - core: NEW `services/kms-alias-resolver.ts` exports
