@@ -97,6 +97,14 @@ export const scheduledLambdaPattern: ArchitecturePattern = {
     "daily",
     "on-a-schedule",
     "on a schedule",
+    // SX-1 (2026-05-13, PH1-H-1 BLOCKER): bare EventBridge rule phrasing
+    // that does NOT contain "lambda" — users asking for a bare rule get
+    // routed here for the 4-resource compound instead of receiving a
+    // target-less AWS::Events::Rule with a CRITICAL finding.
+    "eventbridge rule",
+    "fires every",
+    "fires at",
+    "trigger every",
   ],
   resourceList: [
     {
