@@ -62,6 +62,28 @@ with KMS`) demoted from HIGH → MEDIUM severity. The rule previously fired
   imports from one place. Helper is exported and covered by a dedicated test
   suite (probe variations E–F + boundary cases).
 
+### Fix: pricingBreakdown must not leak across compound resources (PD-2 / PH1-G-1, 2026-05-13)
+
+- core: `preflight-guard.ts` now always includes `pricingBreakdown` in the
+  return object (even as `undefined`) instead of conditionally omitting the
+  key. Previously, free/non-priced resources (e.g. `SubnetRouteTableAssociation`,
+  `EFS::MountTarget`, `IAM::Role`) did not include the `pricingBreakdown` key in
+  the partial-state return. LangGraph's annotation reducer retains a field's
+  previous value when the key is absent from the update, so the EFS::FileSystem
+  breakdown (Storage $0.0250/GB-month) leaked through to all four downstream
+  free resources in the EFS-with-VPC compound plan.
+- core: `graph-state.ts` `pricingBreakdown` annotation reducer updated from
+  `(_, b) => b` to `(_, b) => b ?? undefined`. The explicit `?? undefined`
+  documents intent: when the returning node sends `pricingBreakdown: undefined`
+  (free resource), the reducer must actively clear the stale prior value rather
+  than silently retain it.
+- tests: 5-variation probe suite added to `preflight-guard.test.ts`:
+  Variation A (EFS compound — no leak to SubnetRouteTableAssociation /
+  EFS::MountTarget), Variation B (Lambda + exec-role — no leak to IAM::Role),
+  Variation C (single S3 bucket — no regression), Variation D (SQS + DLQ —
+  no over-clearing on back-to-back priced resources), Variation E (direct
+  reducer contract test).
+
 ### KMS alias-based default-CMK resolver (epic-104 Wave C, 2026-05-08)
 
 - core: NEW `services/kms-alias-resolver.ts` exports
