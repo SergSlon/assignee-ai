@@ -13,6 +13,7 @@ import type { AgentState } from "../graph-state.js";
 import { costAlternatives } from "./advice/cost-advisor/orchestrator.js";
 import { securityPosture } from "./advice/security-advisor.js";
 import { architectureAdvisor } from "./advice/architecture-advisor.js";
+import { eventbridgeNoTargetHint } from "./advice/eventbridge-no-target-hint.js";
 import {
   gatherMcpAdviceContext,
   type McpAdviceContext,
@@ -133,6 +134,7 @@ export function createAdviceGeneratorNode({
     hints.push(
       ...architectureAdvisor(state.resourcePattern, state.resourceQueue),
     );
+    hints.push(...eventbridgeNoTargetHint(state.resourceType, ds));
 
     // Phase 3: LLM-generated hints enriched with MCP data (if rule-based didn't produce enough)
     if (hints.length < MAX_ADVICE_HINTS) {
