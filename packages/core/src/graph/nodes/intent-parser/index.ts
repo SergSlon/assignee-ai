@@ -55,6 +55,7 @@ import {
   extractCloudWatchAlarmMetric,
   extractRetentionDays,
 } from "./extractors/cloudwatch-extractor.js";
+import { extractS3Lifecycle } from "./extractors/s3-lifecycle-extractor.js";
 
 // Public re-exports — preserve the monolith's external API surface.
 export type { Advisory, AssertionExtraction } from "./intent-types.js";
@@ -133,6 +134,7 @@ export function extractAssertedValues(
   extractSnsProtocol(intent, intentLower, resourceType, elicited);
   extractRetentionDays(intent, intentLower, resourceType, elicited);
   extractCloudWatchAlarmMetric(intentLower, resourceType, elicited);
+  extractS3Lifecycle(intent, intentLower, resourceType, elicited, advisories);
 
   return {
     elicited,
