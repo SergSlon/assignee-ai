@@ -60,6 +60,10 @@ export const COMPOUND_PATTERN_ID_LITERALS: ReadonlyArray<{
   { literal: "websocket-api", patternId: PatternId.WEBSOCKET_API },
   { literal: "efs-with-vpc", patternId: PatternId.EFS_WITH_VPC },
   { literal: "sqs-with-dlq", patternId: PatternId.SQS_WITH_DLQ },
+  {
+    literal: "sns-with-email-subscription",
+    patternId: PatternId.SNS_WITH_EMAIL_SUBSCRIPTION,
+  },
 ];
 
 /**

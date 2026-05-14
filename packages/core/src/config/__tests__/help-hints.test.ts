@@ -25,8 +25,8 @@ describe("help-hints — registry-derivation (drift guards)", () => {
 
   it("getPatternCount matches defaultPatternRegistry.size()", () => {
     expect(getPatternCount()).toBe(defaultPatternRegistry.size());
-    // CP-1: added `sqs-with-dlq` pattern → 12 total.
-    expect(getPatternCount()).toBe(12);
+    // CP-2: added `sns-with-email-subscription` pattern → 13 total.
+    expect(getPatternCount()).toBe(13);
   });
 
   it("getSupportedResourceTypes returns the registry contents verbatim", () => {

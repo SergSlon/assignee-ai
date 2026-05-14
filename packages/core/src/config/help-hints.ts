@@ -196,6 +196,10 @@ function renderPatternsHintCli(): string {
       "IAM Role + Lambda (2 resources, auto-created exec role)",
     "websocket-api":
       "IAM + Lambda + Logs + API Gateway v2 WebSocket + 3 Routes (12 resources)",
+    "sqs-with-dlq":
+      "Primary SQS Queue + Dead-Letter Queue (RedrivePolicy wired, 2 resources)",
+    "sns-with-email-subscription":
+      "SNS Topic + Email Subscription (Protocol=email, 2 resources)",
   };
 
   const lines: string[] = [];

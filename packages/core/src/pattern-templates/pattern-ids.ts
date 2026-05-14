@@ -12,6 +12,15 @@ export const PatternId = {
    * RedrivePolicy.deadLetterTargetArn wired via markerGetAtt.
    */
   SQS_WITH_DLQ: "sqs-with-dlq",
+  /**
+   * CP-2 / PH1-C-2: SNS Topic + Email Subscription compound. Routes intents
+   * containing "with email subscription to <email>" or "with subscriber
+   * <email>" to a 2-resource compound (AWS::SNS::Topic +
+   * AWS::SNS::Subscription with Protocol=email). Email is extracted by
+   * email-extractor.ts using a conservative regex; invalid emails fall
+   * through to the bare SNS path with an advisory.
+   */
+  SNS_WITH_EMAIL_SUBSCRIPTION: "sns-with-email-subscription",
   SERVERLESS_API: "serverless-api",
   THREE_TIER_WEB: "three-tier-web",
   CONTAINER_SERVICE: "container-service",
