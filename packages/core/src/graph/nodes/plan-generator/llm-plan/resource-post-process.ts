@@ -40,6 +40,7 @@ import { resolveAmiFromOsName } from "@/utils/aws-resource-discovery/index.js";
 import { assertSshIntentNotWindowsAmi } from "../ssh-windows-guard.js";
 import { isSshIntent } from "@/utils/ssh-intent.js";
 import type { AgentState } from "@/graph/graph-state.js";
+import { injectMasterPasswordPlaceholderIfAbsent } from "@/resource-plugins/plugins/rds-dbinstance/credentials.js";
 
 export interface PostProcessOk {
   kind: "ok";
@@ -98,6 +99,18 @@ export async function postRepairPostProcess(
   if (state.resourceType === RESOURCE_TYPES.EC2_INSTANCE) {
     await postProcessEc2Instance(desiredState, state.userIntent ?? "");
   }
+
+  // RG-1 / DF-E5 (Solution C): inject the actionable placeholder when
+  // MasterUserPassword was not supplied by the user so the plan is never
+  // silently missing this required field. Preflight-guard rejects apply
+  // if the placeholder sentinel is still present at that stage.
+  if (state.resourceType === RESOURCE_TYPES.RDS_DB_INSTANCE) {
+    injectMasterPasswordPlaceholderIfAbsent(
+      desiredState,
+      state.elicitedOptions,
+    );
+  }
+
   return desiredState;
 }
 

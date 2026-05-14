@@ -43,6 +43,7 @@ export {
 // Placeholder passwords for preflight rejection
 export {
   RDS_PLACEHOLDER_PASSWORD,
+  RDS_REQUIRED_PASSWORD_PLACEHOLDER,
   PLACEHOLDER_DB_PASSWORDS,
   RDS_PASSWORD_FIELDS,
 } from "../../config/placeholder-passwords.js";
