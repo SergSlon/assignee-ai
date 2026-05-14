@@ -41,6 +41,41 @@ enforcement prevents false-positives on fused forms like `"vpcdefault"`.
 - Deferred: existing-resource-discovery extractor + `efs-in-existing-vpc` compound
   entered in `sprint-status.yaml` deferred-backlog (entry `deferred-existing-resource-discovery-extractor`).
 
+### fix(destroy): resolve bare CCAPI identifiers via NON_TAGGABLE_RESOURCE_TYPES expansion (DC-1 / DF-OAC-LIST-DESTROY-MISMATCH, 2026-05-14)
+
+Closes the list/destroy mismatch where `assignee list` surfaces a managed
+resource by bare CCAPI identifier (e.g. CloudFront OAC `E3EYXPSYURQIM9`) but
+`assignee destroy <bare-id>` failed with "No managed resource found matching".
+
+Root cause (`single-flow.ts:89`): the provision-log fallback path that handles
+RGTA-blind resources gated on `isNonTaggableConstruct()`, which excluded
+`AWS::CloudFront::OriginAccessControl` and `AWS::S3::BucketPolicy`. Both types
+have ARNs on paper but CCAPI returns a bare primary identifier (OAC Id /
+bucket name), and RGTA does not enumerate either type — so the provision log
+was the only trail for `assignee list`, yet the destroy path rejected the
+provision-log record because its resource type was not in
+`NON_TAGGABLE_RESOURCE_TYPES`.
+
+Fix path A: added `CLOUDFRONT_ORIGIN_ACCESS_CONTROL` and `S3_BUCKET_POLICY` to
+`NON_TAGGABLE_RESOURCE_TYPES` in `non-taggable.ts`. The provision-log fallback
+in `single-flow.ts` already handles the rest correctly (finds the record via
+`findProvisionRecord`, builds a `ResolvedResource` with `identifier = provRecord.key`,
+passes it to CCAPI delete). No other code changes required.
+
+Per `feedback_arn_builder_for_display`: leverages the existing pattern where
+`arn-templates.ts` returns the bare identifier unchanged for these types.
+Per `feedback_cloudcontrol_notfound_short_circuit`: NotFound after delete is
+treated as destroy success (preserved + tested in Variation D).
+
+Tests (Variations A-E in `single-flow.test.ts`; extended
+`non-taggable-resource-registration.test.ts`):
+
+- Var A: bare OAC Id (`E3EYXPSYURQIM9`) resolves and triggers CCAPI delete.
+- Var B: full-ARN destroy path unaffected (regression guard).
+- Var C: list/destroy parity — any identifier `list` emits resolves on `destroy`.
+- Var D: NotFound from CCAPI treated as success.
+- Var E: `AWS::S3::BucketPolicy` bare bucket-name resolves (fix generalises).
+
 ### feat(compound-patterns): add sns-with-email-subscription compound + email-extractor (CP-2 / PH1-C-2 + DF-C2, 2026-05-14)
 
 - core `pattern-templates/patterns/sns-with-email-subscription.ts`: NEW 2-resource
