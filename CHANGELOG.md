@@ -17,6 +17,30 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### fix(intent-parser): lambda body extractor quote-tight + option-A handler-body semantics (EPIC-106-2 / PH5-5-A)
+
+Closes PH5-5-A from Phase-5 dogfood. Two defects fixed:
+
+1. **Quote-leak**: the body-clause regex now uses a backreference (`\1`) so the
+   closing quote cannot leak into the captured token. Previously,
+   `"body 'return event'"` captured `event'` (stray trailing apostrophe).
+
+2. **Semantic confusion**: the captured fragment was previously wedged into the
+   `body:` field of a static `{statusCode: 200, body: '...'}` envelope. User
+   intent `"body 'return event'"` now emits:
+   ```js
+   exports.handler = async (event) => {
+     return event;
+   };
+   ```
+   — the user's literal IS the handler body (option A per Mary's PH5-5-A
+   recommendation).
+
+**Behaviour change**: existing users relying on the static-envelope shape for
+`body 'X'` intents will see different handler code emitted. The new shape
+matches what the user literally typed. Unquoted verb-form intents (`"returns X"`,
+`"logs Y"`, etc.) are unaffected and continue to emit the 200-OK envelope shape.
+
 ### fix(process): reviewer-bypass hook hardening with evidence-file linkage (EPIC-106-1)
 
 Closes the fabricated-ACCEPT bypass class observed in the DC-2 incident (commit
