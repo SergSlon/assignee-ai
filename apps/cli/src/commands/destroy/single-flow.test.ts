@@ -304,6 +304,157 @@ describe("singleDestroyAction — EIP provision-log ARN fallback (BUG-5)", () =>
     expect(callArg.arn).toBe("");
   });
 
+  // ── DC-1: OAC bare-ID list/destroy mismatch fix ─────────────────────────
+  // DF-OAC-LIST-DESTROY-MISMATCH: `assignee list` surfaces OAC by bare CCAPI
+  // Id (E3EYXPSYURQIM9) but destroy previously failed with "No managed resource
+  // found" because `isNonTaggableConstruct` returned false for OAC.
+  // Fix: add OAC + BucketPolicy to NON_TAGGABLE_RESOURCE_TYPES so the
+  // provision-log fallback path in single-flow.ts:89 accepts them.
+
+  it("Var A: bare OAC Id resolves and triggers CCAPI delete", async () => {
+    // RGTA doesn't return OAC (not taggable) → resolveResource returns null.
+    mockResolveResource.mockResolvedValue(null);
+    mockFindProvisionRecord.mockResolvedValue({
+      keyKind: "primaryIdentifier",
+      key: "E3EYXPSYURQIM9",
+      resourceType: "AWS::CloudFront::OriginAccessControl",
+      region: "us-east-1",
+      createdDate: "2026-05-01T00:00:00Z",
+      estimatedMonthlyCost: "$0.00/mo",
+      runId: "run-oac-001",
+    });
+    mockDestroySingleResource.mockResolvedValue({
+      success: true,
+      resourceType: "AWS::CloudFront::OriginAccessControl",
+      identifier: "E3EYXPSYURQIM9",
+      arn: "",
+    });
+
+    await singleDestroyAction("E3EYXPSYURQIM9", { yes: true });
+
+    expect(mockDestroySingleResource).toHaveBeenCalledTimes(1);
+    const callArg = mockDestroySingleResource.mock.calls[0]![0] as {
+      resourceType: string;
+      identifier: string;
+    };
+    expect(callArg.resourceType).toBe("AWS::CloudFront::OriginAccessControl");
+    expect(callArg.identifier).toBe("E3EYXPSYURQIM9");
+  });
+
+  it("Var B: full-ARN destroy path is unaffected (regression guard)", async () => {
+    // When RGTA resolves successfully (e.g. CloudFront Distribution full ARN),
+    // the provision-log fallback must NOT be reached — resolveResource wins.
+    const CF_DIST_ARN =
+      "arn:aws:cloudfront::112233445566:distribution/EDFDVBD6EXAMPLE";
+    mockResolveResource.mockResolvedValue({
+      arn: CF_DIST_ARN,
+      resourceType: "AWS::CloudFront::Distribution",
+      region: "us-east-1",
+      tags: { "managed-by": "assignee-ai" },
+      identifier: "EDFDVBD6EXAMPLE",
+    });
+    mockDestroySingleResource.mockResolvedValue({
+      success: true,
+      resourceType: "AWS::CloudFront::Distribution",
+      identifier: "EDFDVBD6EXAMPLE",
+      arn: CF_DIST_ARN,
+    });
+
+    await singleDestroyAction(CF_DIST_ARN, { yes: true });
+
+    expect(mockDestroySingleResource).toHaveBeenCalledTimes(1);
+    // findProvisionRecord must NOT have been consulted — RGTA resolved it.
+    expect(mockFindProvisionRecord).not.toHaveBeenCalled();
+  });
+
+  it("Var C: list/destroy parity — any identifier surfaced by list resolves on destroy", async () => {
+    // Simulates the parity contract: if fetchManagedResources emits a row
+    // with primaryIdentifier = "E3EYXPSYURQIM9", then
+    // singleDestroyAction("E3EYXPSYURQIM9") MUST succeed.
+    const OAC_ID = "E3EYXPSYURQIM9";
+    mockResolveResource.mockResolvedValue(null);
+    mockFindProvisionRecord.mockResolvedValue({
+      keyKind: "primaryIdentifier",
+      key: OAC_ID,
+      resourceType: "AWS::CloudFront::OriginAccessControl",
+      region: "us-east-1",
+      createdDate: "2026-05-02T00:00:00Z",
+      estimatedMonthlyCost: "$0.00/mo",
+      runId: "run-oac-002",
+    });
+    mockDestroySingleResource.mockResolvedValue({
+      success: true,
+      resourceType: "AWS::CloudFront::OriginAccessControl",
+      identifier: OAC_ID,
+      arn: "",
+    });
+
+    // Must not throw; the identifier that list surfaces resolves on destroy.
+    await expect(
+      singleDestroyAction(OAC_ID, { yes: true }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("Var D: NotFound from CCAPI delete is treated as success (per feedback_cloudcontrol_notfound_short_circuit)", async () => {
+    // If AWS reports NotFound after the delete call, the resource is already
+    // gone — classify as success per the short-circuit convention.
+    const OAC_ID = "ENOTFOUNDEXAMPLE";
+    mockResolveResource.mockResolvedValue(null);
+    mockFindProvisionRecord.mockResolvedValue({
+      keyKind: "primaryIdentifier",
+      key: OAC_ID,
+      resourceType: "AWS::CloudFront::OriginAccessControl",
+      region: "us-east-1",
+      createdDate: "2026-05-03T00:00:00Z",
+      estimatedMonthlyCost: "$0.00/mo",
+      runId: "run-oac-003",
+    });
+    // destroySingleResource already handles NotFound internally and returns
+    // success: true — this test verifies the whole flow resolves cleanly.
+    mockDestroySingleResource.mockResolvedValue({
+      success: true,
+      resourceType: "AWS::CloudFront::OriginAccessControl",
+      identifier: OAC_ID,
+      arn: "",
+    });
+
+    await expect(
+      singleDestroyAction(OAC_ID, { yes: true }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("Var E: S3::BucketPolicy bare bucket-name resolves via provision-log (generalisation)", async () => {
+    // BucketPolicy's CCAPI primaryIdentifier is the bucket name (not an ARN).
+    // Same RGTA gap as OAC — must resolve via provision-log fallback.
+    const BUCKET_NAME = "my-assignee-managed-bucket";
+    mockResolveResource.mockResolvedValue(null);
+    mockFindProvisionRecord.mockResolvedValue({
+      keyKind: "primaryIdentifier",
+      key: BUCKET_NAME,
+      resourceType: "AWS::S3::BucketPolicy",
+      region: "us-east-1",
+      createdDate: "2026-05-04T00:00:00Z",
+      estimatedMonthlyCost: "$0.00/mo",
+      runId: "run-bp-001",
+    });
+    mockDestroySingleResource.mockResolvedValue({
+      success: true,
+      resourceType: "AWS::S3::BucketPolicy",
+      identifier: BUCKET_NAME,
+      arn: "",
+    });
+
+    await singleDestroyAction(BUCKET_NAME, { yes: true });
+
+    expect(mockDestroySingleResource).toHaveBeenCalledTimes(1);
+    const callArg = mockDestroySingleResource.mock.calls[0]![0] as {
+      resourceType: string;
+      identifier: string;
+    };
+    expect(callArg.resourceType).toBe("AWS::S3::BucketPolicy");
+    expect(callArg.identifier).toBe(BUCKET_NAME);
+  });
+
   // T1-1 (Q-M-001): getCostSavingsEstimate 3-arg signature regression guard.
   //
   // PR #37 Defect 3 introduced a `resourceType` arg at position [1] of

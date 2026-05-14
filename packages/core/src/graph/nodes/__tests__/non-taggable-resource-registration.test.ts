@@ -88,7 +88,7 @@ async function seedProvision(
 
 // ── 1. Classifier coverage ───────────────────────────────────────────
 describe("e98.W1.B1 — non-taggable classifier", () => {
-  it("classifies the 3 non-taggable CFN constructs", () => {
+  it("classifies the 5 non-taggable CFN constructs", () => {
     expect(isNonTaggableConstruct(RESOURCE_TYPES.EC2_ROUTE)).toBe(true);
     expect(
       isNonTaggableConstruct(RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION),
@@ -96,26 +96,40 @@ describe("e98.W1.B1 — non-taggable classifier", () => {
     expect(
       isNonTaggableConstruct(RESOURCE_TYPES.EC2_VPC_GATEWAY_ATTACHMENT),
     ).toBe(true);
+    // DC-1: CCAPI returns bare OAC Id (E3EYXPSYURQIM9), RGTA blind.
+    expect(
+      isNonTaggableConstruct(RESOURCE_TYPES.CLOUDFRONT_ORIGIN_ACCESS_CONTROL),
+    ).toBe(true);
+    // DC-1: CCAPI primary identifier for BucketPolicy is the bucket name.
+    expect(isNonTaggableConstruct(RESOURCE_TYPES.S3_BUCKET_POLICY)).toBe(true);
   });
 
-  it("NON_TAGGABLE_RESOURCE_TYPES contains exactly the 3 known types", () => {
+  it("NON_TAGGABLE_RESOURCE_TYPES contains exactly the 5 known types", () => {
     // Lock the set. Future additions require an explicit test update so
     // the coverage probe + dogfood gates don't silently expand.
+    // DC-1: OAC + BucketPolicy added (CCAPI returns bare id, RGTA blind).
     expect([...NON_TAGGABLE_RESOURCE_TYPES].sort()).toEqual(
       [
+        RESOURCE_TYPES.CLOUDFRONT_ORIGIN_ACCESS_CONTROL,
         RESOURCE_TYPES.EC2_ROUTE,
         RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
         RESOURCE_TYPES.EC2_VPC_GATEWAY_ATTACHMENT,
+        RESOURCE_TYPES.S3_BUCKET_POLICY,
       ].sort(),
     );
   });
 
   it("returns false for taggable and unrelated types", () => {
+    // S3 Bucket itself is taggable; BucketPolicy (its policy attribute) is not.
     expect(isNonTaggableConstruct(RESOURCE_TYPES.S3_BUCKET)).toBe(false);
     expect(isNonTaggableConstruct(RESOURCE_TYPES.EC2_INSTANCE)).toBe(false);
     expect(isNonTaggableConstruct(RESOURCE_TYPES.LAMBDA_FUNCTION)).toBe(false);
     // Route TABLE is taggable even though its child Route is not.
     expect(isNonTaggableConstruct(RESOURCE_TYPES.EC2_ROUTE_TABLE)).toBe(false);
+    // CloudFront Distribution is taggable; OAC is not.
+    expect(isNonTaggableConstruct(RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION)).toBe(
+      false,
+    );
     // Unknown string falls through to false (no panic, no false positive).
     expect(isNonTaggableConstruct("AWS::SomethingElse::Widget")).toBe(false);
     expect(isNonTaggableConstruct("")).toBe(false);
@@ -154,6 +168,29 @@ describe("e98.W1.B1 — store projection of non-taggable provisions", () => {
     expect(records[0]!.resourceType).toBe(
       RESOURCE_TYPES.EC2_VPC_GATEWAY_ATTACHMENT,
     );
+  });
+
+  // DC-1 additions
+  it("projects a CloudFront OAC provision record with keyKind=primaryIdentifier", async () => {
+    const pk = "E3EYXPSYURQIM9";
+    await seedProvision(RESOURCE_TYPES.CLOUDFRONT_ORIGIN_ACCESS_CONTROL, pk);
+    const records = await listNonTaggableProvisionRecords();
+    expect(records).toHaveLength(1);
+    expect(records[0]!.keyKind).toBe("primaryIdentifier");
+    expect(records[0]!.key).toBe(pk);
+    expect(records[0]!.resourceType).toBe(
+      RESOURCE_TYPES.CLOUDFRONT_ORIGIN_ACCESS_CONTROL,
+    );
+  });
+
+  it("projects an S3 BucketPolicy provision record with keyKind=primaryIdentifier", async () => {
+    const pk = "my-assignee-managed-bucket";
+    await seedProvision(RESOURCE_TYPES.S3_BUCKET_POLICY, pk);
+    const records = await listNonTaggableProvisionRecords();
+    expect(records).toHaveLength(1);
+    expect(records[0]!.keyKind).toBe("primaryIdentifier");
+    expect(records[0]!.key).toBe(pk);
+    expect(records[0]!.resourceType).toBe(RESOURCE_TYPES.S3_BUCKET_POLICY);
   });
 
   it("classifies a taggable provision record as keyKind=arn", async () => {
@@ -212,6 +249,29 @@ describe("e98.W1.B1 — findProvisionRecord lookup", () => {
     await seedProvision(RESOURCE_TYPES.EC2_ROUTE, "rtb-real|0.0.0.0/0");
     const hit = await findProvisionRecord("rtb-NONEXISTENT|0.0.0.0/0");
     expect(hit).toBeNull();
+  });
+
+  // DC-1 additions
+  it("resolves a CloudFront OAC bare Id by exact match", async () => {
+    const pk = "E3EYXPSYURQIM9";
+    await seedProvision(RESOURCE_TYPES.CLOUDFRONT_ORIGIN_ACCESS_CONTROL, pk);
+    const hit = await findProvisionRecord(pk);
+    expect(hit).not.toBeNull();
+    expect(hit!.key).toBe(pk);
+    expect(hit!.resourceType).toBe(
+      RESOURCE_TYPES.CLOUDFRONT_ORIGIN_ACCESS_CONTROL,
+    );
+    expect(hit!.keyKind).toBe("primaryIdentifier");
+  });
+
+  it("resolves an S3 BucketPolicy by bucket name", async () => {
+    const pk = "my-assignee-managed-bucket";
+    await seedProvision(RESOURCE_TYPES.S3_BUCKET_POLICY, pk);
+    const hit = await findProvisionRecord(pk);
+    expect(hit).not.toBeNull();
+    expect(hit!.key).toBe(pk);
+    expect(hit!.resourceType).toBe(RESOURCE_TYPES.S3_BUCKET_POLICY);
+    expect(hit!.keyKind).toBe("primaryIdentifier");
   });
 });
 
@@ -312,6 +372,40 @@ describe("e98.W1.B1 — fetchManagedResources merges non-taggable entries", () =
       fetchRgtaResources: async () => [],
     });
     expect(resources).toEqual([]);
+  });
+
+  // DC-1 additions
+  it("DC-1: merges OAC provision record with keyKind=primaryIdentifier into list output", async () => {
+    await seedProvision(
+      RESOURCE_TYPES.CLOUDFRONT_ORIGIN_ACCESS_CONTROL,
+      "E3EYXPSYURQIM9",
+    );
+    const resources = await fetchManagedResources({
+      region: "us-east-1",
+      fetchRgtaResources: async () => [],
+    });
+    expect(resources).toHaveLength(1);
+    expect(resources[0]!.resourceType).toBe(
+      RESOURCE_TYPES.CLOUDFRONT_ORIGIN_ACCESS_CONTROL,
+    );
+    expect(resources[0]!.primaryIdentifier).toBe("E3EYXPSYURQIM9");
+    expect(resources[0]!.arn).toBe("");
+    expect(resources[0]!.keyKind).toBe("primaryIdentifier");
+  });
+
+  it("DC-1: merges S3 BucketPolicy provision record into list output", async () => {
+    await seedProvision(
+      RESOURCE_TYPES.S3_BUCKET_POLICY,
+      "my-assignee-managed-bucket",
+    );
+    const resources = await fetchManagedResources({
+      region: "us-east-1",
+      fetchRgtaResources: async () => [],
+    });
+    expect(resources).toHaveLength(1);
+    expect(resources[0]!.resourceType).toBe(RESOURCE_TYPES.S3_BUCKET_POLICY);
+    expect(resources[0]!.primaryIdentifier).toBe("my-assignee-managed-bucket");
+    expect(resources[0]!.keyKind).toBe("primaryIdentifier");
   });
 });
 

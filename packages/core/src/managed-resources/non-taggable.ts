@@ -38,12 +38,25 @@ import { RESOURCE_TYPES } from "@/config/resource-types.js";
  *   2. Add the matching `arn-templates.ts` entry (identifier-passthrough).
  *   3. Extend `packages/core/src/graph/nodes/__tests__/
  *      non-taggable-resource-registration.test.ts` to cover the new type.
+ *
+ * DC-1 (DF-OAC-LIST-DESTROY-MISMATCH): CLOUDFRONT_ORIGIN_ACCESS_CONTROL and
+ * S3_BUCKET_POLICY added here. Both types have ARN formats on paper, but
+ * CCAPI returns their bare primaryIdentifier (OAC Id / bucket name) rather
+ * than a full ARN. RGTA does not enumerate either type, so `assignee list`
+ * surfaces them via the provision log (keyKind: "primaryIdentifier") and
+ * `assignee destroy <bare-id>` must resolve them the same way.
  */
 export const NON_TAGGABLE_RESOURCE_TYPES: ReadonlySet<string> = new Set<string>(
   [
     RESOURCE_TYPES.EC2_ROUTE,
     RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
     RESOURCE_TYPES.EC2_VPC_GATEWAY_ATTACHMENT,
+    // DC-1: CCAPI returns bare OAC Id (E3EYXPSYURQIM9), not a full ARN.
+    // RGTA does not index OAC resources — provision log is the only trail.
+    RESOURCE_TYPES.CLOUDFRONT_ORIGIN_ACCESS_CONTROL,
+    // DC-1: CCAPI primary identifier for BucketPolicy is the bucket name.
+    // Same RGTA gap — provision log is the only trail.
+    RESOURCE_TYPES.S3_BUCKET_POLICY,
   ],
 );
 
