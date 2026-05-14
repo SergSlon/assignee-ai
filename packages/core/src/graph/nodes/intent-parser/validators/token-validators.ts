@@ -45,6 +45,46 @@
 //   - INSTANCE_SIZE_SUFFIXES — used only by isValidInstanceType; kept
 //     unexported so downstream clusters cannot drift the suffix set.
 
+/**
+ * Known RDS DB instance-class family tokens (the part after `db.` and before
+ * the size suffix). Source-of-truth: `classifyRdsFamily` in
+ * `packages/core/src/utils/aws-resource-discovery/rds.ts` — mirrors the
+ * families handled there plus common legacy options.
+ *
+ * Note: RDS families share many tokens with EC2 families but are prefixed
+ * by `db.` in the actual class string (e.g. `db.t4g.micro`). This set
+ * contains ONLY the family token without the `db.` prefix so it can be
+ * matched generically.
+ */
+export const RDS_INSTANCE_FAMILY_PREFIXES: ReadonlySet<string> = new Set([
+  // Burstable (db.t*)
+  "t2",
+  "t3",
+  "t3a",
+  "t4g",
+  // General purpose (db.m*)
+  "m4",
+  "m5",
+  "m5d",
+  "m6g",
+  "m6i",
+  "m7g",
+  // Memory optimised (db.r* / db.x*)
+  "r4",
+  "r5",
+  "r5b",
+  "r6g",
+  "r6i",
+  "r7g",
+  "x1",
+  "x1e",
+  "x2g",
+]);
+
+/** Full regex for a valid RDS DB instance class: `db.<family>.<size>`. */
+export const RDS_INSTANCE_CLASS_REGEX =
+  /\bdb\.([a-z][0-9][a-z]*[0-9]*[a-z]?)\.([a-z0-9]+)\b/gi;
+
 /** Known EC2 instance-type family prefixes (current-gen + common legacy). */
 export const INSTANCE_FAMILY_PREFIXES: ReadonlySet<string> = new Set([
   // Burstable
@@ -136,6 +176,28 @@ const INSTANCE_SIZE_SUFFIXES: ReadonlySet<string> = new Set([
   "48xlarge",
   "metal",
 ]);
+
+/**
+ * Validates an RDS `DBInstanceClass` token (e.g. `db.t4g.micro`).
+ * Returns true only when the family prefix AND size suffix are both
+ * known. Rejects hallucinated values like `db.zz.xxlarge`.
+ *
+ * Note: `INSTANCE_SIZE_SUFFIXES` is shared with EC2 — RDS classes use
+ * the same size vocabulary (micro, small, medium, large, xlarge, …).
+ */
+export function isValidDbInstanceClass(value: string): boolean {
+  const lower = value.toLowerCase();
+  // Must start with "db."
+  if (!lower.startsWith("db.")) return false;
+  const rest = lower.slice(3); // strip "db."
+  const dot = rest.indexOf(".");
+  if (dot < 1) return false;
+  const family = rest.slice(0, dot);
+  const size = rest.slice(dot + 1);
+  return (
+    RDS_INSTANCE_FAMILY_PREFIXES.has(family) && INSTANCE_SIZE_SUFFIXES.has(size)
+  );
+}
 
 /** Validates VPC-grade CIDR (/16-/28) per RFC 4632 + AWS VPC limits. */
 export function isValidCidr(value: string, kind: "vpc" | "source"): boolean {

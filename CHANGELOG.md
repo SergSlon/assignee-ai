@@ -63,6 +63,32 @@ review methodology notes, see
 - Tests: 20 probe variations in `advice-filters.test.ts` covering A-F shapes
   (2 filtered, 4 preserved) plus mixed and edge-case scenarios.
 
+### RDS instance-class extractor honours db.t4g._ / db.r6g._ (SX-3 / PH1-F-1 + DF-E1, 2026-05-13)
+
+- core: EXTENDED `graph/nodes/intent-parser/extractors/compute-extractors.ts`
+  with new `extractDbInstanceClass(intent, intentLower, elicited, errors)`.
+  Captures the user-asserted `db.<family>.<size>` token VERBATIM and writes it
+  to `elicitedOptions.DBInstanceClass`. Prior behaviour silently ignored the
+  user assertion and let the defaults engine emit `db.t3.micro` even when the
+  user wrote `db.t4g.micro` in the intent.
+- core: EXTENDED `graph/nodes/intent-parser/validators/token-validators.ts`
+  with `RDS_INSTANCE_FAMILY_PREFIXES` (t2/t3/t3a/t4g/m4/m5/m6g/m6i/m7g/
+  r4/r5/r5b/r6g/r6i/r7g/x1/x1e/x2g), `RDS_INSTANCE_CLASS_REGEX`, and
+  `isValidDbInstanceClass`. Family set mirrors `classifyRdsFamily` in
+  `packages/core/src/utils/aws-resource-discovery/rds.ts:74`.
+- Extractor uses two-pass matching: strict `db.[a-z][0-9]…` regex (first
+  pass) plus broad `db.<word>.<word>` fallback (second pass) so invalid
+  classes like `db.zz.xxlarge` emit a USAGE_ERROR hint rather than silently
+  defaulting.
+- Wired into `extractAssertedValues` in `intent-parser/index.ts` (one
+  new import + one call site; sequenced AFTER `extractEngineVersion` so
+  both RDS assertions coexist safely).
+- Tests: 30 assertions in `compute-extractors.test.ts` — validator matrix
+  (11 accept / 5 reject), Variations A–F from the spec probe plan, plus a
+  non-RDS guard. All 357 core test files still pass (zero regressions).
+- Closes DF-E1 by side-effect (user-asserted class no longer silently
+  demoted).
+
 ### Lambda body compound propagation — completes PR #52 regression (SX-7 / PH1-D-1, 2026-05-14)
 
 - core: NEW `graph/nodes/intent-parser/extractors/lambda-body-extractor.ts`
