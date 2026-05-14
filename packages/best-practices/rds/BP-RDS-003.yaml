@@ -12,3 +12,5 @@ remediation: "Set MultiAZ to true. This creates a synchronous standby replica in
 consequence: "An AZ outage or hardware failure takes down your database with no automatic failover — expect 30+ minutes of downtime."
 category: reliability
 lastVerified: "2026-03-22"
+skip_when_advisory:
+  - RDS_ENVIRONMENT_TIER_DEFAULTS

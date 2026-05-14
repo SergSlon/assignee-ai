@@ -179,6 +179,17 @@ export interface BestPractice {
   fix_hint?: string;
   /** Human-readable explanation of the risk if this practice is not followed. */
   consequence?: string;
+  /**
+   * Advisory codes that suppress this rule when present in the plan's
+   * advisory list. Used to prevent production-grade rules from contradicting
+   * staging/dev tier advisories (e.g. "RDS_ENVIRONMENT_TIER_DEFAULTS"
+   * suppresses MultiAZ / DeletionProtection / PerformanceInsights rules
+   * when the user explicitly asked for staging-appropriate defaults).
+   *
+   * Compliance-critical rules (encryption, network access) must NOT use
+   * this field — suppression is only for operational comfort rules.
+   */
+  skip_when_advisory?: string[];
 }
 
 export interface BPFinding {
