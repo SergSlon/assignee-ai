@@ -21,6 +21,8 @@ export const messageProcessingPattern: ArchitecturePattern = {
     "event-driven",
     "async processing pipeline",
     "message queue with lambda",
+    // CP-4 probe D: "Lambda that processes SQS messages" phrasing
+    "processes sqs",
   ],
   resourceList: [
     {

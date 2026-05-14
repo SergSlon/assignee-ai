@@ -138,6 +138,20 @@ export const lambdaWithExecRolePattern: ArchitecturePattern = {
           },
         ],
       },
+      // ManagedPolicyArns grants the minimal CloudWatch Logs permissions
+      // (CreateLogGroup, CreateLogStream, PutLogEvents) required for any
+      // Lambda to write execution logs. Without this, the function cannot
+      // emit logs even though PermissionsBoundary allows it in principle —
+      // PermissionsBoundary CAPS the maximum permission set but does NOT
+      // GRANT any permissions. Commercial-partition ARN;
+      // rewriteManagedPolicyArnsForPartition() in compound-plan.ts rewrites
+      // this to the correct partition at apply time. (CP-4 / PH1-D-2 fix)
+      ManagedPolicyArns: [
+        awsManagedPolicyArn(
+          "aws",
+          AwsManagedPolicy.LAMBDA_BASIC_EXECUTION_PATH,
+        ),
+      ],
       // PermissionsBoundary keeps the auto-created role within the same
       // safety envelope used by the serverless-api pattern's exec role —
       // the role can do CloudWatch Logs (the basic exec role grant) plus
