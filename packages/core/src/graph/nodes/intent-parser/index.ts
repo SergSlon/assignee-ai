@@ -48,6 +48,7 @@ import {
   extractInstanceType,
   extractAmiId,
   extractEngineVersion,
+  extractDbInstanceClass,
 } from "./extractors/compute-extractors.js";
 import {
   extractResourceName,
@@ -125,6 +126,7 @@ export function extractAssertedValues(
   extractAmiId(intent, elicited, errors);
   extractRegion(intent, elicited, errors);
   extractEngineVersion(intent, intentLower, elicited, errors);
+  extractDbInstanceClass(intent, intentLower, elicited, errors);
   extractResourceName(
     intent,
     resourceType,

@@ -10,7 +10,9 @@
 
 import {
   INSTANCE_FAMILY_PREFIXES,
+  RDS_INSTANCE_CLASS_REGEX,
   isValidAmiId,
+  isValidDbInstanceClass,
   isValidEngineVersion,
   isValidInstanceType,
   mentionsDatabaseEngine,
@@ -86,6 +88,75 @@ export function extractAmiId(
     return;
   }
   elicited["ImageId"] = token;
+}
+
+/**
+ * Extracts a user-asserted RDS DB instance class (e.g. `db.t4g.micro`) from
+ * the natural-language intent and writes it verbatim to
+ * `elicited.DBInstanceClass`.
+ *
+ * Only runs when the intent mentions an RDS database engine (guarded by
+ * `mentionsDatabaseEngine`) to avoid false positives on EC2 intents where
+ * the user might incidentally mention a dotted token.
+ *
+ * If a `db.*.*` token is present but its family/size are NOT in the known
+ * sets, the extractor emits a `USAGE_ERROR`-compatible message so the caller
+ * can surface an actionable hint instead of silently defaulting to
+ * `db.t3.micro`.
+ *
+ * SX-3 / PH1-F-1 + DF-E1
+ */
+/**
+ * Broad regex that matches ANY `db.<word>.<word>` token — used as the
+ * second-pass "catch malformed class" scanner. The strict `RDS_INSTANCE_CLASS_REGEX`
+ * only matches tokens whose family token matches `[a-z][0-9]…`; anything
+ * like `db.zz.xxlarge` (all-alpha family) escapes the first pass. Without
+ * a second pass those tokens silently fall through to the default, which is
+ * exactly the UX anti-pattern we're fixing.
+ */
+const DB_CLASS_BROAD_REGEX = /\bdb\.([a-z][a-z0-9]*)\.([a-z0-9]+)\b/gi;
+
+export function extractDbInstanceClass(
+  intent: string,
+  intentLower: string,
+  elicited: Record<string, unknown>,
+  errors: string[],
+): void {
+  if (!mentionsDatabaseEngine(intentLower)) return;
+
+  // First pass: strict family regex (known-shape tokens).
+  // Reset lastIndex — the exported constant has the global flag.
+  RDS_INSTANCE_CLASS_REGEX.lastIndex = 0;
+
+  let match: RegExpExecArray | null;
+  while ((match = RDS_INSTANCE_CLASS_REGEX.exec(intent)) !== null) {
+    const token = match[0]!.toLowerCase();
+    if (!isValidDbInstanceClass(token)) {
+      errors.push(
+        `Unknown RDS DB instance class "${match[0]}". Use a valid class like db.t3.micro, db.t4g.micro, db.m5.large, db.r6g.large (family: t3/t4g/m5/m6g/m6i/m7g/r5/r6g/r6i/r7g/x1e/x2g; size: micro/small/medium/large/xlarge/…xlarge).`,
+      );
+      return;
+    }
+    elicited["DBInstanceClass"] = token;
+    return;
+  }
+
+  // Second pass: broader `db.<word>.<word>` pattern catches tokens whose
+  // family didn't match `[a-z][0-9]…` (e.g. `db.zz.xxlarge`). If the user
+  // clearly wrote a `db.*.*` token but it's not valid, emit an error rather
+  // than silently defaulting.
+  DB_CLASS_BROAD_REGEX.lastIndex = 0;
+  const broadMatch = DB_CLASS_BROAD_REGEX.exec(intent);
+  if (broadMatch) {
+    const candidate = broadMatch[0]!.toLowerCase();
+    // Only fail if the candidate isn't already valid (first pass would have
+    // caught a valid token; reaching here means it wasn't recognised).
+    if (!isValidDbInstanceClass(candidate)) {
+      errors.push(
+        `Unknown RDS DB instance class "${broadMatch[0]}". Use a valid class like db.t3.micro, db.t4g.micro, db.m5.large, db.r6g.large (family: t3/t4g/m5/m6g/m6i/m7g/r5/r6g/r6i/r7g/x1e/x2g; size: micro/small/medium/large/xlarge/…xlarge).`,
+      );
+    }
+  }
 }
 
 /** Extracts an RDS engine-version token when the intent signals RDS. */
