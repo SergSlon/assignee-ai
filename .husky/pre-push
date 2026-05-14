@@ -15,6 +15,82 @@ if [ "${ASSIGNEE_REVIEWER_BAN_BYPASS:-0}" = "1" ]; then
   exit 0
 fi
 
+# ---------------------------------------------------------------------------
+# Reviewer token validation helpers
+# ---------------------------------------------------------------------------
+
+# Returns 0 if the commit body contains a valid Reviewer token.
+# Valid tokens:
+#   1. ACCEPT strict:  Reviewer: ACCEPT — <role> (<persona>) — <story_id> — see _archive/reviews/<sha>-review.md
+#   2. ACCEPT bootstrap (ONE-TIME only for EPIC-106-1):
+#      Reviewer: ACCEPT — bootstrap — EPIC-106-1 — <any-suffix>
+#   3. SKIP:           Reviewer: SKIP — <reason> — <user-quote>
+# Blocking token (returns non-zero, caller reports it):
+#   4. PENDING:        Reviewer: PENDING — ...
+#
+# Usage: check_reviewer_token "$body" "$short_sha"
+check_reviewer_token() {
+  _body="$1"
+  _sha="$2"
+
+  # SKIP token — always allowed, no evidence file required
+  if echo "$_body" | grep -qE "^Reviewer: SKIP — "; then
+    return 0
+  fi
+
+  # PENDING token — blocking
+  if echo "$_body" | grep -qE "^Reviewer: PENDING"; then
+    return 2
+  fi
+
+  # Bootstrap exception — ONE-TIME for EPIC-106-1 hook-hardening commit only.
+  # This literal string is the ONLY bootstrap pattern allowed; it cannot be
+  # reused for any other story without changing this hook.
+  if echo "$_body" | grep -qF "Reviewer: ACCEPT — bootstrap — EPIC-106-1"; then
+    echo "  NOTE: bootstrap exception used for EPIC-106-1 (one-time allowance)" >&2
+    return 0
+  fi
+
+  # Strict ACCEPT format:
+  # Reviewer: ACCEPT — <role> (<persona>) — <story_id> — see _archive/reviews/<sha>-review.md
+  _accept_line=$(echo "$_body" | grep -E "^Reviewer: ACCEPT — .+ \(.+\) — [^ ]+ — see _archive/reviews/[a-f0-9]+-review\.md")
+  if [ -z "$_accept_line" ]; then
+    return 1
+  fi
+
+  # Extract the evidence SHA from the line
+  _evidence_sha=$(echo "$_accept_line" | sed 's/.*_archive\/reviews\/\([a-f0-9]*\)-review\.md.*/\1/')
+  if [ -z "$_evidence_sha" ]; then
+    return 1
+  fi
+
+  # Verify the evidence file exists in the repo working tree
+  _evidence_path="_archive/reviews/${_evidence_sha}-review.md"
+  if [ ! -f "$_evidence_path" ]; then
+    echo "  REJECT: evidence file missing: ${_evidence_path}" >&2
+    return 3
+  fi
+
+  # Verify the evidence file's first line matches the required header format:
+  # # Reviewer: ACCEPT — <role> (<persona>) — <story_id>
+  _first_line=$(head -n 1 "$_evidence_path")
+  case "$_first_line" in
+    "# Reviewer: ACCEPT — "*)
+      # Further validate it contains a parenthesised persona
+      if echo "$_first_line" | grep -qE "^# Reviewer: ACCEPT — .+ \(.+\) — [^ ]+"; then
+        return 0
+      else
+        echo "  REJECT: evidence file first line missing parenthesised persona: \"${_evidence_path}\"" >&2
+        return 4
+      fi
+    ;;
+    *)
+      echo "  REJECT: evidence file has malformed first line (must start with '# Reviewer: ACCEPT — '): \"${_evidence_path}\"" >&2
+      return 4
+    ;;
+  esac
+}
+
 while read -r local_ref local_sha remote_ref remote_sha; do
   # Skip deletions (push :branch)
   [ "$local_sha" = "0000000000000000000000000000000000000000" ] && continue
@@ -118,28 +194,55 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     body=$(git log -1 --format="%B" "$sha")
     subject=$(git log -1 --format="%s" "$sha")
 
-    if echo "$body" | grep -qE "^Reviewer: ACCEPT"; then continue; fi
-    if echo "$body" | grep -qE "^Reviewer: SKIP — "; then continue; fi
-    if echo "$body" | grep -qE "_archive/reviews/[a-f0-9]+-review\.md"; then continue; fi
-
     # Use git's portable abbreviated SHA (avoids bash-only ${var:0:N}).
     short_sha=$(git log -1 --format=%h --abbrev=8 "$sha" 2>/dev/null)
     [ -z "$short_sha" ] && short_sha=$(echo "$sha" | cut -c1-8)
-    failures="${failures}  ${short_sha} '${subject}'
+
+    check_reviewer_token "$body" "$short_sha"
+    token_result=$?
+
+    case "$token_result" in
+      0)
+        # Valid token — continue
+        ;;
+      2)
+        # PENDING token — blocking
+        failures="${failures}  ${short_sha} '${subject}' [PENDING — review not complete]
 "
+        ;;
+      3)
+        # Missing evidence file
+        failures="${failures}  ${short_sha} '${subject}' [ACCEPT token missing evidence file]
+"
+        ;;
+      4)
+        # Malformed evidence file header
+        failures="${failures}  ${short_sha} '${subject}' [ACCEPT token evidence file has malformed header]
+"
+        ;;
+      *)
+        # No valid token or unrecognised format
+        failures="${failures}  ${short_sha} '${subject}'
+"
+        ;;
+    esac
   done
 
   if [ -n "$failures" ]; then
     echo "" >&2
-    echo "Reviewer-skip BAN (CLAUDE.md): the following commits lack reviewer evidence:" >&2
+    echo "Reviewer-skip BAN (CLAUDE.md): the following commits failed reviewer evidence validation:" >&2
     printf '%s' "$failures" >&2
     echo "" >&2
-    echo "Add one of these tokens to each commit body, then re-push:" >&2
-    echo "  Reviewer: ACCEPT" >&2
-    echo "  Reviewer: SKIP — <reason> — <user-confirmation-quote>" >&2
+    echo "For commits with Reviewer: ACCEPT, the required format is:" >&2
+    echo "  Reviewer: ACCEPT — <role> (<persona>) — <story_id> — see _archive/reviews/<short-sha>-review.md" >&2
+    echo "" >&2
+    echo "The cited evidence file must:" >&2
+    echo "  1. Exist at _archive/reviews/<short-sha>-review.md" >&2
+    echo "  2. Have first line: # Reviewer: ACCEPT — <role> (<persona>) — <story_id>" >&2
+    echo "" >&2
+    echo "Or use: Reviewer: SKIP — <reason> — <user-confirmation-quote>" >&2
     echo "                  ^         ^" >&2
     echo "                  These are literal em-dashes (U+2014), not hyphens." >&2
-    echo "  _archive/reviews/<short-sha>-review.md" >&2
     echo "" >&2
     echo "Or set ASSIGNEE_REVIEWER_BAN_BYPASS=1 (emergency only)." >&2
     exit 1

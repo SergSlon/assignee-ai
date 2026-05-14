@@ -45,3 +45,23 @@ jobs:
     secrets:
       BEDROCK_LOGGING_VERIFIED: ${{ secrets.BEDROCK_LOGGING_VERIFIED }}
       GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+
+  reviewer-evidence-audit:
+    name: reviewer evidence audit
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run reviewer evidence audit
+        run: pnpm reviewer-evidence-audit --since origin/main
