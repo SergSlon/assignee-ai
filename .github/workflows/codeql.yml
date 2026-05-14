@@ -67,7 +67,7 @@ jobs:
         # SHA pin verified against `gh api repos/github/codeql-action/git/refs/tags/v3.27.1`
         # (tag dereferences to commit 4f3212b61783c3c68e8309a0f18a699764811cda).
         # Dependabot will bump to v3 latest weekly; re-verify when the comment-tag changes.
-        uses: github/codeql-action/init@e46ed2cbd01164d986452f91f178727624ae40d7 # v4.35.3
+        uses: github/codeql-action/init@68bde559dea0fdcac2102bfdf6230c5f70eb485e # v4.35.4
         with:
           languages: ${{ matrix.language }}
           # `security-and-quality` includes the security suite + a curated
@@ -94,7 +94,7 @@ jobs:
         # GitHub Advanced Security on this private repo. See
         # `.github/workflows/codeql.yml` history + the customer-demo
         # 2026-05-06 audit closure for context.
-        uses: github/codeql-action/analyze@e46ed2cbd01164d986452f91f178727624ae40d7 # v4.35.3
+        uses: github/codeql-action/analyze@68bde559dea0fdcac2102bfdf6230c5f70eb485e # v4.35.4
         with:
           category: "/language:${{ matrix.language }}"
           upload: never
