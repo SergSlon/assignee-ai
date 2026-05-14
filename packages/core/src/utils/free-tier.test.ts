@@ -384,3 +384,54 @@ describe("getFreeTierNoteWithConfig", () => {
     expect(getFreeTierNoteWithConfig("AWS::Unknown::Resource")).toBeNull();
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RG-2 / DF-E6 — RDS class-aware free-tier detection (integration)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("getFreeTierNote — RDS class-aware (RG-2)", () => {
+  it("Variation A end-to-end — db.t3.micro returns LEGACY_ELIGIBLE note even when accountCreatedDate is undefined (NO 'unknown' substring)", () => {
+    const note = getFreeTierNote("AWS::RDS::DBInstance", undefined, {
+      DBInstanceClass: "db.t3.micro",
+    });
+    expect(note).not.toBeNull();
+    expect(note?.message).not.toContain("unknown");
+    expect(note?.message).toContain("db.t3.micro");
+  });
+
+  it("Variation D end-to-end — db.t3.medium returns null (NOT free-tier) even when legacy account in 12-month window", () => {
+    const today = new Date();
+    const sixMonthsAgo = new Date(today);
+    sixMonthsAgo.setMonth(today.getMonth() - 6);
+    const legacyDate = sixMonthsAgo.toISOString().slice(0, 10);
+
+    const note = getFreeTierNote("AWS::RDS::DBInstance", legacyDate, {
+      DBInstanceClass: "db.t3.medium",
+    });
+    expect(note).toBeNull();
+  });
+
+  it("Variation C end-to-end — db.t4g.micro Graviton NOT in 12-month free tier", () => {
+    const note = getFreeTierNote("AWS::RDS::DBInstance", undefined, {
+      DBInstanceClass: "db.t4g.micro",
+    });
+    expect(note).toBeNull();
+  });
+
+  it("db.t2.micro end-to-end — same as db.t3.micro path", () => {
+    const note = getFreeTierNote("AWS::RDS::DBInstance", undefined, {
+      DBInstanceClass: "db.t2.micro",
+    });
+    expect(note).not.toBeNull();
+    expect(note?.message).toContain("db.t2.micro");
+  });
+
+  it("no DBInstanceClass declared — falls through to account-date heuristic", () => {
+    // No desiredState → existing "unknown" fallback when accountCreatedDate
+    // is also undefined. Preserves existing behaviour when class info is
+    // genuinely missing from the plan.
+    const note = getFreeTierNote("AWS::RDS::DBInstance", undefined, undefined);
+    expect(note).not.toBeNull();
+    expect(note?.message).toContain("unknown");
+  });
+});

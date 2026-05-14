@@ -100,6 +100,43 @@ const LEGACY_ELIGIBLE_RESOURCES: Record<string, string> = {
 const FREE_TIER_CUTOFF_DATE = "2025-07-15";
 
 /**
+ * RDS DBInstanceClass values that are eligible for the AWS 12-month free tier.
+ * Per AWS docs: db.t2.micro and db.t3.micro are the only classes covered.
+ * Graviton micro (db.t4g.micro) and medium classes (db.t3.medium, etc.) are
+ * NOT included in the free tier.
+ *
+ * @see https://aws.amazon.com/rds/free/
+ */
+export const RDS_FREE_TIER_INSTANCE_CLASSES: ReadonlySet<string> = new Set([
+  "db.t2.micro",
+  "db.t3.micro",
+]);
+
+/**
+ * Returns true when the given RDS DBInstanceClass is covered by the AWS
+ * 12-month free tier (750 hrs/month). False for all other classes including
+ * db.t4g.micro (Graviton — not in the free tier) and db.t3.medium+.
+ *
+ * This is a pure, synchronous check with no IO. It is the canonical detector
+ * for RDS free-tier class eligibility; `getFreeTierNote` in the parent
+ * `../free-tier.ts` checks at the resource-type level; this function adds
+ * class-level granularity for plan display and test probes.
+ */
+export function isRdsInstanceClassFreeTierEligible(
+  instanceClass: string,
+): boolean {
+  return RDS_FREE_TIER_INSTANCE_CLASSES.has(instanceClass);
+}
+
+/**
+ * RDS storage free-tier allotment message surfaced as a separate line in the
+ * plan output. AWS grants 20 GB of General Purpose SSD (gp2) storage per
+ * month during the 12-month free-tier window.
+ */
+export const RDS_FREE_TIER_STORAGE_NOTE =
+  "20 GB GP2 General Purpose SSD storage/month (12-month free tier)";
+
+/**
  * Pre-built frozen snapshot of the maps. Built once at module load so
  * {@link getFreeTierMaps} returns a stable reference (cheap to call in hot
  * paths such as the preflight guard loop) and so consumers cannot mutate

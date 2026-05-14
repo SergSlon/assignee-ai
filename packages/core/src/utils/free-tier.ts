@@ -27,8 +27,11 @@ import { CostEstimateLabel } from "../pricing/filter-constants.js";
 import {
   FreeTierType,
   getFreeTierMaps,
+  isRdsInstanceClassFreeTierEligible,
+  RDS_FREE_TIER_STORAGE_NOTE,
   type FreeTierNote,
 } from "./free-tier/maps.js";
+import { RESOURCE_TYPES } from "../config/resource-types.js";
 import {
   type TenantId,
   createLegacySingleTenantId,
@@ -117,6 +120,7 @@ export function _resetAccountDateCache(tenantId?: TenantId): void {
 export function getFreeTierNote(
   resourceType: string,
   accountCreatedDate?: string,
+  desiredState?: Record<string, unknown>,
 ): FreeTierNote | null {
   const { alwaysFree, alwaysFreeWithLimits, legacyEligible, cutoffDate } =
     getFreeTierMaps();
@@ -133,6 +137,37 @@ export function getFreeTierNote(
 
   const legacyMsg = legacyEligible[resourceType];
   if (legacyMsg) {
+    // RG-2 / DF-E6 — for RDS, narrow the eligibility check to the
+    // `DBInstanceClass` field. The 12-month free-tier window only
+    // applies to `db.t2.micro` and `db.t3.micro` per AWS docs; other
+    // classes (e.g. `db.t3.medium`, `db.t4g.micro` Graviton) are NOT
+    // eligible regardless of account age.
+    if (resourceType === RESOURCE_TYPES.RDS_DB_INSTANCE) {
+      const dbClass =
+        typeof desiredState?.["DBInstanceClass"] === "string"
+          ? (desiredState["DBInstanceClass"] as string)
+          : undefined;
+      // Class declared AND not in the free-tier set → not eligible.
+      if (
+        dbClass !== undefined &&
+        !isRdsInstanceClassFreeTierEligible(dbClass)
+      ) {
+        return null;
+      }
+      // Class declared AND in the free-tier set → return positive note
+      // even when accountCreatedDate is unknown. Closes Variation A's
+      // "no 'unknown' substring" assertion.
+      if (
+        dbClass !== undefined &&
+        isRdsInstanceClassFreeTierEligible(dbClass)
+      ) {
+        return {
+          type: FreeTierType.LEGACY_ELIGIBLE,
+          message: `Free tier: 750 hrs/month for ${dbClass} (12-month free tier). ${RDS_FREE_TIER_STORAGE_NOTE}`,
+        };
+      }
+      // Class undefined → fall through to the account-date heuristic.
+    }
     if (accountCreatedDate === undefined) {
       return {
         type: FreeTierType.CREDITS_APPLY,
