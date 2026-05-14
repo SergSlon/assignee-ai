@@ -17,6 +17,31 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### Lambda body compound propagation — completes PR #52 regression (SX-7 / PH1-D-1, 2026-05-14)
+
+- core: NEW `graph/nodes/intent-parser/extractors/lambda-body-extractor.ts`
+  detects `"returns X"` / `"responds with X"` / `"outputs X"` / `"prints X"` /
+  `"logs X"` phrases in the user intent and writes a generated Node.js
+  handler body to `elicitedOptions.Code.ZipFile`. The shallow-merge spread
+  in `compound-plan.ts:76-79` (`{ ...patternDefaults, ...transformedOptions }`)
+  then overrides each Lambda compound pattern's placeholder ZipFile with the
+  user-extracted body.
+- Closes PR #52 regression: the standalone `lambda-function` plugin path
+  was fixed in #52 but the four compound patterns (`lambda-with-exec-role`,
+  `serverless-api`, `scheduled-lambda`, `websocket-api`) still emitted
+  `body: 'placeholder'` because nothing wrote to `elicitedOptions.Code`.
+- Per Winston's compound-pattern architectural memo §1 Defect C, the fix
+  lives in ONE new extractor file, NOT in the 4 pattern files. Benefits
+  every compound pattern containing a Lambda resource without per-pattern
+  edits. CP-4 (already merged) ensures the IAM execution role is correct;
+  this story ensures the function code is correct.
+- Tests: 10 probe variations in `lambda-body-extractor.test.ts` (Variations
+  A-F + non-Lambda guard, empty-body guard, sentence-terminator boundary,
+  single-quote escaping). 2 regression-mirror tests in
+  `pattern-templates/__tests__/lambda-body-propagation.test.ts` lock the
+  shallow-merge spread order (placeholder is replaced; placeholder is
+  preserved when intent has no body phrase).
+
 ### SECURITY/CORRECTNESS: attach AWSLambdaBasicExecutionRole to all Lambda compound execution roles (CP-4 / PH1-D-2, 2026-05-14)
 
 **Winston memo §1 Defect C — systemic policy hole.** Four Lambda compound
