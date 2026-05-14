@@ -17,27 +17,79 @@ review methodology notes, see
 
 ## [Unreleased]
 
-### fix(destroy): S3 bucket pre-delete iterates ListObjectVersions + DeleteObjects (DC-2 / DF-S3-DESTROY-VERSIONED-OBJECTS, 2026-05-14)
+**Epic-105 (Phase 1-4 dogfood-driven hardening)**: 24 PRs shipped, 15/17 PH1 findings closed + 6 DF carryovers, NFR composite 88.2 (was ~78), three deep fixes deferred to next sprint as numbered backlog items.
 
-Closes the apply-then-destroy round-trip failure where `assignee destroy <s3-bucket-arn>`
-failed with "The bucket you tried to delete is not empty. You must delete all versions in
-the bucket." against any bucket with versioning enabled. Extends the established
-pre-delete-hook pattern (`feedback_destroy_predelete_hooks_for_cfn_only_constructs`) to S3
-object versions.
+### feat(compound-patterns): add sqs-with-dlq compound for "with DLQ" intents (CP-1 / PH1-B-1 + DF-B2, 2026-05-14)
 
-- core `destroy-strategies/strategies/s3-bucket.ts`: `preDestroy` now (1) deletes the
-  companion `AWS::S3::BucketPolicy` via CCAPI before emptying the bucket (spec line 13),
-  then (2) paginates `ListObjectVersions` and batches `DeleteObjects` in ≤1000-key chunks.
-  Conservative approach: always runs the version-listing step even for non-versioned buckets
-  (safe — `ListObjectVersions` on a non-versioned bucket returns objects without VersionId,
-  which `DeleteObjects` handles). BucketPolicy companion delete is non-fatal (warns + continues).
-- core `destroy-strategies/strategies/s3-bucket.test.ts`: 6 DC-2 variations added (A–F):
-  A) 10 versioned objects → single DeleteObjects batch;
-  B) 1500 objects across 2 pagination pages → 2 DeleteObjects calls (1000 + 500);
-  C) empty bucket → no DeleteObjects, direct bucket delete;
-  D) 5 versions + 3 delete markers → all 8 items in one DeleteObjects payload;
-  E) non-versioned bucket → runs same path, no regression;
-  F) BucketPolicy companion in provision log → deleted via CCAPI before bucket empty.
+- core `pattern-templates/patterns/sqs-with-dlq.ts`: NEW 2-resource compound
+  pattern (primary `AWS::SQS::Queue` + DLQ companion). `RedrivePolicy.deadLetterTargetArn`
+  wired via `markerGetAtt(R.DLQ, "Arn")`; `maxReceiveCount` defaults to 5; DLQ
+  provisioned first in `dependencyOrder` so its ARN is available to the primary queue.
+- Routes intents containing `"with DLQ"`, `"with dead-letter queue"`, or
+  `"dead letter queue"` to the 2-resource compound. Bare SQS intents without
+  DLQ phrasing continue to route to the standalone `AWS::SQS::Queue` singleton.
+  `negativeKeywords: ["lambda", "processor", "message processing"]` prevents
+  collision with the larger `message-processing` compound.
+- DF-B2 (deferred SQS+DLQ compound gap) closes.
+
+### feat(intent-parser): environment-tier extractor gates RDS staging defaults (SX-4 / PH1-F-3 + DF-E7)
+
+- NEW `packages/core/src/graph/nodes/intent-parser/extractors/environment-tier-extractor.ts`:
+  exports `extractEnvironmentTier(intent)` (returns `"staging" | "dev" | "production" | null`)
+  with word-boundary guards (Variation F: "stagingZ" does not match) and
+  `applyRdsTierDefaults(intent, resourceType, elicited, advisories)` for RDS-specific
+  tier defaults injection.
+- Cost-behaviour change: intents with `"for staging"` or `"for dev"` now emit
+  `MultiAZ=false, DeletionProtection=false, BackupRetentionPeriod=1,
+PerformanceInsightsEnabled=false` instead of production-grade defaults.
+  Previously, `"for staging"` emitted `MultiAZ=Yes, DeletionProtection=Yes,
+BackupRetention=7d` — doubling RDS cost without justification.
+- `"for production"` / `"in prod"` keeps and reinforces the production-grade
+  defaults. No-tier intents are unaffected (Variation D invariant).
+- Explicit `"with MultiAZ"` keyword in the intent overrides the staging/dev
+  tier default (Variation E: user intent wins over tier signal).
+- Advisory emitted: `"Detected '<tier>' environment — applied <tier>-appropriate
+defaults; override with --set MultiAZ=true if needed."`
+- EDIT `intent-parser/index.ts`: `applyRdsTierDefaults` called after all other
+  extractors; runs last so explicit user-extracted values take priority.
+- EDIT `rds-dbinstance.test.ts`: 5 new tier-aware assertions (Variations A-E).
+
+### feat(compound-patterns): add sns-with-email-subscription compound + email-extractor (CP-2 / PH1-C-2 + DF-C2, 2026-05-14)
+
+- core `pattern-templates/patterns/sns-with-email-subscription.ts`: NEW 2-resource
+  compound pattern (`AWS::SNS::Topic` + `AWS::SNS::Subscription` with
+  `Protocol=email`). `TopicArn` wired via `markerRef(R.TOPIC)`; topic provisioned
+  first in `dependencyOrder`. Routes intents containing `"with email subscription
+to"` / `"with subscriber"`.
+- core `graph/nodes/intent-parser/extractors/email-extractor.ts`: NEW pure
+  email-address extractor (`extractEmail`, `extractAllEmails`, `isWellFormedEmail`)
+  using conservative regex `/[\w.+-]+@[\w-]+(\.[\w-]+)+/` with well-formed
+  validation (no consecutive dots, no leading/trailing dot, TLD ≥ 2 chars).
+- core `graph/nodes/intent-parser/extractors/messaging-extractors.ts`: new
+  `extractEmailForSnsCompound` function. Runs on `SNS_TOPIC` primary slot;
+  writes `Endpoint` which `filterElicitedForSlot` passes only to the
+  `SNS_SUBSCRIPTION` slot (via new `Endpoint: SNS_SUBSCRIPTION` entry in
+  `NAME_FIELD_TO_RESOURCE_TYPE`). Variation D decision: pick-first-and-advise
+  (single `SNS::Subscription` per intent; advisory for extra addresses).
+- Interacts with SX-2 `extractInlineName`: `"SNS topic genai-events with email
+subscription to liamin.web@gmail.com"` produces `TopicName=genai-events` AND
+  `Endpoint=liamin.web@gmail.com` in the same `elicitedOptions`.
+- Pattern count bumped 12 → 13 in `help-hints.test.ts`, `integration-architecture.md`,
+  and `README.md`.
+
+### feat(rds): MasterUserPassword placeholder + advisory + display masking (RG-1 / DF-E5, 2026-05-14)
+
+RDS DBInstance plan now always emits a `MasterUserPassword` field. When the user
+has NOT provided a password via `--set MasterUserPassword=...`, the plan displays
+an actionable placeholder `<REQUIRED - set via --set MasterUserPassword=...>` and
+an advice hint (`RDS_MASTER_USER_PASSWORD_REQUIRED`) pointing to the fix. When
+`--set MasterUserPassword=<value>` is provided, the display renders `<<masked>>`
+(the real value flows to apply unchanged). The preflight-guard already rejects
+apply when any placeholder sentinel is present. Audit-log path verified: the
+checkpoint redactor's `SENSITIVE_KEY_NAMES` set already includes `MasterUserPassword`,
+so no raw password reaches disk. Roadmap: Solutions A (SecretsManager
+dynamic-reference compound) and B (locally-generated random + no-echo) are
+deferred to follow-up stories per spec line 16.
 
 ### feat(advice): EFS default-VPC hint advisory + extractor (CP-3 / PH1-G-2, 2026-05-14)
 
@@ -98,77 +150,27 @@ Tests (Variations A-E in `single-flow.test.ts`; extended
 - Var D: NotFound from CCAPI treated as success.
 - Var E: `AWS::S3::BucketPolicy` bare bucket-name resolves (fix generalises).
 
-### feat(compound-patterns): add sns-with-email-subscription compound + email-extractor (CP-2 / PH1-C-2 + DF-C2, 2026-05-14)
+### fix(destroy): S3 bucket pre-delete iterates ListObjectVersions + DeleteObjects (DC-2 / DF-S3-DESTROY-VERSIONED-OBJECTS, 2026-05-14)
 
-- core `pattern-templates/patterns/sns-with-email-subscription.ts`: NEW 2-resource
-  compound pattern (`AWS::SNS::Topic` + `AWS::SNS::Subscription` with
-  `Protocol=email`). `TopicArn` wired via `markerRef(R.TOPIC)`; topic provisioned
-  first in `dependencyOrder`. Routes intents containing `"with email subscription
-to"` / `"with subscriber"`.
-- core `graph/nodes/intent-parser/extractors/email-extractor.ts`: NEW pure
-  email-address extractor (`extractEmail`, `extractAllEmails`, `isWellFormedEmail`)
-  using conservative regex `/[\w.+-]+@[\w-]+(\.[\w-]+)+/` with well-formed
-  validation (no consecutive dots, no leading/trailing dot, TLD ≥ 2 chars).
-- core `graph/nodes/intent-parser/extractors/messaging-extractors.ts`: new
-  `extractEmailForSnsCompound` function. Runs on `SNS_TOPIC` primary slot;
-  writes `Endpoint` which `filterElicitedForSlot` passes only to the
-  `SNS_SUBSCRIPTION` slot (via new `Endpoint: SNS_SUBSCRIPTION` entry in
-  `NAME_FIELD_TO_RESOURCE_TYPE`). Variation D decision: pick-first-and-advise
-  (single `SNS::Subscription` per intent; advisory for extra addresses).
-- Interacts with SX-2 `extractInlineName`: `"SNS topic genai-events with email
-subscription to liamin.web@gmail.com"` produces `TopicName=genai-events` AND
-  `Endpoint=liamin.web@gmail.com` in the same `elicitedOptions`.
-- Pattern count bumped 12 → 13 in `help-hints.test.ts`, `integration-architecture.md`,
-  and `README.md`.
+Closes the apply-then-destroy round-trip failure where `assignee destroy <s3-bucket-arn>`
+failed with "The bucket you tried to delete is not empty. You must delete all versions in
+the bucket." against any bucket with versioning enabled. Extends the established
+pre-delete-hook pattern (`feedback_destroy_predelete_hooks_for_cfn_only_constructs`) to S3
+object versions.
 
-### feat(rds): MasterUserPassword placeholder + advisory + display masking (RG-1 / DF-E5, 2026-05-14)
-
-RDS DBInstance plan now always emits a `MasterUserPassword` field. When the user
-has NOT provided a password via `--set MasterUserPassword=...`, the plan displays
-an actionable placeholder `<REQUIRED - set via --set MasterUserPassword=...>` and
-an advice hint (`RDS_MASTER_USER_PASSWORD_REQUIRED`) pointing to the fix. When
-`--set MasterUserPassword=<value>` is provided, the display renders `<<masked>>`
-(the real value flows to apply unchanged). The preflight-guard already rejects
-apply when any placeholder sentinel is present. Audit-log path verified: the
-checkpoint redactor's `SENSITIVE_KEY_NAMES` set already includes `MasterUserPassword`,
-so no raw password reaches disk. Roadmap: Solutions A (SecretsManager
-dynamic-reference compound) and B (locally-generated random + no-echo) are
-deferred to follow-up stories per spec line 16.
-
-### feat(compound-patterns): add sqs-with-dlq compound for "with DLQ" intents (CP-1 / PH1-B-1 + DF-B2, 2026-05-14)
-
-- core `pattern-templates/patterns/sqs-with-dlq.ts`: NEW 2-resource compound
-  pattern (primary `AWS::SQS::Queue` + DLQ companion). `RedrivePolicy.deadLetterTargetArn`
-  wired via `markerGetAtt(R.DLQ, "Arn")`; `maxReceiveCount` defaults to 5; DLQ
-  provisioned first in `dependencyOrder` so its ARN is available to the primary queue.
-- Routes intents containing `"with DLQ"`, `"with dead-letter queue"`, or
-  `"dead letter queue"` to the 2-resource compound. Bare SQS intents without
-  DLQ phrasing continue to route to the standalone `AWS::SQS::Queue` singleton.
-  `negativeKeywords: ["lambda", "processor", "message processing"]` prevents
-  collision with the larger `message-processing` compound.
-- DF-B2 (deferred SQS+DLQ compound gap) closes.
-
-### feat(intent-parser): environment-tier extractor gates RDS staging defaults (SX-4 / PH1-F-3 + DF-E7)
-
-- NEW `packages/core/src/graph/nodes/intent-parser/extractors/environment-tier-extractor.ts`:
-  exports `extractEnvironmentTier(intent)` (returns `"staging" | "dev" | "production" | null`)
-  with word-boundary guards (Variation F: "stagingZ" does not match) and
-  `applyRdsTierDefaults(intent, resourceType, elicited, advisories)` for RDS-specific
-  tier defaults injection.
-- Cost-behaviour change: intents with `"for staging"` or `"for dev"` now emit
-  `MultiAZ=false, DeletionProtection=false, BackupRetentionPeriod=1,
-PerformanceInsightsEnabled=false` instead of production-grade defaults.
-  Previously, `"for staging"` emitted `MultiAZ=Yes, DeletionProtection=Yes,
-BackupRetention=7d` — doubling RDS cost without justification.
-- `"for production"` / `"in prod"` keeps and reinforces the production-grade
-  defaults. No-tier intents are unaffected (Variation D invariant).
-- Explicit `"with MultiAZ"` keyword in the intent overrides the staging/dev
-  tier default (Variation E: user intent wins over tier signal).
-- Advisory emitted: `"Detected '<tier>' environment — applied <tier>-appropriate
-defaults; override with --set MultiAZ=true if needed."`
-- EDIT `intent-parser/index.ts`: `applyRdsTierDefaults` called after all other
-  extractors; runs last so explicit user-extracted values take priority.
-- EDIT `rds-dbinstance.test.ts`: 5 new tier-aware assertions (Variations A-E).
+- core `destroy-strategies/strategies/s3-bucket.ts`: `preDestroy` now (1) deletes the
+  companion `AWS::S3::BucketPolicy` via CCAPI before emptying the bucket (spec line 13),
+  then (2) paginates `ListObjectVersions` and batches `DeleteObjects` in ≤1000-key chunks.
+  Conservative approach: always runs the version-listing step even for non-versioned buckets
+  (safe — `ListObjectVersions` on a non-versioned bucket returns objects without VersionId,
+  which `DeleteObjects` handles). BucketPolicy companion delete is non-fatal (warns + continues).
+- core `destroy-strategies/strategies/s3-bucket.test.ts`: 6 DC-2 variations added (A–F):
+  A) 10 versioned objects → single DeleteObjects batch;
+  B) 1500 objects across 2 pagination pages → 2 DeleteObjects calls (1000 + 500);
+  C) empty bucket → no DeleteObjects, direct bucket delete;
+  D) 5 versions + 3 delete markers → all 8 items in one DeleteObjects payload;
+  E) non-versioned bucket → runs same path, no regression;
+  F) BucketPolicy companion in provision log → deleted via CCAPI before bucket empty.
 
 ### Inline-name extractor for SNS/SQS/DynamoDB/Lambda/S3 (SX-2 / PH1-C-1, 2026-05-14)
 
@@ -199,23 +201,6 @@ defaults; override with --set MultiAZ=true if needed."`
   through, explicit-keyword wins, S3-constraint violation, DynamoDB
   table, S3 valid lowercase) + resource without a name field.
 
-### Suppress self-referential and stale advice lines (SX-6 / PH1-C-4 + DF-A2/B3/C4/D4/E4, 2026-05-13)
-
-- core: NEW `graph/nodes/advice/advice-filters.ts` — exports
-  `filterSelfReferentialAdvice(adviceLines, plan)` which removes advice lines
-  that instruct the planner to do what the user already requested and the plan
-  already reflects. Patterns matched: `"Change the <Prop> to '<X>'"`,
-  `"Set <Prop> to <X>"`, `"Update the <Prop> to '<X>'"`, and `"Enable <Prop>"`
-  when the plan already has the property set to a truthy value. The filter is
-  CONSERVATIVE — only suppresses when the proposed value EXACTLY matches the
-  current plan value; genuine future-work guidance is always preserved.
-- core: `advice-generator.ts` wires the post-filter pass right before
-  `finalHints` is assembled; log entry gains `filteredCount` field for
-  observability. Closes DF-A2/B3/C4/D4/E4 stale-advice carryovers by
-  side-effect.
-- Tests: 20 probe variations in `advice-filters.test.ts` covering A-F shapes
-  (2 filtered, 4 preserved) plus mixed and edge-case scenarios.
-
 ### RDS instance-class extractor honours db.t4g._ / db.r6g._ (SX-3 / PH1-F-1 + DF-E1, 2026-05-13)
 
 - core: EXTENDED `graph/nodes/intent-parser/extractors/compute-extractors.ts`
@@ -241,6 +226,23 @@ defaults; override with --set MultiAZ=true if needed."`
   non-RDS guard. All 357 core test files still pass (zero regressions).
 - Closes DF-E1 by side-effect (user-asserted class no longer silently
   demoted).
+
+### Suppress self-referential and stale advice lines (SX-6 / PH1-C-4 + DF-A2/B3/C4/D4/E4, 2026-05-13)
+
+- core: NEW `graph/nodes/advice/advice-filters.ts` — exports
+  `filterSelfReferentialAdvice(adviceLines, plan)` which removes advice lines
+  that instruct the planner to do what the user already requested and the plan
+  already reflects. Patterns matched: `"Change the <Prop> to '<X>'"`,
+  `"Set <Prop> to <X>"`, `"Update the <Prop> to '<X>'"`, and `"Enable <Prop>"`
+  when the plan already has the property set to a truthy value. The filter is
+  CONSERVATIVE — only suppresses when the proposed value EXACTLY matches the
+  current plan value; genuine future-work guidance is always preserved.
+- core: `advice-generator.ts` wires the post-filter pass right before
+  `finalHints` is assembled; log entry gains `filteredCount` field for
+  observability. Closes DF-A2/B3/C4/D4/E4 stale-advice carryovers by
+  side-effect.
+- Tests: 20 probe variations in `advice-filters.test.ts` covering A-F shapes
+  (2 filtered, 4 preserved) plus mixed and edge-case scenarios.
 
 ### SQS decomposer: render Requests + Data transfer out (PD-3 / PH1-B-3, 2026-05-13)
 
@@ -279,30 +281,24 @@ defaults; override with --set MultiAZ=true if needed."`
 - Closes DF-E6: plan output for RDS `db.t3.micro`/`db.t2.micro` no longer relies
   solely on account-date gating; class-level eligibility is now a first-class query.
 
-### Lambda body compound propagation — completes PR #52 regression (SX-7 / PH1-D-1, 2026-05-14)
+### EventBridge bare-Rule routing + no-target advisory (SX-1 / PH1-H-1 BLOCKER, 2026-05-13)
 
-- core: NEW `graph/nodes/intent-parser/extractors/lambda-body-extractor.ts`
-  detects `"returns X"` / `"responds with X"` / `"outputs X"` / `"prints X"` /
-  `"logs X"` phrases in the user intent and writes a generated Node.js
-  handler body to `elicitedOptions.Code.ZipFile`. The shallow-merge spread
-  in `compound-plan.ts:76-79` (`{ ...patternDefaults, ...transformedOptions }`)
-  then overrides each Lambda compound pattern's placeholder ZipFile with the
-  user-extracted body.
-- Closes PR #52 regression: the standalone `lambda-function` plugin path
-  was fixed in #52 but the four compound patterns (`lambda-with-exec-role`,
-  `serverless-api`, `scheduled-lambda`, `websocket-api`) still emitted
-  `body: 'placeholder'` because nothing wrote to `elicitedOptions.Code`.
-- Per Winston's compound-pattern architectural memo §1 Defect C, the fix
-  lives in ONE new extractor file, NOT in the 4 pattern files. Benefits
-  every compound pattern containing a Lambda resource without per-pattern
-  edits. CP-4 (already merged) ensures the IAM execution role is correct;
-  this story ensures the function code is correct.
-- Tests: 10 probe variations in `lambda-body-extractor.test.ts` (Variations
-  A-F + non-Lambda guard, empty-body guard, sentence-terminator boundary,
-  single-quote escaping). 2 regression-mirror tests in
-  `pattern-templates/__tests__/lambda-body-propagation.test.ts` lock the
-  shallow-merge spread order (placeholder is replaced; placeholder is
-  preserved when intent has no body phrase).
+- core `pattern-templates/patterns/scheduled-lambda.ts`: extend the keyword
+  list with four bare-Rule phrasings — `"EventBridge rule"`, `"fires every"`,
+  `"fires at"`, `"trigger every"`. Intent `"Create an EventBridge rule that
+fires every 5 minutes"` now routes to the `scheduled-lambda` compound
+  (4 resources with a wired Lambda target) instead of producing a target-less
+  `AWS::Events::Rule` with a CRITICAL finding and no path forward.
+- core: NEW `graph/nodes/advice/eventbridge-no-target-hint.ts` advisor helper
+  - wired into `advice-generator.ts`. When the planner still produces a bare
+    `AWS::Events::Rule` with no Targets (keyword routing miss), an actionable
+    HIGH advisory now suggests `assignee plan "scheduled lambda <schedule>"`
+    or `--set Targets=...` to recover.
+- Per Winston's compound-pattern architectural memo (`arch-compound-pattern-coverage-2026-05-13.md`),
+  the long-tail fix (LLM-fallback compound classifier) is filed in
+  `_bmad-output/implementation-artifacts/sprint-status.yaml` under
+  `deferred-backlog.deferred-llm-fallback-compound-classifier` with rationale
+  `"needs planner-fallback architecture, not keyword whack-a-mole"`.
 
 ### SECURITY/CORRECTNESS: attach AWSLambdaBasicExecutionRole to all Lambda compound execution roles (CP-4 / PH1-D-2, 2026-05-14)
 
@@ -345,24 +341,30 @@ CloudWatch Logs, making every deployed Lambda silently broken.
   correctly rewrites both `ManagedPolicyArns` and `PermissionsBoundary` to
   GovCloud / China partitions at apply time.
 
-### EventBridge bare-Rule routing + no-target advisory (SX-1 / PH1-H-1 BLOCKER, 2026-05-13)
+### Lambda body compound propagation — completes PR #52 regression (SX-7 / PH1-D-1, 2026-05-14)
 
-- core `pattern-templates/patterns/scheduled-lambda.ts`: extend the keyword
-  list with four bare-Rule phrasings — `"EventBridge rule"`, `"fires every"`,
-  `"fires at"`, `"trigger every"`. Intent `"Create an EventBridge rule that
-fires every 5 minutes"` now routes to the `scheduled-lambda` compound
-  (4 resources with a wired Lambda target) instead of producing a target-less
-  `AWS::Events::Rule` with a CRITICAL finding and no path forward.
-- core: NEW `graph/nodes/advice/eventbridge-no-target-hint.ts` advisor helper
-  - wired into `advice-generator.ts`. When the planner still produces a bare
-    `AWS::Events::Rule` with no Targets (keyword routing miss), an actionable
-    HIGH advisory now suggests `assignee plan "scheduled lambda <schedule>"`
-    or `--set Targets=...` to recover.
-- Per Winston's compound-pattern architectural memo (`arch-compound-pattern-coverage-2026-05-13.md`),
-  the long-tail fix (LLM-fallback compound classifier) is filed in
-  `_bmad-output/implementation-artifacts/sprint-status.yaml` under
-  `deferred-backlog.deferred-llm-fallback-compound-classifier` with rationale
-  `"needs planner-fallback architecture, not keyword whack-a-mole"`.
+- core: NEW `graph/nodes/intent-parser/extractors/lambda-body-extractor.ts`
+  detects `"returns X"` / `"responds with X"` / `"outputs X"` / `"prints X"` /
+  `"logs X"` phrases in the user intent and writes a generated Node.js
+  handler body to `elicitedOptions.Code.ZipFile`. The shallow-merge spread
+  in `compound-plan.ts:76-79` (`{ ...patternDefaults, ...transformedOptions }`)
+  then overrides each Lambda compound pattern's placeholder ZipFile with the
+  user-extracted body.
+- Closes PR #52 regression: the standalone `lambda-function` plugin path
+  was fixed in #52 but the four compound patterns (`lambda-with-exec-role`,
+  `serverless-api`, `scheduled-lambda`, `websocket-api`) still emitted
+  `body: 'placeholder'` because nothing wrote to `elicitedOptions.Code`.
+- Per Winston's compound-pattern architectural memo §1 Defect C, the fix
+  lives in ONE new extractor file, NOT in the 4 pattern files. Benefits
+  every compound pattern containing a Lambda resource without per-pattern
+  edits. CP-4 (already merged) ensures the IAM execution role is correct;
+  this story ensures the function code is correct.
+- Tests: 10 probe variations in `lambda-body-extractor.test.ts` (Variations
+  A-F + non-Lambda guard, empty-body guard, sentence-terminator boundary,
+  single-quote escaping). 2 regression-mirror tests in
+  `pattern-templates/__tests__/lambda-body-propagation.test.ts` lock the
+  shallow-merge spread order (placeholder is replaced; placeholder is
+  preserved when intent has no body phrase).
 
 ### Tier-ladder unit-aware formatRange — 3-for-1 cost-rendering fix (PD-1 / PH1-A-1 + PH1-C-3 + PH1-D-3, 2026-05-13)
 
@@ -403,6 +405,28 @@ fires every 5 minutes"` now routes to the `scheduled-lambda` compound
 - `pnpm audit --audit-level=moderate --prod` now reports 0 un-ignored advisories;
   the pre-existing `CVE-2026-41650` remains in `auditConfig.ignoreCves`.
 
+### Fix: pricingBreakdown must not leak across compound resources (PD-2 / PH1-G-1, 2026-05-13)
+
+- core: `preflight-guard.ts` now always includes `pricingBreakdown` in the
+  return object (even as `undefined`) instead of conditionally omitting the
+  key. Previously, free/non-priced resources (e.g. `SubnetRouteTableAssociation`,
+  `EFS::MountTarget`, `IAM::Role`) did not include the `pricingBreakdown` key in
+  the partial-state return. LangGraph's annotation reducer retains a field's
+  previous value when the key is absent from the update, so the EFS::FileSystem
+  breakdown (Storage $0.0250/GB-month) leaked through to all four downstream
+  free resources in the EFS-with-VPC compound plan.
+- core: `graph-state.ts` `pricingBreakdown` annotation reducer updated from
+  `(_, b) => b` to `(_, b) => b ?? undefined`. The explicit `?? undefined`
+  documents intent: when the returning node sends `pricingBreakdown: undefined`
+  (free resource), the reducer must actively clear the stale prior value rather
+  than silently retain it.
+- tests: 5-variation probe suite added to `preflight-guard.test.ts`:
+  Variation A (EFS compound — no leak to SubnetRouteTableAssociation /
+  EFS::MountTarget), Variation B (Lambda + exec-role — no leak to IAM::Role),
+  Variation C (single S3 bucket — no regression), Variation D (SQS + DLQ —
+  no over-clearing on back-to-back priced resources), Variation E (direct
+  reducer contract test).
+
 ### BP-SQS-003 false-positive reduction — demote to MEDIUM (BR-1 / PH1-B-2, 2026-05-13)
 
 - best-practices: BP-SQS-003 (`SQS queue should have server-side encryption
@@ -437,28 +461,6 @@ with KMS`) demoted from HIGH → MEDIUM severity. The rule previously fired
   `rate(1 hour)`) so any future BP-EVR-XXX INFO line that needs the same count
   imports from one place. Helper is exported and covered by a dedicated test
   suite (probe variations E–F + boundary cases).
-
-### Fix: pricingBreakdown must not leak across compound resources (PD-2 / PH1-G-1, 2026-05-13)
-
-- core: `preflight-guard.ts` now always includes `pricingBreakdown` in the
-  return object (even as `undefined`) instead of conditionally omitting the
-  key. Previously, free/non-priced resources (e.g. `SubnetRouteTableAssociation`,
-  `EFS::MountTarget`, `IAM::Role`) did not include the `pricingBreakdown` key in
-  the partial-state return. LangGraph's annotation reducer retains a field's
-  previous value when the key is absent from the update, so the EFS::FileSystem
-  breakdown (Storage $0.0250/GB-month) leaked through to all four downstream
-  free resources in the EFS-with-VPC compound plan.
-- core: `graph-state.ts` `pricingBreakdown` annotation reducer updated from
-  `(_, b) => b` to `(_, b) => b ?? undefined`. The explicit `?? undefined`
-  documents intent: when the returning node sends `pricingBreakdown: undefined`
-  (free resource), the reducer must actively clear the stale prior value rather
-  than silently retain it.
-- tests: 5-variation probe suite added to `preflight-guard.test.ts`:
-  Variation A (EFS compound — no leak to SubnetRouteTableAssociation /
-  EFS::MountTarget), Variation B (Lambda + exec-role — no leak to IAM::Role),
-  Variation C (single S3 bucket — no regression), Variation D (SQS + DLQ —
-  no over-clearing on back-to-back priced resources), Variation E (direct
-  reducer contract test).
 
 ### S3 lifecycle "30d" contradiction fix (PD-4 / PH1-E-1, 2026-05-13)
 
