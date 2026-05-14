@@ -12,6 +12,7 @@ import {
 import { lambdaWithExecRolePattern } from "./patterns/lambda-with-exec-role.js";
 import { efsWithVpcPattern } from "./patterns/efs-with-vpc.js";
 import { scheduledLambdaPattern } from "./patterns/scheduled-lambda.js";
+import { sqsWithDlqPattern } from "./patterns/sqs-with-dlq.js";
 
 export { PatternId } from "./pattern-ids.js";
 
@@ -44,6 +45,11 @@ defaultPatternRegistry.register(serverlessApiPattern);
 defaultPatternRegistry.register(threeTierWebPattern);
 defaultPatternRegistry.register(containerServicePattern);
 defaultPatternRegistry.register(messageProcessingPattern);
+// SQS-with-DLQ must register AFTER message-processing (which is a larger
+// SQS+Lambda pipeline compound) so "sqs lambda" intents hit message-processing
+// first. The sqs-with-dlq keywords all require explicit DLQ phrasing so
+// there is no ambiguity for bare-SQS intents.
+defaultPatternRegistry.register(sqsWithDlqPattern);
 defaultPatternRegistry.register(staticWebsitePattern);
 // EFS-with-VPC must register BEFORE vpc-networking — the "efs" keyword
 // family is more specific than the generic "vpc" keywords, but both
@@ -75,6 +81,7 @@ export {
 export { lambdaWithExecRolePattern } from "./patterns/lambda-with-exec-role.js";
 export { efsWithVpcPattern } from "./patterns/efs-with-vpc.js";
 export { scheduledLambdaPattern } from "./patterns/scheduled-lambda.js";
+export { sqsWithDlqPattern } from "./patterns/sqs-with-dlq.js";
 export type { ArchitecturePattern, ResourceSpec } from "./types.js";
 export {
   ServerlessApiResourceId,
@@ -86,4 +93,5 @@ export {
   EfsWithVpcResourceId,
   ScheduledLambdaResourceId,
   WebsocketApiResourceId,
+  SqsWithDlqResourceId,
 } from "./pattern-resource-ids.js";
