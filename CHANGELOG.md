@@ -40,6 +40,20 @@ subscription to liamin.web@gmail.com"` produces `TopicName=genai-events` AND
 - Pattern count bumped 12 → 13 in `help-hints.test.ts`, `integration-architecture.md`,
   and `README.md`.
 
+### feat(rds): MasterUserPassword placeholder + advisory + display masking (RG-1 / DF-E5, 2026-05-14)
+
+RDS DBInstance plan now always emits a `MasterUserPassword` field. When the user
+has NOT provided a password via `--set MasterUserPassword=...`, the plan displays
+an actionable placeholder `<REQUIRED - set via --set MasterUserPassword=...>` and
+an advice hint (`RDS_MASTER_USER_PASSWORD_REQUIRED`) pointing to the fix. When
+`--set MasterUserPassword=<value>` is provided, the display renders `<<masked>>`
+(the real value flows to apply unchanged). The preflight-guard already rejects
+apply when any placeholder sentinel is present. Audit-log path verified: the
+checkpoint redactor's `SENSITIVE_KEY_NAMES` set already includes `MasterUserPassword`,
+so no raw password reaches disk. Roadmap: Solutions A (SecretsManager
+dynamic-reference compound) and B (locally-generated random + no-echo) are
+deferred to follow-up stories per spec line 16.
+
 ### feat(compound-patterns): add sqs-with-dlq compound for "with DLQ" intents (CP-1 / PH1-B-1 + DF-B2, 2026-05-14)
 
 - core `pattern-templates/patterns/sqs-with-dlq.ts`: NEW 2-resource compound

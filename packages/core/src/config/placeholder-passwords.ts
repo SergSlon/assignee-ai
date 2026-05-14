@@ -21,12 +21,25 @@
 export const RDS_PLACEHOLDER_PASSWORD = "ChangeMe-REPLACE-123!" as const;
 
 /**
+ * Actionable placeholder emitted by the credentials post-processor when the
+ * user did NOT supply a MasterUserPassword via --set. The plan displays this
+ * verbatim (not masked) so the user sees the required action. Preflight-guard
+ * rejects apply when this sentinel is still present.
+ *
+ * Solution C (RG-1 / DF-E5): plan-only sprint. Solutions A (SecretsManager
+ * compound) and B (locally-generated random + no-echo) are deferred.
+ */
+export const RDS_REQUIRED_PASSWORD_PLACEHOLDER =
+  "<REQUIRED - set via --set MasterUserPassword=...>" as const;
+
+/**
  * Set of every known placeholder-password sentinel. Preflight-guard walks
  * RDS desiredState and rejects the plan if any password-typed field matches
  * one of these values.
  */
 export const PLACEHOLDER_DB_PASSWORDS: ReadonlySet<string> = new Set([
   RDS_PLACEHOLDER_PASSWORD,
+  RDS_REQUIRED_PASSWORD_PLACEHOLDER,
 ]);
 
 /**

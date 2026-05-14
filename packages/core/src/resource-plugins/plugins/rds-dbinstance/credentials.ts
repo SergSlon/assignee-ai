@@ -1,5 +1,31 @@
 import { CfnKey } from "@/config/cfn-keys.js";
+import { RDS_REQUIRED_PASSWORD_PLACEHOLDER } from "@/config/placeholder-passwords.js";
 import type { ResourcePlugin } from "../../types.js";
+
+/**
+ * Injects `MasterUserPassword` placeholder when the user did NOT supply one.
+ * Called from the LLM plan post-processor (Solution C / RG-1 / DF-E5).
+ *
+ * Rules:
+ *   - If `elicitedOptions` already contains a non-empty MasterUserPassword →
+ *     honour it (the user passed --set MasterUserPassword=...). No mutation.
+ *   - If `desiredState` already contains a non-empty MasterUserPassword →
+ *     the LLM filled it in; leave it untouched.
+ *   - Otherwise → inject the placeholder so the plan is never silently missing
+ *     this required field and the user sees an actionable hint.
+ */
+export function injectMasterPasswordPlaceholderIfAbsent(
+  desiredState: Record<string, unknown>,
+  elicitedOptions?: Record<string, unknown>,
+): void {
+  const elicited = elicitedOptions?.[CfnKey.MASTER_USER_PASSWORD];
+  if (elicited !== undefined && elicited !== null && elicited !== "") return;
+
+  const existing = desiredState[CfnKey.MASTER_USER_PASSWORD];
+  if (existing !== undefined && existing !== null && existing !== "") return;
+
+  desiredState[CfnKey.MASTER_USER_PASSWORD] = RDS_REQUIRED_PASSWORD_PLACEHOLDER;
+}
 
 /** Database credential + initial-DB fields (name, username, password). */
 export const credentialFields: ResourcePlugin["commonFields"] = [
