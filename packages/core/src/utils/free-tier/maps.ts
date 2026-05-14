@@ -130,11 +130,11 @@ export function isRdsInstanceClassFreeTierEligible(
 
 /**
  * RDS storage free-tier allotment message surfaced as a separate line in the
- * plan output. AWS grants 20 GB of General Purpose SSD (gp2) storage per
- * month during the 12-month free-tier window.
+ * plan output. AWS grants 20 GB of General Purpose SSD storage per month
+ * during the 12-month free-tier window — applies to both gp2 and gp3.
  */
 export const RDS_FREE_TIER_STORAGE_NOTE =
-  "20 GB GP2 General Purpose SSD storage/month (12-month free tier)";
+  "20 GB General Purpose SSD storage/month (12-month free tier)";
 
 /**
  * Pre-built frozen snapshot of the maps. Built once at module load so
