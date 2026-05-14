@@ -13,6 +13,7 @@ import { lambdaWithExecRolePattern } from "./patterns/lambda-with-exec-role.js";
 import { efsWithVpcPattern } from "./patterns/efs-with-vpc.js";
 import { scheduledLambdaPattern } from "./patterns/scheduled-lambda.js";
 import { sqsWithDlqPattern } from "./patterns/sqs-with-dlq.js";
+import { snsWithEmailSubscriptionPattern } from "./patterns/sns-with-email-subscription.js";
 
 export { PatternId } from "./pattern-ids.js";
 
@@ -50,6 +51,12 @@ defaultPatternRegistry.register(messageProcessingPattern);
 // first. The sqs-with-dlq keywords all require explicit DLQ phrasing so
 // there is no ambiguity for bare-SQS intents.
 defaultPatternRegistry.register(sqsWithDlqPattern);
+// CP-2: SNS-with-email-subscription registers adjacent to sqs-with-dlq.
+// Its keywords all require "with email subscription" or "with subscriber"
+// phrasing, so bare "create an SNS topic" intents fall through to the LLM
+// classifier (→ AWS::SNS::Topic singleton). Negative keywords prevent
+// collision with message-processing.
+defaultPatternRegistry.register(snsWithEmailSubscriptionPattern);
 defaultPatternRegistry.register(staticWebsitePattern);
 // EFS-with-VPC must register BEFORE vpc-networking — the "efs" keyword
 // family is more specific than the generic "vpc" keywords, but both
@@ -82,6 +89,7 @@ export { lambdaWithExecRolePattern } from "./patterns/lambda-with-exec-role.js";
 export { efsWithVpcPattern } from "./patterns/efs-with-vpc.js";
 export { scheduledLambdaPattern } from "./patterns/scheduled-lambda.js";
 export { sqsWithDlqPattern } from "./patterns/sqs-with-dlq.js";
+export { snsWithEmailSubscriptionPattern } from "./patterns/sns-with-email-subscription.js";
 export type { ArchitecturePattern, ResourceSpec } from "./types.js";
 export {
   ServerlessApiResourceId,
@@ -94,4 +102,5 @@ export {
   ScheduledLambdaResourceId,
   WebsocketApiResourceId,
   SqsWithDlqResourceId,
+  SnsWithEmailSubscriptionResourceId,
 } from "./pattern-resource-ids.js";

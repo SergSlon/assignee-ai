@@ -54,7 +54,10 @@ import {
   extractResourceName,
   extractInlineName,
 } from "./extractors/name-extractor.js";
-import { extractSnsProtocol } from "./extractors/messaging-extractors.js";
+import {
+  extractSnsProtocol,
+  extractEmailForSnsCompound,
+} from "./extractors/messaging-extractors.js";
 import {
   extractCloudWatchAlarmMetric,
   extractRetentionDays,
@@ -142,6 +145,15 @@ export function extractAssertedValues(
   extractSgIngress(intent, elicited, errors);
   extractNoVpcDirective(intentLower, elicited);
   extractSnsProtocol(intent, intentLower, resourceType, elicited);
+  // CP-2: extract email for sns-with-email-subscription compound (primary type
+  // is SNS_TOPIC; Endpoint is scoped to SNS_SUBSCRIPTION via filterElicitedForSlot).
+  extractEmailForSnsCompound(
+    intent,
+    intentLower,
+    resourceType,
+    elicited,
+    advisories,
+  );
   extractRetentionDays(intent, intentLower, resourceType, elicited);
   extractCloudWatchAlarmMetric(intentLower, resourceType, elicited);
   extractS3Lifecycle(intent, intentLower, resourceType, elicited, advisories);
@@ -172,6 +184,8 @@ function patternPrimaryResourceType(patternId: string): string | null {
       return RESOURCE_TYPES.SQS_QUEUE;
     case PatternId.STATIC_WEBSITE:
       return RESOURCE_TYPES.S3_BUCKET;
+    case PatternId.SNS_WITH_EMAIL_SUBSCRIPTION:
+      return RESOURCE_TYPES.SNS_TOPIC;
     default:
       return null;
   }
