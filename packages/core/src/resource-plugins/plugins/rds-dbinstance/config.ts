@@ -57,7 +57,7 @@ export function companionResources(
 }
 
 export const configHints: ResourcePlugin["configHints"] = [
-  "If the user did not provide a MasterUserPassword, OMIT it — AWS will auto-generate one via Secrets Manager",
+  "If the user did not provide a MasterUserPassword, OMIT it from the JSON — the post-processor will inject the required placeholder automatically",
   "If the user did not provide a DBName, OMIT it — no initial database will be created",
   "EngineVersion MUST be a valid version number for the selected Engine (e.g., '16' for postgres, '8.4' for mysql). NEVER use deprecated versions.",
   "PubliclyAccessible SHOULD be false for production. If a DBSubnetGroupName is provided, the instance is placed in that VPC subnet group.",

@@ -5,6 +5,10 @@ import { resolveFieldLabel } from "./friendly-names-by-type.js";
 import { SENSITIVE_FIELDS } from "./sensitive-fields.js";
 import { formatValue } from "./format-value.js";
 import { formatSpecialValue } from "./format-special-value.js";
+import { RDS_REQUIRED_PASSWORD_PLACEHOLDER } from "@/config/placeholder-passwords.js";
+
+/** Display token for a redacted (real) sensitive value. */
+export const MASKED_DISPLAY = "<<masked>>";
 
 /**
  * Arrays are joined with commas. Objects render as nested key-value pairs.
@@ -31,9 +35,15 @@ export function formatDesiredState(
   for (const [key, value] of entries) {
     const friendlyKey = resolveFieldLabel(key, resourceType);
     const padded = friendlyKey.padEnd(maxKeyLen);
-    // Mask sensitive fields — never display passwords/secrets in plaintext
+    // Mask sensitive fields — never display passwords/secrets in plaintext.
+    // Exception: if the value IS the actionable placeholder string (Solution C
+    // / RG-1), show it verbatim so the user sees the required action hint.
     if (SENSITIVE_FIELDS.has(key) && value !== undefined && value !== null) {
-      lines.push(`  ${padded}   ********`);
+      const display =
+        value === RDS_REQUIRED_PASSWORD_PLACEHOLDER
+          ? String(value)
+          : MASKED_DISPLAY;
+      lines.push(`  ${padded}   ${display}`);
       continue;
     }
     const formatted = formatSpecialValue(key, value) ?? formatValue(value);
