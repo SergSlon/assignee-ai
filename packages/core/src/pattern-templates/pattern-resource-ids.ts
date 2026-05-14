@@ -155,6 +155,17 @@ export const WebsocketApiResourceId = {
 } as const;
 
 /**
+ * Resource IDs for the SQS-with-DLQ compound pattern.
+ *
+ * DLQ is provisioned first so its ARN can be wired into the primary
+ * queue's RedrivePolicy.deadLetterTargetArn via markerGetAtt.
+ */
+export const SqsWithDlqResourceId = {
+  DLQ: "dlq",
+  PRIMARY_QUEUE: "primary-queue",
+} as const;
+
+/**
  * Resource IDs for the EFS-with-VPC compound pattern.
  *
  * The VPC-bearing resource IDs intentionally reuse the same string
