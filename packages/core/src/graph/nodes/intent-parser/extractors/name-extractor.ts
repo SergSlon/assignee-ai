@@ -48,6 +48,7 @@
 import { RESOURCE_TYPES } from "../../../../index.js";
 import type { Advisory } from "../intent-types.js";
 import { containsNonAscii } from "../validators/token-validators.js";
+import { inlineNameHint } from "../../advice/inline-name-hint.js";
 
 /**
  * Keywords that follow a name in natural-language AWS intents and
@@ -239,6 +240,138 @@ export function extractResourceName(
   // name slot to put it in).
   const nameField = resolveNameField(resourceType);
   if (nameField) elicited[nameField] = parsed.name;
+}
+
+// ---------------------------------------------------------------------------
+// SX-2 / PH1-C-1 — inline-name extractor
+// ---------------------------------------------------------------------------
+//
+// When the user omits the explicit "named X" / "called X" keyword and
+// instead writes the name immediately after the resource-type token
+// (e.g. "Create an SNS topic genai-events"), the keyword extractor above
+// returns empty and the planner falls back to an auto-generated name —
+// silently dropping the user's clear intent. SX-2 closes that gap.
+//
+// For each supported resource type, an inline pattern matches the token
+// after the type keyword. The candidate is validated against the
+// resource's AWS naming constraint; on success the name is written to
+// `elicited[<NameField>]` and an INFO advisory is emitted via the
+// helper at `advice/inline-name-hint.ts`.
+//
+// Inline detection ONLY fires when:
+//   - The keyword path above did not already set `elicited[<NameField>]`
+//     (so "topic foo called bar" still resolves to "bar").
+//   - The candidate token passes the per-resource AWS naming constraint.
+//   - The candidate token is not a known boundary keyword (e.g. "with").
+
+/** Per-resource AWS naming constraint check. Returns true when the candidate
+ *  conforms to the resource's API constraint. */
+function isValidInlineNameForType(
+  resourceType: string,
+  candidate: string,
+): boolean {
+  // S3 bucket names — DNS-compliant: lowercase letters, digits, hyphens,
+  // periods. Length 3-63. Must start/end with letter or digit.
+  if (resourceType === RESOURCE_TYPES.S3_BUCKET) {
+    return /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(candidate);
+  }
+  // Lambda function names — letters/digits/hyphens/underscores. 1-64.
+  if (resourceType === RESOURCE_TYPES.LAMBDA_FUNCTION) {
+    return /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(candidate);
+  }
+  // SNS topic + SQS queue + ECS cluster + ECR repo + IAM role + Log group
+  // all accept alphanumerics + hyphens (and underscores for some). Use a
+  // permissive but bounded check; the CFN API will reject malformed values
+  // at apply time.
+  if (
+    resourceType === RESOURCE_TYPES.SNS_TOPIC ||
+    resourceType === RESOURCE_TYPES.SQS_QUEUE ||
+    resourceType === RESOURCE_TYPES.DYNAMODB_TABLE ||
+    resourceType === RESOURCE_TYPES.ECS_CLUSTER ||
+    resourceType === RESOURCE_TYPES.ECR_REPOSITORY ||
+    resourceType === RESOURCE_TYPES.LOGS_LOG_GROUP ||
+    resourceType === RESOURCE_TYPES.IAM_ROLE
+  ) {
+    return /^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$/.test(candidate);
+  }
+  return false;
+}
+
+/** Resource-type keyword → resource type identifier mapping. The list maps
+ *  intent-text triggers ("topic", "queue", etc.) to the canonical resource
+ *  type so the inline regex can produce the correct candidate per intent. */
+const INLINE_NAME_KEYWORDS: ReadonlyArray<{
+  keyword: string;
+  resourceType: string;
+}> = [
+  { keyword: "topic", resourceType: RESOURCE_TYPES.SNS_TOPIC },
+  { keyword: "queue", resourceType: RESOURCE_TYPES.SQS_QUEUE },
+  { keyword: "table", resourceType: RESOURCE_TYPES.DYNAMODB_TABLE },
+  { keyword: "function", resourceType: RESOURCE_TYPES.LAMBDA_FUNCTION },
+  { keyword: "bucket", resourceType: RESOURCE_TYPES.S3_BUCKET },
+];
+
+/**
+ * Inline-name extraction — runs AFTER `extractResourceName` and only fires
+ * when no name was set by the keyword path. Detects patterns like
+ * `<keyword> <candidate-token>` (e.g. "topic genai-events") and writes
+ * the candidate to the resource's name field on success.
+ *
+ * Emits an INFO advisory via `inlineNameHint` so the user sees we picked
+ * up their intent and how to suppress the hint by using "named".
+ */
+export function extractInlineName(
+  intent: string,
+  resourceType: string,
+  elicited: Record<string, unknown>,
+  advisories: Advisory[],
+): void {
+  const nameField = resolveNameField(resourceType);
+  if (!nameField) return;
+  // Keyword path already wrote a name — explicit wins.
+  if (typeof elicited[nameField] === "string") return;
+
+  // Find the type keyword that matches this resource. The intent-parser
+  // already fixed `resourceType` upstream; we just need the matching keyword
+  // token to anchor the inline regex.
+  const config = INLINE_NAME_KEYWORDS.find(
+    (e) => e.resourceType === resourceType,
+  );
+  if (!config) return;
+
+  // Match `<keyword>\s+<candidate>` where candidate is a single
+  // hyphen/underscore/dot/alphanumeric run (NO whitespace). Case-insensitive
+  // on the keyword, case-sensitive on the candidate so we can apply the
+  // S3 lowercase constraint downstream.
+  const re = new RegExp(
+    String.raw`\b${config.keyword}\s+([A-Za-z0-9][A-Za-z0-9_.-]{0,253})\b`,
+    "i",
+  );
+  const m = re.exec(intent);
+  if (!m || !m[1]) return;
+
+  const candidate = m[1];
+
+  // Reject candidates that are themselves boundary keywords — e.g.
+  // "topic with high throughput" should NOT extract "with" as the name.
+  // Also reject "named" / "called" — those would only appear when the
+  // user wrote `<keyword> named X` and the explicit-keyword path is
+  // handling that case (so inline must not steal "named" as the name).
+  const candidateLower = candidate.toLowerCase();
+  if (NAME_BOUNDARY_KEYWORDS.has(candidateLower)) return;
+  if (candidateLower === "named" || candidateLower === "called") return;
+
+  // Reject candidates that don't pass the per-resource AWS naming
+  // constraint. Falls through to the auto-generator (no user-facing
+  // error — the candidate is treated as descriptive text, not a name).
+  if (!isValidInlineNameForType(resourceType, candidate)) return;
+
+  // Non-ASCII check (defensive — the regex character class is already
+  // ASCII-only, but a future widening of the class should keep this guard).
+  if (containsNonAscii(candidate)) return;
+
+  elicited[nameField] = candidate;
+  advisories.push(inlineNameHint(candidate, nameField));
 }
 
 /**

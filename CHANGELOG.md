@@ -17,6 +17,35 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### Inline-name extractor for SNS/SQS/DynamoDB/Lambda/S3 (SX-2 / PH1-C-1, 2026-05-14)
+
+- core `graph/nodes/intent-parser/extractors/name-extractor.ts`: NEW
+  `extractInlineName` function runs after the explicit
+  `"named X"`/`"called X"` keyword path. When the keyword path did NOT
+  set the resource name AND the intent contains an inline name pattern
+  (`<type-keyword> <candidate>`, e.g. `"SNS topic genai-events"`), the
+  candidate is validated against the per-resource AWS naming constraint
+  (S3 lowercase rule, Lambda alphanumeric+`_-`, SNS/SQS/DDB
+  alphanumeric+`._-`) and written to the resource's name field
+  (`TopicName`, `QueueName`, `TableName`, `FunctionName`, `BucketName`).
+- core: NEW `graph/nodes/advice/inline-name-hint.ts` helper emits an
+  `INLINE_NAME_DETECTED` INFO advisory documenting the extracted name and
+  the explicit `"named X"` form that suppresses the hint. Confined to a
+  dedicated helper file so the advisory wiring does not collide with
+  SX-6's `mcp-advisor.ts` work.
+- Closure conditions: explicit `"named X"`/`"called X"` still wins
+  (keyword path runs first); boundary keywords (`with`, `for`, `to`,
+  ...) reject as candidates; `named`/`called` rejected as candidates
+  (they signal the explicit-keyword path is in play); AWS-naming
+  constraint violations fall through to the auto-name generator silently
+  (no user-facing error — descriptive text is allowed to follow the
+  type token).
+- DF-C1 (SNS topic name dropped) closes by side-effect.
+- 9 probe tests in `name-extractor.test.ts` cover variations A–H per the
+  story spec (single-word, kebab-case, trailing clause, boundary fall-
+  through, explicit-keyword wins, S3-constraint violation, DynamoDB
+  table, S3 valid lowercase) + resource without a name field.
+
 ### Lambda body compound propagation — completes PR #52 regression (SX-7 / PH1-D-1, 2026-05-14)
 
 - core: NEW `graph/nodes/intent-parser/extractors/lambda-body-extractor.ts`

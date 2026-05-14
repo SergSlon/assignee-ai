@@ -49,7 +49,10 @@ import {
   extractAmiId,
   extractEngineVersion,
 } from "./extractors/compute-extractors.js";
-import { extractResourceName } from "./extractors/name-extractor.js";
+import {
+  extractResourceName,
+  extractInlineName,
+} from "./extractors/name-extractor.js";
 import { extractSnsProtocol } from "./extractors/messaging-extractors.js";
 import {
   extractCloudWatchAlarmMetric,
@@ -130,6 +133,9 @@ export function extractAssertedValues(
     advisories,
     errorCodeBox,
   );
+  // SX-2 / PH1-C-1 — inline-name fallback (after the keyword path so
+  // explicit "named X" / "called X" still wins).
+  extractInlineName(intent, resourceType, elicited, advisories);
   extractSgIngress(intent, elicited, errors);
   extractNoVpcDirective(intentLower, elicited);
   extractSnsProtocol(intent, intentLower, resourceType, elicited);
