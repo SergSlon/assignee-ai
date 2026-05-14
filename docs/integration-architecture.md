@@ -57,7 +57,7 @@ The shared foundation. Contains **zero business logic** -- only types, data, and
 - 14-node LangGraph pipeline (`createGraph()` + every node implementation under `packages/core/src/graph/nodes/`); both apps consume it directly. `apps/cli/src/services/graph.ts` and `apps/cli/src/nodes/` are thin re-export shims for backward compatibility.
 - All 38 user-addressable resource type constants and type definitions (36 with dedicated plugins + 2 compound-only that fall through to the generic plugin)
 - Resource plugin registry (38 registered plugins — 37 type-specific + 1 generic fallback; the two compound-only types `EC2::VPCGatewayAttachment` and `EC2::SubnetRouteTableAssociation` share the generic) <!-- doc-lint: plugin-count -->. The runtime SSOT for the supported-type list is `packages/core/src/config/resource-types/supported.ts`.
-- Pattern template registry (12 compound architecture patterns)
+- Pattern template registry (13 compound architecture patterns)
 - Pricing strategy registry (38 strategies) and decomposer registry (38 decomposers)
 - CloudFormation schema service (DescribeType + disk cache)
 - Schema adapter (raw CloudFormation -> normalized format)

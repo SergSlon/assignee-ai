@@ -17,6 +17,29 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### feat(compound-patterns): add sns-with-email-subscription compound + email-extractor (CP-2 / PH1-C-2 + DF-C2, 2026-05-14)
+
+- core `pattern-templates/patterns/sns-with-email-subscription.ts`: NEW 2-resource
+  compound pattern (`AWS::SNS::Topic` + `AWS::SNS::Subscription` with
+  `Protocol=email`). `TopicArn` wired via `markerRef(R.TOPIC)`; topic provisioned
+  first in `dependencyOrder`. Routes intents containing `"with email subscription
+to"` / `"with subscriber"`.
+- core `graph/nodes/intent-parser/extractors/email-extractor.ts`: NEW pure
+  email-address extractor (`extractEmail`, `extractAllEmails`, `isWellFormedEmail`)
+  using conservative regex `/[\w.+-]+@[\w-]+(\.[\w-]+)+/` with well-formed
+  validation (no consecutive dots, no leading/trailing dot, TLD ≥ 2 chars).
+- core `graph/nodes/intent-parser/extractors/messaging-extractors.ts`: new
+  `extractEmailForSnsCompound` function. Runs on `SNS_TOPIC` primary slot;
+  writes `Endpoint` which `filterElicitedForSlot` passes only to the
+  `SNS_SUBSCRIPTION` slot (via new `Endpoint: SNS_SUBSCRIPTION` entry in
+  `NAME_FIELD_TO_RESOURCE_TYPE`). Variation D decision: pick-first-and-advise
+  (single `SNS::Subscription` per intent; advisory for extra addresses).
+- Interacts with SX-2 `extractInlineName`: `"SNS topic genai-events with email
+subscription to liamin.web@gmail.com"` produces `TopicName=genai-events` AND
+  `Endpoint=liamin.web@gmail.com` in the same `elicitedOptions`.
+- Pattern count bumped 12 → 13 in `help-hints.test.ts`, `integration-architecture.md`,
+  and `README.md`.
+
 ### feat(compound-patterns): add sqs-with-dlq compound for "with DLQ" intents (CP-1 / PH1-B-1 + DF-B2, 2026-05-14)
 
 - core `pattern-templates/patterns/sqs-with-dlq.ts`: NEW 2-resource compound

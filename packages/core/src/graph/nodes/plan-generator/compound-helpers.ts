@@ -68,6 +68,10 @@ const NAME_FIELD_TO_RESOURCE_TYPE: Record<string, string> = {
   [CfnKey.FUNCTION_NAME]: RESOURCE_TYPES.LAMBDA_FUNCTION,
   [CfnKey.BUCKET_NAME]: RESOURCE_TYPES.S3_BUCKET,
   [CfnKey.TOPIC_NAME]: RESOURCE_TYPES.SNS_TOPIC,
+  // CP-2: Endpoint is the subscriber address on AWS::SNS::Subscription.
+  // Scoping it here prevents the extracted email address from leaking
+  // into the AWS::SNS::Topic slot when both are in the same compound.
+  Endpoint: RESOURCE_TYPES.SNS_SUBSCRIPTION,
   ClusterName: RESOURCE_TYPES.ECS_CLUSTER,
   RepositoryName: RESOURCE_TYPES.ECR_REPOSITORY,
   LogGroupName: RESOURCE_TYPES.LOGS_LOG_GROUP,

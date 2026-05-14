@@ -165,6 +165,12 @@ export const SqsWithDlqResourceId = {
   PRIMARY_QUEUE: "primary-queue",
 } as const;
 
+/** Resource IDs for the SNS Topic + Email Subscription compound pattern (CP-2). */
+export const SnsWithEmailSubscriptionResourceId = {
+  TOPIC: "sns-topic",
+  SUBSCRIPTION: "sns-subscription",
+} as const;
+
 /**
  * Resource IDs for the EFS-with-VPC compound pattern.
  *

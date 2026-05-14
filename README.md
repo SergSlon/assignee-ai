@@ -113,6 +113,7 @@ Multi-resource intents detected by keyword matching at zero LLM latency, then pr
 | Container Service  | ECR → ECS Cluster → IAM Role                          | "container service", "ecs"                        |
 | Message Processing | SQS DLQ → SQS → DynamoDB → IAM Role → Lambda          | "message queue", "event processing"               |
 | SQS with DLQ       | Primary SQS Queue + Dead-Letter Queue (RedrivePolicy) | "with dlq", "with dead-letter queue"              |
+| SNS with Email     | SNS Topic + Email Subscription (Protocol=email)       | "with email subscription", "with subscriber"      |
 | Static Website     | S3 + CloudFront + OAC + S3 upload                     | "static website", "static site"                   |
 | EFS with VPC       | VPC + private subnets + NFS SG + FS + MountTargets    | "create an efs", "shared file system"             |
 | VPC Networking     | VPC → Subnets → IGW → RouteTables → NAT               | "create a vpc", "vpc with subnets"                |
