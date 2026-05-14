@@ -17,6 +17,28 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### fix(destroy): S3 bucket pre-delete iterates ListObjectVersions + DeleteObjects (DC-2 / DF-S3-DESTROY-VERSIONED-OBJECTS, 2026-05-14)
+
+Closes the apply-then-destroy round-trip failure where `assignee destroy <s3-bucket-arn>`
+failed with "The bucket you tried to delete is not empty. You must delete all versions in
+the bucket." against any bucket with versioning enabled. Extends the established
+pre-delete-hook pattern (`feedback_destroy_predelete_hooks_for_cfn_only_constructs`) to S3
+object versions.
+
+- core `destroy-strategies/strategies/s3-bucket.ts`: `preDestroy` now (1) deletes the
+  companion `AWS::S3::BucketPolicy` via CCAPI before emptying the bucket (spec line 13),
+  then (2) paginates `ListObjectVersions` and batches `DeleteObjects` in ≤1000-key chunks.
+  Conservative approach: always runs the version-listing step even for non-versioned buckets
+  (safe — `ListObjectVersions` on a non-versioned bucket returns objects without VersionId,
+  which `DeleteObjects` handles). BucketPolicy companion delete is non-fatal (warns + continues).
+- core `destroy-strategies/strategies/s3-bucket.test.ts`: 6 DC-2 variations added (A–F):
+  A) 10 versioned objects → single DeleteObjects batch;
+  B) 1500 objects across 2 pagination pages → 2 DeleteObjects calls (1000 + 500);
+  C) empty bucket → no DeleteObjects, direct bucket delete;
+  D) 5 versions + 3 delete markers → all 8 items in one DeleteObjects payload;
+  E) non-versioned bucket → runs same path, no regression;
+  F) BucketPolicy companion in provision log → deleted via CCAPI before bucket empty.
+
 ### feat(advice): EFS default-VPC hint advisory + extractor (CP-3 / PH1-G-2, 2026-05-14)
 
 Solution B advisory per Winston memo §3 (existing-resource discovery deferred). Intents
