@@ -46,9 +46,9 @@ export function createS3PricingDispatchTool(): StructuredTool {
   return createServicePricingDispatchTool({
     "productFamily=Storage+usagetype=TimedStorage-ByteHrs":
       McpMocks.pricing.s3Storage.success,
-    "productFamily=API Request+usagetype=Requests-Tier1":
+    "productFamily=API Request+group=S3-API-Tier1":
       McpMocks.pricing.s3PutRequests.success,
-    "productFamily=API Request+usagetype=Requests-Tier2":
+    "productFamily=API Request+group=S3-API-Tier2":
       McpMocks.pricing.s3GetRequests.success,
     "productFamily=Data Transfer": McpMocks.pricing.s3DataTransfer.success,
   });

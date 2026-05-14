@@ -57,7 +57,7 @@ describe("s3PricingDecomposer", () => {
     );
   });
 
-  it("PUT requests line item has Requests-Tier1 usagetype filter", () => {
+  it("PUT requests line item has group=S3-API-Tier1 filter (cross-region stable)", () => {
     const items = s3PricingDecomposer.decompose({});
     const put = items.find((i) => i.label === "PUT requests")!;
 
@@ -71,14 +71,14 @@ describe("s3PricingDecomposer", () => {
           Value: "API Request",
         }),
         expect.objectContaining({
-          Field: "usagetype",
-          Value: "Requests-Tier1",
+          Field: "group",
+          Value: "S3-API-Tier1",
         }),
       ]),
     );
   });
 
-  it("GET requests line item has Requests-Tier2 usagetype filter", () => {
+  it("GET requests line item has group=S3-API-Tier2 filter (cross-region stable)", () => {
     const items = s3PricingDecomposer.decompose({});
     const get = items.find((i) => i.label === "GET requests")!;
 
@@ -92,8 +92,8 @@ describe("s3PricingDecomposer", () => {
           Value: "API Request",
         }),
         expect.objectContaining({
-          Field: "usagetype",
-          Value: "Requests-Tier2",
+          Field: "group",
+          Value: "S3-API-Tier2",
         }),
       ]),
     );

@@ -20,6 +20,13 @@ export const PricingFilterValue = {
   DDB_READ_UNITS: "DDB-ReadUnits",
   DDB_WRITE_UNITS: "DDB-WriteUnits",
 
+  // S3 group values — these are stable cross-region; usagetype is region-prefixed
+  // (e.g. "USE1-Requests-Tier1" in us-east-1) and must NOT be used as a filter.
+  // The `group` attribute is consistently "S3-API-Tier1" / "S3-API-Tier2" across
+  // all regions and is the correct discriminator for PUT vs GET requests.
+  S3_API_TIER1: "S3-API-Tier1",
+  S3_API_TIER2: "S3-API-Tier2",
+
   // S3 / DynamoDB usage types
   TIMED_STORAGE_BYTE_HRS: "TimedStorage-ByteHrs",
   REQUESTS_TIER1: "Requests-Tier1",
