@@ -30,6 +30,28 @@ review methodology notes, see
   collision with the larger `message-processing` compound.
 - DF-B2 (deferred SQS+DLQ compound gap) closes.
 
+### feat(intent-parser): environment-tier extractor gates RDS staging defaults (SX-4 / PH1-F-3 + DF-E7)
+
+- NEW `packages/core/src/graph/nodes/intent-parser/extractors/environment-tier-extractor.ts`:
+  exports `extractEnvironmentTier(intent)` (returns `"staging" | "dev" | "production" | null`)
+  with word-boundary guards (Variation F: "stagingZ" does not match) and
+  `applyRdsTierDefaults(intent, resourceType, elicited, advisories)` for RDS-specific
+  tier defaults injection.
+- Cost-behaviour change: intents with `"for staging"` or `"for dev"` now emit
+  `MultiAZ=false, DeletionProtection=false, BackupRetentionPeriod=1,
+PerformanceInsightsEnabled=false` instead of production-grade defaults.
+  Previously, `"for staging"` emitted `MultiAZ=Yes, DeletionProtection=Yes,
+BackupRetention=7d` — doubling RDS cost without justification.
+- `"for production"` / `"in prod"` keeps and reinforces the production-grade
+  defaults. No-tier intents are unaffected (Variation D invariant).
+- Explicit `"with MultiAZ"` keyword in the intent overrides the staging/dev
+  tier default (Variation E: user intent wins over tier signal).
+- Advisory emitted: `"Detected '<tier>' environment — applied <tier>-appropriate
+defaults; override with --set MultiAZ=true if needed."`
+- EDIT `intent-parser/index.ts`: `applyRdsTierDefaults` called after all other
+  extractors; runs last so explicit user-extracted values take priority.
+- EDIT `rds-dbinstance.test.ts`: 5 new tier-aware assertions (Variations A-E).
+
 ### Inline-name extractor for SNS/SQS/DynamoDB/Lambda/S3 (SX-2 / PH1-C-1, 2026-05-14)
 
 - core `graph/nodes/intent-parser/extractors/name-extractor.ts`: NEW
