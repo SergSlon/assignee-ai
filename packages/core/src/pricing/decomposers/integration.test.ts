@@ -215,11 +215,12 @@ describe("variant consistency", () => {
   });
 
   describe("SQS — Standard vs FIFO", () => {
-    it("Standard queue has productFamily=Queue (+ DTO line item from (f) 2026-04-09)", () => {
-      // (f) 2026-04-09: SQS decomposer extended to emit a second
-      // Data transfer out line alongside Requests. The first
-      // (Requests) line is what carries the Standard vs FIFO
-      // productFamily distinction; the DTO line uses Data Transfer.
+    it("Standard queue has productFamily=API Request + queueType=Standard (PD-3 fix)", () => {
+      // PD-3 (2026-05-13): the correct AWS Pricing API productFamily for SQS
+      // request-count items is "API Request" (not "Queue"). A queueType
+      // discriminator filter is added so Standard and FIFO map to distinct
+      // SKUs in the pricing API response.
+      // DTO line uses serviceCode=AWSDataTransfer (not AmazonSQS).
       const items = defaultDecomposerRegistry.decompose(
         RESOURCE_TYPES.SQS_QUEUE,
         {},
@@ -229,10 +230,13 @@ describe("variant consistency", () => {
       const productFamily = requests.filters.find(
         (f) => f.Field === "productFamily",
       )!;
-      expect(productFamily.Value).toBe("Queue");
+      expect(productFamily.Value).toBe("API Request");
+      const queueType = requests.filters.find((f) => f.Field === "queueType")!;
+      expect(queueType.Value).toBe("Standard");
     });
 
-    it("FIFO queue has productFamily=FIFO Queue (+ DTO line item)", () => {
+    it("FIFO queue has productFamily=API Request + queueType=FIFO (PD-3 fix)", () => {
+      // PD-3: was "FIFO Queue" — now "API Request" + queueType=FIFO.
       const items = defaultDecomposerRegistry.decompose(
         RESOURCE_TYPES.SQS_QUEUE,
         { FifoQueue: true },
@@ -242,7 +246,9 @@ describe("variant consistency", () => {
       const productFamily = requests.filters.find(
         (f) => f.Field === "productFamily",
       )!;
-      expect(productFamily.Value).toBe("FIFO Queue");
+      expect(productFamily.Value).toBe("API Request");
+      const queueType = requests.filters.find((f) => f.Field === "queueType")!;
+      expect(queueType.Value).toBe("FIFO");
     });
   });
 
