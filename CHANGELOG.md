@@ -46,6 +46,23 @@ review methodology notes, see
   through, explicit-keyword wins, S3-constraint violation, DynamoDB
   table, S3 valid lowercase) + resource without a name field.
 
+### Suppress self-referential and stale advice lines (SX-6 / PH1-C-4 + DF-A2/B3/C4/D4/E4, 2026-05-13)
+
+- core: NEW `graph/nodes/advice/advice-filters.ts` — exports
+  `filterSelfReferentialAdvice(adviceLines, plan)` which removes advice lines
+  that instruct the planner to do what the user already requested and the plan
+  already reflects. Patterns matched: `"Change the <Prop> to '<X>'"`,
+  `"Set <Prop> to <X>"`, `"Update the <Prop> to '<X>'"`, and `"Enable <Prop>"`
+  when the plan already has the property set to a truthy value. The filter is
+  CONSERVATIVE — only suppresses when the proposed value EXACTLY matches the
+  current plan value; genuine future-work guidance is always preserved.
+- core: `advice-generator.ts` wires the post-filter pass right before
+  `finalHints` is assembled; log entry gains `filteredCount` field for
+  observability. Closes DF-A2/B3/C4/D4/E4 stale-advice carryovers by
+  side-effect.
+- Tests: 20 probe variations in `advice-filters.test.ts` covering A-F shapes
+  (2 filtered, 4 preserved) plus mixed and edge-case scenarios.
+
 ### Lambda body compound propagation — completes PR #52 regression (SX-7 / PH1-D-1, 2026-05-14)
 
 - core: NEW `graph/nodes/intent-parser/extractors/lambda-body-extractor.ts`
