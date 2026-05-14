@@ -105,19 +105,20 @@ Source of truth: [`packages/core/src/graph/create-graph.ts`](packages/core/src/g
 
 Multi-resource intents detected by keyword matching at zero LLM latency, then provisioned in dependency order. Source of truth: [`packages/core/src/pattern-templates/index.ts`](packages/core/src/pattern-templates/index.ts).
 
-| Pattern            | What it builds                                     | Trigger keywords                                  |
-| :----------------- | :------------------------------------------------- | :------------------------------------------------ |
-| WebSocket API      | IAM Role → Lambda → LogGroup → API Gateway V2 (WS) | "websocket api", "realtime api", "chat api"       |
-| Serverless API     | IAM Role → Lambda → API Gateway V2 (HTTP)          | "serverless api", "lambda api"                    |
-| Three-Tier Web     | VPC → Subnets → SG → ECS → ALB                     | "three tier", "web application"                   |
-| Container Service  | ECR → ECS Cluster → IAM Role                       | "container service", "ecs"                        |
-| Message Processing | SQS DLQ → SQS → DynamoDB → IAM Role → Lambda       | "message queue", "event processing"               |
-| Static Website     | S3 + CloudFront + OAC + S3 upload                  | "static website", "static site"                   |
-| EFS with VPC       | VPC + private subnets + NFS SG + FS + MountTargets | "create an efs", "shared file system"             |
-| VPC Networking     | VPC → Subnets → IGW → RouteTables → NAT            | "create a vpc", "vpc with subnets"                |
-| VPC Public-Only    | VPC + public Subnets + IGW + Routes (free-tier)    | "vpc public only", "cheap vpc", "vpc without nat" |
-| Scheduled Lambda   | IAM Role → Lambda → EventBridge Rule (cron)        | "scheduled lambda", "cron lambda"                 |
-| Lambda + Exec Role | IAM Role → Lambda (minimal auto-exec-role)         | "create a lambda", "create a function"            |
+| Pattern            | What it builds                                        | Trigger keywords                                  |
+| :----------------- | :---------------------------------------------------- | :------------------------------------------------ |
+| WebSocket API      | IAM Role → Lambda → LogGroup → API Gateway V2 (WS)    | "websocket api", "realtime api", "chat api"       |
+| Serverless API     | IAM Role → Lambda → API Gateway V2 (HTTP)             | "serverless api", "lambda api"                    |
+| Three-Tier Web     | VPC → Subnets → SG → ECS → ALB                        | "three tier", "web application"                   |
+| Container Service  | ECR → ECS Cluster → IAM Role                          | "container service", "ecs"                        |
+| Message Processing | SQS DLQ → SQS → DynamoDB → IAM Role → Lambda          | "message queue", "event processing"               |
+| SQS with DLQ       | Primary SQS Queue + Dead-Letter Queue (RedrivePolicy) | "with dlq", "with dead-letter queue"              |
+| Static Website     | S3 + CloudFront + OAC + S3 upload                     | "static website", "static site"                   |
+| EFS with VPC       | VPC + private subnets + NFS SG + FS + MountTargets    | "create an efs", "shared file system"             |
+| VPC Networking     | VPC → Subnets → IGW → RouteTables → NAT               | "create a vpc", "vpc with subnets"                |
+| VPC Public-Only    | VPC + public Subnets + IGW + Routes (free-tier)       | "vpc public only", "cheap vpc", "vpc without nat" |
+| Scheduled Lambda   | IAM Role → Lambda → EventBridge Rule (cron)           | "scheduled lambda", "cron lambda"                 |
+| Lambda + Exec Role | IAM Role → Lambda (minimal auto-exec-role)            | "create a lambda", "create a function"            |
 
 ### Components & technology rationale
 

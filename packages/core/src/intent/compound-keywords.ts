@@ -59,6 +59,7 @@ export const COMPOUND_PATTERN_ID_LITERALS: ReadonlyArray<{
   { literal: "serverless-api", patternId: PatternId.SERVERLESS_API },
   { literal: "websocket-api", patternId: PatternId.WEBSOCKET_API },
   { literal: "efs-with-vpc", patternId: PatternId.EFS_WITH_VPC },
+  { literal: "sqs-with-dlq", patternId: PatternId.SQS_WITH_DLQ },
 ];
 
 /**

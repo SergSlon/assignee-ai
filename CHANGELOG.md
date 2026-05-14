@@ -17,6 +17,19 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### feat(compound-patterns): add sqs-with-dlq compound for "with DLQ" intents (CP-1 / PH1-B-1 + DF-B2, 2026-05-14)
+
+- core `pattern-templates/patterns/sqs-with-dlq.ts`: NEW 2-resource compound
+  pattern (primary `AWS::SQS::Queue` + DLQ companion). `RedrivePolicy.deadLetterTargetArn`
+  wired via `markerGetAtt(R.DLQ, "Arn")`; `maxReceiveCount` defaults to 5; DLQ
+  provisioned first in `dependencyOrder` so its ARN is available to the primary queue.
+- Routes intents containing `"with DLQ"`, `"with dead-letter queue"`, or
+  `"dead letter queue"` to the 2-resource compound. Bare SQS intents without
+  DLQ phrasing continue to route to the standalone `AWS::SQS::Queue` singleton.
+  `negativeKeywords: ["lambda", "processor", "message processing"]` prevents
+  collision with the larger `message-processing` compound.
+- DF-B2 (deferred SQS+DLQ compound gap) closes.
+
 ### Inline-name extractor for SNS/SQS/DynamoDB/Lambda/S3 (SX-2 / PH1-C-1, 2026-05-14)
 
 - core `graph/nodes/intent-parser/extractors/name-extractor.ts`: NEW

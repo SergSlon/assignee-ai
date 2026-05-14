@@ -5,6 +5,13 @@
  * @see Story 42.10 — zero magic strings policy
  */
 export const PatternId = {
+  /**
+   * CP-1: bare SQS queue that explicitly requests a companion DLQ via
+   * "with DLQ" / "with dead-letter queue" / "dead letter queue" phrasing.
+   * 2-resource compound: primary AWS::SQS::Queue + DLQ companion with
+   * RedrivePolicy.deadLetterTargetArn wired via markerGetAtt.
+   */
+  SQS_WITH_DLQ: "sqs-with-dlq",
   SERVERLESS_API: "serverless-api",
   THREE_TIER_WEB: "three-tier-web",
   CONTAINER_SERVICE: "container-service",

@@ -25,8 +25,8 @@ describe("help-hints — registry-derivation (drift guards)", () => {
 
   it("getPatternCount matches defaultPatternRegistry.size()", () => {
     expect(getPatternCount()).toBe(defaultPatternRegistry.size());
-    // Epic 92 wave 2.b: added `websocket-api` pattern → 11 total.
-    expect(getPatternCount()).toBe(11);
+    // CP-1: added `sqs-with-dlq` pattern → 12 total.
+    expect(getPatternCount()).toBe(12);
   });
 
   it("getSupportedResourceTypes returns the registry contents verbatim", () => {
