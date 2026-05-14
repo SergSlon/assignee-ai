@@ -12,3 +12,5 @@ remediation: "Set DeletionProtection to true. This prevents the instance from be
 consequence: "A single misclick, rogue script, or compromised credential can permanently destroy your production database."
 category: reliability
 lastVerified: "2026-03-22"
+skip_when_advisory:
+  - RDS_ENVIRONMENT_TIER_DEFAULTS

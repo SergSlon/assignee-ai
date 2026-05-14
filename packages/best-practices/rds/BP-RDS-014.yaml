@@ -12,3 +12,5 @@ remediation: "Enable Multi-AZ for production databases. Multi-AZ provides automa
 consequence: "A single AZ failure takes down production with no failover — expect extended downtime and potential data loss."
 category: reliability
 lastVerified: "2026-03-24"
+skip_when_advisory:
+  - RDS_ENVIRONMENT_TIER_DEFAULTS

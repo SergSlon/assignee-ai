@@ -48,6 +48,7 @@ export async function bpEvaluatorNode(
     desiredState: (state.desiredState as Record<string, unknown>) ?? {},
     userIntent: state.userIntent,
     patternId: state.resourcePattern?.patternId,
+    advisorCodes: state.advisories?.map((a) => a.code),
   };
 
   const findings: BPFinding[] = [];
