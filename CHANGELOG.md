@@ -25,6 +25,10 @@ SX-3. AWS free tier covers both gp2 AND gp3 (20 GB shared). Fixed to generic
 wording "20 GB General Purpose SSD storage/month" — accurate for both storage
 types, drops the misleading class-specific reference.
 
+### fix(display): filter underscore-prefix internal fields from plan display + EFS advisor polish (EPIC-106-4 / PH5-4-A)
+
+Closes PH5-4-A from Phase-5 dogfood. Underscore-prefix fields (`_VpcDefaultHint`, `_resourceId`, `_provisionRecord`, etc.) are now filtered generically in `formatDesiredState` before display. Also polishes CP-3's EFS advisor message to cite `deferred-existing-resource-discovery-extractor` and the `--set VpcId=<id>` escape hatch per spec line 25.
+
 ### fix(intent-parser): lambda body extractor quote-tight + option-A handler-body semantics (EPIC-106-2 / PH5-5-A)
 
 Closes PH5-5-A from Phase-5 dogfood. Two defects fixed:

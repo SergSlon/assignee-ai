@@ -51,13 +51,16 @@ describe("efsDefaultVpcHint", () => {
     expect(result).toHaveLength(0);
   });
 
-  // ── Variation E: advisory wording per spec line 17 ─────────────────────────
-  it("Variation E — advisory contains exact required substrings from spec", () => {
+  // ── Variation E: advisory wording per spec line 25 (EPIC-106-4 polish) ──────
+  it("Variation E — advisory contains exact required substrings from spec (EPIC-106-4)", () => {
     const result = efsDefaultVpcHint(EFS, { _VpcDefaultHint: "default-vpc" });
     expect(result).toHaveLength(1);
     expect(result[0]).toContain("vpc-default");
-    expect(result[0]).toContain("--set VpcId=");
-    expect(result[0]).toContain("SubnetIds");
+    expect(result[0]).toContain("EFS currently always creates a private VPC");
+    expect(result[0]).toContain(
+      "deferred-existing-resource-discovery-extractor",
+    );
+    expect(result[0]).toContain("--set VpcId=<id>");
   });
 
   it("Variation E — advisory uses WARNING icon", () => {

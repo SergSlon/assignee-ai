@@ -33,6 +33,9 @@ export function formatDesiredState(
   );
 
   for (const [key, value] of entries) {
+    // EPIC-106-4 / PH5-4-A: underscore-prefix keys are internal fields
+    // (e.g. _resourceId, _provisionRecord, _VpcDefaultHint) — never render.
+    if (key.startsWith("_")) continue;
     const friendlyKey = resolveFieldLabel(key, resourceType);
     const padded = friendlyKey.padEnd(maxKeyLen);
     // Mask sensitive fields — never display passwords/secrets in plaintext.

@@ -653,6 +653,44 @@ describe("formatDesiredState — empty-row suppression (SX-5 / PH1-F-2)", () => 
   });
 });
 
+// ── EPIC-106-4 / PH5-4-A: underscore-prefix internal field filtering ──────────
+
+describe("formatDesiredState — underscore-prefix field filtering (EPIC-106-4 / PH5-4-A)", () => {
+  // Variation A — _VpcDefaultHint is filtered (no row rendered)
+  it("Variation A — _VpcDefaultHint key is filtered from display", () => {
+    const result = formatDesiredState({
+      _VpcDefaultHint: "default-vpc",
+      FileSystemId: "fs-12345",
+    });
+    expect(result).not.toContain("_VpcDefaultHint");
+    expect(result).not.toContain("Vpc Default Hint");
+    expect(result).not.toContain("default-vpc");
+    expect(result).toContain("fs-12345");
+  });
+
+  // Variation B — generic filter: _resourceId filtered, BucketName preserved
+  it("Variation B — _resourceId filtered; non-underscore BucketName row preserved", () => {
+    const result = formatDesiredState({
+      _resourceId: "abc123",
+      BucketName: "mybucket",
+    });
+    expect(result).not.toContain("_resourceId");
+    expect(result).not.toContain("abc123");
+    expect(result).toContain("mybucket");
+  });
+
+  // Variation B (extended) — _provisionRecord also filtered
+  it("Variation B (extended) — _provisionRecord is also filtered generically", () => {
+    const result = formatDesiredState({
+      _provisionRecord: "rec-xyz",
+      EnvironmentName: "prod",
+    });
+    expect(result).not.toContain("_provisionRecord");
+    expect(result).not.toContain("rec-xyz");
+    expect(result).toContain("prod");
+  });
+});
+
 // ── SX-5: renderPlanBox non-TTY integration for empty-row suppression ─────────
 
 describe("renderPlanBox — empty-row suppression integration (SX-5)", () => {
