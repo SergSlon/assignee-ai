@@ -17,6 +17,14 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### fix(free-tier): RDS GP2/GP3 storage-type drift in free-tier hint (EPIC-106-3 / PH5-3-A)
+
+Closes PH5-3-A from Phase-5 dogfood. Free-tier hint for RDS DBInstance
+hardcoded "GP2 General Purpose SSD" while the plugin defaults to gp3 since
+SX-3. AWS free tier covers both gp2 AND gp3 (20 GB shared). Fixed to generic
+wording "20 GB General Purpose SSD storage/month" — accurate for both storage
+types, drops the misleading class-specific reference.
+
 ### fix(intent-parser): lambda body extractor quote-tight + option-A handler-body semantics (EPIC-106-2 / PH5-5-A)
 
 Closes PH5-5-A from Phase-5 dogfood. Two defects fixed:
