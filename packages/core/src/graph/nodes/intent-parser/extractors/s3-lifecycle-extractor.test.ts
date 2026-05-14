@@ -1,13 +1,19 @@
 /**
- * Unit tests for s3-lifecycle-extractor.ts — PD-4 / PH1-E-1
+ * Unit tests for s3-lifecycle-extractor.ts — PD-4 / PH1-E-1 / PH5-8-A
  *
- * Covers all 5 probe variations from the story spec:
+ * PD-4 variations (A-E):
  *   A — bare "lifecycle 30d"
  *   B — explicit "transition to IA after 30 days then expire after 90 days"
  *   C — no lifecycle keyword at all
  *   D — different day value ("lifecycle 90d")
- *   E — multi-rule via explicit options (extractor does not fire, tested via
- *       presence/absence of LifecycleExpireOnly in elicited)
+ *   E — multi-rule via explicit options (extractor does not fire)
+ *
+ * PH5-8-A variations (NC-A through NC-E):
+ *   NC-A — noncurrent only: "delete old versions after 30 days"
+ *   NC-B — PD-4 regression-guard: bare "lifecycle 30d" still works
+ *   NC-C — both current AND noncurrent: "lifecycle 30 days and delete old versions after 7 days"
+ *   NC-D — noncurrent without versioning keyword → advisor warning + auto-enable
+ *   NC-E — synonym variations: "previous versions", "non-current", "old object versions"
  */
 import { describe, it, expect } from "vitest";
 import { RESOURCE_TYPES } from "@/index.js";
@@ -15,6 +21,8 @@ import {
   extractS3Lifecycle,
   S3_LIFECYCLE_SIMPLIFIED_CODE,
   S3_LIFECYCLE_SIMPLIFIED_HINT,
+  S3_NONCURRENT_REQUIRES_VERSIONING_CODE,
+  S3_NONCURRENT_REQUIRES_VERSIONING_HINT,
 } from "./s3-lifecycle-extractor.js";
 import type { Advisory } from "../intent-types.js";
 
@@ -186,6 +194,139 @@ describe("extractS3Lifecycle", () => {
       );
       expect(elicited["LifecycleExpireOnly"]).toBeUndefined();
       expect(advisories).toHaveLength(0);
+    });
+  });
+
+  // ── PH5-8-A: NoncurrentVersion lifecycle ────────────────────────────────
+  describe("NC-A — noncurrent only: 'delete old versions after 30 days'", () => {
+    const INTENT =
+      "Create an S3 bucket with versioning enabled and lifecycle to delete old versions after 30 days";
+
+    it("sets EnableLifecycle=true", () => {
+      const { elicited } = run(INTENT);
+      expect(elicited["EnableLifecycle"]).toBe(true);
+    });
+
+    it("sets LifecycleNoncurrentExpirationDays=30", () => {
+      const { elicited } = run(INTENT);
+      expect(elicited["LifecycleNoncurrentExpirationDays"]).toBe("30");
+    });
+
+    it("does NOT set LifecycleExpirationDays (no current-version expiry)", () => {
+      const { elicited } = run(INTENT);
+      expect(elicited["LifecycleExpirationDays"]).toBeUndefined();
+    });
+
+    it("does NOT set LifecycleExpireOnly", () => {
+      const { elicited } = run(INTENT);
+      expect(elicited["LifecycleExpireOnly"]).toBeUndefined();
+    });
+
+    it("emits no S3_NONCURRENT_REQUIRES_VERSIONING advisory when versioning mentioned", () => {
+      const { advisories } = run(INTENT);
+      const codes = advisories.map((a) => a.code);
+      expect(codes).not.toContain(S3_NONCURRENT_REQUIRES_VERSIONING_CODE);
+    });
+  });
+
+  describe("NC-B — PD-4 regression-guard: bare 'lifecycle 30d' unaffected", () => {
+    it("still sets LifecycleExpireOnly=true", () => {
+      const { elicited } = run("Create an S3 bucket with lifecycle 30d");
+      expect(elicited["LifecycleExpireOnly"]).toBe(true);
+    });
+
+    it("still sets LifecycleExpirationDays=30", () => {
+      const { elicited } = run("Create an S3 bucket with lifecycle 30d");
+      expect(elicited["LifecycleExpirationDays"]).toBe("30");
+    });
+
+    it("does NOT set LifecycleNoncurrentExpirationDays", () => {
+      const { elicited } = run("Create an S3 bucket with lifecycle 30d");
+      expect(elicited["LifecycleNoncurrentExpirationDays"]).toBeUndefined();
+    });
+  });
+
+  describe("NC-C — both current AND noncurrent: lifecycle 30 days + delete old versions after 7 days", () => {
+    const INTENT =
+      "Create an S3 bucket with versioning enabled, lifecycle 30 days and delete old versions after 7 days";
+
+    it("sets LifecycleExpirationDays=30 (current-version)", () => {
+      const { elicited } = run(INTENT);
+      expect(elicited["LifecycleExpirationDays"]).toBe("30");
+    });
+
+    it("sets LifecycleNoncurrentExpirationDays=7 (noncurrent)", () => {
+      const { elicited } = run(INTENT);
+      expect(elicited["LifecycleNoncurrentExpirationDays"]).toBe("7");
+    });
+
+    it("sets EnableLifecycle=true", () => {
+      const { elicited } = run(INTENT);
+      expect(elicited["EnableLifecycle"]).toBe(true);
+    });
+  });
+
+  describe("NC-D — noncurrent without versioning keyword → advisor warning", () => {
+    const INTENT =
+      "Create an S3 bucket with lifecycle to delete old versions after 30 days";
+
+    it("sets LifecycleNoncurrentExpirationDays=30", () => {
+      const { elicited } = run(INTENT);
+      expect(elicited["LifecycleNoncurrentExpirationDays"]).toBe("30");
+    });
+
+    it("emits S3_NONCURRENT_REQUIRES_VERSIONING advisory", () => {
+      const { advisories } = run(INTENT);
+      const advisory = advisories.find(
+        (a) => a.code === S3_NONCURRENT_REQUIRES_VERSIONING_CODE,
+      );
+      expect(advisory).toBeDefined();
+    });
+
+    it("S3_NONCURRENT_REQUIRES_VERSIONING hint matches canonical constant", () => {
+      const { advisories } = run(INTENT);
+      const advisory = advisories.find(
+        (a) => a.code === S3_NONCURRENT_REQUIRES_VERSIONING_CODE,
+      );
+      expect(advisory?.hint).toBe(S3_NONCURRENT_REQUIRES_VERSIONING_HINT);
+    });
+
+    it("advisory details.days === 30", () => {
+      const { advisories } = run(INTENT);
+      const advisory = advisories.find(
+        (a) => a.code === S3_NONCURRENT_REQUIRES_VERSIONING_CODE,
+      );
+      expect(advisory?.details?.["days"]).toBe(30);
+    });
+  });
+
+  describe("NC-E — synonym variations for noncurrent keyword", () => {
+    it("'previous versions after 14 days' → LifecycleNoncurrentExpirationDays=14", () => {
+      const { elicited } = run(
+        "Create an S3 bucket with versioning enabled and lifecycle to delete previous versions after 14 days",
+      );
+      expect(elicited["LifecycleNoncurrentExpirationDays"]).toBe("14");
+    });
+
+    it("'non-current after 60 days' → LifecycleNoncurrentExpirationDays=60", () => {
+      const { elicited } = run(
+        "Create an S3 bucket with versioning, lifecycle to delete non-current after 60 days",
+      );
+      expect(elicited["LifecycleNoncurrentExpirationDays"]).toBe("60");
+    });
+
+    it("'noncurrent versions after 90d' → LifecycleNoncurrentExpirationDays=90", () => {
+      const { elicited } = run(
+        "Create an S3 bucket with versioning enabled, lifecycle noncurrent versions after 90d",
+      );
+      expect(elicited["LifecycleNoncurrentExpirationDays"]).toBe("90");
+    });
+
+    it("'old object versions after 45 days' → LifecycleNoncurrentExpirationDays=45", () => {
+      const { elicited } = run(
+        "Create an S3 bucket with versioning enabled, lifecycle to delete old object versions after 45 days",
+      );
+      expect(elicited["LifecycleNoncurrentExpirationDays"]).toBe("45");
     });
   });
 });

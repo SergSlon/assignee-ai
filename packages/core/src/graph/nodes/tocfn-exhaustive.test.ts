@@ -24,6 +24,8 @@ const S3_COMPOSITE_SUB_FIELDS = new Set([
   "EnableLifecycle",
   "LifecycleTransitionDays",
   "LifecycleExpirationDays",
+  "LifecycleExpireOnly",
+  "LifecycleNoncurrentExpirationDays",
   "EnableCors",
   "CorsAllowedOrigins",
   "CorsAllowedMethods",
