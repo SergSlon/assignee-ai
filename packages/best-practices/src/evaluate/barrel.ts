@@ -188,6 +188,19 @@ export function evaluateTriggers(
       continue;
     }
 
+    // Advisor-gated suppression: if the plan carries an advisory code that
+    // this rule declares in skip_when_advisory, the rule is contextually
+    // inapplicable (e.g. staging/dev tier intentionally disables MultiAZ).
+    if (
+      bp.skip_when_advisory &&
+      bp.skip_when_advisory.length > 0 &&
+      context.advisorCodes &&
+      context.advisorCodes.length > 0 &&
+      bp.skip_when_advisory.some((code) => context.advisorCodes!.includes(code))
+    ) {
+      continue;
+    }
+
     // Awareness-family rules (check_type: "awareness" / "cross_resource_count" /
     // "cross_resource_reference") are informational advisories that fire on
     // EVERY plan of the matched resource type, regardless of whether the

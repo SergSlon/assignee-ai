@@ -49,6 +49,7 @@ export const bestPracticeSchema = z
     condition: z.record(z.unknown()).optional(),
     fix_hint: z.string().max(80).optional(),
     consequence: z.string().max(200).optional(),
+    skip_when_advisory: z.array(z.string()).optional(),
     fixType: z.enum(BP_FIX_TYPE).optional(),
     interactiveOptions: z
       .array(

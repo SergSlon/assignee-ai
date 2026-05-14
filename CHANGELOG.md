@@ -17,6 +17,19 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### fix(best-practices): tier-gated BP-RDS rule suppression for staging/dev (EPIC-106-6 / PH5-3-B)
+
+Closes PH5-3-B from Phase-5 dogfood. Eliminates user-visible contradiction where
+"applied staging-appropriate defaults" advisor appeared alongside HIGH/MEDIUM
+BP-RDS findings on the same staging-appropriate values.
+
+Adds `skip_when_advisory` YAML field and `advisorCodes` to `EvalContext`. When the
+plan carries `RDS_ENVIRONMENT_TIER_DEFAULTS` (emitted by SX-4 for staging/dev
+intents), BP-RDS-003 (MultiAZ), BP-RDS-004 (DeletionProtection), BP-RDS-011
+(PerformanceInsights), and BP-RDS-014 (TA single-AZ) are suppressed. Compliance-
+critical rules (BP-RDS-002 encryption, BP-RDS-001 public access) are intentionally
+excluded from suppression.
+
 ### feat(s3): NoncurrentVersionExpirationInDays via "delete old versions" extractor (EPIC-106-5 / PH5-8-A)
 
 Closes PH5-8-A from Phase-5 dogfood. Intents containing "old versions" /

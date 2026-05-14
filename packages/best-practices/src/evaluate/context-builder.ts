@@ -18,6 +18,14 @@ export interface EvalContext {
   userIntent?: string;
   /** Compound pattern ID if applicable */
   patternId?: string;
+  /**
+   * Advisory codes emitted by the intent-parser pipeline (e.g.
+   * "RDS_ENVIRONMENT_TIER_DEFAULTS"). Rules that declare
+   * `skip_when_advisory` are suppressed when any of their listed codes
+   * appear here — used to prevent production-grade BP findings from
+   * contradicting staging/dev tier advisories.
+   */
+  advisorCodes?: string[];
 }
 
 /**
