@@ -17,6 +17,47 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### SECURITY/CORRECTNESS: attach AWSLambdaBasicExecutionRole to all Lambda compound execution roles (CP-4 / PH1-D-2, 2026-05-14)
+
+**Winston memo §1 Defect C — systemic policy hole.** Four Lambda compound
+patterns produced IAM execution roles with `PermissionsBoundary` set to
+`PowerUserAccess` but with ZERO `ManagedPolicyArns` or inline `Policies`.
+`PermissionsBoundary` CAPS the maximum permission set but does NOT GRANT
+permissions — resulting Lambdas had zero IAM grants and could not write to
+CloudWatch Logs, making every deployed Lambda silently broken.
+
+- **Core fix** — four patterns now attach
+  `AWSLambdaBasicExecutionRole` via `ManagedPolicyArns`:
+  - `packages/core/src/pattern-templates/patterns/lambda-with-exec-role.ts`
+  - `packages/core/src/pattern-templates/patterns/serverless-api.ts`
+  - `packages/core/src/pattern-templates/patterns/scheduled-lambda.ts`
+  - `packages/core/src/pattern-templates/patterns/websocket-api.ts`
+    (`message-processing.ts` was already correct — it is the canonical reference.)
+- **Doc fix** — `lambda-with-exec-role.ts` doc comment at lines 11-13
+  claimed `AWSLambdaBasicExecutionRole` was attached; the code now matches
+  the doc.
+- **Keyword extension** — `message-processing.ts` gains `"processes sqs"`
+  keyword to support the CP-4 Variation D probe intent.
+- **Guard 1** — NEW
+  `packages/core/src/pattern-templates/__tests__/lambda-compound-policy-parity.test.ts`:
+  iterates all patterns with IAM_ROLE + LAMBDA_FUNCTION sibling pair; asserts
+  `ManagedPolicyArns` is non-empty AND includes `LAMBDA_BASIC_EXECUTION_PATH`.
+- **Guard 2** — NEW
+  `packages/core/src/pattern-templates/__tests__/pattern-doc-parity.test.ts`:
+  asserts every IAM entity named in a pattern JSDoc block (regex on
+  `AWSLambdaBasicExecutionRole|AWSLambda\w+Role|PowerUserAccess|AWSManaged\w+`)
+  appears in the file body (literal or canonical constant alias).
+- **Guard 3** — NEW
+  `packages/core/src/pattern-templates/__tests__/pattern-coverage.test.ts`:
+  fixture table asserting `defaultPatternRegistry.detect(intent)` returns the
+  expected `patternId` for 14 canonical Lambda-bearing intents. CP-1/CP-2
+  append their fixtures in separate commits.
+- **Unit tests** in each modified pattern's `.test.ts` file: assert
+  `Properties.ManagedPolicyArns` contains the expected ARN.
+- **Partition-aware** (Variation E): `rewriteManagedPolicyArnsForPartition()`
+  correctly rewrites both `ManagedPolicyArns` and `PermissionsBoundary` to
+  GovCloud / China partitions at apply time.
+
 ### EventBridge bare-Rule routing + no-target advisory (SX-1 / PH1-H-1 BLOCKER, 2026-05-13)
 
 - core `pattern-templates/patterns/scheduled-lambda.ts`: extend the keyword

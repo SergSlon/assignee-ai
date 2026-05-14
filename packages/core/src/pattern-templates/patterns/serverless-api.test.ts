@@ -5,6 +5,10 @@ import { containerServicePattern } from "./container-service.js";
 import { messageProcessingPattern } from "./message-processing.js";
 import { staticWebsitePattern } from "./static-website.js";
 import { PatternRegistry } from "../registry.js";
+import {
+  AwsManagedPolicy,
+  awsManagedPolicyArn,
+} from "../../config/aws-arns.js";
 
 /** Build a fresh registry with all 5 patterns registered in canonical order. */
 function buildRegistry(): PatternRegistry {
@@ -271,6 +275,19 @@ describe("Serverless API pattern (Story 26.4)", () => {
     const serialized = JSON.stringify(serverlessApiPattern.defaultOptions);
     expect(serialized).not.toMatch(/"Fn::/);
     expect(serialized).not.toMatch(/"Ref":/);
+  });
+
+  it("IAM Role attaches AWSLambdaBasicExecutionRole (CP-4 / PH1-D-2 fix)", () => {
+    const roleOpts = serverlessApiPattern.defaultOptions["iam-execution-role"];
+    const managedPolicies = roleOpts?.["ManagedPolicyArns"] as string[];
+    expect(Array.isArray(managedPolicies)).toBe(true);
+    expect(managedPolicies.length).toBeGreaterThan(0);
+    const expectedArn = awsManagedPolicyArn(
+      "aws",
+      AwsManagedPolicy.LAMBDA_BASIC_EXECUTION_PATH,
+    );
+    expect(managedPolicies).toContain(expectedArn);
+    expect(expectedArn).toMatch(/service-role\/AWSLambdaBasicExecutionRole$/);
   });
 
   it("IAM Role has permission boundary enforced (PowerUserAccess)", () => {

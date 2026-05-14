@@ -142,11 +142,30 @@ describe("websocketApiPattern — marker token wiring", () => {
     );
   });
 
+  it("IAM Role attaches AWSLambdaBasicExecutionRole (CP-4 / PH1-D-2 fix)", () => {
+    const role = opts[R.IAM_EXECUTION_ROLE] as Record<string, unknown>;
+    const managedPolicies = role["ManagedPolicyArns"] as string[];
+    expect(Array.isArray(managedPolicies)).toBe(true);
+    expect(managedPolicies.length).toBeGreaterThan(0);
+    const expectedArn = awsManagedPolicyArn(
+      "aws",
+      AwsManagedPolicy.LAMBDA_BASIC_EXECUTION_PATH,
+    );
+    expect(managedPolicies).toContain(expectedArn);
+    expect(expectedArn).toMatch(/service-role\/AWSLambdaBasicExecutionRole$/);
+  });
+
   it("rewriteManagedPolicyArnsForPartition rewrites PermissionsBoundary to GovCloud partition (W-010)", () => {
     // Clone the static defaultOptions slot so we don't mutate the shared pattern object.
     const roleSlot = {
       ...(opts[R.IAM_EXECUTION_ROLE] as Record<string, unknown>),
     };
+    // Deep-clone ManagedPolicyArns array to avoid mutating the shared pattern
+    if (Array.isArray(roleSlot["ManagedPolicyArns"])) {
+      roleSlot["ManagedPolicyArns"] = [
+        ...(roleSlot["ManagedPolicyArns"] as string[]),
+      ];
+    }
     rewriteManagedPolicyArnsForPartition(roleSlot, "aws-us-gov");
     expect(roleSlot["PermissionsBoundary"]).toBe(
       awsManagedPolicyArn(
@@ -157,6 +176,25 @@ describe("websocketApiPattern — marker token wiring", () => {
     expect(roleSlot["PermissionsBoundary"]).toMatch(
       /^arn:aws-us-gov:iam::aws:policy\//,
     );
+  });
+
+  it("rewriteManagedPolicyArnsForPartition rewrites ManagedPolicyArns to GovCloud partition (Variation E — CP-4)", () => {
+    const roleSlot = {
+      ...(opts[R.IAM_EXECUTION_ROLE] as Record<string, unknown>),
+    };
+    roleSlot["ManagedPolicyArns"] = [
+      ...(roleSlot["ManagedPolicyArns"] as string[]),
+    ];
+    rewriteManagedPolicyArnsForPartition(roleSlot, "aws-us-gov");
+    const rewritten = roleSlot["ManagedPolicyArns"] as string[];
+    expect(rewritten[0]).toBe(
+      awsManagedPolicyArn(
+        "aws-us-gov",
+        AwsManagedPolicy.LAMBDA_BASIC_EXECUTION_PATH,
+      ),
+    );
+    expect(rewritten[0]).toMatch(/^arn:aws-us-gov:iam::aws:policy\//);
+    expect(rewritten[0]).toMatch(/service-role\/AWSLambdaBasicExecutionRole$/);
   });
 
   it("rewriteManagedPolicyArnsForPartition is a no-op for commercial partition (W-010)", () => {
