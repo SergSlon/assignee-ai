@@ -25,6 +25,8 @@ export const PricingField = {
   FROM_LOCATION_TYPE: "fromLocationType",
   TO_LOCATION_TYPE: "toLocationType",
   TRANSFER_TYPE: "transferType",
+  // SQS queue type discriminator (Standard vs FIFO)
+  QUEUE_TYPE: "queueType",
 } as const;
 
 export const PricingServiceCode = {

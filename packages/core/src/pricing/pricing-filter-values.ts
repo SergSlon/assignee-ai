@@ -52,4 +52,8 @@ export const PricingFilterValue = {
     "Lambda-Provisioned-Concurrency-GB-Second",
   DATA_PROCESSING_BYTES: "DataProcessing-Bytes",
   DELIVERY_ATTEMPTS_HTTP: "DeliveryAttempts-HTTP",
+  // SQS queue-type discriminator values for the `queueType` attribute
+  // returned by the AWS Pricing API `AmazonSQS` service code.
+  QUEUE_TYPE_STANDARD: "Standard",
+  QUEUE_TYPE_FIFO: "FIFO",
 } as const;
