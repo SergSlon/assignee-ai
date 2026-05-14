@@ -27,10 +27,10 @@ function buildAdvisoryText(hint: string): string {
     : "vpc-default";
 
   return (
-    `${AdviceIcon.WARNING} Detected 'vpc-default' but assignee.ai currently creates a new private VPC for EFS. ` +
-    `To use an existing VPC, run 'assignee plan --set VpcId=<vpc-id> SubnetIds=...'.` +
+    `${AdviceIcon.WARNING} Detected 'vpc-default' but EFS currently always creates a private VPC. ` +
+    `To use the default VPC, see roadmap item deferred-existing-resource-discovery-extractor or run with --set VpcId=<id>.` +
     (isExistingVpc
-      ? ` Detected VPC ID: ${detectedPhrase} — pass it as --set VpcId=${detectedPhrase}.`
+      ? ` Detected VPC ID: ${detectedPhrase} — pass it as --set VpcId=${detectedPhrase} SubnetIds=...`
       : "")
   );
 }
