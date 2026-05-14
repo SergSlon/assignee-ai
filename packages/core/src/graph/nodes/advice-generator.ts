@@ -26,6 +26,7 @@ import {
 } from "../../pricing/advisory-prices.js";
 import { stripPromptBoundaryTags } from "../../llm/prompt-sanitize.js";
 import { redactSensitiveFields } from "../../checkpoint/redaction.js";
+import { filterSelfReferentialAdvice } from "./advice/advice-filters.js";
 
 /**
  * Factory for the advice_generator LangGraph node.
@@ -159,7 +160,12 @@ export function createAdviceGeneratorNode({
       }
     }
 
-    const finalHints = hints.slice(0, MAX_ADVICE_HINTS);
+    // SX-6: Post-filter — suppress self-referential and stale advice lines
+    // (lines that instruct the planner to do what is already in the plan).
+    // Conservative: only removes lines whose proposed value matches an
+    // existing plan value. Genuine future-work advice is always preserved.
+    const filteredHints = filterSelfReferentialAdvice(hints, ds);
+    const finalHints = filteredHints.slice(0, MAX_ADVICE_HINTS);
 
     log({
       ts: new Date().toISOString(),
@@ -171,6 +177,7 @@ export function createAdviceGeneratorNode({
         resourceType: state.resourceType,
         hintCount: finalHints.length,
         ruleBasedCount: hints.length,
+        filteredCount: hints.length - filteredHints.length,
       },
     });
 
