@@ -14,6 +14,7 @@ import { costAlternatives } from "./advice/cost-advisor/orchestrator.js";
 import { securityPosture } from "./advice/security-advisor.js";
 import { architectureAdvisor } from "./advice/architecture-advisor.js";
 import { eventbridgeNoTargetHint } from "./advice/eventbridge-no-target-hint.js";
+import { efsDefaultVpcHint } from "./advice/efs-default-vpc-hint.js";
 import { rdsCredentialsHint } from "./advice/rds-credentials-hint.js";
 import {
   gatherMcpAdviceContext,
@@ -138,6 +139,9 @@ export function createAdviceGeneratorNode({
     );
     hints.push(...eventbridgeNoTargetHint(state.resourceType, ds));
     hints.push(...rdsCredentialsHint(state.resourceType, ds));
+    hints.push(
+      ...efsDefaultVpcHint(state.resourceType, state.elicitedOptions ?? {}),
+    );
 
     // Phase 3: LLM-generated hints enriched with MCP data (if rule-based didn't produce enough)
     if (hints.length < MAX_ADVICE_HINTS) {

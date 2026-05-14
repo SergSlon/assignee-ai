@@ -65,6 +65,7 @@ import {
 import { extractS3Lifecycle } from "./extractors/s3-lifecycle-extractor.js";
 import { extractLambdaBody } from "./extractors/lambda-body-extractor.js";
 import { applyRdsTierDefaults } from "./extractors/environment-tier-extractor.js";
+import { extractVpcDefaultHint } from "./extractors/vpc-default-hint-extractor.js";
 
 // Public re-exports — preserve the monolith's external API surface.
 export type { Advisory, AssertionExtraction } from "./intent-types.js";
@@ -159,6 +160,12 @@ export function extractAssertedValues(
   extractS3Lifecycle(intent, intentLower, resourceType, elicited, advisories);
   extractLambdaBody(intent, resourceType, elicited);
   applyRdsTierDefaults(intent, resourceType, elicited, advisories);
+  // CP-3: detect "vpc-default" / "default VPC" / "existing VPC <id>" — result
+  // stored in _VpcDefaultHint for the efs-default-vpc-hint advisor to consume.
+  const vpcDefaultHint = extractVpcDefaultHint(intent);
+  if (vpcDefaultHint !== null) {
+    elicited["_VpcDefaultHint"] = vpcDefaultHint;
+  }
 
   return {
     elicited,

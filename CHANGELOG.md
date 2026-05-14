@@ -17,6 +17,30 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### feat(advice): EFS default-VPC hint advisory + extractor (CP-3 / PH1-G-2, 2026-05-14)
+
+Solution B advisory per Winston memo §3 (existing-resource discovery deferred). Intents
+containing `"vpc-default"` / `"default VPC"` / `"existing VPC vpc-XXXXX"` still produce
+the existing `efs-with-vpc` compound (new private VPC) but now emit a HIGH-visibility
+advisory documenting the gap and the `--set VpcId=<vpc-id> SubnetIds=...` escape hatch.
+Existing behaviour is preserved for intents without VPC-default phrasing. Word-boundary
+enforcement prevents false-positives on fused forms like `"vpcdefault"`.
+
+- core `graph/nodes/intent-parser/extractors/vpc-default-hint-extractor.ts`: NEW pure
+  extractor `extractVpcDefaultHint(intent)` returning `"default-vpc"`,
+  `"existing-vpc-id:<id>"`, or `null`. Six variations tested (A–F).
+- core `graph/nodes/advice/efs-default-vpc-hint.ts`: NEW advisor helper
+  `efsDefaultVpcHint(resourceType, elicitedOptions)`. Narrow guard: fires only for
+  `AWS::EFS::FileSystem` when `_VpcDefaultHint` key is present. Emits exact advisory
+  wording per spec line 17 including `--set VpcId=` / `SubnetIds` escape hatch.
+- core `graph/nodes/intent-parser/index.ts`: `extractAssertedValues` wires
+  `extractVpcDefaultHint` after existing extractors; result stored under `_VpcDefaultHint`
+  in `elicitedOptions` for the advisor to consume.
+- core `graph/nodes/advice-generator.ts`: `efsDefaultVpcHint` added to rule-based
+  advisor chain, scoped to EFS only.
+- Deferred: existing-resource-discovery extractor + `efs-in-existing-vpc` compound
+  entered in `sprint-status.yaml` deferred-backlog (entry `deferred-existing-resource-discovery-extractor`).
+
 ### feat(compound-patterns): add sns-with-email-subscription compound + email-extractor (CP-2 / PH1-C-2 + DF-C2, 2026-05-14)
 
 - core `pattern-templates/patterns/sns-with-email-subscription.ts`: NEW 2-resource
