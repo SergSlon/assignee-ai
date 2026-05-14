@@ -17,6 +17,22 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### fix(naming): deterministic auto-naming guards against LLM bucket-name hallucination (EPIC-106-7 / PH5-8-B)
+
+Closes PH5-8-B from Phase-5 dogfood. Eliminates the silent class of bug where
+the LLM hallucinated a `BucketName` (e.g. `payments-data-prod`) for a bare intent
+with no name in it, and the plan emitted that name with no indication it was made up.
+
+Adds `guardLlmHallucinatedName` in `resource-post-process.ts` (runs inside
+`postRepairPostProcess`). When the LLM proposes a name for S3 (`BucketName`),
+Lambda (`FunctionName`), or SQS (`QueueName`) AND neither the `"named X"` keyword
+extractor nor the SX-2 inline-name extractor fired (i.e. name absent from
+`elicitedOptions`), the LLM-proposed name is replaced with a deterministic
+`assignee-s3-bucket-<8hex>` / `assignee-lambda-fn-<8hex>` / `assignee-sqs-queue-<8hex>`
+identifier. User-provided names (written into `elicitedOptions` by the intent-parser)
+are preserved. DynamoDB, SNS, and ECR are unaffected — they already have
+`toCfn`-level guards in their plugin files.
+
 ### fix(best-practices): tier-gated BP-RDS rule suppression for staging/dev (EPIC-106-6 / PH5-3-B)
 
 Closes PH5-3-B from Phase-5 dogfood. Eliminates user-visible contradiction where
