@@ -89,19 +89,121 @@ function currencyPrefix(currency: string): string {
 }
 
 /**
- * Format a GB value into a human-readable string.
- * Converts to TB (rounded to nearest integer TB) when the value is >= 512 GB.
+ * Determine the unit family for a given AWS pricing unit string.
+ *
+ * - "byte": storage units that should render as GB / TB
+ * - "count": request/event count units that render with k/M/B suffix
+ * - "compute-second": Lambda/compute GB-Second units (M/B suffix + label)
+ * - "unknown": everything else — render as raw number + unit string
+ */
+function unitFamily(
+  unit: string,
+): "byte" | "count" | "compute-second" | "unknown" {
+  const u = unit.toLowerCase();
+  // Byte / storage units
+  if (
+    u === "gb" ||
+    u === "gb-mo" ||
+    u === "gb-month" ||
+    u.startsWith("gb-mo") ||
+    u === "tb" ||
+    u === "tb-mo" ||
+    u === "tb-month"
+  ) {
+    return "byte";
+  }
+  // Compute-second units (must check before generic count patterns)
+  if (u.includes("gb-second") || u.includes("gb-seconds")) {
+    return "compute-second";
+  }
+  // Count / event units
+  const countKeywords = [
+    "request",
+    "notification",
+    "publish",
+    "message",
+    "invocation",
+    "call",
+    "event",
+    "query",
+    "item",
+    "read",
+    "write",
+    "unit",
+  ];
+  for (const kw of countKeywords) {
+    if (u.includes(kw)) return "count";
+  }
+  // "million requests", "million publishes", etc.
+  if (u.startsWith("million ") || u.startsWith("1 million")) return "count";
+  return "unknown";
+}
+
+/**
+ * Format a numeric count value with k/M/B suffix.
+ * Uses toPrecision(3) then strips trailing zeros via unary + coercion.
+ * e.g. 999_999 → "1M", 1_000_000 → "1M", 100_000_000 → "100M"
+ */
+function formatCount(value: number): string {
+  if (value >= 1_000_000_000) {
+    const b = +(value / 1_000_000_000).toPrecision(3);
+    return `${b}B`;
+  }
+  if (value >= 1_000_000) {
+    const m = +(value / 1_000_000).toPrecision(3);
+    // Promote to next tier when toPrecision rounds across the boundary
+    // (e.g. 999_999_999 / 1_000_000 = 999.999 → toPrecision(3) → 1_000).
+    if (m >= 1000) return `${+(m / 1000).toPrecision(3)}B`;
+    return `${m}M`;
+  }
+  if (value >= 1_000) {
+    const k = +(value / 1_000).toPrecision(3);
+    // Promote to next tier when toPrecision rounds across the boundary
+    // (e.g. 999_999 / 1_000 = 999.999 → toPrecision(3) → 1_000).
+    if (k >= 1000) return `${+(k / 1000).toPrecision(3)}M`;
+    return `${k}k`;
+  }
+  return value.toLocaleString("en-US");
+}
+
+/**
+ * Format a range value for display based on the pricing unit.
+ *
+ * Unit families:
+ *   - Byte units (GB-Mo, GB-month, GB, TB-*): GB→TB at ≥512 GB.
+ *   - Count units (Requests, Notifications, Publishes, …): k/M/B suffix.
+ *   - Compute-second units (Lambda-GB-Second, GB-Second): M/B suffix + "GB-Seconds".
+ *   - Default: raw number (locale-formatted) + unit string, NO TB conversion.
  *
  * AWS pricing pages show clean numbers like "10 TB" and "40 TB" for tier
  * boundaries that are slightly imprecise in GB (e.g. 10140 GB ≈ 10 TB,
  * 40960 GB ≈ 40 TB). We round to the nearest integer TB to match.
+ *
+ * @param value  Raw numeric tier boundary from the AWS Pricing API.
+ * @param unit   Unit string from the price dimension (e.g. "GB-Mo", "Requests").
  */
-function formatRange(gb: number): string {
-  if (gb >= 512) {
-    const tb = Math.round(gb / 1024);
-    return `${tb} TB`;
+export function formatRange(value: number, unit: string): string {
+  const family = unitFamily(unit);
+
+  switch (family) {
+    case "byte": {
+      if (value >= 512) {
+        const tb = Math.round(value / 1024);
+        return `${tb} TB`;
+      }
+      return `${value} GB`;
+    }
+    case "count": {
+      return `${formatCount(value)} ${unit}`;
+    }
+    case "compute-second": {
+      return `${formatCount(value)} GB-Seconds`;
+    }
+    default: {
+      // Unknown unit — raw value + unit string, no TB conversion
+      return `${value.toLocaleString("en-US")} ${unit}`;
+    }
   }
-  return `${gb} GB`;
 }
 
 /**
@@ -217,7 +319,7 @@ export function renderTierLadder(
     if (rate === 0) {
       // Free tier
       if (hasEnd) {
-        segments.push(`free up to ${formatRange(tier.endRange!)}`);
+        segments.push(`free up to ${formatRange(tier.endRange!, unit)}`);
       } else {
         segments.push("free");
       }
@@ -226,22 +328,23 @@ export function renderTierLadder(
       if (i === 0) {
         // First tier (paid from the start)
         if (hasEnd) {
-          segments.push(`${rateStr} up to ${formatRange(tier.endRange!)}`);
+          segments.push(
+            `${rateStr} up to ${formatRange(tier.endRange!, unit)}`,
+          );
         } else {
           segments.push(rateStr);
         }
       } else {
-        // Subsequent paid tier — show the tier width as "next N TB/GB"
+        // Subsequent paid tier — show the tier width as "next N <unit>"
         // The width is endRange - prevEnd (approximately how much usage
-        // falls into this tier). AWS pricing pages show clean round numbers
-        // like "next 10 TB" and "next 40 TB" for tier widths that are
-        // slightly imprecise in raw GB; formatRange rounds to nearest integer TB.
+        // falls into this tier). For byte units, formatRange rounds to nearest
+        // integer TB; for count/compute units it renders with k/M/B suffix.
         const prevEnd = tiers[i - 1]!.endRange;
         if (hasEnd && prevEnd !== undefined) {
           const width = tier.endRange! - prevEnd;
-          segments.push(`${rateStr} next ${formatRange(width)}`);
+          segments.push(`${rateStr} next ${formatRange(width, unit)}`);
         } else if (prevEnd !== undefined) {
-          segments.push(`${rateStr} above ${formatRange(prevEnd)}`);
+          segments.push(`${rateStr} above ${formatRange(prevEnd, unit)}`);
         } else {
           segments.push(rateStr);
         }

@@ -5,7 +5,11 @@
  */
 
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { isTieredResponse, renderTierLadder } from "./tier-ladder.js";
+import {
+  isTieredResponse,
+  renderTierLadder,
+  formatRange,
+} from "./tier-ladder.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -328,5 +332,80 @@ describe("renderTierLadder", () => {
 
     // 10240 GB = 10 TB
     expect(result!.text).toContain("10 TB");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PD-1 probe suite — formatRange unit-family switch
+// Closes PH1-A-1 (DDB Storage GB suffix), PH1-C-3 (SNS publishes TB drift),
+// PH1-D-3 (Lambda GB-Seconds TB drift). Single-root-cause fix.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("formatRange — unit-family switch (PD-1)", () => {
+  // ── Variation A — bytes (GB→TB) preserved ─────────────────────────────────
+  it("Variation A — large byte unit renders as TB (≥512 GB threshold)", () => {
+    expect(formatRange(40960, "GB-Mo")).toBe("40 TB");
+    expect(formatRange(10240, "GB-Mo")).toBe("10 TB");
+    expect(formatRange(1024, "GB-Mo")).toBe("1 TB");
+    expect(formatRange(512, "GB-Mo")).toBe("1 TB"); // boundary — rounds to 1 TB
+  });
+
+  // ── Variation B — bytes small (< 512 GB) ──────────────────────────────────
+  it("Variation B — small byte unit renders as GB (< 512 GB)", () => {
+    expect(formatRange(100, "GB-Mo")).toBe("100 GB");
+    expect(formatRange(25, "GB-Mo")).toBe("25 GB"); // DDB free-tier upper
+    expect(formatRange(511, "GB-Mo")).toBe("511 GB"); // boundary − 1
+  });
+
+  // ── Variation C — count unit (Notifications) ──────────────────────────────
+  it("Variation C — count unit (Notifications) renders with k/M suffix + unit name", () => {
+    expect(formatRange(1_000_000, "Notifications")).toBe("1M Notifications");
+    expect(formatRange(100_000_000, "Notifications")).toBe(
+      "100M Notifications",
+    );
+    expect(formatRange(1_500_000, "Notifications")).toBe("1.5M Notifications");
+  });
+
+  // ── Variation D — count unit (Publishes) ──────────────────────────────────
+  it("Variation D — count unit (Publishes) — large counts use B suffix", () => {
+    expect(formatRange(1_000_000_000, "Publishes")).toBe("1B Publishes");
+    expect(formatRange(98_000_000_000, "Publishes")).toBe("98B Publishes");
+    // Was: "98 TB" — PH1-C-3 root cause; now renders the actual count.
+  });
+
+  // ── Variation E — compute-second unit (Lambda-GB-Second) ──────────────────
+  it("Variation E — compute-second unit renders with M/B suffix + 'GB-Seconds' name", () => {
+    expect(formatRange(6_000_000_000, "Lambda-GB-Second")).toBe(
+      "6B GB-Seconds",
+    );
+    expect(formatRange(5_859_375_000, "Lambda-GB-Second")).toBe(
+      "5.86B GB-Seconds",
+    );
+    // Was: "5859375 TB" — PH1-D-3 root cause; now renders the actual compute-second count.
+  });
+
+  // ── Variation F — unknown unit fallback ───────────────────────────────────
+  it("Variation F — unknown unit renders raw + unit string, NO TB conversion", () => {
+    expect(formatRange(123_456, "Unknown")).toBe("123,456 Unknown");
+    expect(formatRange(1024, "Widgets")).toBe("1,024 Widgets");
+    // Critically: NO "1 TB" rendering even though value ≥ 512.
+  });
+
+  // ── Variation G — count boundary at 1k / 1M ───────────────────────────────
+  it("Variation G — count boundary cases (k/M/B transitions)", () => {
+    expect(formatRange(999, "Requests")).toBe("999 Requests");
+    expect(formatRange(1_000, "Requests")).toBe("1k Requests");
+    expect(formatRange(999_999, "Requests")).toBe("1M Requests"); // toPrecision rounds k→M
+    expect(formatRange(1_000_000, "Requests")).toBe("1M Requests");
+    // M→B boundary — same toPrecision promotion at the next tier.
+    expect(formatRange(999_999_999, "Publishes")).toBe("1B Publishes"); // toPrecision rounds M→B
+    expect(formatRange(1_000_000_000, "Publishes")).toBe("1B Publishes"); // exact 1B
+  });
+
+  // ── Variation H — case-insensitive unit family detection ──────────────────
+  it("Variation H — unit family detection is case-insensitive", () => {
+    expect(formatRange(1_000_000, "REQUESTS")).toBe("1M REQUESTS");
+    expect(formatRange(40960, "gb-mo")).toBe("40 TB");
+    expect(formatRange(6_000_000_000, "GB-Second")).toBe("6B GB-Seconds");
   });
 });
