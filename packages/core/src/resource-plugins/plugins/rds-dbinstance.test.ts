@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { rdsDbInstancePlugin } from "./rds-dbinstance.js";
+import { RESOURCE_TYPES } from "@/index.js";
+import type { Advisory } from "@/graph/nodes/intent-parser/intent-types.js";
+import { applyRdsTierDefaults } from "@/graph/nodes/intent-parser/extractors/environment-tier-extractor.js";
 
 describe("rdsDbInstancePlugin", () => {
   // ── Task 4.1 / AC #6: DBName field ────────────────────────────────────
@@ -288,6 +291,86 @@ describe("rdsDbInstancePlugin", () => {
         "SecurityGroupIngress"
       ] as Array<{ FromPort?: number; CidrIp?: string }>;
       expect(ingress.some((r) => r.CidrIp === "10.0.0.0/8")).toBe(true);
+    });
+  });
+
+  // ── SX-4: Environment-tier defaults ──────────────────────────────────────
+
+  describe("environment-tier defaults via applyRdsTierDefaults", () => {
+    const RDS = RESOURCE_TYPES.RDS_DB_INSTANCE;
+
+    // Variation A — staging
+    it("Variation A — staging: MultiAZ=false, DeletionProtection=false, BackupRetentionPeriod=1, PerformanceInsightsEnabled=false", () => {
+      const elicited: Record<string, unknown> = {};
+      const advisories: Advisory[] = [];
+      applyRdsTierDefaults(
+        "Create an RDS Postgres db.t3.micro for staging",
+        RDS,
+        elicited,
+        advisories,
+      );
+      expect(elicited["MultiAZ"]).toBe(false);
+      expect(elicited["DeletionProtection"]).toBe(false);
+      expect(elicited["BackupRetentionPeriod"]).toBe(1);
+      expect(elicited["PerformanceInsightsEnabled"]).toBe(false);
+      expect(advisories).toHaveLength(1);
+      expect(advisories[0]!.message).toMatch(/staging/);
+    });
+
+    // Variation B — dev
+    it("Variation B — dev: MultiAZ=false, DeletionProtection=false, BackupRetentionPeriod=1", () => {
+      const elicited: Record<string, unknown> = {};
+      const advisories: Advisory[] = [];
+      applyRdsTierDefaults(
+        "Create an RDS MySQL db.t3.small for dev",
+        RDS,
+        elicited,
+        advisories,
+      );
+      expect(elicited["MultiAZ"]).toBe(false);
+      expect(elicited["DeletionProtection"]).toBe(false);
+      expect(elicited["BackupRetentionPeriod"]).toBe(1);
+      expect(advisories[0]!.message).toMatch(/dev/);
+    });
+
+    // Variation C — production
+    it("Variation C — production: MultiAZ=true, DeletionProtection=true, BackupRetentionPeriod=7, PerformanceInsightsEnabled=true", () => {
+      const elicited: Record<string, unknown> = {};
+      const advisories: Advisory[] = [];
+      applyRdsTierDefaults(
+        "Create an RDS Postgres for production",
+        RDS,
+        elicited,
+        advisories,
+      );
+      expect(elicited["MultiAZ"]).toBe(true);
+      expect(elicited["DeletionProtection"]).toBe(true);
+      expect(elicited["BackupRetentionPeriod"]).toBe(7);
+      expect(elicited["PerformanceInsightsEnabled"]).toBe(true);
+    });
+
+    // Variation D — no tier hint: current defaults unchanged
+    it("Variation D — no tier hint: elicited unchanged, no advisory", () => {
+      const elicited: Record<string, unknown> = {};
+      const advisories: Advisory[] = [];
+      applyRdsTierDefaults("Create an RDS Postgres", RDS, elicited, advisories);
+      expect(elicited).toEqual({});
+      expect(advisories).toHaveLength(0);
+    });
+
+    // Variation E — explicit "with MultiAZ" overrides staging
+    it("Variation E — 'with MultiAZ' keyword overrides staging tier default, MultiAZ=true", () => {
+      const elicited: Record<string, unknown> = {};
+      const advisories: Advisory[] = [];
+      applyRdsTierDefaults(
+        "Create an RDS Postgres for staging with MultiAZ",
+        RDS,
+        elicited,
+        advisories,
+      );
+      expect(elicited["MultiAZ"]).toBe(true);
+      expect(elicited["DeletionProtection"]).toBe(false);
+      expect(elicited["BackupRetentionPeriod"]).toBe(1);
     });
   });
 });
