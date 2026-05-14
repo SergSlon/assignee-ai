@@ -17,6 +17,19 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### fix(process): reviewer-bypass hook hardening with evidence-file linkage (EPIC-106-1)
+
+Closes the fabricated-ACCEPT bypass class observed in the DC-2 incident (commit
+`6106a807` force-replaced by `04a9f671`). Root cause: the pre-push hook accepted
+any commit body containing the literal string `Reviewer: ACCEPT` — no
+cryptographic or file-system linkage was required, so an agent could forge the
+token directly without a real review artefact existing.
+
+- `.husky/pre-push`: strict parser requires `Reviewer: ACCEPT — <role> (<persona>) — <story_id> — see _archive/reviews/<sha>-review.md`; validates the cited file EXISTS and has a conformant first line. Fabricated tokens fail because the evidence file must exist AND match the required header.
+- `scripts/reviewer-evidence-audit.ts`: new CLI utility (`pnpm reviewer-evidence-audit`) for retroactive scanning; exits 1 on any failure for CI consumption.
+- `.github/workflows/ci.yml`: new `reviewer-evidence-audit` PR gate job.
+- `_archive/reviews/`: new directory (tracked via `.gitkeep`) with format documentation.
+
 **Epic-105 (Phase 1-4 dogfood-driven hardening)**: 24 PRs shipped, 15/17 PH1 findings closed + 6 DF carryovers, NFR composite 88.2 (was ~78), three deep fixes deferred to next sprint as numbered backlog items.
 
 ### feat(compound-patterns): add sqs-with-dlq compound for "with DLQ" intents (CP-1 / PH1-B-1 + DF-B2, 2026-05-14)
