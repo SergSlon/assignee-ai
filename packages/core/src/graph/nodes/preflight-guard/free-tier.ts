@@ -11,7 +11,11 @@ export type FreeTierNote = ReturnType<typeof getFreeTierNote>;
 export function collectFreeTierNote(state: AgentState): FreeTierNote {
   try {
     const accountCreated = loadAccountCreatedDate();
-    const note = getFreeTierNote(state.resourceType, accountCreated);
+    const note = getFreeTierNote(
+      state.resourceType,
+      accountCreated,
+      state.desiredState as Record<string, unknown> | undefined,
+    );
     if (note) {
       log({
         ts: new Date().toISOString(),

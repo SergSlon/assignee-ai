@@ -113,6 +113,19 @@ review methodology notes, see
 - pricing/decomposers/integration.test.ts: update SQS variant-consistency tests
   to assert new correct filters (API Request + queueType discriminator).
 
+### RDS free-tier class detector — db.t3.micro / db.t2.micro recognised (RG-2 / DF-E6, 2026-05-13)
+
+- core: ADD `RDS_FREE_TIER_INSTANCE_CLASSES` set and `isRdsInstanceClassFreeTierEligible(instanceClass)`
+  to `utils/free-tier/maps.ts`. The two AWS-documented free-tier classes (`db.t2.micro`,
+  `db.t3.micro`) are the only members; `db.t4g.micro` (Graviton) and any medium/large
+  class return `false`.
+- core: ADD `RDS_FREE_TIER_STORAGE_NOTE` constant exposing the "20 GB GP2 storage/month"
+  free-tier allotment for use in plan display.
+- core: NEW `utils/free-tier/maps.test.ts` covering 5 probe variations (A db.t3.micro free,
+  B db.t2.micro free, C db.t4g.micro NOT free, D db.t3.medium NOT free, E storage note present).
+- Closes DF-E6: plan output for RDS `db.t3.micro`/`db.t2.micro` no longer relies
+  solely on account-date gating; class-level eligibility is now a first-class query.
+
 ### Lambda body compound propagation — completes PR #52 regression (SX-7 / PH1-D-1, 2026-05-14)
 
 - core: NEW `graph/nodes/intent-parser/extractors/lambda-body-extractor.ts`
