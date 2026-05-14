@@ -70,19 +70,39 @@ describe("isRdsInstanceClassFreeTierEligible — Variation D (db.t3.medium NOT f
 
 // ── Probe Variation E — storage free-tier note present ───────────────────────
 
-describe("RDS_FREE_TIER_STORAGE_NOTE — Variation E (20 GB GP2 storage note)", () => {
+describe("RDS_FREE_TIER_STORAGE_NOTE — Variation E (20 GB General Purpose SSD storage note)", () => {
   it("is a non-empty string", () => {
     expect(typeof RDS_FREE_TIER_STORAGE_NOTE).toBe("string");
     expect(RDS_FREE_TIER_STORAGE_NOTE.length).toBeGreaterThan(0);
   });
 
-  it("mentions 20 GB GP2 storage", () => {
+  it("mentions 20 GB and General Purpose SSD storage", () => {
     expect(RDS_FREE_TIER_STORAGE_NOTE).toMatch(/20\s*GB/i);
-    expect(RDS_FREE_TIER_STORAGE_NOTE).toMatch(/GP2/i);
+    expect(RDS_FREE_TIER_STORAGE_NOTE).toMatch(/General Purpose SSD/i);
+  });
+
+  it("does not mention GP2 or GP3 storage class (generic wording covers both)", () => {
+    expect(RDS_FREE_TIER_STORAGE_NOTE).not.toMatch(/GP2/i);
+    expect(RDS_FREE_TIER_STORAGE_NOTE).not.toMatch(/GP3/i);
+  });
+
+  it("is non-contradictory with a gp3 StorageType plan row", () => {
+    // Simulates plan output: StorageType = gp3. The hint must not claim GP2.
+    const planStorageType = "gp3";
+    const noteContainsGp2 = /GP2/i.test(RDS_FREE_TIER_STORAGE_NOTE);
+    const planIsGp3 = planStorageType === "gp3";
+    // Contradiction would be: note says GP2 but plan shows gp3.
+    expect(noteContainsGp2 && planIsGp3).toBe(false);
+  });
+
+  it("is non-contradictory with a gp2 StorageType plan row", () => {
+    const planStorageType = "gp2";
+    const noteContainsGp3 = /GP3/i.test(RDS_FREE_TIER_STORAGE_NOTE);
+    const planIsGp2 = planStorageType === "gp2";
+    expect(noteContainsGp3 && planIsGp2).toBe(false);
   });
 
   it("can be surfaced alongside a free-tier eligible instance (db.t3.micro)", () => {
-    // When db.t3.micro is free, the storage note should be surfaced.
     const instanceIsFree = isRdsInstanceClassFreeTierEligible("db.t3.micro");
     const storageNote = instanceIsFree ? RDS_FREE_TIER_STORAGE_NOTE : null;
     expect(instanceIsFree).toBe(true);
@@ -91,7 +111,6 @@ describe("RDS_FREE_TIER_STORAGE_NOTE — Variation E (20 GB GP2 storage note)", 
   });
 
   it("is NOT surfaced for a non-free-tier instance (db.t4g.micro)", () => {
-    // When the instance class is not free-tier, no storage note applies.
     const instanceIsFree = isRdsInstanceClassFreeTierEligible("db.t4g.micro");
     const storageNote = instanceIsFree ? RDS_FREE_TIER_STORAGE_NOTE : null;
     expect(instanceIsFree).toBe(false);
