@@ -113,28 +113,56 @@ export function assembleS3Composites(
     // is pointless (object is deleted before any IA savings accrue).
     const expireOnly = options[CfnKey.LIFECYCLE_EXPIRE_ONLY] === true;
 
-    if (expireOnly) {
-      // Parse expiration days set by the extractor (required when expireOnly).
-      const expirationDaysRaw = options[CfnKey.LIFECYCLE_EXPIRATION_DAYS];
-      let expirationDays = 30; // safe default matching the "lifecycle 30d" bare phrase
-      if (expirationDaysRaw !== undefined && expirationDaysRaw !== null) {
-        const trimmed = String(expirationDaysRaw).trim();
-        if (trimmed.length > 0) {
-          const parsed = parseInt(trimmed, 10);
-          if (Number.isFinite(parsed) && parsed >= 1) expirationDays = parsed;
+    // PH5-8-A: parse noncurrent expiration days set by the extractor.
+    const noncurrentDaysRaw =
+      options[CfnKey.LIFECYCLE_NONCURRENT_EXPIRATION_DAYS];
+    let noncurrentExpirationDays: number | undefined;
+    if (noncurrentDaysRaw !== undefined && noncurrentDaysRaw !== null) {
+      const trimmed = String(noncurrentDaysRaw).trim();
+      if (trimmed.length > 0) {
+        const parsed = parseInt(trimmed, 10);
+        if (Number.isFinite(parsed) && parsed >= 1)
+          noncurrentExpirationDays = parsed;
+      }
+    }
+
+    if (expireOnly || noncurrentExpirationDays !== undefined) {
+      // PH5-8-A noncurrent-only path: emit a single rule with
+      // NoncurrentVersionExpirationInDays (and optional ExpirationInDays when
+      // current-version expiry is also requested — Variation C).
+      const rule: Record<string, unknown> = {
+        Id:
+          noncurrentExpirationDays !== undefined && !expireOnly
+            ? `delete-old-versions-after-${noncurrentExpirationDays}d`
+            : "assignee-default-lifecycle",
+        Status: CfnKey.ENABLED,
+      };
+
+      if (expireOnly) {
+        const expirationDaysRaw = options[CfnKey.LIFECYCLE_EXPIRATION_DAYS];
+        let expirationDays = 30;
+        if (expirationDaysRaw !== undefined && expirationDaysRaw !== null) {
+          const trimmed = String(expirationDaysRaw).trim();
+          if (trimmed.length > 0) {
+            const parsed = parseInt(trimmed, 10);
+            if (Number.isFinite(parsed) && parsed >= 1) expirationDays = parsed;
+          }
+        }
+        rule[CfnKey.EXPIRATION_IN_DAYS] = expirationDays;
+      }
+
+      if (noncurrentExpirationDays !== undefined) {
+        rule[CfnKey.NONCURRENT_VERSION_EXPIRATION_IN_DAYS] =
+          noncurrentExpirationDays;
+
+        // Auto-enable versioning when the noncurrent path was triggered without
+        // explicit versioning in the intent (Variation D).
+        if (!transformed[CfnKey.VERSIONING_CONFIGURATION]) {
+          transformed[CfnKey.VERSIONING_CONFIGURATION] = { Status: "Enabled" };
         }
       }
-      transformed[CfnKey.LIFECYCLE_CONFIGURATION] = {
-        Rules: [
-          {
-            Id: "assignee-default-lifecycle",
-            Status: CfnKey.ENABLED,
-            ExpirationInDays: expirationDays,
-            // No Transitions — IA tier is pointless when expiration fires
-            // at the same boundary (PD-4 / PH1-E-1).
-          },
-        ],
-      };
+
+      transformed[CfnKey.LIFECYCLE_CONFIGURATION] = { Rules: [rule] };
     } else {
       // Full multi-rule lifecycle (transition + optional expiration).
       // M-R9: `parseInt(...) || 30` swallows a deliberate `0` from the user.
@@ -190,6 +218,7 @@ export function assembleS3Composites(
   delete transformed[CfnKey.LIFECYCLE_TRANSITION_DAYS];
   delete transformed[CfnKey.LIFECYCLE_EXPIRATION_DAYS];
   delete transformed[CfnKey.LIFECYCLE_EXPIRE_ONLY];
+  delete transformed[CfnKey.LIFECYCLE_NONCURRENT_EXPIRATION_DAYS];
 
   // ── CORS ──
   if (options[CfnKey.ENABLE_CORS] === true) {
