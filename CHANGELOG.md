@@ -17,6 +17,17 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### feat(s3): NoncurrentVersionExpirationInDays via "delete old versions" extractor (EPIC-106-5 / PH5-8-A)
+
+Closes PH5-8-A from Phase-5 dogfood. Intents containing "old versions" /
+"noncurrent" / "non-current" / "previous versions" combined with "after N days"
+now extract `LifecycleNoncurrentExpirationDays=N` and emit a single lifecycle
+rule with `NoncurrentVersionExpirationInDays`. When versioning is absent from
+the intent, VersioningConfiguration is auto-enabled and an advisory warns the
+user. Variation C (both current AND noncurrent in one intent) emits both
+ExpirationInDays and NoncurrentVersionExpirationInDays in a single rule.
+PD-4's bare "lifecycle Nd" path is unchanged (NC-B regression-guard).
+
 ### fix(free-tier): RDS GP2/GP3 storage-type drift in free-tier hint (EPIC-106-3 / PH5-3-A)
 
 Closes PH5-3-A from Phase-5 dogfood. Free-tier hint for RDS DBInstance

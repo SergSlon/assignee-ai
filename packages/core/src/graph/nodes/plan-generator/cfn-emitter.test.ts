@@ -167,6 +167,82 @@ describe("cfn-emitter direct import", () => {
         expect(rule[CfnKey.EXPIRATION_IN_DAYS]).toBe(180);
       });
     });
+
+    // ── PH5-8-A NoncurrentVersion tests ─────────────────────────────────────
+    describe("lifecycle — PH5-8-A noncurrent-version path", () => {
+      it("NC-A: noncurrent-only emits NoncurrentVersionExpirationInDays=30, no ExpirationInDays", () => {
+        const transformed: Record<string, unknown> = {};
+        assembleS3Composites(transformed, {
+          [CfnKey.ENABLE_LIFECYCLE]: true,
+          [CfnKey.LIFECYCLE_NONCURRENT_EXPIRATION_DAYS]: "30",
+        });
+        const lc = transformed[CfnKey.LIFECYCLE_CONFIGURATION] as {
+          Rules: Array<Record<string, unknown>>;
+        };
+        expect(lc).toBeDefined();
+        expect(lc.Rules).toHaveLength(1);
+        const rule = lc.Rules[0]!;
+        expect(rule[CfnKey.NONCURRENT_VERSION_EXPIRATION_IN_DAYS]).toBe(30);
+        expect(rule[CfnKey.EXPIRATION_IN_DAYS]).toBeUndefined();
+        expect(rule["Transitions"]).toBeUndefined();
+      });
+
+      it("NC-A: noncurrent-only auto-enables VersioningConfiguration", () => {
+        const transformed: Record<string, unknown> = {};
+        assembleS3Composites(transformed, {
+          [CfnKey.ENABLE_LIFECYCLE]: true,
+          [CfnKey.LIFECYCLE_NONCURRENT_EXPIRATION_DAYS]: "30",
+        });
+        expect(transformed[CfnKey.VERSIONING_CONFIGURATION]).toEqual({
+          Status: "Enabled",
+        });
+      });
+
+      it("NC-A: noncurrent-only does NOT overwrite existing VersioningConfiguration", () => {
+        const transformed: Record<string, unknown> = {
+          [CfnKey.VERSIONING_CONFIGURATION]: { Status: "Suspended" },
+        };
+        assembleS3Composites(transformed, {
+          [CfnKey.ENABLE_LIFECYCLE]: true,
+          [CfnKey.LIFECYCLE_NONCURRENT_EXPIRATION_DAYS]: "30",
+        });
+        // Should preserve existing versioning config, not overwrite
+        expect(transformed[CfnKey.VERSIONING_CONFIGURATION]).toEqual({
+          Status: "Suspended",
+        });
+      });
+
+      it("NC-C: both current AND noncurrent emits both fields in one rule", () => {
+        const transformed: Record<string, unknown> = {};
+        assembleS3Composites(transformed, {
+          [CfnKey.ENABLE_LIFECYCLE]: true,
+          [CfnKey.LIFECYCLE_EXPIRE_ONLY]: true,
+          [CfnKey.LIFECYCLE_EXPIRATION_DAYS]: "30",
+          [CfnKey.LIFECYCLE_NONCURRENT_EXPIRATION_DAYS]: "7",
+        });
+        const lc = transformed[CfnKey.LIFECYCLE_CONFIGURATION] as {
+          Rules: Array<Record<string, unknown>>;
+        };
+        expect(lc.Rules).toHaveLength(1);
+        const rule = lc.Rules[0]!;
+        expect(rule[CfnKey.EXPIRATION_IN_DAYS]).toBe(30);
+        expect(rule[CfnKey.NONCURRENT_VERSION_EXPIRATION_IN_DAYS]).toBe(7);
+        expect(rule["Transitions"]).toBeUndefined();
+      });
+
+      it("noncurrent cleans up wizard-only key from transformed", () => {
+        const transformed: Record<string, unknown> = {
+          [CfnKey.LIFECYCLE_NONCURRENT_EXPIRATION_DAYS]: "30",
+        };
+        assembleS3Composites(transformed, {
+          [CfnKey.ENABLE_LIFECYCLE]: true,
+          [CfnKey.LIFECYCLE_NONCURRENT_EXPIRATION_DAYS]: "30",
+        });
+        expect(
+          transformed[CfnKey.LIFECYCLE_NONCURRENT_EXPIRATION_DAYS],
+        ).toBeUndefined();
+      });
+    });
   });
 
   describe("assembleEc2Storage", () => {

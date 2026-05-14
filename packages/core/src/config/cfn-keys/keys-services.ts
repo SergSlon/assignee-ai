@@ -138,6 +138,7 @@ export const CFN_KEYS_SERVICES = {
   TRANSITIONS: "Transitions",
   TRANSITION_IN_DAYS: "TransitionInDays",
   EXPIRATION_IN_DAYS: "ExpirationInDays",
+  NONCURRENT_VERSION_EXPIRATION_IN_DAYS: "NoncurrentVersionExpirationInDays",
   CORS_RULES: "CorsRules",
 
   // ── Auto-populated / read-only fields (drift comparison) ──
