@@ -89,6 +89,30 @@ review methodology notes, see
 - Closes DF-E1 by side-effect (user-asserted class no longer silently
   demoted).
 
+### SQS decomposer: render Requests + Data transfer out (PD-3 / PH1-B-3, 2026-05-13)
+
+- core/pricing/decomposers/sqs.ts: fix Requests filter from
+  `productFamily=Queue|FIFO Queue` → `productFamily=API Request` +
+  `queueType=Standard|FIFO` discriminator. The old filter matched zero
+  SKUs in the AWS Pricing API; the new filter matches exactly one per
+  region+queue-type combination. Closes the "Requests unavailable" display.
+- core/pricing/decomposers/sqs.ts: fix Data transfer out from
+  `serviceCode=AmazonSQS` → `serviceCode=AWSDataTransfer` + full
+  `fromLocationType/toLocationType/transferType` filters (S3 DTO pattern).
+  Closes the "Data transfer out unavailable" display.
+- core/pricing/filter-constants.ts: add `PricingField.QUEUE_TYPE` constant.
+- core/pricing/pricing-filter-values.ts: add `QUEUE_TYPE_STANDARD` and
+  `QUEUE_TYPE_FIFO` constants.
+- test-fixtures/mcp-mock-responses/pricing-sqs.ts: extend with
+  `sqsStandardRequestsEu` (Variation B), `sqsDataTransferOut` (AWSDataTransfer
+  fixture), `sqsEmptyResponse` (Variation D — graceful fallback).
+- pricing/decomposers/sqs.test.ts: full PD-3 probe suite (Variations A–E):
+  A=Standard us-east-1 renders non-null Requests+DTO; B=eu-west-1 region parity;
+  C=FIFO rate > Standard; D=empty response → null (no crash); E=cache-poisoning
+  guard rejects+deletes AmazonSNS-keyed entry stored under AmazonSQS key.
+- pricing/decomposers/integration.test.ts: update SQS variant-consistency tests
+  to assert new correct filters (API Request + queueType discriminator).
+
 ### Lambda body compound propagation — completes PR #52 regression (SX-7 / PH1-D-1, 2026-05-14)
 
 - core: NEW `graph/nodes/intent-parser/extractors/lambda-body-extractor.ts`
