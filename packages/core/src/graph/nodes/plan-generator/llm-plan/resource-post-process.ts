@@ -19,6 +19,13 @@
  *      - EC2 instance post-processing: drops invalid SG IDs (non-`sg-`
  *        prefix) and injects an SSH key-pair placeholder when the user
  *        intent mentions `ssh` but the LLM (and repair) omitted `KeyName`.
+ *      - S3 bucket-name hallucination guard (EPIC-106-7 / PH5-8-B): when
+ *        the LLM proposes a BucketName and the name was NOT set by the
+ *        intent-parser (neither "named X" keyword nor inline-name extractor
+ *        fired), replace it with a deterministic `assignee-s3-bucket-<8hex>`
+ *        to avoid silent hallucinated names landing in real AWS accounts.
+ *      - Same guard for Lambda FunctionName and SQS QueueName which have no
+ *        plugin-level toCfn guard in the LLM path.
  *
  * TODO (Epic 53 it2 — plugin `postProcessPlan` migration): lift these
  * resource-type-specific branches into their owning plugins. See
@@ -111,6 +118,18 @@ export async function postRepairPostProcess(
     );
   }
 
+  // EPIC-106-7 / PH5-8-B: deterministic name guards for resource types where
+  // the LLM can silently hallucinate a name when the user never supplied one.
+  // Only replaces the name when the intent-parser did NOT extract a user-
+  // provided name (i.e., neither "named X" keyword nor inline-name extractor
+  // fired). User-provided names are preserved.
+  guardLlmHallucinatedName(
+    desiredState,
+    state.elicitedOptions,
+    state.resourceType ?? "",
+    state.runId ?? "",
+  );
+
   return desiredState;
 }
 
@@ -195,5 +214,93 @@ async function postProcessEc2Instance(
     if (!desiredState[CfnKey.KEY_NAME]) {
       desiredState[CfnKey.KEY_NAME] = ResourceDefault.SSH_KEY_PLACEHOLDER;
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// EPIC-106-7 / PH5-8-B — LLM name-hallucination guard
+// ---------------------------------------------------------------------------
+//
+// Resource types with a user-settable name field: when the LLM proposes a
+// name AND the intent-parser did NOT extract a user-provided name (i.e.
+// neither the "named X" keyword path nor the inline-name extractor fired),
+// the LLM name is silently wrong. Replace it with a deterministic
+// `assignee-<type>-<8hex>` to prevent hallucinated names reaching AWS.
+//
+// Guard logic: the intent-parser writes its result into `elicitedOptions`
+// (which `mergeElicitedOptions` then spreads on top of the LLM output).
+// So if the name field is absent from `elicitedOptions`, the name currently
+// in `desiredState` came entirely from the LLM and must be replaced.
+
+/**
+ * Per-resource-type: CFN name-field → deterministic `assignee-…` prefix.
+ * Covers S3, Lambda (standalone/LLM path), and SQS — DynamoDB, SNS, and ECR
+ * already have toCfn guards in their plugin files and do not need this shim.
+ */
+const NAME_HALLUCINATION_GUARD: ReadonlyArray<{
+  resourceType: string;
+  nameField: string;
+  prefix: string;
+}> = [
+  {
+    resourceType: RESOURCE_TYPES.S3_BUCKET,
+    nameField: CfnKey.BUCKET_NAME,
+    prefix: "assignee-s3-bucket",
+  },
+  {
+    resourceType: RESOURCE_TYPES.LAMBDA_FUNCTION,
+    nameField: CfnKey.FUNCTION_NAME,
+    prefix: "assignee-lambda-fn",
+  },
+  {
+    resourceType: RESOURCE_TYPES.SQS_QUEUE,
+    nameField: CfnKey.QUEUE_NAME,
+    prefix: "assignee-sqs-queue",
+  },
+];
+
+function generateDeterministicName(prefix: string, runId: string): string {
+  return `${prefix}-${runId.slice(0, 8)}`;
+}
+
+/**
+ * Replaces an LLM-hallucinated resource name with a deterministic
+ * `assignee-<type>-<runId[:8]>` identifier when the user never provided a name.
+ *
+ * Uses the first 8 characters of `runId` (same convention as
+ * `injectCompoundResourceName` in compound-helpers.ts) so the same intent
+ * always produces the same name within a run, preserving plan→apply
+ * idempotency.
+ *
+ * Safe to call for every resource type — the `NAME_HALLUCINATION_GUARD`
+ * table acts as an allowlist; types not listed are untouched.
+ */
+function guardLlmHallucinatedName(
+  desiredState: Record<string, unknown>,
+  elicitedOptions: AgentState["elicitedOptions"],
+  resourceType: string,
+  runId: string,
+): void {
+  const guard = NAME_HALLUCINATION_GUARD.find(
+    (g) => g.resourceType === resourceType,
+  );
+  if (!guard) return;
+
+  const { nameField, prefix } = guard;
+
+  // If the intent-parser captured a user-provided name it will be present
+  // in elicitedOptions. In that case the name in desiredState is authoritative
+  // (it was written by mergeElicitedOptions) — preserve it.
+  if (
+    elicitedOptions &&
+    typeof elicitedOptions[nameField] === "string" &&
+    (elicitedOptions[nameField] as string).length > 0
+  ) {
+    return;
+  }
+
+  // LLM proposed a name (or repair injected one). Replace unconditionally.
+  if (typeof desiredState[nameField] === "string") {
+    desiredState[nameField] = generateDeterministicName(prefix, runId);
   }
 }

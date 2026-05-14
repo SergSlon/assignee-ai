@@ -147,3 +147,164 @@ describe("postRepairPostProcess — SSH-bundle Windows fail-fast (LLM-plan path)
     expect(desiredState[CfnKey.SECURITY_GROUP_IDS]).toEqual(["sg-12345678"]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// EPIC-106-7 / PH5-8-B — LLM name-hallucination guard
+// ---------------------------------------------------------------------------
+
+describe("postRepairPostProcess — LLM name-hallucination guard (EPIC-106-7)", () => {
+  // runId prefix: "run-halluc" → first 8 chars = "run-hall"
+  const S3_RUN_ID = "run-hallucination-guard-test";
+  const S3_EXPECTED_NAME = "assignee-s3-bucket-run-hall";
+
+  function makeS3State(overrides: Partial<AgentState> = {}): AgentState {
+    return {
+      resourceType: RESOURCE_TYPES.S3_BUCKET,
+      runId: S3_RUN_ID,
+      userIntent: "Create an S3 bucket",
+      elicitedOptions: {},
+      ...overrides,
+    } as AgentState;
+  }
+
+  // Variation A — bare intent, no name extractor fired
+  it("A: bare intent (no user name) → LLM-proposed BucketName replaced with assignee-s3-bucket-<runId[:8]>", async () => {
+    const desiredState: Record<string, unknown> = {
+      BucketName: "payments-data-prod", // LLM-hallucinated
+      VersioningConfiguration: { Status: "Enabled" },
+    };
+
+    await postRepairPostProcess(
+      desiredState,
+      makeS3State({
+        userIntent: "Create an S3 bucket with versioning enabled",
+      }),
+    );
+
+    expect(desiredState["BucketName"]).toBe(S3_EXPECTED_NAME);
+  });
+
+  // Variation B — explicit "named foo" keyword: user name preserved
+  it('B: "named my-data-bucket" → BucketName preserved from elicitedOptions', async () => {
+    const desiredState: Record<string, unknown> = {
+      BucketName: "my-data-bucket", // merged from elicitedOptions by mergeElicitedOptions upstream
+      VersioningConfiguration: { Status: "Enabled" },
+    };
+
+    await postRepairPostProcess(
+      desiredState,
+      makeS3State({
+        userIntent: "Create an S3 bucket named my-data-bucket with versioning",
+        elicitedOptions: { BucketName: "my-data-bucket" },
+      }),
+    );
+
+    expect(desiredState["BucketName"]).toBe("my-data-bucket");
+  });
+
+  // Variation C — inline-name extractor (SX-2) fired: user name preserved
+  it("C: inline SX-2 name extractor fired → BucketName preserved from elicitedOptions", async () => {
+    const desiredState: Record<string, unknown> = {
+      BucketName: "data-archive", // merged from elicitedOptions by SX-2 path
+    };
+
+    await postRepairPostProcess(
+      desiredState,
+      makeS3State({
+        userIntent: "Create an S3 bucket data-archive",
+        elicitedOptions: { BucketName: "data-archive" },
+      }),
+    );
+
+    expect(desiredState["BucketName"]).toBe("data-archive");
+  });
+
+  // Variation D — Lambda FunctionName in LLM path gets guarded too
+  it("D: Lambda FunctionName hallucinated by LLM replaced with assignee-lambda-fn-<runId[:8]>", async () => {
+    vi.mocked(getAmiPlatformDetails).mockReset();
+    // runId "run-lambd" → first 8 chars = "run-lamb"
+    const desiredState: Record<string, unknown> = {
+      FunctionName: "my-payment-processor", // LLM-hallucinated
+      Runtime: "nodejs22.x",
+      Handler: "index.handler",
+      Role: "arn:aws:iam::112233445566:role/my-role",
+    };
+
+    await postRepairPostProcess(desiredState, {
+      resourceType: RESOURCE_TYPES.LAMBDA_FUNCTION,
+      runId: "run-lambda-guard-test",
+      userIntent: "Create a Lambda function for payment processing",
+      elicitedOptions: {},
+    } as AgentState);
+
+    expect(desiredState["FunctionName"]).toBe("assignee-lambda-fn-run-lamb");
+  });
+
+  // Variation D-SQS — SQS QueueName in LLM path gets guarded too
+  it("D-SQS: SQS QueueName hallucinated by LLM replaced with assignee-sqs-queue-<runId[:8]>", async () => {
+    // runId "run-sqs-g" → first 8 chars = "run-sqs-"
+    const desiredState: Record<string, unknown> = {
+      QueueName: "orders-processing-queue", // LLM-hallucinated
+      VisibilityTimeout: 30,
+    };
+
+    await postRepairPostProcess(desiredState, {
+      resourceType: RESOURCE_TYPES.SQS_QUEUE,
+      runId: "run-sqs-guard-test",
+      userIntent: "Create an SQS queue for order processing",
+      elicitedOptions: {},
+    } as AgentState);
+
+    expect(desiredState["QueueName"]).toBe("assignee-sqs-queue-run-sqs-");
+  });
+
+  // Edge case: no BucketName in LLM output at all → nothing set / no crash
+  it("no BucketName in LLM output → desiredState unchanged", async () => {
+    const desiredState: Record<string, unknown> = {
+      VersioningConfiguration: { Status: "Enabled" },
+    };
+
+    await postRepairPostProcess(
+      desiredState,
+      makeS3State({ userIntent: "Create an S3 bucket with versioning" }),
+    );
+
+    expect(desiredState["BucketName"]).toBeUndefined();
+  });
+
+  // Verify DynamoDB is NOT in the guard list (it has a toCfn guard in plugin)
+  it("DynamoDB TableName is NOT replaced by post-process guard (toCfn handles it)", async () => {
+    const desiredState: Record<string, unknown> = {
+      TableName: "my-dynamodb-table", // would normally be caught by plugin toCfn
+      BillingMode: "PAY_PER_REQUEST",
+    };
+
+    await postRepairPostProcess(desiredState, {
+      resourceType: RESOURCE_TYPES.DYNAMODB_TABLE,
+      runId: "run-ddb-guard-test",
+      userIntent: "Create a DynamoDB table",
+      elicitedOptions: {},
+    } as AgentState);
+
+    // DynamoDB is NOT in the post-process guard list — its plugin toCfn handles it
+    expect(desiredState["TableName"]).toBe("my-dynamodb-table");
+  });
+
+  // Idempotency regression guard: same state → same name across two calls
+  it("idempotency: calling twice with the same state produces the same BucketName (plan→apply consistency)", async () => {
+    const state = makeS3State({
+      userIntent: "Create an S3 bucket with versioning enabled",
+    });
+
+    const ds1: Record<string, unknown> = { BucketName: "hallucinated-name-1" };
+    await postRepairPostProcess(ds1, state);
+    const name1 = ds1["BucketName"] as string;
+
+    const ds2: Record<string, unknown> = { BucketName: "hallucinated-name-2" };
+    await postRepairPostProcess(ds2, state);
+    const name2 = ds2["BucketName"] as string;
+
+    expect(name1).toBe(name2);
+    expect(name1).toBe(S3_EXPECTED_NAME);
+  });
+});

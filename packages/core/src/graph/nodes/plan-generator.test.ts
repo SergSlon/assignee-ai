@@ -85,7 +85,9 @@ describe("planGeneratorNode", () => {
     );
     const node = createPlanGeneratorNode({ llmClient: mock });
 
-    const result = await node(makeState());
+    const result = await node(
+      makeState({ elicitedOptions: { BucketName: "my-test-bucket" } }),
+    );
 
     expect(result.desiredState).toEqual({ BucketName: "my-test-bucket" });
     expect(result.executionStatus).toBeUndefined(); // no failure
@@ -101,7 +103,9 @@ describe("planGeneratorNode", () => {
     );
     const node = createPlanGeneratorNode({ llmClient: mock });
 
-    const result = await node(makeState());
+    const result = await node(
+      makeState({ elicitedOptions: { BucketName: "test-data-bucket" } }),
+    );
 
     expect(result.desiredState).toEqual({ BucketName: "test-data-bucket" });
     expect(
@@ -173,7 +177,9 @@ describe("planGeneratorNode", () => {
     );
     const node = createPlanGeneratorNode({ llmClient: mock });
 
-    const result = await node(makeState());
+    const result = await node(
+      makeState({ elicitedOptions: { BucketName: "clean-bucket" } }),
+    );
 
     expect(result.desiredState).toEqual({ BucketName: "clean-bucket" });
   });
@@ -190,7 +196,9 @@ describe("planGeneratorNode", () => {
     );
     const node = createPlanGeneratorNode({ llmClient: mock });
 
-    const result = await node(makeState());
+    const result = await node(
+      makeState({ elicitedOptions: { BucketName: "my-test-bucket" } }),
+    );
 
     expect(result.desiredState).toEqual({ BucketName: "my-test-bucket" });
   });
@@ -267,6 +275,7 @@ describe("planGeneratorNode", () => {
 
     const result = await node(
       makeState({
+        elicitedOptions: { BucketName: "test-data-bucket" },
         resourceSchema: {
           Properties: {
             BucketName: { type: "string" },
@@ -391,7 +400,9 @@ describe("planGeneratorNode — Story 19.3 memory hints", () => {
     );
     const node = createPlanGeneratorNode({ llmClient: mock });
 
-    const result = await node(makeState());
+    const result = await node(
+      makeState({ elicitedOptions: { BucketName: "test-data-bucket" } }),
+    );
 
     // Plan should still generate successfully
     expect(result.desiredState).toEqual({ BucketName: "test-data-bucket" });
@@ -542,7 +553,9 @@ describe("planGeneratorNode — Story 19.4 failure history warnings", () => {
       JSON.stringify({ BucketName: "test-data-bucket" }),
     );
     const node = createPlanGeneratorNode({ llmClient: mock });
-    const result = await node(makeState());
+    const result = await node(
+      makeState({ elicitedOptions: { BucketName: "test-data-bucket" } }),
+    );
 
     // Plan should still generate successfully
     expect(result.desiredState).toEqual({ BucketName: "test-data-bucket" });
@@ -671,6 +684,7 @@ describe("planGeneratorNode — Story 18.9 toCfn integration", () => {
     const result = await node(
       makeState({
         elicitedOptions: {
+          BucketName: "test-data-bucket",
           BucketEncryption: false,
           VersioningConfiguration: false,
         },
