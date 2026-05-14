@@ -6,6 +6,10 @@ import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import { markerGetAtt, markerRef } from "../../config/marker-tokens.js";
 import { ScheduledLambdaResourceId as R } from "../pattern-resource-ids.js";
 import { PatternId } from "../pattern-ids.js";
+import {
+  AwsManagedPolicy,
+  awsManagedPolicyArn,
+} from "../../config/aws-arns.js";
 
 /** Registry that matches the default registration order (scheduled BEFORE generic lambda). */
 function buildRegistry(): PatternRegistry {
@@ -113,6 +117,19 @@ describe("scheduledLambdaPattern — dependency ordering", () => {
 
 describe("scheduledLambdaPattern — marker token wiring", () => {
   const opts = scheduledLambdaPattern.defaultOptions;
+
+  it("IAM role attaches AWSLambdaBasicExecutionRole (CP-4 / PH1-D-2 fix)", () => {
+    const role = opts[R.IAM_EXECUTION_ROLE] as Record<string, unknown>;
+    const managedPolicies = role["ManagedPolicyArns"] as string[];
+    expect(Array.isArray(managedPolicies)).toBe(true);
+    expect(managedPolicies.length).toBeGreaterThan(0);
+    const expectedArn = awsManagedPolicyArn(
+      "aws",
+      AwsManagedPolicy.LAMBDA_BASIC_EXECUTION_PATH,
+    );
+    expect(managedPolicies).toContain(expectedArn);
+    expect(expectedArn).toMatch(/service-role\/AWSLambdaBasicExecutionRole$/);
+  });
 
   it("Lambda Role references the IAM role via markerGetAtt", () => {
     expect(opts[R.LAMBDA_FN]?.["Role"]).toBe(

@@ -82,6 +82,21 @@ describe("lambdaWithExecRolePattern — structure", () => {
     );
   });
 
+  it("IAM Role default attaches AWSLambdaBasicExecutionRole (CP-4 / PH1-D-2 fix)", () => {
+    const role = lambdaWithExecRolePattern.defaultOptions[
+      R.IAM_EXECUTION_ROLE
+    ] as Record<string, unknown>;
+    const managedPolicies = role["ManagedPolicyArns"] as string[];
+    expect(Array.isArray(managedPolicies)).toBe(true);
+    expect(managedPolicies.length).toBeGreaterThan(0);
+    const expectedArn = awsManagedPolicyArn(
+      "aws",
+      AwsManagedPolicy.LAMBDA_BASIC_EXECUTION_PATH,
+    );
+    expect(managedPolicies).toContain(expectedArn);
+    expect(expectedArn).toMatch(/service-role\/AWSLambdaBasicExecutionRole$/);
+  });
+
   it("IAM Role default applies the PowerUserAccess permissions boundary (commercial partition)", () => {
     const role = lambdaWithExecRolePattern.defaultOptions[
       R.IAM_EXECUTION_ROLE
@@ -98,6 +113,12 @@ describe("lambdaWithExecRolePattern — structure", () => {
         R.IAM_EXECUTION_ROLE
       ] as Record<string, unknown>),
     };
+    // Deep-clone ManagedPolicyArns array to avoid mutating the shared pattern
+    if (Array.isArray(roleSlot["ManagedPolicyArns"])) {
+      roleSlot["ManagedPolicyArns"] = [
+        ...(roleSlot["ManagedPolicyArns"] as string[]),
+      ];
+    }
     rewriteManagedPolicyArnsForPartition(roleSlot, "aws-us-gov");
     expect(roleSlot["PermissionsBoundary"]).toBe(
       awsManagedPolicyArn(
@@ -108,6 +129,28 @@ describe("lambdaWithExecRolePattern — structure", () => {
     expect(roleSlot["PermissionsBoundary"]).toMatch(
       /^arn:aws-us-gov:iam::aws:policy\//,
     );
+  });
+
+  it("rewriteManagedPolicyArnsForPartition rewrites ManagedPolicyArns to GovCloud partition (Variation E — CP-4)", () => {
+    const roleSlot = {
+      ...(lambdaWithExecRolePattern.defaultOptions[
+        R.IAM_EXECUTION_ROLE
+      ] as Record<string, unknown>),
+    };
+    // Deep-clone ManagedPolicyArns array
+    roleSlot["ManagedPolicyArns"] = [
+      ...(roleSlot["ManagedPolicyArns"] as string[]),
+    ];
+    rewriteManagedPolicyArnsForPartition(roleSlot, "aws-us-gov");
+    const rewritten = roleSlot["ManagedPolicyArns"] as string[];
+    expect(rewritten[0]).toBe(
+      awsManagedPolicyArn(
+        "aws-us-gov",
+        AwsManagedPolicy.LAMBDA_BASIC_EXECUTION_PATH,
+      ),
+    );
+    expect(rewritten[0]).toMatch(/^arn:aws-us-gov:iam::aws:policy\//);
+    expect(rewritten[0]).toMatch(/service-role\/AWSLambdaBasicExecutionRole$/);
   });
 
   it("Lambda default Role field is a marker token referencing the IAM Role's Arn", () => {
