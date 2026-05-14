@@ -61,6 +61,7 @@ import {
 } from "./extractors/cloudwatch-extractor.js";
 import { extractS3Lifecycle } from "./extractors/s3-lifecycle-extractor.js";
 import { extractLambdaBody } from "./extractors/lambda-body-extractor.js";
+import { applyRdsTierDefaults } from "./extractors/environment-tier-extractor.js";
 
 // Public re-exports — preserve the monolith's external API surface.
 export type { Advisory, AssertionExtraction } from "./intent-types.js";
@@ -145,6 +146,7 @@ export function extractAssertedValues(
   extractCloudWatchAlarmMetric(intentLower, resourceType, elicited);
   extractS3Lifecycle(intent, intentLower, resourceType, elicited, advisories);
   extractLambdaBody(intent, resourceType, elicited);
+  applyRdsTierDefaults(intent, resourceType, elicited, advisories);
 
   return {
     elicited,
