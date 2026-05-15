@@ -17,6 +17,22 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### Added
+
+**feat(intent-parser): LLM fallback for compound-pattern classification (EPIC-107-1)**
+
+Closes the PH1-H-1 deep fix deferred from Epic-105. The keyword-driven `PatternRegistry.detect()` now has a Tier 2 fallback: when the keyword registry returns null AND the intent is ≥ 10 words, a structured Bedrock call asks "which compound pattern (or NONE) best matches?" The response is Zod-validated (`{ patternKey, confidence: "high"|"medium"|"low", rationale }`); only high/medium-confidence results are actioned.
+
+Guardrails:
+
+- Short intents (< 10 words) skip the LLM call entirely — no token burn on "make sqs".
+- Low confidence, schema-rejection, and Bedrock errors all fall through to the SX-1 advisory path — no crash, no change to existing unknown-intent UX.
+- Hallucinated patternKeys (not in the live registry) are caught and treated as null.
+
+Cost surface: every Tier 2 call is ~650 tokens (500-prompt + 150-response, Sonnet-class). Callsite `intent-parser/compound-classifier-llm` is greppable in the structured-log stream. No caching yet — defer an LRU cache by intent-hash if production telemetry shows Tier 2 firing frequently for repeated intents.
+
+New files: `compound-classifier-llm.ts`, `compound-classifier-llm.schema.ts` (Zod schema), `compound-classifier-llm.test.ts` (12 unit tests), `__tests__/llm-fallback-integration.test.ts` (6 graph-level integration tests). Documentation: `docs/explanation/intent-parser.md`.
+
 ### Improved
 
 **chore: close EPIC-106-2 / 106-5 / 106-6 informational nits (post-merge paydown)**

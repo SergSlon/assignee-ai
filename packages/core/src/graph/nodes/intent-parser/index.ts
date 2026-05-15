@@ -31,6 +31,7 @@ import {
 } from "../../../index.js";
 import { AssigneeError } from "../../../errors.js";
 import type { LlmPort } from "../../../index.js";
+import { classifyCompoundViaLlm } from "./compound-classifier-llm.js";
 import {
   resolveCompoundPatternIdLiteral,
   resolveSingletonOverride,
@@ -361,6 +362,59 @@ export function createIntentParserNode({ llmClient }: { llmClient: LlmPort }) {
         intentKind: "create" as const,
       };
     }
+
+    // Step 3.5 — LLM compound-pattern fallback (Epic-107 Story 1).
+    //
+    // When both the literal-pattern lookup (Step 2) and the keyword-registry
+    // detect (Step 3) return null, ask the LLM: "given the known compound
+    // catalogue, which pattern (or NONE) fits this intent?"
+    //
+    // Gates:
+    //   (a) Intent must be ≥ 10 words — short intents stay deterministic.
+    //   (b) Only high/medium-confidence LLM answers are actioned.
+    //   (c) Schema-rejection, low-confidence, and LLM errors all fall through
+    //       to Step 4 (Bedrock resource-type classifier) unchanged.
+    //
+    // Cost: callsite "intent-parser/compound-classifier-llm" is logged so
+    // per-call token spend is attributable in the structured-log stream
+    // (feedback_token_cost_visibility).
+    const llmCompoundResult = await classifyCompoundViaLlm(
+      safeIntent,
+      defaultPatternRegistry,
+      llmClient,
+      state.runId,
+    );
+    if (llmCompoundResult.kind === "match") {
+      const llmPattern = defaultPatternRegistry.get(
+        llmCompoundResult.patternKey,
+      );
+      if (llmPattern !== undefined) {
+        const primaryType =
+          patternPrimaryResourceType(llmPattern.patternId) ?? "";
+        const extraction = extractAssertedValues(safeIntent, primaryType);
+        if (extraction.errors.length > 0) {
+          return buildExtractionFailureUpdate(safeIntent, extraction);
+        }
+        log({
+          ts: new Date().toISOString(),
+          runId: state.runId,
+          level: "info",
+          action: LOG_ACTIONS.INTENT_PARSED,
+          extras: {
+            resourceType: null,
+            pattern: llmPattern.patternId,
+            via: "llm-compound-fallback",
+          },
+        });
+        return {
+          ...buildExtractionSuccessUpdate(safeIntent, extraction, state, {
+            resourcePattern: llmPattern,
+          }),
+          intentKind: "create" as const,
+        };
+      }
+    }
+    // kind === "no-match" or "skipped" — fall through to Step 4.
 
     // Step 4 — Bedrock classification on the sanitised intent.
     //
