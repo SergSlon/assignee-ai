@@ -475,3 +475,80 @@ describe("M-γ-08: condition field shape validation", () => {
     expect(() => bestPracticeSchema.parse(bp)).not.toThrow();
   });
 });
+
+// Base fixture for skip_when_advisory guard tests (reliability, non-critical)
+const reliabilityBP = {
+  id: "BP-RDS-003",
+  title: "RDS Multi-AZ",
+  severity: "HIGH",
+  resource_type: "AWS::RDS::DBInstance",
+  property_path: "MultiAZ",
+  check_type: "equals",
+  expected_value: true,
+  source: "FSBP",
+  category: "reliability",
+  lastVerified: "2026-03-22",
+} as const;
+
+describe("EPIC-106-6 nit: skip_when_advisory guard on compliance-critical rules", () => {
+  it("accepts skip_when_advisory on a non-security, non-CRITICAL rule (reliability HIGH)", () => {
+    const bp = {
+      ...reliabilityBP,
+      skip_when_advisory: ["RDS_ENVIRONMENT_TIER_DEFAULTS"],
+    };
+    expect(() => bestPracticeSchema.parse(bp)).not.toThrow();
+  });
+
+  it("rejects skip_when_advisory on a CRITICAL severity rule", () => {
+    const bp = {
+      ...validBP, // category: "security", severity: "CRITICAL"
+      skip_when_advisory: ["SOME_ADVISOR"],
+    };
+    expect(() => bestPracticeSchema.parse(bp)).toThrow(ZodError);
+    try {
+      bestPracticeSchema.parse(bp);
+    } catch (err) {
+      const zodErr = err as ZodError;
+      const issue = zodErr.errors.find((e) =>
+        e.path.includes("skip_when_advisory"),
+      )!;
+      expect(issue.message).toContain(
+        "compliance-critical rules must always fire",
+      );
+    }
+  });
+
+  it("rejects skip_when_advisory on a security category rule (even if not CRITICAL)", () => {
+    const securityHighBP = {
+      ...reliabilityBP,
+      id: "BP-RDS-008",
+      severity: "HIGH",
+      category: "security",
+      skip_when_advisory: ["SOME_ADVISOR"],
+    };
+    expect(() => bestPracticeSchema.parse(securityHighBP)).toThrow(ZodError);
+    try {
+      bestPracticeSchema.parse(securityHighBP);
+    } catch (err) {
+      const zodErr = err as ZodError;
+      const issue = zodErr.errors.find((e) =>
+        e.path.includes("skip_when_advisory"),
+      )!;
+      expect(issue.message).toContain(
+        "compliance-critical rules must always fire",
+      );
+    }
+  });
+
+  it("accepts skip_when_advisory: [] (empty array) on any rule — guard only fires on non-empty", () => {
+    const bp = {
+      ...validBP, // CRITICAL + security
+      skip_when_advisory: [],
+    };
+    expect(() => bestPracticeSchema.parse(bp)).not.toThrow();
+  });
+
+  it("accepts skip_when_advisory absent on a security CRITICAL rule", () => {
+    expect(() => bestPracticeSchema.parse(validBP)).not.toThrow();
+  });
+});

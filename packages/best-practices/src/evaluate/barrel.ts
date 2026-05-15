@@ -198,6 +198,13 @@ export function evaluateTriggers(
       context.advisorCodes.length > 0 &&
       bp.skip_when_advisory.some((code) => context.advisorCodes!.includes(code))
     ) {
+      // EPIC-106-6 nit: emit a debug log so suppression is observable in
+      // verbose mode without cluttering normal output.
+      if (process.env["DEBUG_BP_SUPPRESS"]) {
+        process.stderr.write(
+          `[bp-eval] ${bp.id} suppressed via skip_when_advisory (matching codes: ${bp.skip_when_advisory.filter((c) => context.advisorCodes!.includes(c)).join(", ")})\n`,
+        );
+      }
       continue;
     }
 

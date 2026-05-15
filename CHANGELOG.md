@@ -17,6 +17,17 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### Improved
+
+**chore: close EPIC-106-2 / 106-5 / 106-6 informational nits (post-merge paydown)**
+
+Batches the informational-severity findings Quinn logged across three Epic-106 reviews.
+
+- EPIC-106-5 (S3 NoncurrentVersionExpirationInDays): remove redundant `versioning enabled` regex (strict subset of `\bversion(?:ing|ed)?\b`); rename Variation C combined lifecycle rule Id from `"assignee-default-lifecycle"` to `"expire-and-delete-old-versions"` so plan output is self-explanatory.
+- EPIC-106-6 (BP-RDS tier-gating): add Zod `superRefine` guard that rejects `skip_when_advisory` on `category: "security"` or `severity: "CRITICAL"` rules at schema-load time; add `DEBUG_BP_SUPPRESS=1` stderr debug line when advisor-gated suppression short-circuits a rule.
+
+Skipped (documented): EPIC-106-2 Variation D arrow-wrapping changes documented semantics+tests — deferred to follow-up story; EPIC-106-5 fallback noncurrent-day tightening deferred pending dogfood evidence; EPIC-106-6 one-way resource_type scoping out of scope per review.
+
 ### Removed
 
 - Dead `PricingUnit` parallel constant in `constants/pricing-api.ts` (zero callers except one test, repointed to `PriceUnit.PER_GB_MONTH_LONG`). Closes EPIC-106 strategies-review OOS paydown.

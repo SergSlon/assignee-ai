@@ -75,6 +75,8 @@ describe("cfn-emitter direct import", () => {
         const rule = lc.Rules[0]!;
         expect(rule[CfnKey.EXPIRATION_IN_DAYS]).toBe(30);
         expect(rule["Transitions"]).toBeUndefined();
+        // PD-4 stable Id preserved for current-only expire path
+        expect(rule["Id"]).toBe("assignee-default-lifecycle");
       });
 
       it("Variation D — lifecycle 90d: emits ExpirationInDays=90, no Transitions", () => {
@@ -185,6 +187,8 @@ describe("cfn-emitter direct import", () => {
         expect(rule[CfnKey.NONCURRENT_VERSION_EXPIRATION_IN_DAYS]).toBe(30);
         expect(rule[CfnKey.EXPIRATION_IN_DAYS]).toBeUndefined();
         expect(rule["Transitions"]).toBeUndefined();
+        // EPIC-106-5 nit: noncurrent-only gets content-addressed Id
+        expect(rule["Id"]).toBe("delete-old-versions-after-30d");
       });
 
       it("NC-A: noncurrent-only auto-enables VersioningConfiguration", () => {
@@ -228,6 +232,9 @@ describe("cfn-emitter direct import", () => {
         expect(rule[CfnKey.EXPIRATION_IN_DAYS]).toBe(30);
         expect(rule[CfnKey.NONCURRENT_VERSION_EXPIRATION_IN_DAYS]).toBe(7);
         expect(rule["Transitions"]).toBeUndefined();
+        // EPIC-106-5 nit: Variation C uses a descriptive combined rule Id,
+        // not the PD-4 "assignee-default-lifecycle" stable Id.
+        expect(rule["Id"]).toBe("expire-and-delete-old-versions");
       });
 
       it("noncurrent cleans up wizard-only key from transformed", () => {

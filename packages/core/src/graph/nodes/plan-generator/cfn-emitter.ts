@@ -130,11 +130,18 @@ export function assembleS3Composites(
       // PH5-8-A noncurrent-only path: emit a single rule with
       // NoncurrentVersionExpirationInDays (and optional ExpirationInDays when
       // current-version expiry is also requested — Variation C).
+      //
+      // Rule Id disambiguation (EPIC-106-5 nit):
+      //   noncurrent-only    → "delete-old-versions-after-Nd"  (stable, content-addressed)
+      //   current+noncurrent → "expire-and-delete-old-versions" (Variation C — combined)
+      //   current-only       → "assignee-default-lifecycle"     (PD-4 stable Id preserved)
       const rule: Record<string, unknown> = {
         Id:
           noncurrentExpirationDays !== undefined && !expireOnly
             ? `delete-old-versions-after-${noncurrentExpirationDays}d`
-            : "assignee-default-lifecycle",
+            : noncurrentExpirationDays !== undefined && expireOnly
+              ? "expire-and-delete-old-versions"
+              : "assignee-default-lifecycle",
         Status: CfnKey.ENABLED,
       };
 
