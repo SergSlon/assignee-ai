@@ -1,7 +1,12 @@
 /**
  * Named constants for price unit strings used in decomposer line items.
  * Zero magic strings policy — every price unit literal must reference this map.
+ *
+ * Per-million suffixes are derived from `formatUnitSuffix` (unit-label.ts) so
+ * the canonical "/M <noun>" convention is enforced in one place.
  */
+
+import { formatUnitSuffix } from "./formatters/unit-label.js";
 
 export const PriceUnit = {
   PER_HOUR: "/hr",
@@ -16,12 +21,12 @@ export const PriceUnit = {
   PER_WCU_HOUR: "/WCU-hr",
   PER_LCU_HOUR: "/LCU-hr",
   PER_NLCU_HOUR: "/NLCU-hr",
-  PER_MILLION_REQS: "/M reqs",
-  PER_MILLION_READ_REQS: "/M read reqs",
-  PER_MILLION_WRITE_REQS: "/M write reqs",
-  PER_MILLION_MSGS: "/M msgs",
-  PER_MILLION_MINS: "/M mins",
-  PER_MILLION_PUBLISHES: "/M publishes",
+  PER_MILLION_REQS: formatUnitSuffix("req"),
+  PER_MILLION_READ_REQS: formatUnitSuffix("read req"),
+  PER_MILLION_WRITE_REQS: formatUnitSuffix("write req"),
+  PER_MILLION_MSGS: formatUnitSuffix("msg"),
+  PER_MILLION_MINS: formatUnitSuffix("min"),
+  PER_MILLION_PUBLISHES: formatUnitSuffix("publish"),
   PER_1000_REQS: "/1000 reqs",
   PER_100K_NOTIFS: "/100K notifs",
   PER_10K_REQS: "/10K reqs",
