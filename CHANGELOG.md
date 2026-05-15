@@ -17,6 +17,23 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### fix(pricing): centralise cost-label unit rendering across decomposers (EPIC-106-9 / PH5-X-COST-LABEL)
+
+Closes PH5-X-COST-LABEL from Phase-5 dogfood. Three distinct unit-label conventions
+(`"$0.4000/M reqs"`, `"$0.0000005000/million publishes (live)"`, `"~$1.03/million req"`)
+undermined user trust in the pricing output.
+
+New helper `formatUnitSuffix(unit, plural)` in `packages/core/src/pricing/formatters/unit-label.ts`
+produces the canonical `"/M <noun>"` suffix. `formatPerUnit(value, unit, plural)` builds
+the complete `"$X.XX/M <nouns>"` display label. All five per-million `PriceUnit` constants
+(`PER_MILLION_REQS`, `PER_MILLION_READ_REQS`, `PER_MILLION_WRITE_REQS`, `PER_MILLION_MSGS`,
+`PER_MILLION_PUBLISHES`) are now derived from `formatUnitSuffix` — output is identical to
+before (no user-visible change) but enforced through one canonical path. New snapshot guard
+`unit-label-convention.test.ts` enumerates all five decomposers (SQS, SNS, Lambda, DynamoDB,
+S3) and asserts every per-million `priceUnit` matches `/^\/M [a-z ]+$/`.
+
+This is the 9th and final story of Epic-106 — Epic-106 is now fully closed.
+
 ### fix(pricing): S3 PUT/GET requests render real prices (EPIC-106-8 / PH5-X-S3-DECOMPOSER)
 
 Closes PH5-X-S3-DECOMPOSER from Phase-5 dogfood. S3 PUT/GET request cost rows
