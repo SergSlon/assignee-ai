@@ -116,10 +116,9 @@ const TAG_AUTOSELECT_STOPWORDS = new Set([
  *      "vpc" are excluded as kind-name fragments).
  *   2. Drop stopwords (kind names, articles, helpers).
  *   3. For each remaining word, count how many candidate labels it
- *      matches.
- *   4. Auto-select ONLY when there is exactly one word with exactly one
- *      label-match AND that word is the longest such word (highest
- *      discriminating signal). Ties → fall through to needsElicitation.
+ *      matches. Track only words that uniquely match exactly one label.
+ *   4. Auto-select ONLY when ALL unique-match words converge on the
+ *      SAME candidate (convergence guard: matchedIds.size === 1).
  *   5. If multiple words yield unique-but-different matches, fall through
  *      to needsElicitation (ambiguous-which-to-trust).
  *
@@ -194,12 +193,16 @@ export interface ExtractExistingResult {
  * @param intent — raw user intent string.
  * @param port — ResourceDiscoveryPort impl (mock in tests, production in runtime).
  * @param region — AWS region (defaults to AWS_REGION env).
+ * @param runId — correlation ID for structured log lines (defaults to
+ *   "discovery" as a belt-and-suspenders fallback; callers should always
+ *   pass state.runId so all DISCOVERY_* log lines are traceable).
  * @returns Discovered resources (may be empty) + elicitation flag.
  */
 export async function extractExisting(
   intent: string,
   port: ResourceDiscoveryPort,
   region: string = AWS_REGION,
+  runId: string = "discovery",
 ): Promise<ExtractExistingResult> {
   const intentLower = intent.toLowerCase();
   const opts = { region };
@@ -228,7 +231,7 @@ export async function extractExisting(
     // guard for unexpected throws (e.g. import failures).
     log({
       ts: new Date().toISOString(),
-      runId: "discovery",
+      runId,
       level: "warn",
       action: LOG_ACTIONS.DISCOVERY_FAILURE,
       extras: {
