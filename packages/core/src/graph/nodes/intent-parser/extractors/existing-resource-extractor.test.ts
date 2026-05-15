@@ -319,4 +319,35 @@ describe("extractExisting — multi-kind (VPC + ECS cluster)", () => {
     const kinds = result.existing.map((r) => r.kind).sort();
     expect(kinds).toEqual(["EcsCluster", "VPC"]);
   });
+
+  it("mixed-kind: ambiguous VPC + unique ECS — existing has ECS only, ambiguous has VPC kind", async () => {
+    // R2 review LOW paydown #2: when one kind is ambiguous (multi-match)
+    // and another kind has exactly one candidate, the unique kind lands in
+    // `existing[]` while the ambiguous kind drops to `ambiguous[]` and
+    // never pollutes graph state. needsElicitation is true (some kind is
+    // ambiguous) but the picker only needs to disambiguate the listed
+    // kinds; unique kinds are already committed.
+    const ECS_CLUSTER: ExistingResource = {
+      kind: "EcsCluster",
+      id: "only-cluster",
+      label: "only-cluster (1 service)",
+      region: "us-east-1",
+    };
+    const port = makePort({
+      discoverVpcs: vi.fn().mockResolvedValue([VPC_STAGING, VPC_PROD]),
+      discoverEcsClusters: vi.fn().mockResolvedValue([ECS_CLUSTER]),
+    });
+    const result = await extractExisting(
+      "Deploy an ECS service in my VPC using the existing cluster",
+      port,
+      "us-east-1",
+    );
+    expect(result.needsElicitation).toBe(true);
+    expect(result.existing).toHaveLength(1);
+    expect(result.existing[0]!.kind).toBe("EcsCluster");
+    expect(result.existing[0]!.id).toBe("only-cluster");
+    expect(result.ambiguous).toHaveLength(1);
+    expect(result.ambiguous[0]!.kind).toBe("VPC");
+    expect(result.ambiguous[0]!.candidates).toHaveLength(2);
+  });
 });

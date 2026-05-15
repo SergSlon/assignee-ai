@@ -330,7 +330,7 @@ export function createIntentParserNode({ llmClient }: { llmClient: LlmPort }) {
       existing: existingResources,
       ambiguous,
       needsElicitation,
-    } = await extractExisting(safeIntent, discoveryPort, region);
+    } = await extractExisting(safeIntent, discoveryPort, region, state.runId);
 
     // EPIC-107-2 R2 (review finding #4, supersedes R1 #3): when one or more
     // resource kinds had multiple candidates that could not be auto-
