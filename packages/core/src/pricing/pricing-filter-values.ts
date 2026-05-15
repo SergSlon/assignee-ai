@@ -58,7 +58,13 @@ export const PricingFilterValue = {
   LAMBDA_PROVISIONED_CONCURRENCY_GB_SECOND:
     "Lambda-Provisioned-Concurrency-GB-Second",
   DATA_PROCESSING_BYTES: "DataProcessing-Bytes",
-  DELIVERY_ATTEMPTS_HTTP: "DeliveryAttempts-HTTP",
+  // SNS group values — stable cross-region (usagetype is region-prefixed, e.g.
+  // "USE1-Requests-Tier1", "USE1-DeliveryAttempts-HTTP" in us-east-1).
+  // The `group` attribute is consistently the same value across all regions
+  // and is the correct stable discriminator — mirrors S3-API-Tier1/Tier2 fix
+  // from EPIC-106-8.
+  SNS_REQUESTS_TIER1: "SNS-Requests-Tier1",
+  SNS_DELIVERY_ATTEMPTS_HTTP: "SNS-HTTP",
   // SQS queue-type discriminator values for the `queueType` attribute
   // returned by the AWS Pricing API `AmazonSQS` service code.
   QUEUE_TYPE_STANDARD: "Standard",
