@@ -65,7 +65,7 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - uses: pnpm/action-setup@8912a9102ac27614460f54aedde9e1e7f9aec20d # v6.0.5
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
         with:
           version: 10.32.1
 
@@ -88,7 +88,7 @@ jobs:
         # doesn't produce a nightly red ❌. The verify step below
         # emits a visible warning annotation instead.
         continue-on-error: true
-        uses: aws-actions/configure-aws-credentials@010d0da01d0b5a38af31e9c3470dbfdabdecca3a # v4.0.1
+        uses: aws-actions/configure-aws-credentials@d979d5b3a71173a29b74b5b88418bfda9437d885 # v6.1.1
         with:
           role-to-assume: ${{ vars.AWS_DRIFT_READER_ROLE_ARN }}
           aws-access-key-id: ${{ secrets.ASSIGNEE_DRIFT_READER_ACCESS_KEY_ID }}
