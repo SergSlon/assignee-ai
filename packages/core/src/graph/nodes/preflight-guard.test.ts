@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ExecutionStatus, CostEstimateLabel } from "../../index.js";
 import { preflightGuardNode } from "./preflight-guard.js";
-import { LambdaPricing, PricingUnit } from "../../constants/pricing-api.js";
+import { LambdaPricing } from "../../constants/pricing-api.js";
+import { PriceUnit } from "../../pricing/price-units.js";
 import { ToolName } from "../../constants/tools.js";
 import { ProcessEnvConfigAdapter } from "../../config/config-port.js";
 import type { StructuredTool } from "@langchain/core/tools";
@@ -1369,7 +1370,9 @@ describe("preflightGuardNode", () => {
 
     const result = await preflightGuardNode(makeState(), [pricingTool]);
 
-    expect(result.estimatedMonthlyCost).toBe(`$0.0230${PricingUnit.GB_MONTH}`);
+    expect(result.estimatedMonthlyCost).toBe(
+      `$0.0230${PriceUnit.PER_GB_MONTH_LONG}`,
+    );
     expect(result.preflightPassed).toBe(true);
     expect(pricingTool.invoke).toHaveBeenCalledWith(
       expect.objectContaining({ service_code: "AmazonS3" }),
