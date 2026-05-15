@@ -181,9 +181,9 @@ export function extractS3Lifecycle(
 
     // Warn when versioning is not mentioned — NoncurrentVersionExpiration
     // has no effect without versioning enabled.
-    const hasVersioningMention =
-      /\bversion(?:ing|ed)?\b/.test(intentLower) ||
-      /\bversioning\s+enabled\b/.test(intentLower);
+    // Single regex covers "version", "versioning", "versioned" (the prior
+    // second clause `/\bversioning\s+enabled\b/` was a strict subset).
+    const hasVersioningMention = /\bversion(?:ing|ed)?\b/.test(intentLower);
     if (!hasVersioningMention) {
       advisories.push({
         code: S3_NONCURRENT_REQUIRES_VERSIONING_CODE,

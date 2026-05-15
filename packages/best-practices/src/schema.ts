@@ -92,6 +92,21 @@ export const bestPracticeSchema = z
     { message: "fixType 'interactive' requires non-empty interactiveOptions" },
   )
   .superRefine((bp, ctx) => {
+    // EPIC-106-6 nit: compliance-critical rules must never carry skip_when_advisory.
+    // Defense-in-depth — convention is also documented in types.ts, but a schema
+    // guard catches YAML mistakes at load time before they reach the evaluator.
+    if (
+      bp.skip_when_advisory !== undefined &&
+      bp.skip_when_advisory.length > 0 &&
+      (bp.category === "security" || bp.severity === "CRITICAL")
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["skip_when_advisory"],
+        message: `skip_when_advisory must not be set on a ${bp.severity} / ${bp.category} rule — compliance-critical rules must always fire`,
+      });
+    }
+
     // M-γ-08: validate expected_value grammar for policy_antipattern
     if (bp.check_type === "policy_antipattern") {
       if (typeof bp.expected_value !== "string") {

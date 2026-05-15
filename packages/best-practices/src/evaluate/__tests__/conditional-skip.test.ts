@@ -6,9 +6,10 @@
  *   B — production intent (no advisory) → fires HIGH as before
  *   C — no tier hint (no advisory) → fires HIGH as before
  *   D — security rule (no skip_when_advisory) → always fires regardless of advisory
+ *   E — DEBUG_BP_SUPPRESS env var → suppression emits stderr debug line (EPIC-106-6 nit)
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { evaluateTriggers } from "../barrel.js";
 import type { EvalContext } from "../context-builder.js";
 import type { BestPractice } from "../../types.js";
@@ -247,5 +248,60 @@ describe("BP advisor-gated suppression — Variation D (compliance-critical rule
     ]);
     expect(findings).toHaveLength(1);
     expect(findings[0]!.practiceId).toBe("BP-RDS-002");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Variation E: DEBUG_BP_SUPPRESS env var → stderr debug line on suppression
+// (EPIC-106-6 nit — suppression visibility)
+// ---------------------------------------------------------------------------
+
+describe("BP advisor-gated suppression — Variation E (DEBUG_BP_SUPPRESS debug log)", () => {
+  afterEach(() => {
+    delete process.env["DEBUG_BP_SUPPRESS"];
+    vi.restoreAllMocks();
+  });
+
+  it("emits a stderr debug line when DEBUG_BP_SUPPRESS is set and rule is suppressed", () => {
+    process.env["DEBUG_BP_SUPPRESS"] = "1";
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+
+    const ctx = makeRdsCtx({
+      userIntent: "Create an RDS Postgres db.t3.micro for staging",
+      desiredState: { MultiAZ: false },
+      advisorCodes: ["RDS_ENVIRONMENT_TIER_DEFAULTS"],
+    });
+
+    evaluateTriggers(ctx, [makeMultiAzBp()]);
+
+    const debugLines = stderrSpy.mock.calls
+      .map((args) => String(args[0]))
+      .filter((line) => line.includes("[bp-eval]"));
+
+    expect(debugLines.length).toBeGreaterThanOrEqual(1);
+    expect(debugLines[0]).toContain("BP-RDS-003");
+    expect(debugLines[0]).toContain("suppressed via skip_when_advisory");
+    expect(debugLines[0]).toContain("RDS_ENVIRONMENT_TIER_DEFAULTS");
+  });
+
+  it("does NOT emit debug line when DEBUG_BP_SUPPRESS is absent", () => {
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+
+    const ctx = makeRdsCtx({
+      desiredState: { MultiAZ: false },
+      advisorCodes: ["RDS_ENVIRONMENT_TIER_DEFAULTS"],
+    });
+
+    evaluateTriggers(ctx, [makeMultiAzBp()]);
+
+    const debugLines = stderrSpy.mock.calls
+      .map((args) => String(args[0]))
+      .filter((line) => line.includes("[bp-eval]"));
+
+    expect(debugLines).toHaveLength(0);
   });
 });
