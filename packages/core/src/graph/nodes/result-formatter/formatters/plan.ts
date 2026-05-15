@@ -17,6 +17,7 @@
 import { ExecutionMode, ExecutionStatus } from "@/index.js";
 import type { AgentState } from "@/graph/graph-state.js";
 import type { Advisory } from "@/graph/nodes/intent-parser.js";
+import type { ExistingResource } from "@/services/resource-discovery-port.js";
 import {
   promptFixSelection,
   renderPlanBox,
@@ -24,6 +25,24 @@ import {
 } from "@/utils/display.js";
 import { AWS_REGION } from "@/config/constants/aws.js";
 import { EnvVar } from "@/constants/env-vars.js";
+
+/**
+ * EPIC-107-2: emit "Found existing <kind>: <id> (<region>)" lines on
+ * stdout BEFORE the plan box. Each Existing node is rendered once so the
+ * user sees what real infrastructure was discovered and will be wired to
+ * the Desired resources in this plan.
+ *
+ * Callable with `undefined` (e.g. from existing plan paths that have no
+ * existingResources field yet) — no-ops safely.
+ */
+export function emitExistingResourceLines(
+  existingResources: ExistingResource[] | undefined,
+): void {
+  if (!existingResources || existingResources.length === 0) return;
+  for (const r of existingResources) {
+    process.stdout.write(`Found existing ${r.kind}: ${r.id} (${r.region})\n`);
+  }
+}
 
 /**
  * Epic 94 Wave 3 N6 (C-05 / C-06): emit each advisory as a `warning:`
@@ -132,6 +151,11 @@ interface PlanJsonPayload {
   freeTierNote: unknown;
   adviceHints: unknown[];
   /**
+   * EPIC-107-2: existing resources discovered at intent-parse time.
+   * Read-only — not provisioned or destroyed. Empty array when none found.
+   */
+  existingResources: ExistingResource[];
+  /**
    * Non-blocking structured advisories — emitted by the intent-parser
    * when a token was silently altered (e.g. multi-word name remainder
    * was dropped). Distinct from `bpFindings` (best-practice violations)
@@ -194,6 +218,7 @@ function buildPlanJsonPayload(state: AgentState): PlanJsonPayload {
     freeTierNote: state.freeTierNote ?? null,
     adviceHints: state.adviceHints ?? [],
     advisories: state.advisories ?? [],
+    existingResources: state.existingResources ?? [],
     provisionable: isProvisionable,
     ...(state.resourcePattern
       ? {
@@ -286,6 +311,10 @@ export async function formatPlanResult(
         JSON.stringify(buildPlanJsonPayload(state), null, 2) + "\n",
       );
     } else {
+      // EPIC-107-2: emit "Found existing <kind>: <id> (<region>)" on
+      // stdout BEFORE advisory warnings so the user sees existing
+      // infra context before the plan box renders.
+      emitExistingResourceLines(state.existingResources);
       // Epic 94 Wave 3 N6 (C-05 / C-06): emit non-blocking advisories
       // as `warning:` lines on stderr BEFORE the plan box so the
       // operator sees why the preview is provisional. stderr keeps

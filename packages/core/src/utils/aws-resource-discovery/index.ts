@@ -37,3 +37,8 @@ export { discoverLambdaRuntimes } from "./lambda.js";
 export { discoverEfsFileSystems } from "./efs.js";
 export { discoverSnsTopics } from "./sns.js";
 export { discoverKmsKeys } from "./kms.js";
+// EPIC-107-2: new discovery helpers for existing-resource extraction
+export { discoverVpcs } from "./vpc.js";
+export { discoverDbSubnetGroups } from "./rds-subnet-groups.js";
+export { discoverEcsClusters } from "./ecs.js";
+export { discoverElbs } from "./elb.js";

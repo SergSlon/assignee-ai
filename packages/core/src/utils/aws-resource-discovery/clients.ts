@@ -24,6 +24,8 @@ import { SSMClient } from "@aws-sdk/client-ssm";
 import { EFSClient } from "@aws-sdk/client-efs";
 import { KMSClient } from "@aws-sdk/client-kms";
 import { SNSClient } from "@aws-sdk/client-sns";
+import { ECSClient } from "@aws-sdk/client-ecs";
+import { ElasticLoadBalancingV2Client } from "@aws-sdk/client-elastic-load-balancing-v2";
 import { AWS_REGION } from "../../config/constants/aws.js";
 import {
   tryAssigneeCredentials,
@@ -34,11 +36,11 @@ function readerCredsOrUndefined(): ExplicitAwsCredentials | undefined {
   return tryAssigneeCredentials("reader");
 }
 
-export function createEc2Client(): EC2Client | undefined {
+export function createEc2Client(region?: string): EC2Client | undefined {
   const creds = readerCredsOrUndefined();
   if (!creds) return undefined;
   return createEC2Client({
-    region: AWS_REGION,
+    region: region ?? AWS_REGION,
     credentials: creds,
   });
 }
@@ -52,11 +54,11 @@ export function createSsmClient(): SSMClient | undefined {
   });
 }
 
-export function createRdsClient(): RDSClient | undefined {
+export function createRdsClient(region?: string): RDSClient | undefined {
   const creds = readerCredsOrUndefined();
   if (!creds) return undefined;
   return new RDSClient({
-    region: AWS_REGION,
+    region: region ?? AWS_REGION,
     credentials: creds,
   });
 }
@@ -84,6 +86,26 @@ export function createSnsClient(): SNSClient | undefined {
   if (!creds) return undefined;
   return new SNSClient({
     region: AWS_REGION,
+    credentials: creds,
+  });
+}
+
+export function createEcsClient(region?: string): ECSClient | undefined {
+  const creds = readerCredsOrUndefined();
+  if (!creds) return undefined;
+  return new ECSClient({
+    region: region ?? AWS_REGION,
+    credentials: creds,
+  });
+}
+
+export function createElbClient(
+  region?: string,
+): ElasticLoadBalancingV2Client | undefined {
+  const creds = readerCredsOrUndefined();
+  if (!creds) return undefined;
+  return new ElasticLoadBalancingV2Client({
+    region: region ?? AWS_REGION,
     credentials: creds,
   });
 }

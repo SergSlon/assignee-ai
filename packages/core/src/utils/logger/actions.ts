@@ -191,6 +191,13 @@ export const LOG_ACTIONS = {
    * delays with a specific invalidation request.
    */
   CLOUDFRONT_INVALIDATION_TIMEOUT: "cloudfront_invalidation_timeout",
+  /**
+   * EPIC-107-2: emitted at WARN level when the existing-resource-discovery
+   * port fails to reach AWS (network timeout, missing reader creds, SDK error).
+   * Carries `callsite`, `kind`, and `error` extras. The plan continues via
+   * the CP-3 advisory fallback — no exception propagates.
+   */
+  DISCOVERY_FAILURE: "discovery_failure",
 } as const;
 
 export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];
