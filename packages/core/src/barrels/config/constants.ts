@@ -162,7 +162,6 @@ export {
 export {
   PricingFilter,
   PricingTerm,
-  PricingUnit,
   PricingScale,
   LambdaPricing,
 } from "../../constants/pricing-api.js";

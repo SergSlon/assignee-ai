@@ -55,13 +55,6 @@ export const PricingTerm = {
   ON_DEMAND: "OnDemand",
 } as const;
 
-export const PricingUnit = {
-  GB_MONTH: "/GB-month",
-  PARAM_HOUR: "/param-hour",
-  HOUR: "/hour",
-  MILLION_REQUESTS: "/million requests",
-} as const;
-
 export const PricingScale = {
   ONE: 1,
   MILLION: 1_000_000,

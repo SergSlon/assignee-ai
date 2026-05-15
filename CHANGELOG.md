@@ -17,6 +17,10 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### Removed
+
+- Dead `PricingUnit` parallel constant in `constants/pricing-api.ts` (zero callers except one test, repointed to `PriceUnit.PER_GB_MONTH_LONG`). Closes EPIC-106 strategies-review OOS paydown.
+
 ### Fixed
 
 **fix(pricing): route strategies-layer per-million labels through formatUnitSuffix (follow-up to EPIC-106-9)**
