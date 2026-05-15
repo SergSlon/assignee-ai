@@ -449,7 +449,7 @@ describe("Graph integration — plan mode", () => {
     });
     expect(result.preflightPassed).toBe(true);
     // Lambda uses local estimate formula, not MCP pricing
-    expect(result.estimatedMonthlyCost).toMatch(/million req/);
+    expect(result.estimatedMonthlyCost).toMatch(/\/M requests/);
     expect(result.estimatedMonthlyCost).toContain("128MB");
   });
 

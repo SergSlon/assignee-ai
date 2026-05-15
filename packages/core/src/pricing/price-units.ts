@@ -27,13 +27,14 @@ export const PriceUnit = {
   PER_MILLION_MSGS: formatUnitSuffix("msg"),
   PER_MILLION_MINS: formatUnitSuffix("min"),
   PER_MILLION_PUBLISHES: formatUnitSuffix("publish"),
+  PER_MILLION_REQUESTS: formatUnitSuffix("request"),
+  PER_MILLION_MESSAGES: formatUnitSuffix("message"),
   PER_1000_REQS: "/1000 reqs",
   PER_100K_NOTIFS: "/100K notifs",
   PER_10K_REQS: "/10K reqs",
   // Long-form variants used in strategy mcpConfig.unit fields
   PER_HOUR_LONG: "/hour",
   PER_GB_MONTH_LONG: "/GB-month",
-  PER_MILLION_REQUESTS_LONG: "/million requests",
   // A11 (2026-04-09): AWS::KMS::Key — $1/key-month (symmetric + asymmetric)
   PER_KEY_MONTH: "/key-mo",
   // (f) 2026-04-09: EFS provisioned throughput billing unit.

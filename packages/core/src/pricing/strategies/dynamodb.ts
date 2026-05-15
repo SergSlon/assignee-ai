@@ -62,7 +62,7 @@ export const dynamodbPricingStrategy: PricingStrategy = {
         },
         { Field: F.GROUP, Value: FV.DDB_WRITE_UNITS, Type: M.TERM_MATCH },
       ],
-      unit: "/M write req",
+      unit: PriceUnit.PER_MILLION_WRITE_REQS,
     };
   },
 };

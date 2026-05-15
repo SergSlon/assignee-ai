@@ -17,6 +17,24 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### Fixed
+
+**fix(pricing): route strategies-layer per-million labels through formatUnitSuffix (follow-up to EPIC-106-9)**
+
+Closes the strategies-layer cost-label drift Quinn flagged as MED follow-up in the
+EPIC-106-9 review. Six sites across SQS / DynamoDB / Lambda / SNS / ApiGatewayV2
+(WebSocket + HTTP) now route through `formatUnitSuffix` / `PriceUnit` constants:
+`strategies/sqs.ts` (mcpConfig unit `/million requests` → `/M requests`),
+`strategies/dynamodb.ts`, `strategies/lambda.ts`, `strategies/sns.ts`,
+`strategies/apigatewayv2.ts` (WebSocket mcpConfig), and `strategies/apigatewayv2.ts`
+(HTTP mcpConfig) — all were emitting hand-rolled strings that bypassed
+the `formatUnitSuffix` helper introduced in EPIC-106-9. Two new `PriceUnit` constants
+added: `PER_MILLION_REQUESTS` (`/M requests`) and `PER_MILLION_MESSAGES` (`/M messages`).
+Dead constant `PER_MILLION_REQUESTS_LONG` (`/million requests`) removed after SQS fix.
+Guard test `strategies/unit-label-convention.test.ts` updated to cover SQS.
+User-visible: Lambda fallback label changes from `~$0.41/million req (...)` to
+`~$0.41/M requests (...)`; SQS mcpConfig unit normalised from `/million requests` to `/M requests`.
+
 ### fix(pricing): centralise cost-label unit rendering across decomposers (EPIC-106-9 / PH5-X-COST-LABEL)
 
 Closes PH5-X-COST-LABEL from Phase-5 dogfood. Three distinct unit-label conventions

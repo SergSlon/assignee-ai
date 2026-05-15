@@ -1146,7 +1146,7 @@ describe("preflightGuardNode", () => {
     );
     // Default 128MB: duration cost = 1M × 0.1s × (128/1024) × $0.0000166667 = $0.208333
     // Total = $0.20 (requests) + $0.208333 (duration) ≈ $0.41
-    expect(result.estimatedMonthlyCost).toMatch(/^~\$0\.41\/million req/);
+    expect(result.estimatedMonthlyCost).toMatch(/^~\$0\.41\/M requests/);
     expect(result.estimatedMonthlyCost).toContain(
       `${LambdaPricing.DEFAULT_MEMORY_MB}MB`,
     );
@@ -1162,7 +1162,7 @@ describe("preflightGuardNode", () => {
     );
     // 512MB: duration cost = 1M × 0.1s × (512/1024) × $0.0000166667 = $0.833335
     // Total = $0.20 + $0.833335 ≈ $1.03
-    expect(result.estimatedMonthlyCost).toMatch(/^~\$1\.03\/million req/);
+    expect(result.estimatedMonthlyCost).toMatch(/^~\$1\.03\/M requests/);
     expect(result.estimatedMonthlyCost).toContain("512MB");
   });
 
