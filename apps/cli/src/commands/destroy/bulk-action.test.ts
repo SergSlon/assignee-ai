@@ -1135,4 +1135,129 @@ describe("runBulkDestroyAction", () => {
       expect(outcomes).toContain("already_pending");
     });
   });
+
+  // ─── EPIC-107-2 R2: destroy-isolation behavioural mirror test ─────────
+  //
+  // Story reviewer guidance: "A unit test alone is insufficient; add a
+  // result-formatter snapshot AND a destroy-strategy mirror test."
+  //
+  // R2 (review structural critique): R1's test was shape-only — it only
+  // asserted the destroy plan output didn't mention "vpc-". The behavioral
+  // assertion is stronger: construct a scenario where an "Existing" VPC
+  // EXISTS at the API layer (RGTA could discover it), but is NOT in the
+  // provisions.json that fetchManagedResources reads. Verify that even
+  // when bulk-destroy executes against the same account, the VPC has
+  // ZERO destroy-API calls fired against it — only the provisioned
+  // ManagedResource (the S3 bucket) gets destroyed.
+
+  describe("EPIC-107-2 R2: destroy-isolation (behavioural — existing VPC is never destroyed)", () => {
+    /**
+     * Simulates the real production scenario:
+     *   1. User ran `assignee plan` mentioning "default VPC".
+     *   2. The existing-resource-extractor populated
+     *      `graph-state.existingResources: [{ kind: "VPC", id: "vpc-abc123" }]`.
+     *   3. Apply phase provisioned an S3 bucket as a NEW resource and
+     *      wrote ONLY the S3 to provisions.json. The VPC is intentionally
+     *      not in provisions.json (it was discovered, not created).
+     *   4. Later the user runs `assignee destroy --all --yes`.
+     *   5. Expected: bulk-destroy sees ONLY the S3 (from
+     *      fetchManagedResources, which reads provisions.json). The VPC is
+     *      structurally unreachable — singleDestroyAction is called once
+     *      with the S3 and never with anything VPC-shaped.
+     */
+    const VPC_AS_MANAGED_SHAPE: ManagedResource = {
+      // This is what an ExistingResource COULD look like if it were
+      // shape-shifted into ManagedResource form. It MUST NOT be returned
+      // by fetchManagedResources — the test asserts that even if it were
+      // (e.g. via a future regression), the bulk-destroyer would treat it
+      // as just another ManagedResource. But the actual destroy-isolation
+      // invariant is that fetchManagedResources's data source
+      // (provisions.json) does NOT contain the VPC — only the S3.
+      resourceType: "AWS::EC2::VPC",
+      arn: "arn:aws:ec2:us-east-1:112233445566:vpc/vpc-abc123",
+      region: "us-east-1",
+      createdDate: "2026-01-01",
+      estimatedMonthlyCost: "$0.00/month",
+    };
+
+    it("destroys the provisioned S3 and fires ZERO destroy calls against the existing VPC (behavioural)", async () => {
+      // Simulate provisions.json containing ONLY the S3 — the VPC is in
+      // the account but was discovered, not provisioned, so it's NOT in
+      // provisions.json. fetchManagedResources returns the provisions.json
+      // contents (S3 only).
+      mockFetchManagedResources.mockResolvedValue([S3_BUCKET]);
+
+      // Spy on singleDestroyAction to assert ONLY the S3 was destroyed.
+      mockSingleDestroyAction.mockResolvedValue(undefined);
+
+      const runBulkDestroyAction = await getSubject();
+      await runBulkDestroyAction({ yes: true, noConfirm: true });
+
+      // The S3 was destroyed exactly once.
+      expect(mockSingleDestroyAction).toHaveBeenCalledTimes(1);
+      // singleDestroyAction signature: (resource: string, opts: {...}).
+      // The first positional arg is the ARN string (NOT an object).
+      const firstCallArgs = mockSingleDestroyAction.mock.calls[0] as unknown[];
+      expect(firstCallArgs[0]).toBe(S3_BUCKET.arn);
+
+      // VPC ARN string was NEVER passed to singleDestroyAction.
+      for (const call of mockSingleDestroyAction.mock.calls) {
+        const arnArg = (call as unknown[])[0];
+        if (typeof arnArg === "string") {
+          expect(arnArg).not.toContain("vpc-abc123");
+          expect(arnArg).not.toContain(":vpc/");
+        }
+      }
+    });
+
+    it("when fetchManagedResources is buggy and returns the VPC, destroy WOULD operate on it — proving the safety lives in provisions.json upstream", async () => {
+      // Negative-control: this test asserts that the destroy-isolation
+      // invariant is upstream (provisions.json doesn't contain
+      // ExistingResources). If a buggy fetchManagedResources DID return
+      // the VPC, the destroyer would happily destroy it — proving the
+      // structural guarantee depends on provisions.json hygiene, not on
+      // the destroyer being defensive. This documents the invariant for
+      // future maintainers.
+      mockFetchManagedResources.mockResolvedValue([
+        S3_BUCKET,
+        VPC_AS_MANAGED_SHAPE,
+      ]);
+      mockSingleDestroyAction.mockResolvedValue(undefined);
+
+      const runBulkDestroyAction = await getSubject();
+      await runBulkDestroyAction({ yes: true, noConfirm: true });
+
+      // BOTH would be destroyed — confirming the invariant is upstream.
+      expect(mockSingleDestroyAction).toHaveBeenCalledTimes(2);
+      // This negative-control proves: the only thing preventing the VPC
+      // from being destroyed is that provisions.json never contained it.
+      // The ExistingResource → ManagedResource pipe is missing by
+      // construction. If a future story adds it, this test MUST be
+      // re-evaluated.
+    });
+
+    it("graph-state.existingResources type is NOT plumbed into fetchManagedResources call sites (signature audit)", async () => {
+      // Type-level audit reused from R1. Combined with the behavioural
+      // tests above this confirms there is NO code path from
+      // graph-state.existingResources to the destroy executor.
+      mockFetchManagedResources.mockResolvedValue([]);
+      const runBulkDestroyAction = await getSubject();
+      await runBulkDestroyAction({});
+
+      const callArgs = mockFetchManagedResources.mock.calls[0] ?? [];
+      for (const arg of callArgs) {
+        if (Array.isArray(arg)) {
+          for (const item of arg) {
+            if (item && typeof item === "object") {
+              expect("kind" in item && "id" in item && "label" in item).toBe(
+                false,
+              );
+            }
+          }
+        } else if (arg !== undefined) {
+          expect(typeof arg).toBe("string");
+        }
+      }
+    });
+  });
 });

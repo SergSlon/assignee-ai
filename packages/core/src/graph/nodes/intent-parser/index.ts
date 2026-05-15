@@ -67,6 +67,9 @@ import { extractS3Lifecycle } from "./extractors/s3-lifecycle-extractor.js";
 import { extractLambdaBody } from "./extractors/lambda-body-extractor.js";
 import { applyRdsTierDefaults } from "./extractors/environment-tier-extractor.js";
 import { extractVpcDefaultHint } from "./extractors/vpc-default-hint-extractor.js";
+import { extractExisting } from "./extractors/existing-resource-extractor.js";
+import { productionResourceDiscoveryPort } from "../../../services/resource-discovery-port.js";
+import { AWS_REGION } from "../../../config/constants/aws.js";
 
 // Public re-exports — preserve the monolith's external API surface.
 export type { Advisory, AssertionExtraction } from "./intent-types.js";
@@ -275,22 +278,30 @@ function buildExtractionSuccessUpdate(
   resolution:
     | { resourceType: string }
     | { resourcePattern: NonNullable<AgentState["resourcePattern"]> },
+  existingResources?: AgentState["existingResources"],
+  discoveryAdvisory?: Advisory,
 ): Partial<AgentState> {
   const merged = mergeElicited(state.elicitedOptions, extraction.elicited);
   const mergedPresets = mergePresetFields(
     state.presetFields,
     extraction.elicited,
   );
-  const mergedAdvisories = mergeAdvisories(
-    state.advisories,
-    extraction.advisories,
-  );
+  // EPIC-107-2 R1: append discoveryAdvisory (when set) into the same
+  // advisory stream the extraction emits — order preserved (extraction
+  // first, discovery last).
+  const advisoriesIn = discoveryAdvisory
+    ? [...extraction.advisories, discoveryAdvisory]
+    : extraction.advisories;
+  const mergedAdvisories = mergeAdvisories(state.advisories, advisoriesIn);
   return {
     userIntent: safeIntent,
     ...resolution,
     ...(merged !== undefined ? { elicitedOptions: merged } : {}),
     ...(mergedPresets !== undefined ? { presetFields: mergedPresets } : {}),
     ...(mergedAdvisories !== undefined ? { advisories: mergedAdvisories } : {}),
+    ...(existingResources !== undefined && existingResources.length > 0
+      ? { existingResources }
+      : {}),
   };
 }
 
@@ -305,6 +316,48 @@ export function createIntentParserNode({ llmClient }: { llmClient: LlmPort }) {
     state: AgentState,
   ): Promise<Partial<AgentState>> {
     const safeIntent = sanitizeUserIntent(state.userIntent);
+
+    // EPIC-107-2 (PH1-G-2): discover existing AWS resources matching the
+    // user's intent. Runs before classification so compound-pattern
+    // consumers can reference Existing nodes. Failure is swallowed by the
+    // port impl — no crash, CP-3 advisory path still renders.
+    const region =
+      state.config?.get("AWS_REGION") ??
+      state.config?.get("AWS_DEFAULT_REGION") ??
+      AWS_REGION;
+    const discoveryPort = productionResourceDiscoveryPort(region, state.runId);
+    const {
+      existing: existingResources,
+      ambiguous,
+      needsElicitation,
+    } = await extractExisting(safeIntent, discoveryPort, region);
+
+    // EPIC-107-2 R2 (review finding #4, supersedes R1 #3): when one or more
+    // resource kinds had multiple candidates that could not be auto-
+    // disambiguated, the extractor drops them from `existing[]` (no graph-
+    // state pollution) and reports them in `ambiguous[]`. We emit an
+    // advisory that names the ambiguous kinds + candidate counts so the
+    // user can rephrase. The option-elicitor picker is deferred (per ADR
+    // Decision 2 fallback): advisory now, picker later.
+    const discoveryAdvisory: Advisory | undefined = needsElicitation
+      ? {
+          code: "EXISTING_RESOURCE_AMBIGUOUS",
+          message:
+            `Multiple existing resources matched your intent — ` +
+            ambiguous
+              .map((a) => `${a.candidates.length} ${a.kind}s`)
+              .join(", ") +
+            `. Plan continues without selecting any of them.`,
+          hint: "Rephrase your intent to include a distinguishing name fragment (e.g., 'staging VPC', 'prod cluster') so discovery can auto-select.",
+          details: {
+            ambiguousKinds: ambiguous.map((a) => ({
+              kind: a.kind,
+              count: a.candidates.length,
+              candidateIds: a.candidates.map((c) => c.id),
+            })),
+          },
+        }
+      : undefined;
 
     // Step 1 — Singleton-override cues (C-08, C-09).
     const singletonType = resolveSingletonOverride(safeIntent);
@@ -324,9 +377,16 @@ export function createIntentParserNode({ llmClient }: { llmClient: LlmPort }) {
         extras: { resourceType: singletonType, pattern: null },
       });
       return {
-        ...buildExtractionSuccessUpdate(safeIntent, extraction, state, {
-          resourceType: singletonType,
-        }),
+        ...buildExtractionSuccessUpdate(
+          safeIntent,
+          extraction,
+          state,
+          {
+            resourceType: singletonType,
+          },
+          existingResources,
+          discoveryAdvisory,
+        ),
         intentKind: "create" as const,
       };
     }
@@ -356,9 +416,16 @@ export function createIntentParserNode({ llmClient }: { llmClient: LlmPort }) {
         extras: { resourceType: null, pattern: detectedPattern.patternId },
       });
       return {
-        ...buildExtractionSuccessUpdate(safeIntent, extraction, state, {
-          resourcePattern: detectedPattern,
-        }),
+        ...buildExtractionSuccessUpdate(
+          safeIntent,
+          extraction,
+          state,
+          {
+            resourcePattern: detectedPattern,
+          },
+          existingResources,
+          discoveryAdvisory,
+        ),
         intentKind: "create" as const,
       };
     }
@@ -407,9 +474,16 @@ export function createIntentParserNode({ llmClient }: { llmClient: LlmPort }) {
           },
         });
         return {
-          ...buildExtractionSuccessUpdate(safeIntent, extraction, state, {
-            resourcePattern: llmPattern,
-          }),
+          ...buildExtractionSuccessUpdate(
+            safeIntent,
+            extraction,
+            state,
+            {
+              resourcePattern: llmPattern,
+            },
+            existingResources,
+            discoveryAdvisory,
+          ),
           intentKind: "create" as const,
         };
       }
@@ -585,9 +659,16 @@ Request: "${safeIntent}"`;
       },
     });
     return {
-      ...buildExtractionSuccessUpdate(safeIntent, extraction, state, {
-        resourceType: output.resourceType,
-      }),
+      ...buildExtractionSuccessUpdate(
+        safeIntent,
+        extraction,
+        state,
+        {
+          resourceType: output.resourceType,
+        },
+        existingResources,
+        discoveryAdvisory,
+      ),
       intentKind: isIntentKind(output.kind) ? output.kind : "create",
     };
   };
