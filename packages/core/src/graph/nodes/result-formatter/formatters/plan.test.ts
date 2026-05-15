@@ -6,7 +6,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ExecutionMode, ExecutionStatus } from "@/index.js";
 import type { AgentState } from "@/graph/graph-state.js";
 import { ProcessEnvConfigAdapter } from "@/config/config-port.js";
-import { sanitizeDesiredState, normalizeMemoryHints } from "./plan.js";
+import {
+  sanitizeDesiredState,
+  normalizeMemoryHints,
+  emitExistingResourceLines,
+} from "./plan.js";
+import type { ExistingResource } from "@/services/resource-discovery-port.js";
 
 vi.mock("@/utils/display.js", () => ({
   renderPlanBox: vi.fn(),
@@ -155,6 +160,64 @@ describe("normalizeMemoryHints (Epic 92 Wave 4.a / A-19 / D-35)", () => {
         "$0.0230/GB-month/month",
       ]),
     ).toEqual(["$1.00/mo", "Failures: 2 in last 24h", "$0.0230/GB-month"]);
+  });
+});
+
+describe("emitExistingResourceLines (EPIC-107-2)", () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let stdoutSpy: any;
+
+  beforeEach(() => {
+    stdoutSpy = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation(() => true);
+  });
+
+  afterEach(() => {
+    stdoutSpy.mockRestore();
+  });
+
+  const vpcResource: ExistingResource = {
+    kind: "VPC",
+    id: "vpc-abc123",
+    label: "default (vpc-abc123, 172.31.0.0/16 [default])",
+    region: "us-east-1",
+  };
+
+  it("emits 'Found existing <kind>: <id> (<region>)' for each resource", () => {
+    emitExistingResourceLines([vpcResource]);
+    expect(stdoutSpy).toHaveBeenCalledWith(
+      "Found existing VPC: vpc-abc123 (us-east-1)\n",
+    );
+  });
+
+  it("emits nothing when existingResources is empty", () => {
+    emitExistingResourceLines([]);
+    expect(stdoutSpy).not.toHaveBeenCalled();
+  });
+
+  it("emits nothing when existingResources is undefined", () => {
+    emitExistingResourceLines(undefined);
+    expect(stdoutSpy).not.toHaveBeenCalled();
+  });
+
+  it("emits one line per resource for multiple entries", () => {
+    const ecsResource: ExistingResource = {
+      kind: "EcsCluster",
+      id: "my-cluster",
+      label: "my-cluster (2 services)",
+      region: "eu-west-1",
+    };
+    emitExistingResourceLines([vpcResource, ecsResource]);
+    expect(stdoutSpy).toHaveBeenCalledTimes(2);
+    expect(stdoutSpy).toHaveBeenNthCalledWith(
+      1,
+      "Found existing VPC: vpc-abc123 (us-east-1)\n",
+    );
+    expect(stdoutSpy).toHaveBeenNthCalledWith(
+      2,
+      "Found existing EcsCluster: my-cluster (eu-west-1)\n",
+    );
   });
 });
 

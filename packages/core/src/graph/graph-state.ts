@@ -61,8 +61,10 @@ import {
   ProcessEnvConfigAdapter,
   type ConfigPort,
 } from "../config/config-port.js";
+import type { ExistingResource } from "../services/resource-discovery-port.js";
 
 export type { AppliedFix, SecurityFinding };
+export type { ExistingResource };
 
 export const graphAnnotation = Annotation.Root({
   userIntent: Annotation<string>({ reducer: (_, b) => b, default: () => "" }),
@@ -325,6 +327,28 @@ export const graphAnnotation = Annotation.Root({
   queryResult: Annotation<QueryResult | undefined>({
     reducer: (_, b) => b,
     default: () => undefined,
+  }),
+  /**
+   * EPIC-107-2 (PH1-G-2 deep fix): existing AWS resources discovered at
+   * intent-parse time via the ResourceDiscoveryPort.
+   *
+   * These are READ-ONLY nodes that were already provisioned in the user's
+   * account. They are NEVER iterated by the destroy strategies — destroy
+   * only touches `ManagedResource` entries from provisions.json.
+   *
+   * Destroy isolation invariant (Variation F): `existingResources` is
+   * populated by the existing-resource-extractor, persisted through graph
+   * state, and consumed by compound-pattern consumers that need to wire
+   * Desired resources to Existing ones. The destroy bulk-action and
+   * single-flow use `fetchManagedResources()` exclusively — they do NOT
+   * read this field.
+   *
+   * Default `[]` ensures all existing reader call-sites are backwards-
+   * compatible without modification.
+   */
+  existingResources: Annotation<ExistingResource[]>({
+    reducer: (_, b) => b,
+    default: () => [],
   }),
 });
 

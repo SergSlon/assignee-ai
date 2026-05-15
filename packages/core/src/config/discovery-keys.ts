@@ -19,4 +19,8 @@ export const DiscoveryCacheKey = {
   EFS_FILE_SYSTEMS: "discover-efs-file-systems",
   SNS_TOPICS: "discover-sns-topics",
   KMS_KEYS: "discover-kms-keys",
+  // EPIC-107-2: existing-resource-discovery (new resource kinds)
+  DB_SUBNET_GROUPS: "discover-db-subnet-groups",
+  ECS_CLUSTERS: "discover-ecs-clusters",
+  ELBS: "discover-elbs",
 } as const;

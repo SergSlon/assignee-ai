@@ -19,6 +19,33 @@ review methodology notes, see
 
 ### Added
 
+**feat(graph): existing-resource discovery extractor (EPIC-107-2)**
+
+Closes PH1-G-2 deeply. At intent-parse time, the new `existing-resource-extractor`
+calls AWS (via reader credentials) to discover VPCs, RDS DB subnet groups, ECS
+clusters, and ALB/NLB load balancers that already exist in the user's account.
+Matched resources land in `graph-state.existingResources` as read-only
+`ExistingResource` nodes, visible in the plan card as
+`Found existing <kind>: <id> (<region>)` lines before the Desired-resources block.
+
+Four new SDK discovery helpers added (`vpc.ts`, `rds-subnet-groups.ts`, `ecs.ts`,
+`elb.ts`) mirroring the existing `efs.ts` pattern, plus new
+`@aws-sdk/client-ecs` and `@aws-sdk/client-elastic-load-balancing-v2` dependencies.
+
+Architecture: backs a `ResourceDiscoveryPort` interface (hexagonal boundary) —
+production impl wraps the existing direct-SDK module, test impl is a deterministic
+fake. No new MCP servers, no new cache infrastructure (reuses `cachedDiscover()` TTL).
+
+Destroy isolation invariant (Variation F — CRITICAL): `existingResources` is NEVER
+iterated by destroy strategies. Bulk-destroy and single-flow use
+`fetchManagedResources()` from provisions.json exclusively. Explicit boundary test
+(`existing-resource-extractor.test.ts` Variation F) asserts `ExistingResource` lacks
+the `resourceArn`/`provisionedAt` fields that `ManagedResource` carries.
+
+Discovery failure falls back gracefully (logged once, CP-3 advisory path renders,
+no crash). Multi-match: tag-substring auto-select when a unique label match is found;
+otherwise `needsElicitation=true` for picker flow.
+
 **feat(intent-parser): LLM fallback for compound-pattern classification (EPIC-107-1)**
 
 Closes the PH1-H-1 deep fix deferred from Epic-105. The keyword-driven `PatternRegistry.detect()` now has a Tier 2 fallback: when the keyword registry returns null AND the intent is ≥ 10 words, a structured Bedrock call asks "which compound pattern (or NONE) best matches?" The response is Zod-validated (`{ patternKey, confidence: "high"|"medium"|"low", rationale }`); only high/medium-confidence results are actioned.
