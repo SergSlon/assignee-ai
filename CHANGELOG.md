@@ -17,6 +17,17 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### fix(pricing): S3 PUT/GET requests render real prices (EPIC-106-8 / PH5-X-S3-DECOMPOSER)
+
+Closes PH5-X-S3-DECOMPOSER from Phase-5 dogfood. S3 PUT/GET request cost rows
+rendered "unavailable" because the decomposer used `usagetype=Requests-Tier1/Tier2`
+TERM_MATCH filters which the real AWS Pricing API never returns — it returns
+region-prefixed values like `USE1-Requests-Tier1`. The fix mirrors the DynamoDB
+decomposer pattern: switch to the stable cross-region `group=S3-API-Tier1/S3-API-Tier2`
+discriminator. DynamoDB audited — already uses `group=DDB-ReadUnits/DDB-WriteUnits`
+(no "unavailable" gap). New parity guard in `coverage.test.ts` asserts S3 and DynamoDB
+decomposers produce zero "unavailable" rows when the pricing tool returns canonical fixtures.
+
 ### fix(naming): deterministic auto-naming guards against LLM bucket-name hallucination (EPIC-106-7 / PH5-8-B)
 
 Closes PH5-8-B from Phase-5 dogfood. Eliminates the silent class of bug where

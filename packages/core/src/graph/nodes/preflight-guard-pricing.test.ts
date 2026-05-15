@@ -210,19 +210,19 @@ function createFilterDispatchedPricingTool(): StructuredTool {
             return Promise.resolve(s3StorageResponse);
           }
 
-          // PUT requests: usagetype=Requests-Tier1
+          // PUT requests: group=S3-API-Tier1
           if (
             filters.some(
-              (f) => f.Field === "usagetype" && f.Value === "Requests-Tier1",
+              (f) => f.Field === "group" && f.Value === "S3-API-Tier1",
             )
           ) {
             return Promise.resolve(s3PutResponse);
           }
 
-          // GET requests: usagetype=Requests-Tier2
+          // GET requests: group=S3-API-Tier2
           if (
             filters.some(
-              (f) => f.Field === "usagetype" && f.Value === "Requests-Tier2",
+              (f) => f.Field === "group" && f.Value === "S3-API-Tier2",
             )
           ) {
             return Promise.resolve(s3GetResponse);
@@ -323,7 +323,7 @@ describe("S3 pricing decomposer — line item structure", () => {
     expect(put.filters).toEqual(
       expect.arrayContaining([
         { Field: "productFamily", Value: "API Request", Type: "TERM_MATCH" },
-        { Field: "usagetype", Value: "Requests-Tier1", Type: "TERM_MATCH" },
+        { Field: "group", Value: "S3-API-Tier1", Type: "TERM_MATCH" },
       ]),
     );
   });
@@ -338,7 +338,7 @@ describe("S3 pricing decomposer — line item structure", () => {
     expect(get.filters).toEqual(
       expect.arrayContaining([
         { Field: "productFamily", Value: "API Request", Type: "TERM_MATCH" },
-        { Field: "usagetype", Value: "Requests-Tier2", Type: "TERM_MATCH" },
+        { Field: "group", Value: "S3-API-Tier2", Type: "TERM_MATCH" },
       ]),
     );
   });
@@ -446,14 +446,14 @@ describe("S3 pricing — filter-dispatched queryLineItemPrices via preflightGuar
           }
           if (
             filters.some(
-              (f) => f.Field === "usagetype" && f.Value === "Requests-Tier1",
+              (f) => f.Field === "group" && f.Value === "S3-API-Tier1",
             )
           ) {
             return Promise.resolve(s3PutResponse);
           }
           if (
             filters.some(
-              (f) => f.Field === "usagetype" && f.Value === "Requests-Tier2",
+              (f) => f.Field === "group" && f.Value === "S3-API-Tier2",
             )
           ) {
             return Promise.resolve(s3GetResponse);
@@ -499,7 +499,7 @@ describe("extractFirstTierPrice — filter validation", () => {
     const storageData: AwsPricingResponse = JSON.parse(s3StorageResponse.text);
     const apiRequestFilters: McpPricingFilter[] = [
       { Field: "productFamily", Value: "API Request", Type: "TERM_MATCH" },
-      { Field: "usagetype", Value: "Requests-Tier1", Type: "TERM_MATCH" },
+      { Field: "group", Value: "S3-API-Tier1", Type: "TERM_MATCH" },
     ];
 
     const result = extractFirstTierPrice(
@@ -511,12 +511,12 @@ describe("extractFirstTierPrice — filter validation", () => {
     expect(result).toBeNull();
   });
 
-  it("returns null when response item usagetype does not match filters", () => {
-    // Response has Requests-Tier1 (PUT), but filters ask for Requests-Tier2 (GET)
+  it("returns null when response item group does not match filters", () => {
+    // Response has S3-API-Tier1 (PUT), but filters ask for S3-API-Tier2 (GET)
     const putData: AwsPricingResponse = JSON.parse(s3PutResponse.text);
     const getFilters: McpPricingFilter[] = [
       { Field: "productFamily", Value: "API Request", Type: "TERM_MATCH" },
-      { Field: "usagetype", Value: "Requests-Tier2", Type: "TERM_MATCH" },
+      { Field: "group", Value: "S3-API-Tier2", Type: "TERM_MATCH" },
     ];
 
     const result = extractFirstTierPrice(putData, "/1000 reqs", 1, getFilters);
@@ -724,7 +724,7 @@ describe("Price cache — filter-based key differentiation", () => {
     ];
     const putFilters: McpPricingFilter[] = [
       { Field: "productFamily", Value: "API Request", Type: "TERM_MATCH" },
-      { Field: "usagetype", Value: "Requests-Tier1", Type: "TERM_MATCH" },
+      { Field: "group", Value: "S3-API-Tier1", Type: "TERM_MATCH" },
     ];
 
     const storageKey = JSON.stringify({
@@ -742,11 +742,11 @@ describe("Price cache — filter-based key differentiation", () => {
   it("GET and PUT filters produce different cache keys despite same serviceCode", () => {
     const putFilters: McpPricingFilter[] = [
       { Field: "productFamily", Value: "API Request", Type: "TERM_MATCH" },
-      { Field: "usagetype", Value: "Requests-Tier1", Type: "TERM_MATCH" },
+      { Field: "group", Value: "S3-API-Tier1", Type: "TERM_MATCH" },
     ];
     const getFilters: McpPricingFilter[] = [
       { Field: "productFamily", Value: "API Request", Type: "TERM_MATCH" },
-      { Field: "usagetype", Value: "Requests-Tier2", Type: "TERM_MATCH" },
+      { Field: "group", Value: "S3-API-Tier2", Type: "TERM_MATCH" },
     ];
 
     const putKey = JSON.stringify({

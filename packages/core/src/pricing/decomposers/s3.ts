@@ -68,6 +68,14 @@ export const s3PricingDecomposer: PricingDecomposer = {
     });
 
     // 2. PUT requests
+    //
+    // EPIC-106-8 fix: the usagetype field is region-prefixed in the real AWS
+    // Pricing API (e.g. "USE1-Requests-Tier1" in us-east-1, "EU-Requests-Tier1"
+    // in eu-west-1). A TERM_MATCH filter on the unprefixed value returns zero
+    // results and renders "unavailable". The `group` attribute is consistently
+    // "S3-API-Tier1" / "S3-API-Tier2" across all regions and is the correct
+    // stable discriminator — mirrors how the DynamoDB decomposer uses
+    // group=DDB-ReadUnits / DDB-WriteUnits.
     items.push({
       label: LineItemLabel.PUT_REQUESTS,
       quantity: 0,
@@ -75,14 +83,14 @@ export const s3PricingDecomposer: PricingDecomposer = {
       serviceCode: SC.S3,
       filters: [
         { Field: F.PRODUCT_FAMILY, Value: PF.API_REQUEST, Type: M.TERM_MATCH },
-        { Field: F.USAGE_TYPE, Value: FV.REQUESTS_TIER1, Type: M.TERM_MATCH },
+        { Field: F.GROUP, Value: FV.S3_API_TIER1, Type: M.TERM_MATCH },
       ],
       kind: K.USAGE_BASED,
       description: "per 1,000 requests",
       priceUnit: PriceUnit.PER_1000_REQS,
     });
 
-    // 3. GET requests
+    // 3. GET requests (see EPIC-106-8 fix note on PUT requests above)
     items.push({
       label: LineItemLabel.GET_REQUESTS,
       quantity: 0,
@@ -90,7 +98,7 @@ export const s3PricingDecomposer: PricingDecomposer = {
       serviceCode: SC.S3,
       filters: [
         { Field: F.PRODUCT_FAMILY, Value: PF.API_REQUEST, Type: M.TERM_MATCH },
-        { Field: F.USAGE_TYPE, Value: FV.REQUESTS_TIER2, Type: M.TERM_MATCH },
+        { Field: F.GROUP, Value: FV.S3_API_TIER2, Type: M.TERM_MATCH },
       ],
       kind: K.USAGE_BASED,
       description: "per 1,000 requests",
@@ -177,11 +185,7 @@ export const s3PricingDecomposer: PricingDecomposer = {
             Value: PF.API_REQUEST,
             Type: M.TERM_MATCH,
           },
-          {
-            Field: F.USAGE_TYPE,
-            Value: FV.REQUESTS_TIER1,
-            Type: M.TERM_MATCH,
-          },
+          { Field: F.GROUP, Value: FV.S3_API_TIER1, Type: M.TERM_MATCH },
         ],
         kind: K.USAGE_BASED,
         description: "Replication PUT operations (source side)",

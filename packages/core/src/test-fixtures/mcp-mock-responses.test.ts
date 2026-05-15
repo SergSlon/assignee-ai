@@ -134,28 +134,28 @@ describe("createS3PricingDispatchTool", () => {
     expect(result).toBe(McpMocks.pricing.s3Storage.success);
   });
 
-  it("returns s3PutRequests for API Request + Requests-Tier1", async () => {
+  it("returns s3PutRequests for API Request + group=S3-API-Tier1", async () => {
     const tool = createS3PricingDispatchTool();
 
     const result = await tool.invoke({
       service_code: "AmazonS3",
       filters: makeFilters(
         ["productFamily", "API Request"],
-        ["usagetype", "Requests-Tier1"],
+        ["group", "S3-API-Tier1"],
       ),
     });
 
     expect(result).toBe(McpMocks.pricing.s3PutRequests.success);
   });
 
-  it("returns s3GetRequests for API Request + Requests-Tier2", async () => {
+  it("returns s3GetRequests for API Request + group=S3-API-Tier2", async () => {
     const tool = createS3PricingDispatchTool();
 
     const result = await tool.invoke({
       service_code: "AmazonS3",
       filters: makeFilters(
         ["productFamily", "API Request"],
-        ["usagetype", "Requests-Tier2"],
+        ["group", "S3-API-Tier2"],
       ),
     });
 
