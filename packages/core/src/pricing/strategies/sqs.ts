@@ -31,7 +31,7 @@ export const sqsPricingStrategy: PricingStrategy = {
       filters: [
         { Field: F.PRODUCT_FAMILY, Value: PF.QUEUE, Type: M.TERM_MATCH },
       ],
-      unit: PriceUnit.PER_MILLION_REQUESTS_LONG,
+      unit: PriceUnit.PER_MILLION_REQUESTS,
     };
   },
 };

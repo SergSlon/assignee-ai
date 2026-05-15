@@ -31,6 +31,6 @@
     "Handler": "index.handler",
     "FunctionName": "assignee-lambda-fn-c28ee96e"
   },
-  "estimatedMonthlyCost": "~$1.03/million req (100ms avg, 512MB)",
+  "estimatedMonthlyCost": "~$1.03/M requests (100ms avg, 512MB)",
   "preflightPassed": true
 }
