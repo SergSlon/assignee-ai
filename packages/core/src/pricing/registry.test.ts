@@ -25,7 +25,7 @@ describe("PricingStrategyRegistry", () => {
       "AWS::Lambda::Function",
       undefined,
     );
-    expect(result.label).toMatch(/^~\$0\.41\/million req/);
+    expect(result.label).toMatch(/^~\$0\.41\/M requests/);
     expect(result.label).toContain("128MB");
   });
 
@@ -33,7 +33,7 @@ describe("PricingStrategyRegistry", () => {
     const result = defaultPricingRegistry.estimate("AWS::Lambda::Function", {
       MemorySize: 512,
     });
-    expect(result.label).toMatch(/^~\$1\.03\/million req/);
+    expect(result.label).toMatch(/^~\$1\.03\/M requests/);
     expect(result.label).toContain("512MB");
   });
 

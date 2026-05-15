@@ -1,5 +1,6 @@
 import type { PricingStrategy, PricingEstimate } from "../types.js";
 import { CfnKey } from "../../config/cfn-keys.js";
+import { formatUnitSuffix } from "../formatters/unit-label.js";
 
 // Lambda pricing rates (stable since 2014 — verified 2025)
 const USD_PER_MILLION_REQUESTS = 0.2;
@@ -23,7 +24,7 @@ function computeLambdaLabel(memoryMb: number): string {
     (memoryMb / 1024) *
     LAMBDA_USD_PER_GB_SECOND;
   const total = USD_PER_MILLION_REQUESTS + durationCostPerMillion;
-  return `~$${total.toFixed(2)}/million req (${ASSUMED_AVG_DURATION_SEC * 1000}ms avg, ${memoryMb}MB)`;
+  return `~$${total.toFixed(2)}${formatUnitSuffix("request")} (${ASSUMED_AVG_DURATION_SEC * 1000}ms avg, ${memoryMb}MB)`;
 }
 
 export const lambdaPricingStrategy: PricingStrategy = {

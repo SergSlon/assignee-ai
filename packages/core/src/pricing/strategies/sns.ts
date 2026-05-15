@@ -9,6 +9,7 @@ import {
   PricingProductFamily as PF,
   PricingServiceCode as SC,
 } from "../filter-constants.js";
+import { PriceUnit } from "../price-units.js";
 
 export const snsPricingStrategy: PricingStrategy = {
   estimateLocal(): PricingEstimate {
@@ -28,7 +29,7 @@ export const snsPricingStrategy: PricingStrategy = {
           Type: M.TERM_MATCH,
         },
       ],
-      unit: "/million publishes",
+      unit: PriceUnit.PER_MILLION_PUBLISHES,
     };
   },
 };

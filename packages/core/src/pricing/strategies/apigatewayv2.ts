@@ -56,7 +56,7 @@ export const apiGatewayV2PricingStrategy: PricingStrategy = {
             Type: M.TERM_MATCH,
           },
         ],
-        unit: "/million messages",
+        unit: PriceUnit.PER_MILLION_MESSAGES,
         scale: 1_000_000,
       };
     }
@@ -72,7 +72,7 @@ export const apiGatewayV2PricingStrategy: PricingStrategy = {
           Type: M.TERM_MATCH,
         },
       ],
-      unit: PriceUnit.PER_MILLION_REQUESTS_LONG,
+      unit: PriceUnit.PER_MILLION_REQUESTS,
       scale: 1_000_000,
     };
   },
