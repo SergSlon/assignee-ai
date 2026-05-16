@@ -37,6 +37,10 @@ import { statusCommand } from "../src/commands/status.js";
 import { reconcileCommand } from "../src/commands/reconcile.js";
 import { doctorCommand } from "../src/commands/doctor.js";
 import { versionCommand } from "../src/commands/version.js";
+import { restoreProvisionsCommand } from "../src/commands/restore-provisions.js";
+import { auditVerifyCommand } from "../src/commands/audit-verify.js";
+import { updateCommand } from "../src/commands/update.js";
+import { discoverCommand } from "../src/commands/discover/discover.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const completionsDir = path.resolve(__dirname, "..", "completions");
@@ -52,6 +56,9 @@ function buildProgram(): Command {
   // Keep this list in sync with apps/cli/src/index.ts so shell
   // completions cover every shipping command. Story 50-3 trimmed the
   // list from 18 → 13 by removing clean, cache, patterns, types, whoami.
+  // Story 108-A-03 round-2 fix: added restore-provisions, audit-verify,
+  // update, and discover (all four were previously missing from this
+  // generator, causing completions to omit them — AC#6 regression fix).
   program.addCommand(planCommand);
   program.addCommand(applyCommand);
   program.addCommand(initCommand);
@@ -65,6 +72,10 @@ function buildProgram(): Command {
   program.addCommand(statusCommand);
   program.addCommand(reconcileCommand);
   program.addCommand(doctorCommand);
+  program.addCommand(restoreProvisionsCommand);
+  program.addCommand(auditVerifyCommand);
+  program.addCommand(updateCommand);
+  program.addCommand(discoverCommand);
 
   // Story 58-it1-03: `version` is now a standalone command module
   // (closes it57-1-L3-L1 — the previous inline `.command("version")`

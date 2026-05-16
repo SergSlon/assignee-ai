@@ -206,8 +206,8 @@ describe("Drift-guard — command coverage", () => {
   beforeEach(() => resetMatrixRegistry());
   afterEach(() => resetMatrixRegistry());
 
-  it("CLI_COMMANDS tuple has 17 commands (Story 108-B-01 baseline)", () => {
-    expect(CLI_COMMANDS.length).toBe(17);
+  it("CLI_COMMANDS tuple has 18 commands (Story 108-A-03: added 'discover')", () => {
+    expect(CLI_COMMANDS.length).toBe(18);
   });
 
   it("all commands in CLI_COMMANDS can be registered in the matrix", () => {

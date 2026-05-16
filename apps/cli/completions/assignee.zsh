@@ -27,6 +27,10 @@ _assignee() {
         'status:Show summary of managed infrastructure'
         'reconcile:Reconcile drifted resources back to desired state'
         'doctor:Run a non-destructive health check of credentials, Bedrock, MCP servers, cache, config and best-practices'
+        'restore-provisions:Restore provisions.json from a dated backup (BCP/DR)'
+        'audit-verify:Verify the HMAC chain integrity of the local audit log. Exits 0 on a clean chain; non-zero with diagnostics when the chain is broken.'
+        'update:Refresh a deployed static-website\: upload new files to S3 and invalidate CloudFront'
+        'discover:Browse and search all supported resource types, compound patterns, and CLI commands'
         'version:Show version and environment info'
       )
       _describe 'command' commands
@@ -152,6 +156,35 @@ _assignee() {
             '--skip-bedrock[Skip the Bedrock LLM invoke check]' \
             '--skip-mcp[Skip the MCP server launch probe]' \
             '--short[Fast identity-only summary\: STS account + ARN + region + active config (replaces the removed `whoami` command)]'
+          ;;
+        restore-provisions)
+          _arguments \
+            '--from[Restore from a specific backup date (YYYY-MM-DD). Defaults to most recent backup.]:date:' \
+            '--from-audit-log[Rebuild missing provision records from the HMAC-chained audit log (~/.assignee/audit/audit.log). Reads `apply_resource_created` events and appends a reconstructed record for any ARN absent from provisions.json. Cannot be combined with --from <date>.]' \
+            '--json[Emit machine-readable JSON to stdout instead of human-readable text]'
+          ;;
+        audit-verify)
+          _arguments \
+            '--from[Start date for verification range (ISO 8601). Scaffold\: full chain always verified; range filtering is planned for a future release.]:date:' \
+            '--to[End date for verification range (ISO 8601). Scaffold\: full chain always verified; range filtering is planned for a future release.]:date:' \
+            '--log-file[Audit log file path (default\: /Users/serhii_l/.assignee/audit/audit.log)]:path:' \
+            '--json[Emit machine-readable JSON to stdout instead of human-readable text]'
+          ;;
+        update)
+          _arguments \
+            '--source[Path to local directory containing the new site files (required)]:path:' \
+            '--delete[Delete remote objects that have no local counterpart (default\: OFF — additive uploads only)]' \
+            '--invalidation-paths[Comma-separated paths to invalidate on CloudFront (default\: '\''/*'\'')]:paths:' \
+            '--no-invalidation[Skip CloudFront cache invalidation entirely]' \
+            '--wait[Poll until invalidation Status === '\''Completed'\'' (typically 1-5 min)]' \
+            '--yes[Skip confirmation prompt (for CI/CD)]' \
+            '--output[Output format (json|text)]:format:' \
+            '--json[Shorthand for --output json (emit machine-readable envelope)]'
+          ;;
+        discover)
+          _arguments \
+            '--json[Output the full catalogue as a JSON array]' \
+            '--category[Filter by category\: resource-types | patterns | commands]:filter:'
           ;;
         version)
           _arguments \
