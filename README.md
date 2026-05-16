@@ -14,25 +14,30 @@
 
 ---
 
-## 1. Problem & Market
+## Install & quick start
 
-**The problem.** Cloud Ops is broken for the developer who is not a platform engineer. Industry surveys consistently report multi-day provisioning cycles for a single managed database, a sizable share of senior-engineer time burned on routine infrastructure, and several billion dollars of annual cloud spend wasted on misconfiguration and over-provisioning (see Flexera State of the Cloud 2024 and the DORA / Stack Overflow developer surveys for the underlying figures). Existing IaC tools (Terraform, Pulumi, CDK) require dedicated expertise — they define resources but don't _operate_ them, and a new hire cannot safely deploy production infra without mentorship.
+The workspace packages are `"private": true` — nothing is published to npm yet. Build from source and link the CLI into your `$PATH`:
 
-**Target user — "Mara, the solo / small-team AWS operator."** A backend or full-stack engineer who inherited the AWS account. 2–8 years of experience, writes Python and TypeScript, does NOT write HCL or Pulumi day-to-day. Runs a side project or small production account (1–10 engineers, under $10k/mo AWS bill). Tried Terraform once and got stuck on state backends; tried CDK and got stuck on bootstrap. Uses Claude Code or Cursor; respects "local-first, my credentials never leave the box."
+```bash
+git clone https://github.com/SergSlon/assignee-ai.git
+cd assignee-ai
+pnpm install
+pnpm build
+pnpm setup               # pnpm CLI's global-bin bootstrap (writes pnpm bin to $PATH). Reload shell after.
+pnpm link --global        # adds 'assignee' to PATH
 
-**Market sizing _(indicative — derived from public industry surveys; not a committed forecast for the course-submission build)_.**
+assignee setup       # creates operator / reader / auditor IAM users; writes .env (idempotent)
+assignee doctor --short   # sanity-check credentials + Bedrock region
+assignee plan "Create an S3 bucket named my-test-bucket"
+```
 
-| Layer   | Figure      | Definition                                                                        |
-| :------ | :---------- | :-------------------------------------------------------------------------------- |
-| **TAM** | **$50–60B** | Cloud Management Platforms (order-of-magnitude, per Gartner CMP market estimates) |
-| **SAM** | **$5–10B**  | DevOps automation tooling subset                                                  |
-| **SOM** | **~$100M**  | SMB / mid-market reachable in Years 1–3 (order-of-magnitude)                      |
+> **Fallback (without global link):** `node apps/cli/dist/index.js <command>` works identically. You can also alias it: `alias assignee="node $(pwd)/apps/cli/dist/index.js"`.
+
+For the full bootstrap walkthrough see [docs/how-to/quickstart.md](docs/how-to/quickstart.md) and [docs/aws-bootstrap.md](docs/aws-bootstrap.md). AWS SSO users: [docs/how-to/sso-authentication.md](docs/how-to/sso-authentication.md). MCP-server wire-up for Claude Code / Cursor / Windsurf: [docs/mcp-server.md](docs/mcp-server.md).
 
 ---
 
-## 2. Solution
-
-**Infrastructure-as-Intent.** The CLI parses plain English, fetches the live CloudFormation schema, runs an interactive wizard, evaluates the bundled best-practice rule library, prices the result against the AWS Pricing API, and gates the apply behind a human "yes." Resources land tagged in your AWS account; there is no source file to maintain and no state backend to host.
+## First plan example
 
 ```console
 $ assignee plan "Create an S3 bucket named hero-demo-bucket"
@@ -56,52 +61,51 @@ Findings:        5 high, 5 medium (4 fixable)
 Apply now? (AWS::S3::Bucket, est. $0.0230/GB-month) ▸
 ```
 
-**Unique Value Proposition: constrained agency.** The LLM has zero inherent privilege. It _proposes_ desired state; the _system_ enforces IAM scope, cost ceiling, schema strictness, and best-practice gates. You don't trust the model — you trust the cage around it. Contrast: agentic CLIs that hand the model your AWS credentials and a shell — assignee.ai never does that, by design.
+---
 
-**Key differences from existing solutions:**
+## Commands at a glance
 
-|                          | Assignee.ai            | Terraform / CDK        | Pulumi Neo            | CDK + Amazon Q       |
-| :----------------------- | :--------------------- | :--------------------- | :-------------------- | :------------------- |
-| Code artifact            | **None**               | HCL + state            | Pulumi code + state   | CDK code + bootstrap |
-| Pre-apply BP rules       | **Bundled YAML, free** | Sentinel (paid)        | CrossGuard (paid SKU) | cdk-nag add-on       |
-| Plan-time cost preflight | **Live, blocking**     | Plugin / PR-comment    | Plugin                | Manual               |
-| HITL approval gate       | **Built-in**           | None                   | None                  | None                 |
-| Onboarding prereq        | Node + AWS creds       | TF CLI + state backend | Pulumi CLI + backend  | Node + cdk bootstrap |
-| Agent surface (MCP)      | **Same graph as CLI**  | Provider MCPs (read)   | None bundled          | None                 |
+Full reference: [docs/commands.md](docs/commands.md).
 
-These four properties — no code artifact, free BP rules, plan-time cost preflight, and HITL on both CLI and MCP surfaces — are the design intent of the bundle. A tool with three of the four lands closer to one of the existing categories above; assignee.ai ships all four through one shared 14-node graph.
-
-> Comparison reflects bundled defaults of each tool's free / standard tier as of April 2026; paid SKUs and add-ons may close some gaps.
+| Workflow  | Commands                              |
+| :-------- | :------------------------------------ |
+| Provision | `plan`, `apply`                       |
+| Manage    | `list`, `status`, `destroy`, `update` |
+| Detect    | `drift`, `reconcile`                  |
+| Optimise  | `optimize`                            |
+| Configure | `init`, `setup`, `doctor`             |
+| Audit     | `audit-verify`                        |
+| Restore   | `restore-provisions`                  |
+| Discover  | `describe`                            |
+| Shell     | `completions`, `version`              |
 
 ---
 
-## 3. Technical Architecture
+## Configuration
 
-### The LangGraph ↔ MCP pipeline
+Full reference: [docs/configuration.md](docs/configuration.md).
 
-```
-User intent (CLI or MCP server)
-        │
-        ▼
-   LangGraph 14-node DAG  ◀──▶  Amazon Nova Lite (Bedrock)
-        │
-        ▼
-   5 AWS MCP servers (Pricing · Docs · IAM · WA-Security · Billing)
-        │
-        ▼
-   AWS Cloud Control API  ──▶  Tagged resource
-```
+Most common env vars:
 
-```
-intent_parser → schema_fetcher → option_elicitor → compound_dispatcher
-  → plan_generator → validate_desired_state → advice_generator
-  → bp_evaluator → fix_applicator → preflight_guard → human_approval ─[HITL]─
-  → resource_provisioner → status_poller → result_formatter
-```
+| Variable                              | Purpose                                              |
+| :------------------------------------ | :--------------------------------------------------- |
+| `ASSIGNEE_OPERATOR_ACCESS_KEY_ID`     | Least-privilege key for write operations             |
+| `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` | Paired secret                                        |
+| `AWS_REGION`                          | Target region (falls back to `us-east-1`)            |
+| `ASSIGNEE_COST_CEILING_USD`           | Hard monthly cost ceiling — blocks apply above limit |
+| `ASSIGNEE_VERBOSITY`                  | `verbose` to show JSON logs on stderr                |
 
-Source of truth: [`packages/core/src/graph/create-graph.ts`](packages/core/src/graph/create-graph.ts). Compound patterns loop `plan_generator → result_formatter` per resource in dependency order.
+Run `assignee init` to create a `.assignee/config.yaml` with region, tags, and auto-fix preferences. Run `assignee init --global` for user-wide defaults.
 
-### Compound architecture patterns
+---
+
+## Supported AWS resource types
+
+Run `assignee plan --help` to discover all supported types and compound patterns in the running build. Full reference: [docs/resource-types.md](docs/resource-types.md).
+
+---
+
+## Compound patterns
 
 Multi-resource intents detected by keyword matching at zero LLM latency, then provisioned in dependency order. Source of truth: [`packages/core/src/pattern-templates/index.ts`](packages/core/src/pattern-templates/index.ts).
 
@@ -121,103 +125,11 @@ Multi-resource intents detected by keyword matching at zero LLM latency, then pr
 | Scheduled Lambda   | IAM Role → Lambda → EventBridge Rule (cron)           | "scheduled lambda", "cron lambda"                 |
 | Lambda + Exec Role | IAM Role → Lambda (minimal auto-exec-role)            | "create a lambda", "create a function"            |
 
-### Components & technology rationale
-
-| Component                | Choice                                                                | Why                                                                                                                                                                                                                        |
-| :----------------------- | :-------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Orchestration**        | [`@langchain/langgraph`](https://langchain-ai.github.io/langgraphjs/) | Typed state machine; deterministic node routing; built-in HITL interrupts. Fits a graph that mixes LLM + deterministic + human steps.                                                                                      |
-| **LLM (default)**        | `bedrock/amazon.nova-lite-v1:0`                                       | ~10× cheaper than GPT-4o for schema-shaped tasks; native CloudTrail audit via `bedrock:InvokeModel`.                                                                                                                       |
-| **LLM gateway**          | [Vercel AI SDK](https://sdk.vercel.ai/)                               | Multi-provider (Bedrock / Anthropic / OpenAI / Google / Ollama) — operator can swap if Bedrock is unavailable in their region.                                                                                             |
-| **Schema validation**    | Zod `.strict()` everywhere                                            | Hallucinated fields throw immediately; LLM self-corrects on the next turn. Same Zod types serve CLI prompts and MCP tool schemas.                                                                                          |
-| **AWS plane**            | Cloud Control API + 5 MCP servers                                     | One CRUD interface for ~1000 CFN types; MCP servers for pricing / docs / IAM / WA-Security / billing. CFN schemas fetched directly via SDK (Epic 31).                                                                      |
-| **Monorepo**             | Turborepo + pnpm workspaces                                           | `packages/core` is single-source for the graph and Zod schemas; CLI + MCP server import the same `createGraph()`.                                                                                                          |
-| **Best-practice engine** | YAML rules + pure-function evaluator                                  | Each rule cites its source (FSBP, Well-Architected, AWS docs). Evaluation runs in <10 ms; new rule lands in ~45 minutes. Live count: see [`packages/best-practices/manifest.json`](packages/best-practices/manifest.json). |
-| **Memory**               | JSON files in `~/.assignee/`                                          | `provisions.json` (managed-resource registry), `failures.json` (mistake log), `patterns.json` (learned patterns). Local-first; HMAC-chained audit log.                                                                     |
-| **Terminal UX**          | `@clack/prompts` + `chalk` + `boxen`                                  | Idiomatic clack wizard for the elicitor; box-drawn plan output that pastes cleanly into chat tools.                                                                                                                        |
-
-**Safety sandwich.** Six independent guardrails wrap every apply: Zod-strict schemas, prompt-injection guard (Bedrock Guardrails — deny topics `iam-privilege-escalation`, `credential-exfiltration`), pre-flight cost circuit breaker, IAM least-privilege role separation (`ASSIGNEE_OPERATOR_*` / `ASSIGNEE_READER_*` / `ASSIGNEE_AUDITOR_*`), state guard (read-before-write rejects stale plans), and the HITL gate.
-
-**Repo layout (abbreviated):**
-
-```
-apps/cli            — Commander CLI; thin shim over @assignee/core
-apps/mcp-server     — stdio MCP server; same createGraph() as the CLI
-packages/core       — graph, nodes, ports, plugins, destroy strategies, pricing
-packages/best-practices — YAML rule library + evaluation engine
-```
-
-For the full layout, see [docs/architecture.md](docs/architecture.md).
-
 ---
 
-## 4. Business Model & Metrics
+## Troubleshooting
 
-### Monetization — Open Core (Terraform / Pulumi / Infracost playbook)
-
-| Tier                            | Audience                     | Includes                                                                                  |
-| :------------------------------ | :--------------------------- | :---------------------------------------------------------------------------------------- |
-| **Free CLI** _(MIT, this repo)_ | Solo operators / small teams | All resource types · compound patterns · best-practice library · JSON memory · MCP server |
-| **Pro** _(future)_              | Power users                  | Unlimited plans · priority models · advanced patterns                                     |
-| **Team** _(future SaaS)_        | Eng teams                    | Shared org policies · audit log · RBAC · drift dashboard                                  |
-| **Enterprise** _(future SaaS)_  | Regulated buyers             | SSO/SAML · industry-aligned compliance posture · operational SLA · multi-cloud            |
-
-The free CLI stays MIT-licensed forever. The paid tiers are a future direction, not a price list — concrete pricing is intentionally not committed at the course-submission stage. Distribution flywheel: free CLI adoption → MCP server distribution via Claude Code / Cursor / Windsurf → power users convert to paid → enterprise upsell on compliance and scale.
-
-### KPIs (3 primary technical, 2 distribution)
-
-|   #   | KPI                                                                                  | Target                                      | Current status                                                                                                                                                                  |
-| :---: | :----------------------------------------------------------------------------------- | :------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **1** | Time-to-resource (single-resource happy path: bucket / queue / table)                | **≤ 5 min**                                 | ~4 min 12 s on `Create an S3 bucket` (S3 + IAM + Lambda paths benchmarked)                                                                                                      |
-| **2** | Pre-flight cost-check pass rate (zero bill-shock incidents)                          | **100%**                                    | 100% — enforced by architecture; preflight blocks plans with no live price                                                                                                      |
-| **3** | Best-practice violations caught before provisioning                                  | **≥ 80%** of detectable violations          | Bundled rule library covering FSBP + Well-Architected; <10 ms evaluation per plan. Live count: [`packages/best-practices/manifest.json`](packages/best-practices/manifest.json) |
-| **4** | Plan acceptance rate (operator approves without `--set` overrides)                   | **≥ 90%**                                   | Design intent — measurement infrastructure deferred to Phase 2 (no telemetry hook captures `--set` overrides today)                                                             |
-| **5** | Adoption (npm weekly downloads) — _post-publication distribution KPI (Phase 2 gate)_ | **≥ 1 000** within 90 days of public launch | Not yet published — Phase 2 target                                                                                                                                              |
-
-**Engineering health (sanity floor, not a KPI):** vitest suite runs across all four workspace packages on every commit; CI green on Ubuntu, macOS, and Windows. Run `pnpm -r test:coverage` for the current case count and line coverage.
-
----
-
-## 5. Roadmap
-
-| Window             | Phase                                                       | Scope                                                                                                                                       |
-| :----------------- | :---------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------ |
-| Feb 2026           | **Phase 0 — POC** ✅                                        | CLI + LangGraph loop · Bedrock + Cloud Control · S3 / SSM / IAM Role                                                                        |
-| Mar – Apr 2026     | **Phase 1 — CLI-first MVP** ✅                              | Sprints A–E · `list` / `destroy` / `status` / `drift` / `reconcile` · intelligence layer · MCP server · cross-platform CI                   |
-| **May – Jul 2026** | **Phase 2 — Distribution** _(short-term, next 3 months)_    | npm + Homebrew packages · GitHub Action · MCP-server registries (Cursor / Claude Code) · "Show HN" launch · onboarding polish to hit KPI #5 |
-| H2 2026 – H1 2027  | **Phase 3 — SaaS control plane** _(long-term, 6–12 months)_ | Auth · org-wide policy engine · audit log · SSO/SAML · drift dashboard · Team / Enterprise tier features                                    |
-| 2027+              | **Phase 4 — Multi-cloud** _(post-traction)_                 | Provider abstraction (GCP / Azure) once SAM penetration validates the AWS-only thesis                                                       |
-
-**Key scaling milestones (gates between phases):**
-
-1. **1 000 npm weekly downloads** — validates the free-CLI distribution thesis (KPI #5); gates investment in paid tiers.
-2. **First 10 conversions to a paid tier** — validates the conversion hypothesis on a pure-CLI surface.
-3. **First team deployment with audit log + RBAC** — validates the SaaS control-plane premise; gates Phase 3 work.
-4. **First regulated-buyer engagement** — validates the regulated-buyer hypothesis that justifies the local-first / no-SaaS-platform-fee posture.
-
----
-
-## Install & quick start
-
-This is the course-submission build — sources are MIT-licensed; nothing is published to npm yet.
-
-```bash
-# 1. Clone and build
-git clone https://github.com/SergSlon/assignee-ai.git
-cd assignee-ai && pnpm install && pnpm build
-
-# 2. One-shot AWS bootstrap — creates the operator / reader / auditor IAM
-#    users, attaches least-privilege policies, and writes a .env file. Needs
-#    admin/root AWS creds (or a profile via --profile). Idempotent.
-node apps/cli/dist/index.js setup
-
-# 3. Sanity-check the local environment
-node apps/cli/dist/index.js doctor --short
-
-# 4. First plan — no AWS write happens until you confirm at the HITL gate
-node apps/cli/dist/index.js plan "Create an S3 bucket named my-test-bucket"
-```
-
-For the full bootstrap walkthrough see [docs/how-to/quickstart.md](docs/how-to/quickstart.md) and [docs/aws-bootstrap.md](docs/aws-bootstrap.md). AWS SSO users: [docs/how-to/sso-authentication.md](docs/how-to/sso-authentication.md). MCP-server wire-up for Claude Code / Cursor / Windsurf: [docs/mcp-server.md](docs/mcp-server.md).
+Exit codes, error-class playbook, and common remediation steps: [docs/troubleshooting.md](docs/troubleshooting.md).
 
 ---
 
@@ -253,7 +165,7 @@ Docs follow the [Diátaxis](https://diataxis.fr/) framework. Top-level entry poi
 
 | Topic                                                                                  | Where                                                                                    |
 | :------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------- |
-| Monorepo layout + 14-node graph + hexagonal ports                                      | [docs/architecture.md](docs/architecture.md)                                             |
+| Monorepo layout + 15-node graph + hexagonal ports                                      | [docs/architecture.md](docs/architecture.md)                                             |
 | End-to-end flow diagrams (plan / apply / destroy / drift)                              | [docs/architecture-flows.md](docs/architecture-flows.md)                                 |
 | How CLI, MCP server, and `@assignee/core` fit together                                 | [docs/integration-architecture.md](docs/integration-architecture.md)                     |
 | What the AI parts actually do (LLM callsites, MCP servers, BP engine, HITL)            | [docs/explanation/ai-architecture.md](docs/explanation/ai-architecture.md)               |
@@ -266,18 +178,124 @@ Docs follow the [Diátaxis](https://diataxis.fr/) framework. Top-level entry poi
 
 ---
 
-## Presentation
+## Architecture
 
-The course-submission pitch deck for this project (10 slides, dark tech-talk theme):
+### The 15-node pipeline
 
-- **Live**: <https://sergslon.github.io/assignee-ai/presentation/> — served via GitHub Pages directly from `main`.
-- **Source in repo**: [presentation/index.html](presentation/index.html) — single self-contained HTML file (~94 KB, no external assets except Google Fonts).
+```
+User intent (CLI or MCP server)
+        │
+        ▼
+   LangGraph 15-node DAG  ◀──▶  Amazon Nova Lite (Bedrock)
+        │
+        ▼
+   5 AWS MCP servers (Pricing · Docs · IAM · WA-Security · Billing)
+        │
+        ▼
+   AWS Cloud Control API  ──▶  Tagged resource
+```
 
-Navigation: ← / → / Space. Text is selectable.
+Nodes in source order ([`packages/core/src/graph/create-graph.ts`](packages/core/src/graph/create-graph.ts)):
+
+```
+intent_parser → schema_fetcher → option_elicitor → compound_dispatcher
+  → plan_generator → validate_desired_state → advice_generator
+  → preflight_guard → human_approval [HITL]
+  → resource_provisioner → status_poller → bp_evaluator
+  → fix_applicator → result_formatter → query_handler
+```
+
+Compound patterns loop `plan_generator → result_formatter` per resource in dependency order. `query_handler` serves QUERY_INTENT requests without entering the provision flow. Full architecture: [docs/architecture.md](docs/architecture.md).
+
+### Components
+
+| Component                | Choice                                                                | Why                                                                                                                                                                                     |
+| :----------------------- | :-------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Orchestration**        | [`@langchain/langgraph`](https://langchain-ai.github.io/langgraphjs/) | Typed state machine; deterministic node routing; built-in HITL interrupts.                                                                                                              |
+| **LLM (default)**        | `bedrock/amazon.nova-lite-v1:0`                                       | ~10× cheaper than GPT-4o for schema-shaped tasks; native CloudTrail audit via `bedrock:InvokeModel`.                                                                                    |
+| **LLM gateway**          | [Vercel AI SDK](https://sdk.vercel.ai/)                               | Multi-provider (Bedrock / Anthropic / OpenAI / Google / Ollama) — operator can swap if Bedrock is unavailable.                                                                          |
+| **Schema validation**    | Zod `.strict()` everywhere                                            | Hallucinated fields throw immediately; LLM self-corrects on the next turn.                                                                                                              |
+| **AWS plane**            | Cloud Control API + 5 MCP servers                                     | One CRUD interface for ~1000 CFN types; MCP servers for pricing / docs / IAM / WA-Security / billing.                                                                                   |
+| **Monorepo**             | Turborepo + pnpm workspaces                                           | `packages/core` is single-source for the graph and Zod schemas; CLI + MCP server import the same `createGraph()`.                                                                       |
+| **Best-practice engine** | YAML rules + pure-function evaluator                                  | Each rule cites its source (FSBP, Well-Architected, AWS docs). Evaluation runs in <10 ms. Live count: [`packages/best-practices/manifest.json`](packages/best-practices/manifest.json). |
+| **Memory**               | JSON files in `~/.assignee/`                                          | `provisions.json` (managed-resource registry), `failures.json` (mistake log), `patterns.json` (learned patterns). Local-first; HMAC-chained audit log.                                  |
+| **Terminal UX**          | `@clack/prompts` + `chalk` + `boxen`                                  | Idiomatic clack wizard for the elicitor; box-drawn plan output that pastes cleanly into chat tools.                                                                                     |
+
+**Repo layout (abbreviated):**
+
+```
+apps/cli            — Commander CLI; thin shim over @assignee/core
+apps/mcp-server     — stdio MCP server; same createGraph() as the CLI
+packages/core       — graph, nodes, ports, plugins, destroy strategies, pricing
+packages/best-practices — YAML rule library + evaluation engine
+```
+
+**Safety sandwich.** Six independent guardrails wrap every apply: Zod-strict schemas, prompt-injection guard (Bedrock Guardrails), pre-flight cost circuit breaker, IAM least-privilege role separation, state guard (read-before-write rejects stale plans), and the HITL gate.
 
 ---
 
-## License · Contributing · Security
+## How it differs from Terraform / CDK / Pulumi
+
+|                          | Assignee.ai            | Terraform / CDK        | Pulumi Neo            | CDK + Amazon Q       |
+| :----------------------- | :--------------------- | :--------------------- | :-------------------- | :------------------- |
+| Code artifact            | **None**               | HCL + state            | Pulumi code + state   | CDK code + bootstrap |
+| Pre-apply BP rules       | **Bundled YAML, free** | Sentinel (paid)        | CrossGuard (paid SKU) | cdk-nag add-on       |
+| Plan-time cost preflight | **Live, blocking**     | Plugin / PR-comment    | Plugin                | Manual               |
+| HITL approval gate       | **Built-in**           | None                   | None                  | None                 |
+| Onboarding prereq        | Node + AWS creds       | TF CLI + state backend | Pulumi CLI + backend  | Node + cdk bootstrap |
+| Agent surface (MCP)      | **Same graph as CLI**  | Provider MCPs (read)   | None bundled          | None                 |
+
+These four properties — no code artifact, free BP rules, plan-time cost preflight, and HITL on both CLI and MCP surfaces — are the design intent of the bundle. The 15-node graph delivers all four through one shared pipeline.
+
+> Comparison reflects bundled defaults of each tool's free / standard tier as of April 2026; paid SKUs and add-ons may close some gaps.
+
+---
+
+## Why this exists (vision · market · problem)
+
+**The problem.** Cloud Ops is broken for the developer who is not a platform engineer. Multi-day provisioning cycles, senior-engineer time burned on routine infrastructure, and cloud spend wasted on misconfiguration and over-provisioning are endemic. Existing IaC tools (Terraform, Pulumi, CDK) require dedicated expertise — they define resources but don't _operate_ them.
+
+**Target user — "Mara, the solo / small-team AWS operator."** A backend or full-stack engineer who inherited the AWS account. Uses Claude Code or Cursor; respects "local-first, my credentials never leave the box." Tried Terraform once and got stuck on state backends.
+
+**Unique Value Proposition: constrained agency.** The LLM has zero inherent privilege. It _proposes_ desired state; the _system_ enforces IAM scope, cost ceiling, schema strictness, and best-practice gates. You don't trust the model — you trust the cage around it. Contrast: agentic CLIs that hand the model your AWS credentials and a shell — assignee.ai never does that, by design.
+
+---
+
+## Roadmap
+
+| Window             | Phase                                            | Scope                                                                                                                     |
+| :----------------- | :----------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------ |
+| Feb 2026           | **Phase 0 — POC** ✅                             | CLI + LangGraph loop · Bedrock + Cloud Control · S3 / SSM / IAM Role                                                      |
+| Mar – Apr 2026     | **Phase 1 — CLI-first MVP** ✅                   | Sprints A–E · `list` / `destroy` / `status` / `drift` / `reconcile` · intelligence layer · MCP server · cross-platform CI |
+| **May – Jul 2026** | **Phase 2 — Distribution** _(next 3 months)_     | npm + Homebrew packages · GitHub Action · MCP-server registries · "Show HN" launch · onboarding polish                    |
+| H2 2026 – H1 2027  | **Phase 3 — SaaS control plane** _(6–12 months)_ | Auth · org-wide policy engine · audit log · SSO/SAML · drift dashboard · Team / Enterprise tier features                  |
+| 2027+              | **Phase 4 — Multi-cloud** _(post-traction)_      | Provider abstraction (GCP / Azure) once SAM penetration validates the AWS-only thesis                                     |
+
+---
+
+## Business model
+
+| Tier                            | Audience                     | Includes                                                                                  |
+| :------------------------------ | :--------------------------- | :---------------------------------------------------------------------------------------- |
+| **Free CLI** _(MIT, this repo)_ | Solo operators / small teams | All resource types · compound patterns · best-practice library · JSON memory · MCP server |
+| **Pro** _(future)_              | Power users                  | Unlimited plans · priority models · advanced patterns                                     |
+| **Team** _(future SaaS)_        | Eng teams                    | Shared org policies · audit log · RBAC · drift dashboard                                  |
+| **Enterprise** _(future SaaS)_  | Regulated buyers             | SSO/SAML · industry-aligned compliance posture · operational SLA · multi-cloud            |
+
+The free CLI stays MIT-licensed forever. Distribution flywheel: free CLI adoption → MCP server distribution via Claude Code / Cursor / Windsurf → power users convert to paid → enterprise upsell on compliance and scale.
+
+---
+
+## Presentation
+
+The course-submission pitch deck (10 slides, dark tech-talk theme):
+
+- **Live**: <https://sergslon.github.io/assignee-ai/presentation/>
+- **Source**: [presentation/index.html](presentation/index.html)
+
+---
+
+## License · Contributing · Security · Changelog
 
 - **License:** MIT — see [LICENSE](LICENSE).
 - **Changelog:** see [CHANGELOG.md](CHANGELOG.md).
