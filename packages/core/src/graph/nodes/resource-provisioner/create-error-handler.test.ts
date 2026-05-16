@@ -91,9 +91,11 @@ describe("handleCreateError", () => {
     ).toBe(PROVISIONING_ERROR_CODES.THROTTLED);
   });
 
-  it("surfaces raw adapter message for ACCESS_DENIED (UNKNOWN dispatch bucket)", async () => {
-    // ACCESS_DENIED falls through to UNKNOWN semantics: surface the adapter's
-    // raw message verbatim so the user sees the actual IAM reason.
+  it("surfaces raw adapter message for ACCESS_DENIED via the ACCESS_DENIED dispatch bucket", async () => {
+    // Story 108-A-02 DF-A4/D6: ACCESS_DENIED kind now maps to ACCESS_DENIED code
+    // (was UNKNOWN before the round-1 dispatch remap).
+    // The enricher surfaces assignee audit-verify + assignee setup hints alongside
+    // the adapter's raw message so the user sees the actual IAM reason.
     const raw =
       "AccessDenied: User: arn:aws:iam::123456789012:user/dev is not authorized to perform iam:CreateRole";
     const result = await handleCreateError({
@@ -108,7 +110,7 @@ describe("handleCreateError", () => {
     expect(result.errorMessage).toContain(raw);
     expect(
       (result.error as { provisioningCode?: string })?.provisioningCode,
-    ).toBe(PROVISIONING_ERROR_CODES.UNKNOWN);
+    ).toBe(PROVISIONING_ERROR_CODES.ACCESS_DENIED);
   });
 
   it("ALWAYS surfaces desiredState back to the reducer on failure (invariant H9)", async () => {

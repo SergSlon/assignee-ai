@@ -115,15 +115,12 @@ describe("classifyCreateError", () => {
       expect(result.shortMessage).toBe("Unable to locate credentials.");
     });
 
-    it("maps ACCESS_DENIED with 'not authorized' to UNKNOWN code with `assignee setup` hint + raw", () => {
-      // DF-A4-partial / DF-D5: AWS denials from a stale operator policy
-      // (or a truly-missing action) used to show "An unclassified error
-      // was encountered" — useless for the user. The classifier now
-      // routes any UNKNOWN-mapped kind whose raw message contains
-      // "is not authorized to perform" through enrichForUserPrefix /
-      // enrichForShortMessage, which prepends an `assignee setup` hint
-      // AND preserves the original AWS message for grep / support
-      // tickets.
+    it("maps ACCESS_DENIED with 'not authorized' to ACCESS_DENIED code with `assignee setup` hint + raw", () => {
+      // DF-A4/D6 fix: ACCESS_DENIED kind now maps to ACCESS_DENIED errorCode
+      // (was UNKNOWN — a pre-fix regression). The enricher surfaces the
+      // `assignee setup` hint (since "is not authorized to perform" matches
+      // the NOT_AUTHORIZED_SUBSTRING sub-pattern inside the access-denied
+      // enricher) AND preserves the original AWS message for grep / support.
       const rawMsg =
         "User: arn:aws:iam::112233445566:user/dev is not authorized to perform: ec2:RunInstances";
       const result = classifyCreateError(
@@ -134,7 +131,8 @@ describe("classifyCreateError", () => {
         "AWS::EC2::Instance",
       );
 
-      expect(result.errorCode).toBe(PROVISIONING_ERROR_CODES.UNKNOWN);
+      // DF-A4/D6: errorCode must now be ACCESS_DENIED, not UNKNOWN.
+      expect(result.errorCode).toBe(PROVISIONING_ERROR_CODES.ACCESS_DENIED);
       // Actionable guidance present in both surfaces.
       expect(result.userPrefix).toContain("assignee setup");
       expect(result.userPrefix).toContain("CreatePolicyVersion");
