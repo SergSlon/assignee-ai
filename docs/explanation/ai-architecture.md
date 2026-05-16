@@ -7,7 +7,7 @@
 ## Table of contents
 
 - [1. What AI does in this project](#1-what-ai-does-in-this-project)
-- [2. The 14-node pipeline, at a glance](#2-the-14-node-pipeline-at-a-glance)
+- [2. The 15-node pipeline, at a glance](#2-the-15-node-pipeline-at-a-glance)
 - [3. Node classification — LLM / MCP / rule / plumbing](#3-node-classification--llm--mcp--rule--plumbing)
 - [4. The LLM layer — providers, sanitization, cost](#4-the-llm-layer--providers-sanitization-cost)
 - [5. The MCP layer — five MCP servers (2 core, 3 optional)](#5-the-mcp-layer--five-mcp-servers-2-core-3-optional)
@@ -40,9 +40,9 @@ Everything else that _feels_ AI-ish is not:
 
 The architectural rule: **LLMs translate, MCP servers report, rules enforce, humans authorize.** A mistake in any one layer is caught by the next.
 
-## 2. The 14-node pipeline, at a glance
+## 2. The 15-node pipeline, at a glance
 
-`packages/core/src/graph/create-graph.ts` declares 14 nodes in a LangGraph `StateGraph`. <!-- doc-lint: node-count --> Pipeline shape (abbreviated — full routing in §3):
+`packages/core/src/graph/create-graph.ts` declares 15 nodes in a LangGraph `StateGraph`. <!-- doc-lint: node-count --> Pipeline shape (abbreviated — full routing in §3):
 
 ```
           ┌──────────────────── Phase 1: planning ─────────────────────┐
@@ -102,8 +102,9 @@ Each node is classified by what it _consumes_. The point is to show that only th
 | 12  | `resource_provisioner`   | —                             | —                                            | —                                                      | CloudControl `CreateResource`. Writes `requestToken` + `resourceArn` into state.                                                                                                                                                                               |
 | 13  | `status_poller`          | —                             | —                                            | —                                                      | Polls CloudControl until the request is terminal. Self-loops with `POLL_INTERVAL_MS = 2_000` (see `status-poller.ts:22`). Extended timeout (`20 * 60 * 1000`) for slow resources like CloudFront / RDS.                                                        |
 | 14  | `result_formatter`       | —                             | —                                            | —                                                      | Terminal rendering. Routes to `SUCCESS` / `FAILED` / `CANCELLED` / plan-mode formatters. Emits `BP_BLOCKED` envelope when a blocking BP finding prevented provisioning.                                                                                        |
+| 15  | `query_handler`          | —                             | —                                            | —                                                      | Query-intent routing branch. Reached from `intent_parser` when `executionStatus === QUERY_INTENT` (see `graph-routing.ts:34/37`). Handles read-only queries (e.g. "what resources do I have?") without entering the creation pipeline.                         |
 
-**Plumbing nodes** (classified neither as LLM nor MCP): `schema_fetcher`, `compound_dispatcher`, `validate_desired_state`, `human_approval`, `resource_provisioner`, `status_poller`, `fix_applicator`, `result_formatter`. More than half the pipeline is deterministic.
+**Plumbing nodes** (classified neither as LLM nor MCP): `schema_fetcher`, `compound_dispatcher`, `validate_desired_state`, `human_approval`, `resource_provisioner`, `status_poller`, `fix_applicator`, `result_formatter`, `query_handler`. More than half the pipeline is deterministic.
 
 **LLM callsites — four total**: `intent_parser`, `workload_classifier` (invoked from `option_elicitor`), `plan_generator`, `advice_generator`. The `option_elicitor` row above is the easy one to miss — its LLM use is delegated to `classifyWorkload`, which carries its own `"workload_classifier"` callsite for token-cost grepping.
 
@@ -306,7 +307,7 @@ So far we've talked about the MCP servers the pipeline _consumes_. The project a
 4. **`estimate_cost`** (`estimate-cost.ts:49+`) — fast-path pricing lookup via `PricingStrategyRegistry`. Doesn't run the full graph.
 5. **`destroy_resource`** (`destroy-resource.ts:15-48`) — safely deletes a resource by ARN or slug. Requires `confirmed: true`.
 
-All 5 are registered at `apps/mcp-server/src/tools/index.ts:15-21`. They go through the same 14-node graph as the CLI, which means the HITL interrupt fires _inside the MCP server call_ — an agent calling `apply_plan` without `confirmed: true` gets a rejection, not a silent provision.
+All 5 are registered at `apps/mcp-server/src/tools/index.ts:15-21`. They go through the same 15-node graph as the CLI, which means the HITL interrupt fires _inside the MCP server call_ — an agent calling `apply_plan` without `confirmed: true` gets a rejection, not a silent provision.
 
 ## 8.6. Hexagonal port surface, persistence, and observability
 
@@ -341,7 +342,7 @@ Four ports were added to `packages/core/` (totaling seven ports across the packa
 
 ### Telemetry pipeline
 
-`OTEL_FIELD_ALLOWLIST` + `FIELD_PRIVACY_MAP` source-side allowlist (`otel-allowlist.ts`) with `@privacy: PII | SYSTEM | OPERATIONAL` classification. Per-graph-node spans (`telemetry/spans.ts`) at 13/14 node entry + exit. `redactLogContent()` line-by-line filter wired into the CI artefact-upload scrub (`scripts/scrub-logs-for-upload.ts`). See `docs/explanation/telemetry-design.md` for the full observability pipeline.
+`OTEL_FIELD_ALLOWLIST` + `FIELD_PRIVACY_MAP` source-side allowlist (`otel-allowlist.ts`) with `@privacy: PII | SYSTEM | OPERATIONAL` classification. Per-graph-node spans (`telemetry/spans.ts`) at 14/15 node entry + exit. `redactLogContent()` line-by-line filter wired into the CI artefact-upload scrub (`scripts/scrub-logs-for-upload.ts`). See `docs/explanation/telemetry-design.md` for the full observability pipeline.
 
 ---
 

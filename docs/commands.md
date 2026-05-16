@@ -33,6 +33,7 @@ are the user-facing subset.
 | [`completions`](#completions)               | Output shell completion scripts                                          |
 | [`audit-verify`](#audit-verify)             | Verify the integrity of the on-disk audit log chain                      |
 | [`restore-provisions`](#restore-provisions) | Restore the provision registry from a backup snapshot                    |
+| [`update`](#update)                         | Re-sync a deployed static website to S3 and invalidate CloudFront        |
 | [`version`](#version)                       | Print the CLI's version string                                           |
 | [`describe`](#describe)                     | Self-describe blob suitable for bug reports                              |
 
@@ -290,6 +291,51 @@ assignee destroy <resource> [options]
 assignee destroy arn:aws:s3:::my-bucket
 assignee destroy my-bucket
 assignee destroy --yes arn:aws:lambda:us-east-1:123456789012:function:my-fn
+```
+
+### update
+
+Refresh a deployed static-website: upload new files to S3 and invalidate CloudFront.
+
+```
+assignee update <target> [options]
+```
+
+**Arguments:**
+
+| Argument | Description                                                               |
+| -------- | ------------------------------------------------------------------------- |
+| `target` | Bucket name, S3 ARN, or runId of the static-website to refresh. Required. |
+
+**Options:**
+
+| Flag                           | Description                                                                                 | Default |
+| ------------------------------ | ------------------------------------------------------------------------------------------- | ------- |
+| `-s, --source <path>`          | Path to local directory containing the new site files (required)                            | -       |
+| `--delete`                     | Delete remote objects that have no local counterpart (default: OFF — additive uploads only) | false   |
+| `--invalidation-paths <paths>` | Comma-separated paths to invalidate on CloudFront (default: `/*`)                           | `/*`    |
+| `--no-invalidation`            | Skip CloudFront cache invalidation entirely                                                 | false   |
+| `--wait`                       | Poll until invalidation Status === `Completed` (typically 1–5 min)                          | false   |
+| `-y, --yes`                    | Skip confirmation prompt (for CI/CD)                                                        | false   |
+| `-o, --output <format>`        | Output format (`json` or `text`)                                                            | `text`  |
+| `--json`                       | Shorthand for `--output json` (emit machine-readable envelope)                              | false   |
+
+**Behavior:**
+
+Replaces the manual `aws s3 sync && aws cloudfront create-invalidation` two-step. Uploads all files from `--source` to the target S3 bucket (with `--delete`, orphaned remote objects are removed), then creates a CloudFront invalidation for the fronting distribution. Without `--no-invalidation`, the invalidation is always submitted; without `--wait`, the command returns as soon as the invalidation is created rather than polling for completion.
+
+**Prerequisites:**
+
+Operator IAM policy must include: `s3:PutObject`, `s3:ListBucket`, `cloudfront:CreateInvalidation`, `cloudfront:ListDistributions`; plus `s3:DeleteObject` when `--delete` is used; plus `cloudfront:GetInvalidation` when `--wait` is used. Run `assignee setup` to provision the operator role.
+
+**Examples:**
+
+```bash
+assignee update my-marketing-site --source ./dist
+assignee update my-marketing-site --source ./dist --delete
+assignee update arn:aws:s3:::my-marketing-site --source ./dist --invalidation-paths "/index.html,/css/*"
+assignee update <runId-uuid> --source ./dist --no-invalidation
+assignee update my-marketing-site --source ./dist --wait --yes --json
 ```
 
 ---
@@ -636,7 +682,7 @@ assignee doctor [options]
 **Checks (each capped at 5 s):**
 
 1. **Credentials** — for each of `operator` / `reader` / `auditor`: env-var presence, access-key shape (`AKIA…` or `ASIA…`), live `sts:GetCallerIdentity`. Reports the resolved Account + ARN per role.
-2. **Bedrock / LLM** — invokes the configured LLM (`ASSIGNEE_LLM_DEFAULT`, defaults to `bedrock/amazon.nova-lite-v1:0`) with the prompt `"hello"`. If `BEDROCK_GUARDRAIL_ID` is set, the guardrail is reported in the section header.
+2. **Bedrock / LLM** — invokes the configured LLM (`ASSIGNEE_LLM_DEFAULT`, defaults to `bedrock/amazon.nova-lite-v1:0`) with the prompt `"hello"`. If `BEDROCK_GUARDRAIL_ID` is set, the guardrail is reported in the section header. When Bedrock is active and no `BEDROCK_GUARDRAIL_ID` is configured, a **Guardrail [HIGH]** sub-check is emitted as a warning (no runtime content policy means LLM-generated output reaches your infrastructure automation unfiltered). Set `BEDROCK_GUARDRAIL_DISABLE=1` to suppress the warning when the operator has explicitly accepted the risk.
 3. **MCP servers** — launches each pinned MCP server with `--help` to confirm `uvx` can resolve it: pricing, documentation, IAM, well-architected-security, cost-management. Servers whose role credentials are unavailable are reported as warnings (skipped) rather than failures.
 4. **Cache** — inspects `~/.assignee/`: total size, oldest checkpoint age, stale checkpoint count (>72 h), log file count.
 5. **Config** — looks for `assignee.yaml` / `assignee.yml` / `.assignee/config.yaml` in the cwd and confirms it parses as YAML.
@@ -746,16 +792,19 @@ assignee restore-provisions [options]
 
 **Options:**
 
-| Flag            | Description                                                                                                     | Default                                         |
-| --------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
-| `--from <date>` | Restore from the backup whose ISO-8601 date matches `<date>` (e.g. `2026-04-01` → `provisions-2026-04-01.json`) | latest backup file under `~/.assignee/backups/` |
-| `--json`        | Emit the restore result as JSON instead of formatted text                                                       | false                                           |
+| Flag               | Description                                                                                                                                                                                                                                                     | Default                                         |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| `--from <date>`    | Restore from the backup whose ISO-8601 date matches `<date>` (e.g. `2026-04-01` → `provisions-2026-04-01.json`)                                                                                                                                                 | latest backup file under `~/.assignee/backups/` |
+| `--from-audit-log` | Rebuild missing provision records from the HMAC-chained audit log (`~/.assignee/audit/audit.log`). Reads `apply_resource_created` events and appends a reconstructed record for any ARN absent from `provisions.json`. Mutually exclusive with `--from <date>`. | false                                           |
+| `--json`           | Emit the restore result as JSON instead of formatted text                                                                                                                                                                                                       | false                                           |
 
 **Behavior:**
 
 1. Looks under `~/.assignee/backups/` for `provisions-<date>.json` files. With `--from <date>` it picks the file matching that date; otherwise it picks the most recent.
 2. Before overwriting, the existing `~/.assignee/memory/provisions.json` is moved aside as `provisions.json.bak-<timestamp>` (safety copy — never silently destructive).
 3. Replaces `~/.assignee/memory/provisions.json` with the chosen backup file (overwrite-with-safety-copy semantics).
+
+With `--from-audit-log`, the command rebuilds from the HMAC-chained audit log instead of a backup snapshot file. It reads `apply_resource_created` events from `~/.assignee/audit/audit.log` and appends a reconstructed provision record for any ARN that is absent from the current `provisions.json`. This mode is mutually exclusive with `--from <date>` — passing both flags exits with code `73` (`USAGE_ERROR`) before performing any I/O.
 
 The command does **not** read JSONL from stdin and does not accept a positional path argument — the backup location is canonical (`~/.assignee/backups/`). After restoration, run `assignee drift` to verify the restored baseline is consistent with live state.
 
@@ -773,7 +822,7 @@ assignee restore-provisions --json
 
 ### version
 
-Print the CLI's version string. Registered at `apps/cli/src/index.ts:147-150`.
+Print the CLI's version string. Registered at `apps/cli/src/index.ts:171`.
 
 ```
 assignee version
@@ -783,7 +832,7 @@ Outputs the package version of the `assignee` CLI on a single line. No flags. Us
 
 ### describe
 
-Self-describe blob — prints a compact JSON / text snapshot suitable for bug reports (CLI version, Node version, platform, arch, AWS region, audit-key source). Registered at `apps/cli/src/index.ts:147-150` alongside `version`.
+Self-describe blob — prints a compact JSON / text snapshot suitable for bug reports (CLI version, Node version, platform, arch, AWS region, audit-key source). Registered at `apps/cli/src/index.ts:174` alongside `version`.
 
 ```
 assignee describe

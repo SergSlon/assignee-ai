@@ -42,7 +42,7 @@ You need:
   done this before, follow [`../aws-bootstrap.md`](../aws-bootstrap.md)
   first; it sets up the IAM users assignee uses. You can also use
   `aws configure` with an admin profile.
-- **Node.js 22 or later** and **pnpm 9 or later**. Check with
+- **Node.js 20.11 or later** and **pnpm 9 or later**. Check with
   `node --version` and `pnpm --version`.
 - A working terminal you can paste commands into.
 

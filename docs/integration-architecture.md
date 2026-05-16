@@ -54,7 +54,7 @@ The shared foundation. Contains **zero business logic** -- only types, data, and
 
 **Provides to both CLI and MCP server:**
 
-- 14-node LangGraph pipeline (`createGraph()` + every node implementation under `packages/core/src/graph/nodes/`); both apps consume it directly. `apps/cli/src/services/graph.ts` and `apps/cli/src/nodes/` are thin re-export shims for backward compatibility.
+- 15-node LangGraph pipeline (`createGraph()` + every node implementation under `packages/core/src/graph/nodes/`); both apps consume it directly. `apps/cli/src/services/graph.ts` and `apps/cli/src/nodes/` are thin re-export shims for backward compatibility.
 - All 38 user-addressable resource type constants and type definitions (36 with dedicated plugins + 2 compound-only that fall through to the generic plugin)
 - Resource plugin registry (38 registered plugins — 37 type-specific + 1 generic fallback; the two compound-only types `EC2::VPCGatewayAttachment` and `EC2::SubnetRouteTableAssociation` share the generic) <!-- doc-lint: plugin-count -->. The runtime SSOT for the supported-type list is `packages/core/src/config/resource-types/supported.ts`.
 - Pattern template registry (13 compound architecture patterns)
@@ -76,7 +76,7 @@ The shared foundation. Contains **zero business logic** -- only types, data, and
 - Audit log (`packages/core/src/audit/`) — HMAC-chain, verifier, per-tenant key
 - RBAC scaffolding (`packages/core/src/rbac/`) — Zod policy schema, in-memory + file adapters, five fixtures
 - Partition-aware provisioner (`packages/core/src/provisioning/`) — CCAPI partition matrix + SDK-direct routing for GovCloud/China/ISO
-- Telemetry spans (`packages/core/src/telemetry/spans.ts`) — per-graph-node entry/exit spans for 13/14 nodes
+- Telemetry spans (`packages/core/src/telemetry/spans.ts`) — per-graph-node entry/exit spans for 14/15 nodes
 - OTEL source-side allowlist (`packages/core/src/telemetry/otel-allowlist.ts`) — `OTEL_FIELD_ALLOWLIST` with `@privacy` classification and W1 sensitive-field scrub composition
 
 ### CLI (`apps/cli/`)
@@ -157,7 +157,7 @@ The MCP server's only workspace runtime deps are `@assignee/core` and
 on the CLI workspace package was retired during the dependency
 inversion refactor). Through `@assignee/core` the MCP server accesses:
 
-- `createGraph()` and every node implementation (all 14 nodes live
+- `createGraph()` and every node implementation (all 15 nodes live
   under `packages/core/src/graph/nodes/`; `apps/cli/src/nodes/` is
   shim-only) <!-- doc-lint: node-count -->
 - `CloudControlAdapter` (the former SDKFallbackDispatcher redirect
