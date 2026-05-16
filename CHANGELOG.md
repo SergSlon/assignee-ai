@@ -20,6 +20,7 @@ review methodology notes, see
 ### Changed
 
 - **docs(readme):** restructure for dev-first reading — install/quick-start/commands moved to top; vision/market/roadmap/business-model pushed to bottom. Node count reconciled to 15 (was inconsistently 13/14). Install snippet harmonised with `docs/how-to/quickstart.md` (`pnpm setup` + `pnpm link --global`; removed stale `types list` command; added `optimize` and `version` to commands table). (~286 → ~303 lines).
+- **docs(env-example):** rewrote `.env.example` to match current code — added 17 missing prod vars (telemetry adapter, audit key/fsync/retention, LLM retry trio, OTEL allowlist/PII/HTTP, RBAC role, MCP active-applies + audit-dir, FinOps budgets); dropped 5 stale blocks (per-node LLM routing retired in Epic 100 R9b, `ASSIGNEE_OUTPUT_FORMAT` never wired, `ASSIGNEE_ENABLE_REMOTE_MCP` retired, `ASSIGNEE_BP_INTEGRITY` trio never read); fixed 3 description mismatches; regrouped into 13 sections (required → optional → CI-only → test gates → SaaS-future).
 
 ### Added
 
