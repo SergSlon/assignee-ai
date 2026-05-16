@@ -701,8 +701,9 @@ describe("runDoctor", () => {
       // Story 50-3 removed the MCP version drift section → 6 sections.
       // R9a-03 (P045) added "Log retention" → 7 sections total
       // PR-013 (W24c-S3) added "npm registry" → 8 sections total
-      // (credentials, bedrock, mcp, cache, config, best-practices, log retention, npm registry).
-      expect(report.sections).toHaveLength(8);
+      // Story 108-B-04 added "Intent routing" → 9 sections total
+      // (credentials, bedrock, mcp, cache, config, best-practices, log retention, npm registry, intent routing).
+      expect(report.sections).toHaveLength(9);
       // Skip flags should produce 'warn' rather than 0/SUCCESS — they're
       // unverified, not "ok".
       expect(report.exitCode).toBe(2);

@@ -54,6 +54,15 @@ and surfaces miss-rate in `assignee doctor`.
 - `packages/core/src/graph/graph-state.ts`: new optional `classifierPath` field
   (`"keyword" | "llm-primary" | "llm-fallback" | "unsupported" | undefined`) on
   `AgentState`; last-write-wins reducer; backwards-compatible (default `undefined`).
+  **feat(doctor): intent-routing miss-rate telemetry + doctor check (Story 108-B-04)**
+
+Closes Epic 108-B G6. Adds opt-in local telemetry for intent-routing decisions and
+surfaces miss-rate in `assignee doctor`.
+
+- `packages/core/src/graph/graph-state.ts`: new optional `classifierPath` field
+  (`"keyword" | "llm-primary" | "llm-fallback" | "unsupported" | undefined`) on
+  `AgentState`; last-write-wins reducer; backwards-compatible (`default: () => undefined`).
+  Removed the `// TODO 108-B-04` placeholder comment placed by 108-B-02.
 - `packages/core/src/telemetry/telemetry-event-schema.ts`: new `IntentRoutingEvent`
   interface with `eventType`, `timestamp`, `classifierPath`, `patternKey`,
   `resourceType`, and `durationMs` fields.
@@ -63,6 +72,10 @@ and surfaces miss-rate in `assignee doctor`.
   (debug-level log, no crash).
 - `packages/core/src/telemetry/index.ts` (new): telemetry barrel exporting
   schema types and log writer; registered as `@assignee/core/telemetry` export.
+  opt-in via `ASSIGNEE_TELEMETRY_ADAPTER=local`; write errors swallowed at
+  debug level (no crash — AC-7).
+- `packages/core/src/telemetry/index.ts` (new): telemetry barrel exporting
+  schema types and log writer; registered as `@assignee/core/telemetry` export path.
 - `packages/core/src/graph/nodes/intent-parser/index.ts`: `createIntentParserNode`
   now sets `state.classifierPath` and calls `emitRoutingTelemetry()` at each
   branch (keyword / llm-primary / llm-fallback / unsupported).
@@ -70,6 +83,9 @@ and surfaces miss-rate in `assignee doctor`.
   `DEBUG` log level to `LogLevel`.
 - `packages/core/src/telemetry/otel-exporter.ts`: added `debug: 5` to
   `SEVERITY_NUMBERS` map (required by `Record<LogLevelType, number>` type).
+  `DEBUG` log level to `LogLevel` enum.
+- `packages/core/src/telemetry/otel-exporter.ts`: added `debug: 5` to
+  `SEVERITY_NUMBERS` map (required by exhaustive `Record<LogLevelType, number>`).
 - `packages/core/src/constants/env-vars.ts`: registered `ASSIGNEE_TELEMETRY_ADAPTER`
   in the `EnvVar` catalogue.
 - `apps/cli/src/commands/doctor/checks/intent-routing-health.ts` (new): reads
@@ -82,6 +98,13 @@ and surfaces miss-rate in `assignee doctor`.
   (Axes E, F, I), `intent-routing-health.test.ts` (Axes G, H + AC-3/AC-4 contracts).
 - Snapshot baseline: 1 snapshot file pre-change, 0 snapshot updates (optional
   field with `default: () => undefined` does not appear in existing snapshots).
+  Warn threshold ≥ 10%; no file → `"Telemetry not enabled"` (ok status).
+- `apps/cli/src/commands/doctor/runner.ts`: `intentRouting` added as 9th section;
+  section count assertion in `doctor.test.ts` updated from 8 → 9.
+- New test files: `telemetry-emit.test.ts` (Axes A–E, K), `local-log-writer.test.ts`
+  (Axes E, F, I), `intent-routing-health.test.ts` (Axes G, H + AC-3/AC-4 contracts).
+- Snapshot baseline: 1 snapshot file pre-change, 0 snapshot updates needed
+  (optional field with `default: () => undefined` does not appear in serialized state).
 
 **feat(plan): cost-leading plan output + `--cost-detail` flag (Story 108-B-03)**
 
