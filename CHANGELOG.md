@@ -17,6 +17,59 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### Added
+
+**feat(test): variant-matrix harness scaffold — registry-driven test coverage foundation (Story 108-B-01)**
+
+Closes Epic 108-B G5. Builds the machine-enumerable variant-matrix harness in
+`packages/core/src/__tests__/variant-matrix/` that other 108-A and 108-B stories
+extend in their Probes sections.
+
+- `index.ts`: axis enumeration API — `enumerateTypes()`, `enumeratePatterns()`,
+  `enumerateBpRules()`, `enumerateCommands()` + in-memory matrix registry with
+  `registerMatrixEntry` / `getMatrixRegistry` / `resetMatrixRegistry`.
+- `mock-llm-adapter.ts`: shared `MockLlmAdapter` contract with
+  `forScriptedResponse(type, intentShape)` factory — deterministic LLM responses
+  for matrix tests (Axes C, D). Cached fixture identity ensures `toBe` equality.
+- `drift-guard.test.ts`: registry-parity enforcement — fails CI when any type or
+  pattern is missing from the matrix; Axes A+B sentinel injection tests verify
+  the guard fires correctly.
+- `type-intent-seed.test.ts`: 38 types × {CREATE, DESCRIBE, DESTROY} = 114
+  combinations; zero skips; all pass against mocked LLM (Axes E, F, G, H).
+- `packages/core/src/graph/nodes/intent-parser/resolve-intent-for-type.ts`:
+  thin pure-function extraction wrapping `createIntentParserNode` for testable
+  single-type intent resolution without the full graph.
+
+### Fixed
+
+**fix(graph): `estimatedMonthlyCost` and `pricingBreakdown` accumulator reducers (Story 108-B-02)**
+
+Fixes a last-write-wins reducer bug where compound plans (N-resource LangGraph loops)
+only reported the Nth resource's cost instead of the accumulated total. `assignee plan
+"three-tier web app"` (3+ resources) now reports the correct total infrastructure cost.
+
+Changes in `packages/core/src/graph/graph-state.ts`:
+
+- `estimatedMonthlyCost` reducer changed from `(_, b) => b` to `accumulateCostLabel`
+  — sums parseable `$X.XX/mo` labels across compound-plan iterations; falls back to
+  last-write-wins for non-numeric labels (N/A, Free, usage-based rate strings);
+  `undefined` still signals an explicit reset (e.g. human-approval clears stale cost).
+- `pricingBreakdown` reducer changed from `(_, b) => b ?? undefined` to
+  `accumulatePricingBreakdown` — merges `fixedItems` and `usageBasedItems` arrays
+  across iterations (all per-resource line items are preserved); `fixedSubtotal` is
+  summed; PD-2 reset semantics preserved (`undefined` b still clears the breakdown).
+- Added `// TODO 108-B-04` comment marking where `classifierPath?: string` will be
+  added in Wave 1 telemetry story.
+
+Two new test files:
+
+- `packages/core/src/graph/__tests__/graph-state-reducers.test.ts` — 35 isolated
+  reducer unit tests (Axes A–H, no graph execution or LLM).
+- `packages/core/src/graph/__tests__/compound-plan-cost-accumulation.test.ts` —
+  10 integration tests using a minimal `StateGraph` with the real `graphAnnotation`;
+  confirms pre-fix last-write-wins behaviour would have produced `"$25.00/mo"` (RDS
+  only) instead of `"$50.00/mo"` (correct S3 + Lambda + RDS total).
+
 ### Changed
 
 - **docs(readme):** restructure for dev-first reading — install/quick-start/commands moved to top; vision/market/roadmap/business-model pushed to bottom. Node count reconciled to 15 (was inconsistently 13/14). Install snippet harmonised with `docs/how-to/quickstart.md` (`pnpm setup` + `pnpm link --global`; removed stale `types list` command; added `optimize` and `version` to commands table). (~286 → ~303 lines).
