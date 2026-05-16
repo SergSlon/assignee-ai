@@ -8,6 +8,12 @@
  * The CLI file `apps/cli/src/services/graph-state.ts` is now a thin
  * re-export shim — Pass E will lift the remaining `createGraph` + routing
  * wiring.
+ *
+ * Story 108-B-02: `estimatedMonthlyCost` and `pricingBreakdown` reducers
+ * changed from last-write-wins to accumulator semantics so compound plans
+ * (N-resource LangGraph loops) report the correct total cost instead of
+ * only the Nth resource's cost. See `accumulateCostLabel` and
+ * `accumulatePricingBreakdown` below.
  */
 
 import { Annotation } from "@langchain/langgraph";
@@ -66,6 +72,112 @@ import type { ExistingResource } from "../services/resource-discovery-port.js";
 export type { AppliedFix, SecurityFinding };
 export type { ExistingResource };
 
+// ---------------------------------------------------------------------------
+// Story 108-B-02 — Accumulator reducers for compound-plan cost fields
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse the dollar amount from a formatted cost label such as `"$12.34/mo"`,
+ * `"~$0.50/mo"`, `"$3.00/hr"`, etc.
+ *
+ * Returns the numeric value if the label contains a recognizable `$X.XX`
+ * pattern, or `null` for non-numeric labels (`"N/A"`, `"Free"`,
+ * `"No charge"`, usage-based-only strings like `"$0.023/GB"` that
+ * describe per-unit rates rather than fixed monthly costs).
+ *
+ * @internal Used only by `accumulateCostLabel`.
+ */
+function parseCostLabelToNumber(label: string): number | null {
+  // Must start with optional "~" then "$" to be a fixed-amount label.
+  // Examples: "$12.34/mo", "~$0.50/mo", "$3.00/mo (live)"
+  // Non-examples: "$0.023/GB", "$0.09/GB-mo", "N/A", "Free"
+  const match = /^~?\$(\d+(?:\.\d+)?)\/mo/.exec(label.trim());
+  if (match?.[1] !== undefined) {
+    return parseFloat(match[1]);
+  }
+  return null;
+}
+
+/**
+ * Accumulator reducer for `estimatedMonthlyCost` across compound-plan
+ * LangGraph iterations (Story 108-B-02).
+ *
+ * Behaviour:
+ * - `b === undefined` → explicit reset (e.g. human-approval clears stale
+ *   cost when the user amends config). Returns `undefined`.
+ * - `a === undefined` → first write; return `b` as-is.
+ * - Both parseable as `$X.XX/mo` → sum and format as `"$X.XX/mo"`.
+ * - Either non-numeric (N/A, Free, usage-based rate string) → fall back
+ *   to `b` (last-write-wins) — we cannot sum a flat rate and a per-unit
+ *   rate meaningfully.
+ *
+ * Reducer purity: pure function, no side effects.
+ */
+export function accumulateCostLabel(
+  a: string | undefined,
+  b: string | undefined,
+): string | undefined {
+  // Explicit reset signal — return undefined unconditionally.
+  if (b === undefined) return undefined;
+  // First write — use b directly.
+  if (a === undefined) return b;
+  // Both defined: attempt numeric accumulation.
+  const aNum = parseCostLabelToNumber(a);
+  const bNum = parseCostLabelToNumber(b);
+  if (aNum !== null && bNum !== null) {
+    const total = aNum + bNum;
+    return `$${total.toFixed(2)}/mo`;
+  }
+  // Cannot sum (usage-based rate or special label) — fall back to b.
+  return b;
+}
+
+/**
+ * Accumulator reducer for `pricingBreakdown` across compound-plan
+ * LangGraph iterations (Story 108-B-02).
+ *
+ * Behaviour:
+ * - `b === undefined` → explicit reset (free/non-priced resource clears
+ *   breakdown). Returns `undefined` — matches PD-2 semantics preserved
+ *   from the old last-write-wins reducer.
+ * - `a === undefined` → first write; return `b` as-is.
+ * - Both defined → merge: fixedItems and usageBasedItems arrays are
+ *   concatenated (all per-resource line items are preserved); fixedSubtotal
+ *   is summed; fetchedAt is the most recent; hasCacheHits / hasPartialFailure
+ *   use boolean OR.
+ *
+ * Reducer purity: pure function, no side effects; does not mutate inputs.
+ */
+export function accumulatePricingBreakdown(
+  a: PricingBreakdown | undefined,
+  b: PricingBreakdown | undefined,
+): PricingBreakdown | undefined {
+  // Explicit reset — PD-2: an incoming `undefined` (free/non-priced resource)
+  // clears any stale breakdown from the previous compound-plan iteration.
+  if (b === undefined) return undefined;
+  // First write — use b directly.
+  if (a === undefined) return b;
+  // Both defined — merge all per-resource entries.
+  return {
+    fixedItems: [...a.fixedItems, ...b.fixedItems],
+    usageBasedItems: [...a.usageBasedItems, ...b.usageBasedItems],
+    fixedSubtotal: a.fixedSubtotal + b.fixedSubtotal,
+    // Use the most recent timestamp.
+    fetchedAt:
+      new Date(a.fetchedAt) >= new Date(b.fetchedAt)
+        ? a.fetchedAt
+        : b.fetchedAt,
+    hasCacheHits: a.hasCacheHits || b.hasCacheHits,
+    hasPartialFailure: a.hasPartialFailure || b.hasPartialFailure,
+  };
+}
+
+// TODO 108-B-04: add classifierPath?: string optional field here before Wave 1 telemetry story
+// (intent-routing miss-rate telemetry — will be populated by the intent-parser node
+//  and consumed by the new `doctor` check added in 108-B-04)
+
+// ---------------------------------------------------------------------------
+
 export const graphAnnotation = Annotation.Root({
   userIntent: Annotation<string>({ reducer: (_, b) => b, default: () => "" }),
   runId: Annotation<string>({
@@ -84,7 +196,11 @@ export const graphAnnotation = Annotation.Root({
     reducer: (_, b) => b,
   }),
   estimatedMonthlyCost: Annotation<string | undefined>({
-    reducer: (_, b) => b,
+    // Story 108-B-02: accumulator reducer — sums numeric cost labels across
+    // compound-plan iterations instead of replacing on each write (last-write-wins
+    // caused compound plans to report only the Nth resource's cost, not the total).
+    // Special cases: undefined b → reset; non-numeric labels → fall back to b.
+    reducer: accumulateCostLabel,
   }),
   estimatedMonthlyCostSource: Annotation<DataSource | undefined>({
     reducer: (_, b) => b,
@@ -185,11 +301,12 @@ export const graphAnnotation = Annotation.Root({
     default: () => undefined,
   }),
   pricingBreakdown: Annotation<PricingBreakdown | undefined>({
-    // PD-2: explicit `b ?? undefined` so that a preflight-guard return of
-    // `pricingBreakdown: undefined` (free/non-priced resource) actively clears
-    // any breakdown that leaked from the previous compound-plan resource,
-    // instead of retaining it when the key was absent from the partial update.
-    reducer: (_, b) => b ?? undefined,
+    // Story 108-B-02: accumulator reducer — merges per-resource fixedItems and
+    // usageBasedItems arrays across compound-plan iterations (all N resources'
+    // line items are preserved, fixedSubtotal is summed).
+    // PD-2 reset semantics preserved: an incoming `undefined` (free/non-priced
+    // resource) still clears the breakdown, consistent with the old behaviour.
+    reducer: accumulatePricingBreakdown,
     default: () => undefined,
   }),
   autoFixEnabled: Annotation<boolean>({
