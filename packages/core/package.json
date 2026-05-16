@@ -47,6 +47,10 @@
     "./test-hooks/audit": {
       "import": "./dist/test-hooks/audit.js",
       "types": "./dist/test-hooks/audit.d.ts"
+    },
+    "./telemetry": {
+      "import": "./dist/telemetry/index.js",
+      "types": "./dist/telemetry/index.d.ts"
     }
   },
   "files": [

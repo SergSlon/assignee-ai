@@ -257,6 +257,15 @@ export const EnvVar = {
    */
   ASSIGNEE_MCP_AUDIT_DIR: "ASSIGNEE_MCP_AUDIT_DIR",
 
+  // ── Intent-routing telemetry (Story 108-B-04) ────────────────────────────
+  /**
+   * When set to "local", enables the local JSONL telemetry adapter that
+   * appends `IntentRoutingEvent` objects to `~/.assignee/telemetry-events.jsonl`.
+   * Absent or any other value → no telemetry file is created or modified
+   * (L1-F52 opt-in invariant).
+   */
+  ASSIGNEE_TELEMETRY_ADAPTER: "ASSIGNEE_TELEMETRY_ADAPTER",
+
   // ── Deprecated aliases ────────────────────────────────────────
   /**
    * @deprecated Alias for ASSIGNEE_LLM_DEFAULT — accepted for backward

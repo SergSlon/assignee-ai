@@ -38,6 +38,10 @@ import {
 } from "../../../intent/compound-keywords.js";
 import { log, LOG_ACTIONS } from "../../../utils/logger/index.js";
 import type { AgentState } from "../../graph-state.js";
+import {
+  appendRoutingEvent,
+  isTelemetryEnabled,
+} from "../../../telemetry/local-log-writer.js";
 import type { Advisory, AssertionExtraction } from "./intent-types.js";
 import {
   extractCidr,
@@ -310,6 +314,38 @@ function buildExtractionSuccessUpdate(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Telemetry helper (Story 108-B-04)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fire-and-forget telemetry emission for a routing decision.
+ *
+ * Gated by `isTelemetryEnabled()` — no I/O when telemetry is disabled.
+ * Errors inside `appendRoutingEvent` are already swallowed by the writer;
+ * this wrapper simply ensures the async write does not block the caller.
+ */
+function emitRoutingTelemetry(
+  startMs: number,
+  classifierPath: "keyword" | "llm-primary" | "llm-fallback" | "unsupported",
+  patternKey: string | null,
+  resourceType: string | null,
+  runId: string,
+): void {
+  if (!isTelemetryEnabled()) return;
+  void appendRoutingEvent(
+    {
+      eventType: "intent-routing",
+      timestamp: new Date().toISOString(),
+      classifierPath,
+      patternKey,
+      resourceType,
+      durationMs: Date.now() - startMs,
+    },
+    runId,
+  );
+}
+
 /**
  * Factory for the intent_parser LangGraph node. Mirrors the monolith
  * dispatch order: singleton-override → literal pattern → registry detect
@@ -320,6 +356,7 @@ export function createIntentParserNode({ llmClient }: { llmClient: LlmPort }) {
   return async function intentParserNode(
     state: AgentState,
   ): Promise<Partial<AgentState>> {
+    const startMs = Date.now();
     const safeIntent = sanitizeUserIntent(state.userIntent);
 
     // EPIC-107-2 (PH1-G-2): discover existing AWS resources matching the
@@ -381,6 +418,7 @@ export function createIntentParserNode({ llmClient }: { llmClient: LlmPort }) {
         action: LOG_ACTIONS.INTENT_PARSED,
         extras: { resourceType: singletonType, pattern: null },
       });
+      emitRoutingTelemetry(startMs, "keyword", null, null, state.runId);
       return {
         ...buildExtractionSuccessUpdate(
           safeIntent,
@@ -392,6 +430,7 @@ export function createIntentParserNode({ llmClient }: { llmClient: LlmPort }) {
           existingResources,
           discoveryAdvisory,
         ),
+        classifierPath: "keyword" as const,
         intentKind: "create" as const,
       };
     }
@@ -420,6 +459,13 @@ export function createIntentParserNode({ llmClient }: { llmClient: LlmPort }) {
         action: LOG_ACTIONS.INTENT_PARSED,
         extras: { resourceType: null, pattern: detectedPattern.patternId },
       });
+      emitRoutingTelemetry(
+        startMs,
+        "keyword",
+        detectedPattern.patternId,
+        null,
+        state.runId,
+      );
       return {
         ...buildExtractionSuccessUpdate(
           safeIntent,
@@ -431,6 +477,7 @@ export function createIntentParserNode({ llmClient }: { llmClient: LlmPort }) {
           existingResources,
           discoveryAdvisory,
         ),
+        classifierPath: "keyword" as const,
         intentKind: "create" as const,
       };
     }
@@ -478,6 +525,13 @@ export function createIntentParserNode({ llmClient }: { llmClient: LlmPort }) {
             via: "llm-compound-fallback",
           },
         });
+        emitRoutingTelemetry(
+          startMs,
+          "llm-fallback",
+          llmPattern.patternId,
+          null,
+          state.runId,
+        );
         return {
           ...buildExtractionSuccessUpdate(
             safeIntent,
@@ -489,6 +543,7 @@ export function createIntentParserNode({ llmClient }: { llmClient: LlmPort }) {
             existingResources,
             discoveryAdvisory,
           ),
+          classifierPath: "llm-fallback" as const,
           intentKind: "create" as const,
         };
       }
@@ -546,6 +601,11 @@ Request: "${safeIntent}"`;
           action: LOG_ACTIONS.INTENT_PARSED,
           extras: { outcome: "unsupported_resource", reason: "zod_validation" },
         });
+        // Zod validation failure is classified as "unsupported" for miss-rate
+        // purposes: the LLM returned a schema-invalid response, which means the
+        // resource type was not in the supported set. Emitting here ensures
+        // intent-routing-health miss-rate includes these cases.
+        emitRoutingTelemetry(startMs, "unsupported", null, null, state.runId);
         return {
           userIntent: safeIntent,
           executionStatus: ExecutionStatus.UNSUPPORTED_RESOURCE,
@@ -562,6 +622,10 @@ Request: "${safeIntent}"`;
         action: LOG_ACTIONS.INTENT_PARSED,
         extras: { outcome: "failed", reason: "llm_error" },
       });
+      // Generic LLM error is classified as "unsupported" for miss-rate purposes:
+      // the routing could not resolve the resource type. Emitting here ensures
+      // intent-routing-health miss-rate captures these hard-failure cases.
+      emitRoutingTelemetry(startMs, "unsupported", null, null, state.runId);
       return {
         userIntent: safeIntent,
         executionStatus: ExecutionStatus.FAILED,
@@ -588,10 +652,18 @@ Request: "${safeIntent}"`;
         action: LOG_ACTIONS.INTENT_PARSED,
         extras: { resourceType: resolvedQueryType ?? null, kind: "query" },
       });
+      emitRoutingTelemetry(
+        startMs,
+        "llm-primary",
+        null,
+        resolvedQueryType ?? null,
+        state.runId,
+      );
       return {
         userIntent: safeIntent,
         intentKind: "query",
         executionStatus: ExecutionStatus.QUERY_INTENT,
+        classifierPath: "llm-primary" as const,
         ...(resolvedQueryType ? { resourceType: resolvedQueryType } : {}),
       };
     }
@@ -618,10 +690,12 @@ Request: "${safeIntent}"`;
         action: LOG_ACTIONS.INTENT_PARSED,
         extras: { kind: "destroy", resourceType: typeLabel },
       });
+      emitRoutingTelemetry(startMs, "llm-primary", null, null, state.runId);
       return {
         userIntent: safeIntent,
         intentKind: "destroy",
         executionStatus: ExecutionStatus.UNSUPPORTED_RESOURCE,
+        classifierPath: "llm-primary" as const,
         errorMessage:
           `I detected you want to destroy a ${typeLabel}. ` +
           `Use \`assignee destroy <arn>\` directly. ` +
@@ -641,10 +715,12 @@ Request: "${safeIntent}"`;
           kind: output.kind,
         },
       });
+      emitRoutingTelemetry(startMs, "unsupported", null, null, state.runId);
       return {
         userIntent: safeIntent,
         intentKind: isIntentKind(output.kind) ? output.kind : "create",
         executionStatus: ExecutionStatus.UNSUPPORTED_RESOURCE,
+        classifierPath: "unsupported" as const,
         errorMessage: `Unsupported resource type. ${SUPPORTED_TYPES_HINT}.`,
       };
     }
@@ -663,6 +739,13 @@ Request: "${safeIntent}"`;
         pattern: null,
       },
     });
+    emitRoutingTelemetry(
+      startMs,
+      "llm-primary",
+      null,
+      output.resourceType,
+      state.runId,
+    );
     return {
       ...buildExtractionSuccessUpdate(
         safeIntent,
@@ -674,6 +757,7 @@ Request: "${safeIntent}"`;
         existingResources,
         discoveryAdvisory,
       ),
+      classifierPath: "llm-primary" as const,
       intentKind: isIntentKind(output.kind) ? output.kind : "create",
     };
   };

@@ -67,3 +67,48 @@ export interface TelemetryEvent {
    */
   extras: Record<string, unknown>;
 }
+
+// ── IntentRoutingEvent shape ──────────────────────────────────────────
+
+/**
+ * Story 108-B-04 — A single intent-routing telemetry event emitted by the
+ * intent-parser node. Appended as JSONL to `~/.assignee/telemetry-events.jsonl`
+ * when `ASSIGNEE_TELEMETRY_ADAPTER=local` is set.
+ *
+ * Privacy model: `intent` is the sanitised user-intent string; it goes through
+ * `sanitizeUserIntent` before being stored. The local JSONL file is
+ * operator-controlled; it is never sent to external services unless the
+ * operator also configures an OTEL exporter.
+ */
+export interface IntentRoutingEvent {
+  /** Discriminant — always "intent-routing" for JSONL filtering. */
+  eventType: "intent-routing";
+
+  /** ISO-8601 timestamp (UTC) when the event was created. */
+  timestamp: string;
+
+  /**
+   * Which routing branch produced the final result.
+   * - `"keyword"`: singleton-override or pattern-registry keyword matched.
+   * - `"llm-primary"`: Bedrock Step-4 classifier resolved a resource type.
+   * - `"llm-fallback"`: Epic 107-1 LLM compound-pattern classifier matched.
+   * - `"unsupported"`: all branches missed; intent is unsupported.
+   */
+  classifierPath: "keyword" | "llm-primary" | "llm-fallback" | "unsupported";
+
+  /**
+   * Compound pattern ID when `classifierPath` is `"keyword"` (singleton /
+   * pattern-registry hit) or `"llm-fallback"` (LLM compound match).
+   * `null` for `"llm-primary"` and `"unsupported"` paths.
+   */
+  patternKey: string | null;
+
+  /**
+   * CFN resource type (e.g. `"AWS::S3::Bucket"`) when `classifierPath` is
+   * `"llm-primary"`. `null` for pattern-based and unsupported paths.
+   */
+  resourceType: string | null;
+
+  /** Wall-clock duration in milliseconds from node entry to routing decision. */
+  durationMs: number;
+}

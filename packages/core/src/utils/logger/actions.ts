@@ -198,6 +198,13 @@ export const LOG_ACTIONS = {
    * the CP-3 advisory fallback — no exception propagates.
    */
   DISCOVERY_FAILURE: "discovery_failure",
+  /**
+   * Story 108-B-04: emitted at DEBUG level when the local telemetry log
+   * writer encounters an I/O error (disk full, permission denied, etc.).
+   * The write error is swallowed; this log entry exists so `--verbose`
+   * users can diagnose why telemetry was silently skipped.
+   */
+  TELEMETRY_EMIT: "telemetry_emit",
 } as const;
 
 export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];
@@ -206,6 +213,7 @@ export const LogLevel = {
   INFO: "info",
   WARN: "warn",
   ERROR: "error",
+  DEBUG: "debug",
 } as const;
 
 export type LogLevelType = (typeof LogLevel)[keyof typeof LogLevel];

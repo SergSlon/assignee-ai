@@ -172,10 +172,6 @@ export function accumulatePricingBreakdown(
   };
 }
 
-// TODO 108-B-04: add classifierPath?: string optional field here before Wave 1 telemetry story
-// (intent-routing miss-rate telemetry — will be populated by the intent-parser node
-//  and consumed by the new `doctor` check added in 108-B-04)
-
 // ---------------------------------------------------------------------------
 
 export const graphAnnotation = Annotation.Root({
@@ -466,6 +462,26 @@ export const graphAnnotation = Annotation.Root({
   existingResources: Annotation<ExistingResource[]>({
     reducer: (_, b) => b,
     default: () => [],
+  }),
+  // Story 108-B-04 — classifierPath field:
+  /**
+   * Story 108-B-04 — Which routing branch resolved this intent.
+   * Populated by the intent-parser node; consumed by the local telemetry
+   * log writer and the `assignee doctor` intent-routing-health check.
+   *
+   * Optional and backwards-compatible: existing tests that do not supply
+   * this field receive `undefined` (the default).
+   *
+   * - `"keyword"`: singleton-override or pattern-registry keyword matched.
+   * - `"llm-primary"`: Bedrock Step-4 classifier resolved a resource type.
+   * - `"llm-fallback"`: Epic 107-1 LLM compound-pattern classifier matched.
+   * - `"unsupported"`: all branches missed; intent is unsupported.
+   */
+  classifierPath: Annotation<
+    "keyword" | "llm-primary" | "llm-fallback" | "unsupported" | undefined
+  >({
+    reducer: (_, b) => b,
+    default: () => undefined,
   }),
 });
 

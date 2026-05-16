@@ -132,6 +132,7 @@ const SEVERITY_NUMBERS: Record<LogLevelType, number> = {
   info: 9,
   warn: 13,
   error: 17,
+  debug: 5,
 };
 
 /* ------------------------------------------------------------------ */
