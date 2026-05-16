@@ -757,3 +757,142 @@ describe("renderPlanBox — empty-row suppression integration (SX-5)", () => {
     expect(captured).toContain("sg-abc123");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Story 108-B-03 — renderCostBlock (non-TTY path, Axes A-K)
+// ---------------------------------------------------------------------------
+import { renderCostBlock } from "./display-plan.js";
+import type { CostBlock } from "../graph/nodes/result-formatter/cost-block-types.js";
+
+describe("renderCostBlock (Story 108-B-03)", () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let stdoutSpy: any;
+  let captured: string;
+
+  beforeEach(() => {
+    captured = "";
+    stdoutSpy = vi
+      .spyOn(process.stdout, "write")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .mockImplementation((chunk: any) => {
+        captured += String(chunk);
+        return true;
+      });
+    // Ensure non-TTY path (CI-safe).
+    vi.spyOn(process.stdout, "isTTY", "get").mockReturnValue(
+      false as unknown as true,
+    );
+  });
+
+  afterEach(() => {
+    stdoutSpy.mockRestore();
+    vi.restoreAllMocks();
+  });
+
+  // Axis A: standard priced resource.
+  it("Axis A: priced resource emits 'Cost: Estimated: ~$X.XX/mo infra + ~N Bedrock tokens'", () => {
+    const block: CostBlock = {
+      infraCostMonthly: 32.85,
+      bedrockTokens: 5000,
+      freeTierNote: null,
+      unavailable: false,
+    };
+    renderCostBlock(block);
+    expect(captured).toContain("Cost: Estimated: ~$32.85/mo infra");
+    expect(captured).toContain("Bedrock tokens to generate");
+  });
+
+  // Axis E: free-tier resource.
+  it("Axis E: free-tier resource emits 'Free tier applies'", () => {
+    const block: CostBlock = {
+      infraCostMonthly: 0,
+      bedrockTokens: 1000,
+      freeTierNote: "Free tier: 750 hrs/mo",
+      unavailable: false,
+    };
+    renderCostBlock(block);
+    expect(captured).toContain("Free tier applies");
+    expect(captured).toContain("Free tier: 750 hrs/mo");
+  });
+
+  // Axis G: unavailable resource.
+  it("Axis G: unavailable=true emits 'Cost estimate: unavailable'", () => {
+    const block: CostBlock = {
+      infraCostMonthly: null,
+      bedrockTokens: 0,
+      freeTierNote: null,
+      unavailable: true,
+    };
+    renderCostBlock(block);
+    expect(captured).toContain("Cost estimate: unavailable");
+  });
+
+  // Axis G-2: null cost with no free-tier note → unavailable fallback.
+  it("Axis G-2: null infraCostMonthly and no freeTierNote → 'Cost estimate: unavailable'", () => {
+    const block: CostBlock = {
+      infraCostMonthly: null,
+      bedrockTokens: 500,
+      freeTierNote: null,
+      unavailable: false,
+    };
+    renderCostBlock(block);
+    expect(captured).toContain("Cost estimate: unavailable");
+  });
+
+  // Axis I: no perResourceBreakdown → no breakdown section.
+  it("Axis I: no perResourceBreakdown → breakdown section absent", () => {
+    const block: CostBlock = {
+      infraCostMonthly: 10.0,
+      bedrockTokens: 200,
+      freeTierNote: null,
+      unavailable: false,
+    };
+    renderCostBlock(block);
+    expect(captured).not.toContain("breakdown by resource");
+  });
+
+  // Axis J: perResourceBreakdown present → breakdown rendered.
+  it("Axis J: perResourceBreakdown → breakdown entries rendered", () => {
+    const block: CostBlock = {
+      infraCostMonthly: 45.0,
+      bedrockTokens: 3000,
+      freeTierNote: null,
+      unavailable: false,
+      perResourceBreakdown: [
+        { resourceType: "AWS::EC2::Instance", cost: "~$30.00/mo" },
+        { resourceType: "AWS::RDS::DBInstance", cost: "~$15.00/mo" },
+      ],
+    };
+    renderCostBlock(block);
+    expect(captured).toContain("Cost breakdown by resource");
+    expect(captured).toContain("AWS::EC2::Instance: ~$30.00/mo");
+    expect(captured).toContain("AWS::RDS::DBInstance: ~$15.00/mo");
+  });
+
+  // Axis A+E combined: priced resource with free-tier note → cost line with note appended.
+  it("Axis A+E: priced + freeTierNote → note appended to cost line", () => {
+    const block: CostBlock = {
+      infraCostMonthly: 5.0,
+      bedrockTokens: 800,
+      freeTierNote: "First 12 months free",
+      unavailable: false,
+    };
+    renderCostBlock(block);
+    expect(captured).toContain("~$5.00/mo infra");
+    expect(captured).toContain("First 12 months free");
+  });
+
+  // Axis G: unavailable=true → freeTierNote suffix NOT appended (no misleading note).
+  it("Axis G-3: unavailable=true → freeTierNote suffix NOT appended", () => {
+    const block: CostBlock = {
+      infraCostMonthly: null,
+      bedrockTokens: 0,
+      freeTierNote: "Some note",
+      unavailable: true,
+    };
+    renderCostBlock(block);
+    expect(captured).toContain("Cost estimate: unavailable");
+    // The note must NOT be appended (freeTierSuffix guard: !costBlock.unavailable).
+    expect(captured).not.toContain("Some note");
+  });
+});

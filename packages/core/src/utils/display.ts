@@ -18,6 +18,7 @@ export {
 
 export {
   renderPlanBox,
+  renderCostBlock,
   formatCostLine,
   formatPricingBreakdown,
   formatAppliedFixes,

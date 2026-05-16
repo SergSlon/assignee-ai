@@ -22,6 +22,7 @@ import type { PricingBreakdown } from "../pricing/decomposer-types.js";
 import { countAutoFixable } from "./fix-command-resolver.js";
 import { formatDesiredState } from "./display-helpers/format-desired-state.js";
 import type { RenderableState } from "./display-helpers/renderable-state.js";
+import type { CostBlock } from "../graph/nodes/result-formatter/cost-block-types.js";
 // NOTE: display.ts re-exports from this module, creating a circular reference.
 // This is safe because: (1) RenderableState is type-only (erased at runtime),
 // (2) formatDesiredState is defined directly in display.ts (not re-exported from
@@ -71,6 +72,72 @@ export function formatCostLine(
   if (estimatedMonthlyCost === undefined) return CostEstimateLabel.NA;
   if (source === undefined) return estimatedMonthlyCost;
   return formatLabelWithSource(estimatedMonthlyCost, source);
+}
+
+/**
+ * Story 108-B-03 — Cost-leading plan output.
+ *
+ * Renders the cost block to stdout BEFORE the plan box. In TTY mode the
+ * output uses ANSI styling; in non-TTY (pipe/CI) it is plain text.
+ *
+ * Primary cost source: `costBlock.infraCostMonthly` (numeric, from
+ * `pricingBreakdown.fixedSubtotal`). NOT the `estimatedMonthlyCost` string
+ * (advisory F1+F2 from B-02 review).
+ */
+export function renderCostBlock(costBlock: CostBlock): void {
+  const isTTY = process.stdout.isTTY;
+
+  let line: string;
+  if (costBlock.unavailable) {
+    line = "Cost estimate: unavailable";
+  } else if (
+    costBlock.infraCostMonthly === null ||
+    costBlock.infraCostMonthly === 0
+  ) {
+    // Zero fixed cost AND there's a free-tier note → free-tier resource.
+    if (costBlock.freeTierNote) {
+      line = `Estimated: Free tier applies`;
+    } else {
+      line = "Cost estimate: unavailable";
+    }
+  } else {
+    const infraStr = `~$${costBlock.infraCostMonthly.toFixed(2)}/mo infra`;
+    const tokensStr = `~${costBlock.bedrockTokens.toLocaleString()} Bedrock tokens to generate`;
+    line = `Estimated: ${infraStr} + ${tokensStr}`;
+  }
+
+  const freeTierSuffix =
+    costBlock.freeTierNote && !costBlock.unavailable
+      ? ` (${costBlock.freeTierNote})`
+      : "";
+
+  const fullLine = `${line}${freeTierSuffix}`;
+
+  if (isTTY) {
+    process.stdout.write(chalk.cyan(`  💡 ${fullLine}\n`));
+  } else {
+    process.stdout.write(`Cost: ${fullLine}\n`);
+  }
+
+  // Per-resource breakdown (--cost-detail flag).
+  if (
+    costBlock.perResourceBreakdown &&
+    costBlock.perResourceBreakdown.length > 0
+  ) {
+    if (isTTY) {
+      process.stdout.write(chalk.dim("  Cost breakdown by resource:\n"));
+    } else {
+      process.stdout.write("Cost breakdown by resource:\n");
+    }
+    for (const entry of costBlock.perResourceBreakdown) {
+      const detail = `    ${entry.resourceType}: ${entry.cost}`;
+      if (isTTY) {
+        process.stdout.write(chalk.dim(detail) + "\n");
+      } else {
+        process.stdout.write(detail + "\n");
+      }
+    }
+  }
 }
 
 export function renderPlanBox(state: RenderableState): void {

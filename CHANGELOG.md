@@ -19,6 +19,39 @@ review methodology notes, see
 
 ### Added
 
+**feat(plan): cost-leading plan output + `--cost-detail` flag (Story 108-B-03)**
+
+Closes Epic 108-B G1–G4. Every `assignee plan` output now leads with a cost block
+("Estimated: ~$X/mo infra + ~Y Bedrock tokens to generate") printed BEFORE the plan
+box. The `--cost-detail` flag adds a per-resource breakdown table.
+
+- `packages/core/src/graph/nodes/result-formatter/cost-block-types.ts` (new):
+  shared `CostBlock` interface — extracted to break the circular import chain
+  between `display-plan.ts` and `formatters/plan.ts`.
+- `packages/core/src/graph/nodes/result-formatter/formatters/plan.ts`:
+  `formatCostBlock()` (primary source: `pricingBreakdown.fixedSubtotal`, NOT the
+  `estimatedMonthlyCost` string — advisory F1+F2 from B-02 review);
+  `parseCostLabelFallback()` for legacy paths; `setCostDetailEnabled()` /
+  `getCostDetailEnabled()` session flag; `PlanJsonPayload` extended with `costBlock`
+  field; `formatPlanResult` calls `renderCostBlock` before `renderPlanBox`.
+- `packages/core/src/utils/display-plan.ts`: `renderCostBlock()` — TTY/non-TTY
+  rendering (ANSI on TTY, plain text in pipes/CI); free-tier, unavailable, and
+  priced resource variants; per-resource breakdown support.
+- `apps/cli/src/commands/plan/orchestrator.ts`: `resetTokenUsage()` called at start
+  of every `runPlan()` (AC #7 — fixes accumulation across sequential plan calls);
+  cost block reiterated before apply Y/N confirmation (AC #5).
+- `apps/cli/src/commands/plan.ts` + `arg-parser.ts`: `--cost-detail` CLI flag wired
+  through `PlanRunArgs`.
+- `packages/core/src/barrels/utils.ts` + `packages/core/src/utils/display.ts`:
+  barrel re-exports for `formatCostBlock`, `setCostDetailEnabled`, `renderCostBlock`,
+  `CostBlock`.
+- Pre-existing fix: `lambda-iam-autorole.ts` — `?? null` coercion on
+  `getOperatorCallerArn()` return (TS2322 `string | undefined` → `string | null`).
+
+### Changed
+
+- `--cost-detail` is opt-in; default plan output shows single-line cost summary.
+
 **feat(test): variant-matrix harness scaffold — registry-driven test coverage foundation (Story 108-B-01)**
 
 Closes Epic 108-B G5. Builds the machine-enumerable variant-matrix harness in

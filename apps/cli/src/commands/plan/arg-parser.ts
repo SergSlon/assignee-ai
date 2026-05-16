@@ -20,6 +20,8 @@ export interface PlanOpts {
   yes?: boolean;
   /** Story 50-2: --quick wizard mode (skip defaulted prompts). */
   quick?: boolean;
+  /** Story 108-B-03: include per-resource cost breakdown in plan output. */
+  costDetail?: boolean;
 }
 
 export interface ResolvedPlanArgs {
@@ -28,6 +30,8 @@ export interface ResolvedPlanArgs {
   sourceFileCount: number;
   outputFormat: string;
   noApply: boolean;
+  /** Story 108-B-03: show per-resource cost breakdown in plan output. */
+  costDetail: boolean;
 }
 
 export function resolvePlanArgs(
@@ -36,6 +40,7 @@ export function resolvePlanArgs(
 ): ResolvedPlanArgs {
   const noApply = opts.apply === false;
   const outputFormat = opts.output ?? "text";
+  const costDetail = opts.costDetail === true;
 
   // Parse --set key=value pairs (supports human names via resolveSetKey).
   //
@@ -129,5 +134,6 @@ export function resolvePlanArgs(
     sourceFileCount,
     outputFormat,
     noApply,
+    costDetail,
   };
 }

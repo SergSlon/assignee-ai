@@ -42,6 +42,7 @@ _assignee() {
             '--source[Path to local files to upload after provisioning (e.g., static site)]:path:' \
             '--set[Pre-set field values (repeatable), supports human names (e.g., --set size=t3.medium)]:key=value:' \
             '--yes[Accepted for CI wrapper compatibility; plan is read-only and does not mutate.]' \
+            '--cost-detail[Show per-resource cost breakdown below the cost summary block.]' \
             '--quick[Skip wizard prompts that have defaults — only ask for required fields without a default. Shows a summary gate before generating the plan.]' \
             '--wizard[Run the interactive configuration wizard.]' \
             '--target-account[Target AWS account ID (12 digits). Validates format; cross-account assume-role is not yet supported.]:id:'
