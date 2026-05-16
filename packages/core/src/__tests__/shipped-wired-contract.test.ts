@@ -237,6 +237,11 @@ const PROBE_WHITELIST_FLAGS = new Set<string>([
   "--invalidation-paths",
   "--no-invalidation",
   "--wait",
+  // Story 108-B-03: --cost-detail (plan) — render per-resource cost breakdown.
+  // Runtime probe would require live Bedrock credentials. Behaviour covered by
+  // unit tests in packages/core/src/graph/nodes/result-formatter/formatters/plan.test.ts
+  // (Axes I, J, K: costDetail=false, costDetail=true+perResourceCosts, single-resource).
+  "--cost-detail",
 ]);
 
 /** Extract every `<long-flag>` from Commander `.option("...")` calls. */

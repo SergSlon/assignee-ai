@@ -213,6 +213,7 @@ export {
 // Utils — Display-plan, findings, docs renderers (Story 50-4 Wave 5 Pass C-2)
 export {
   renderPlanBox,
+  renderCostBlock,
   formatCostLine,
   formatPricingBreakdown,
   formatAppliedFixes,
@@ -227,6 +228,17 @@ export {
   type JsonErrorDetail,
   type JsonSuccessEnvelope,
 } from "../utils/display-plan.js";
+
+// Story 108-B-03 — Cost-block formatter + session flag
+export {
+  formatCostBlock,
+  setCostDetailEnabled,
+  getCostDetailEnabled,
+  parseCostLabelFallback,
+  type FormatCostBlockOpts,
+  type FormatPlanResultOpts,
+} from "../graph/nodes/result-formatter/formatters/plan.js";
+export type { CostBlock } from "../graph/nodes/result-formatter/cost-block-types.js";
 export {
   formatFindings,
   formatFreeTierNote,

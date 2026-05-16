@@ -18,13 +18,45 @@ import { ExecutionMode, ExecutionStatus } from "@/index.js";
 import type { AgentState } from "@/graph/graph-state.js";
 import type { Advisory } from "@/graph/nodes/intent-parser.js";
 import type { ExistingResource } from "@/services/resource-discovery-port.js";
+import type { PricingBreakdown } from "@/pricing/decomposer-types.js";
+import type { CostBlock } from "../cost-block-types.js";
 import {
   promptFixSelection,
   renderPlanBox,
+  renderCostBlock,
   type FixSelectionResult,
 } from "@/utils/display.js";
+import { getTokenUsageSummary } from "@/utils/token-usage.js";
 import { AWS_REGION } from "@/config/constants/aws.js";
 import { EnvVar } from "@/constants/env-vars.js";
+
+// ---------------------------------------------------------------------------
+// Story 108-B-03 — Per-session cost-detail flag
+// ---------------------------------------------------------------------------
+// Process-local flag set by the CLI before graph invocation. Pattern mirrors
+// token-usage.ts accumulator: the CLI sets the flag before runPlan, the
+// formatter reads it, the flag is reset to false after the plan finishes.
+// This avoids threading costDetail through LangGraph state (which would
+// require modifying graph-state.ts, owned by 108-B-02).
+
+let _costDetailEnabled = false;
+
+/**
+ * Set whether `--cost-detail` is active for the current plan invocation.
+ * Called by the CLI's `runPlan` before invoking the graph.
+ */
+export function setCostDetailEnabled(enabled: boolean): void {
+  _costDetailEnabled = enabled;
+}
+
+/**
+ * Returns the current cost-detail flag.
+ * @internal Used by `formatPlanResult` and tests.
+ */
+export function getCostDetailEnabled(): boolean {
+  return _costDetailEnabled;
+}
+// ---------------------------------------------------------------------------
 
 /**
  * EPIC-107-2: emit "Found existing <kind>: <id> (<region>)" lines on
@@ -140,6 +172,123 @@ function collapseDuplicateMonthSuffix(line: string): string {
   return prev;
 }
 
+// ---------------------------------------------------------------------------
+// Story 108-B-03 — Cost-leading plan output
+// ---------------------------------------------------------------------------
+
+// CostBlock is imported from the shared types module (cost-block-types.ts)
+// to avoid a circular import with display-plan.ts.
+export type { CostBlock } from "../cost-block-types.js";
+
+export interface FormatCostBlockOpts {
+  /** Include per-resource breakdown table (--cost-detail flag). */
+  costDetail?: boolean;
+  /** Per-resource costs map from state.perResourceCosts. */
+  perResourceCosts?: Record<string, string>;
+}
+
+/**
+ * Build a `CostBlock` from graph state.
+ *
+ * Primary source for infra cost: `pricingBreakdown.fixedSubtotal` (numeric,
+ * accumulator-merged by Story 108-B-02). Falls back to parsing
+ * `estimatedMonthlyCost` only when `pricingBreakdown` is absent.
+ *
+ * NEVER uses `estimatedMonthlyCost` as the primary (advisory F1+F2): the
+ * string label can be `"Free"` or other unparseable values on compound plans
+ * where one resource emits a free-tier companion.
+ */
+export function formatCostBlock(
+  state: AgentState,
+  opts: FormatCostBlockOpts = {},
+): CostBlock {
+  const tokenSummary = getTokenUsageSummary();
+  const bedrockTokens = tokenSummary.totalTokens;
+
+  // Free-tier note text.
+  const freeTierNoteText: string | null = state.freeTierNote?.message ?? null;
+
+  // Determine if cost is entirely unavailable (no decomposer, no cost label).
+  const hasBreakdown =
+    state.pricingBreakdown !== undefined && state.pricingBreakdown !== null;
+  const hasLabel =
+    state.estimatedMonthlyCost !== undefined &&
+    state.estimatedMonthlyCost !== null;
+
+  if (!hasBreakdown && !hasLabel) {
+    return {
+      infraCostMonthly: null,
+      bedrockTokens,
+      freeTierNote: freeTierNoteText,
+      unavailable: true,
+    };
+  }
+
+  // Primary: use pricingBreakdown.fixedSubtotal (numeric, accumulator).
+  let infraCostMonthly: number | null = null;
+  if (hasBreakdown) {
+    const breakdown = state.pricingBreakdown as PricingBreakdown;
+    infraCostMonthly = breakdown.fixedSubtotal;
+  } else {
+    // Fallback: parse the string label.
+    infraCostMonthly = parseCostLabelFallback(
+      state.estimatedMonthlyCost as string,
+    );
+  }
+
+  // Per-resource breakdown (--cost-detail flag).
+  let perResourceBreakdown:
+    | Array<{ resourceType: string; cost: string }>
+    | undefined;
+  if (opts.costDetail) {
+    const costs = opts.perResourceCosts ?? state.perResourceCosts;
+    if (costs && Object.keys(costs).length > 0) {
+      perResourceBreakdown = Object.entries(costs).map(
+        ([resourceType, cost]) => ({
+          resourceType,
+          cost,
+        }),
+      );
+    } else if (state.resourceType && state.estimatedMonthlyCost) {
+      // Single-resource plan: produce one-entry breakdown.
+      perResourceBreakdown = [
+        {
+          resourceType: state.resourceType,
+          cost: state.estimatedMonthlyCost,
+        },
+      ];
+    }
+  }
+
+  return {
+    infraCostMonthly,
+    bedrockTokens,
+    freeTierNote: freeTierNoteText,
+    unavailable: false,
+    ...(perResourceBreakdown !== undefined ? { perResourceBreakdown } : {}),
+  };
+}
+
+/**
+ * Parse a `$X.XX/mo` cost label string into a number.
+ * Fallback used when `pricingBreakdown` is absent.
+ * Returns `null` for `"Free"`, `"N/A"`, or other non-numeric labels.
+ *
+ * @internal Only exported for unit tests.
+ */
+export function parseCostLabelFallback(
+  label: string | undefined,
+): number | null {
+  if (!label) return null;
+  const match = /^~?\$(\d+(?:\.\d+)?)\/mo/.exec(label.trim());
+  if (match?.[1] !== undefined) {
+    return parseFloat(match[1]);
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+
 interface PlanJsonPayload {
   resourceType: string | undefined;
   region: string;
@@ -173,6 +322,13 @@ interface PlanJsonPayload {
    * treat every payload as a real provisioning target.
    */
   provisionable: boolean;
+  /**
+   * Story 108-B-03: structured cost summary block.
+   * `infraCostMonthly` is numeric (from pricingBreakdown.fixedSubtotal) — NOT
+   * the estimatedMonthlyCost string. `bedrockTokens` is the total tokens
+   * consumed to generate the plan.
+   */
+  costBlock: CostBlock;
   resourcePattern?: {
     patternId: string;
     displayName: string;
@@ -186,7 +342,10 @@ interface PlanJsonPayload {
   }> | null;
 }
 
-function buildPlanJsonPayload(state: AgentState): PlanJsonPayload {
+function buildPlanJsonPayload(
+  state: AgentState,
+  opts: FormatCostBlockOpts = {},
+): PlanJsonPayload {
   // MASTER-009 (RW4b-3): read via the ConfigPort threaded through graph
   // state rather than constructing a fresh adapter per call.
   const cfg = state.config;
@@ -220,6 +379,9 @@ function buildPlanJsonPayload(state: AgentState): PlanJsonPayload {
     advisories: state.advisories ?? [],
     existingResources: state.existingResources ?? [],
     provisionable: isProvisionable,
+    // Story 108-B-03: costBlock always present in JSON payload.
+    // costDetail: false for the JSON path (breakdown is available via pricingBreakdown).
+    costBlock: formatCostBlock(state, { costDetail: false, ...opts }),
     ...(state.resourcePattern
       ? {
           resourcePattern: {
@@ -296,9 +458,23 @@ function attachCompoundQueue(state: AgentState): AgentState {
   return base;
 }
 
+/**
+ * Options for `formatPlanResult` — controls cost block rendering.
+ */
+export interface FormatPlanResultOpts {
+  /** Story 108-B-03: include per-resource cost breakdown in output. */
+  costDetail?: boolean;
+}
+
 export async function formatPlanResult(
   state: AgentState,
+  planOpts: FormatPlanResultOpts = {},
 ): Promise<Partial<AgentState>> {
+  // Story 108-B-03: read cost-detail from session flag OR passed opts.
+  // The module-level flag is set by the CLI before graph invocation;
+  // planOpts.costDetail is for direct test invocations.
+  const costDetail = planOpts.costDetail ?? _costDetailEnabled;
+
   let fixResult: FixSelectionResult | null = null;
 
   const isPlanRender =
@@ -308,7 +484,8 @@ export async function formatPlanResult(
   if (isPlanRender) {
     if (state.outputFormat === "json") {
       process.stdout.write(
-        JSON.stringify(buildPlanJsonPayload(state), null, 2) + "\n",
+        JSON.stringify(buildPlanJsonPayload(state, { costDetail }), null, 2) +
+          "\n",
       );
     } else {
       // EPIC-107-2: emit "Found existing <kind>: <id> (<region>)" on
@@ -320,6 +497,10 @@ export async function formatPlanResult(
       // operator sees why the preview is provisional. stderr keeps
       // shell captures of the plan render clean.
       emitAdvisoryWarnings(state.advisories);
+      // Story 108-B-03: render cost block BEFORE the plan box so the
+      // user sees cost first. Only rendered in non-JSON text mode.
+      const costBlock = formatCostBlock(state, { costDetail });
+      renderCostBlock(costBlock);
       const stateWithQueue = attachCompoundQueue(state);
       renderPlanBox(stateWithQueue);
 

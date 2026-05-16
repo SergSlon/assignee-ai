@@ -203,6 +203,11 @@ export const planCommand = new Command(CommandName.PLAN)
     "-y, --yes",
     "Accepted for CI wrapper compatibility; plan is read-only and does not mutate.",
   )
+  // Story 108-B-03: per-resource cost breakdown.
+  .option(
+    "--cost-detail",
+    "Show per-resource cost breakdown below the cost summary block.",
+  )
   .option(
     "-q, --quick",
     "Skip wizard prompts that have defaults — only ask for required fields without a default. Shows a summary gate before generating the plan.",
@@ -347,7 +352,13 @@ export const planCommand = new Command(CommandName.PLAN)
             runPlan(ctx, {
               ...resolved,
               intent: intent!,
-              opts: { advice: opts.advice, quick: opts.quick === true },
+              opts: {
+                advice: opts.advice,
+                quick: opts.quick === true,
+                costDetail:
+                  (opts as PlanOpts & { costDetail?: boolean }).costDetail ===
+                  true,
+              },
             }),
         });
       } catch (err) {

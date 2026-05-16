@@ -37,10 +37,16 @@ import { askClarifyingQuestion } from "../../services/clarifier.js";
 import { writePlanCheckpoint } from "./checkpoint-writer.js";
 import { runPlanToApply } from "./apply-transition.js";
 import type { ResolvedPlanArgs } from "./arg-parser.js";
+import { resetTokenUsage } from "../../utils/token-usage.js";
+import {
+  setCostDetailEnabled,
+  formatCostBlock,
+  renderCostBlock,
+} from "@assignee/core";
 
 export interface PlanRunArgs extends ResolvedPlanArgs {
   intent: string;
-  opts: { advice?: boolean; quick?: boolean };
+  opts: { advice?: boolean; quick?: boolean; costDetail?: boolean };
 }
 
 export async function runPlan(
@@ -55,6 +61,14 @@ export async function runPlan(
     sourceFileCount,
     opts,
   } = args;
+
+  // Story 108-B-03 / AC #7: reset token accumulator at the START of each
+  // plan invocation so sequential plan calls in the same process don't
+  // double-count tokens from the previous run.
+  resetTokenUsage();
+  // Story 108-B-03: set the session-level cost-detail flag so the
+  // result-formatter node reads it without needing a graph-state field.
+  setCostDetailEnabled(opts.costDetail === true);
 
   // Story 7.2: load user config + org policy before graph invocation.
   const [userConfig, authToken] = await Promise.all([
@@ -245,6 +259,12 @@ export async function runPlan(
     // Fail-closed: surface a visible warning. User must review manually.
     clack.log.warn(budgetCheck.message);
   }
+
+  // Story 108-B-03 / AC #5: reiterate cost block before the apply confirmation
+  // so the user sees the cost immediately before approving. Uses the
+  // accumulated pricingBreakdown.fixedSubtotal (not the string label).
+  const applyConfirmCostBlock = formatCostBlock(state);
+  renderCostBlock(applyConfirmCostBlock);
 
   // Story 50-2: single unified confirm — renderApplyNowConfirm was collapsed
   // into renderHitlConfirm. The second prompt on the apply side is gated by
