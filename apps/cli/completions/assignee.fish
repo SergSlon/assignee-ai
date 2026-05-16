@@ -28,6 +28,7 @@ complete -c assignee -n "__fish_seen_subcommand_from plan" -l no-advice -d 'Skip
 complete -c assignee -n "__fish_seen_subcommand_from plan" -l source -s s -r -d 'Path to local files to upload after provisioning (e.g., static site)'
 complete -c assignee -n "__fish_seen_subcommand_from plan" -l set -r -d 'Pre-set field values (repeatable), supports human names (e.g., --set size=t3.medium)'
 complete -c assignee -n "__fish_seen_subcommand_from plan" -l yes -s y -d 'Accepted for CI wrapper compatibility; plan is read-only and does not mutate.'
+complete -c assignee -n "__fish_seen_subcommand_from plan" -l cost-detail -d 'Show per-resource cost breakdown below the cost summary block.'
 complete -c assignee -n "__fish_seen_subcommand_from plan" -l quick -s q -d 'Skip wizard prompts that have defaults — only ask for required fields without a default. Shows a summary gate before generating the plan.'
 complete -c assignee -n "__fish_seen_subcommand_from plan" -l wizard -d 'Run the interactive configuration wizard.'
 complete -c assignee -n "__fish_seen_subcommand_from plan" -l target-account -r -d 'Target AWS account ID (12 digits). Validates format; cross-account assume-role is not yet supported.'

@@ -69,6 +69,7 @@ const displayMocks = vi.hoisted(() => ({
   renderCompoundPartialFailure: vi.fn(),
   renderError: vi.fn(),
   renderPlanBox: vi.fn(),
+  renderCostBlock: vi.fn(),
   renderSecurityWarnings: vi.fn(),
   promptFixSelection: vi.fn(),
 }));

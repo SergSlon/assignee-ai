@@ -18,7 +18,7 @@ _assignee_completions() {
   local command="${COMP_WORDS[1]}"
   case "${command}" in
     plan)
-      COMPREPLY=( $(compgen -W "--output --json --no-apply --no-advice --source --set --yes --quick --wizard --target-account" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--output --json --no-apply --no-advice --source --set --yes --cost-detail --quick --wizard --target-account" -- "${cur}") )
       ;;
     apply)
       COMPREPLY=( $(compgen -W "--wizard --quick --no-advice --yes --checkpoint --source --set --output --json --target-account" -- "${cur}") )
