@@ -8,7 +8,7 @@ _assignee_completions() {
   cur="${COMP_WORDS[COMP_CWORD]}"
   prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-  commands="plan apply init completions describe destroy drift optimize list setup status reconcile doctor version"
+  commands="plan apply init completions describe destroy drift optimize list setup status reconcile doctor restore-provisions audit-verify update discover version"
 
   if [[ ${COMP_CWORD} -eq 1 ]]; then
     COMPREPLY=( $(compgen -W "${commands}" -- "${cur}") )
@@ -55,6 +55,18 @@ _assignee_completions() {
       ;;
     doctor)
       COMPREPLY=( $(compgen -W "--output --json --skip-bedrock --skip-mcp --short" -- "${cur}") )
+      ;;
+    restore-provisions)
+      COMPREPLY=( $(compgen -W "--from --from-audit-log --json" -- "${cur}") )
+      ;;
+    audit-verify)
+      COMPREPLY=( $(compgen -W "--from --to --log-file --json" -- "${cur}") )
+      ;;
+    update)
+      COMPREPLY=( $(compgen -W "--source --delete --invalidation-paths --no-invalidation --wait --yes --output --json" -- "${cur}") )
+      ;;
+    discover)
+      COMPREPLY=( $(compgen -W "--json --category" -- "${cur}") )
       ;;
     version)
       COMPREPLY=( $(compgen -W "--json" -- "${cur}") )

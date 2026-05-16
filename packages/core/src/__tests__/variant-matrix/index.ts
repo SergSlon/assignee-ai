@@ -119,7 +119,7 @@ export function enumerateBpRules(): string[] {
  * test failure. To add a command: append its name below AND register a
  * matrix entry in `drift-guard.test.ts`.
  *
- * Current count: 17 (as of Story 108-B-01).
+ * Current count: 18 (as of Story 108-A-03: added "discover").
  */
 export const CLI_COMMANDS = [
   "plan",
@@ -139,6 +139,7 @@ export const CLI_COMMANDS = [
   "audit-verify",
   "update",
   "version",
+  "discover",
 ] as const;
 
 export type CliCommand = (typeof CLI_COMMANDS)[number];
