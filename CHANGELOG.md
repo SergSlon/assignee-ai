@@ -17,6 +17,10 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### Changed
+
+- **docs(readme):** restructure for dev-first reading — install/quick-start/commands moved to top; vision/market/roadmap/business-model pushed to bottom. Node count reconciled to 15 (was inconsistently 13/14). Install snippet harmonised with `docs/how-to/quickstart.md` (`pnpm setup` + `pnpm link --global`; removed stale `types list` command; added `optimize` and `version` to commands table). (~286 → ~303 lines).
+
 ### Added
 
 **feat(graph): existing-resource discovery extractor (EPIC-107-2)**
