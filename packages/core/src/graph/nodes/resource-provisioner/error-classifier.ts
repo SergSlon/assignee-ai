@@ -107,7 +107,38 @@ const NOT_AUTHORIZED_HINT =
   "Most often this means the operator user was provisioned by an older version of assignee; " +
   "run `assignee setup` to refresh the operator policy via CreatePolicyVersion (no user recreation needed). " +
   "If the error persists after re-running setup, the action is missing from the codebase — " +
-  "file an issue with the AWS message below.";
+  "file an issue with the AWS message below. " +
+  "Run `assignee audit-verify` to see required IAM actions for this resource type.";
+
+/**
+ * DF-A4/D6 (live dogfood 2026-05-11): PERMISSION_DENIED / AccessDeniedException
+ * from CloudControl API was surfacing as the raw unhandled error string
+ * ("An unclassified error was encountered. This may be a bug") because
+ * ACCESS_DENIED kind mapped to PROVISIONING_ERROR_CODES.UNKNOWN instead of
+ * PROVISIONING_ERROR_CODES.ACCESS_DENIED.
+ *
+ * Fix: any raw AWS message that contains "AccessDeniedException", "Access Denied",
+ * or "PERMISSION_DENIED" is enriched with an actionable hint that names
+ * `assignee audit-verify` as the diagnostic tool.
+ *
+ * Note: "is not authorized to perform" messages are handled by
+ * NOT_AUTHORIZED_SUBSTRING above (those come through multiple ProvisioningErrorKinds
+ * depending on which SDK pathway hit them). This handler covers the pure CCAPI
+ * permission-denied class that arrives explicitly as ACCESS_DENIED kind with
+ * an AWS AccessDeniedException payload.
+ */
+const PERMISSION_DENIED_SUBSTRINGS = [
+  "accessdeniedexception",
+  "access denied",
+  "permission_denied",
+  "is not authorized to perform",
+] as const;
+
+const PERMISSION_DENIED_HINT =
+  "CloudControl API returned a permission denied error. " +
+  "Check your operator role's permissions for this resource type. " +
+  "Run `assignee audit-verify` to list the required IAM actions and identify what is missing. " +
+  "Then run `assignee setup` to refresh the operator policy via CreatePolicyVersion (no user recreation needed).";
 
 /**
  * Shared base for ALREADY_EXISTS / THROTTLED / UNKNOWN (and any future
@@ -123,6 +154,18 @@ function staticEntry(
     userPrefix: () => prefix,
     shortMessage: () => shortMessage,
   };
+}
+
+/**
+ * Returns true when the raw AWS error message indicates a permission-denied
+ * class of error (covers CCAPI AccessDeniedException, "is not authorized to
+ * perform", and bare "PERMISSION_DENIED" strings).
+ *
+ * Used by both enrichers AND the ACCESS_DENIED dispatch entry to decide
+ * whether to surface the PERMISSION_DENIED_HINT.
+ */
+function isPermissionDeniedMessage(lower: string): boolean {
+  return PERMISSION_DENIED_SUBSTRINGS.some((s) => lower.includes(s));
 }
 
 /**
@@ -154,6 +197,57 @@ function enrichForShortMessage(raw: string): string {
     return `${NOT_AUTHORIZED_HINT} (raw: ${raw})`;
   }
   return raw;
+}
+
+/**
+ * Enricher for the ACCESS_DENIED dispatch branch. Unlike the generic
+ * enrichers above (which handle UNKNOWN-mapped kinds), this one is
+ * called ONLY when the ProvisioningErrorKind is explicitly ACCESS_DENIED.
+ * It always returns the PERMISSION_DENIED_HINT + raw message — because
+ * if CCAPI classified the error as ACCESS_DENIED, it IS a permission issue.
+ *
+ * DF-A4/D6 fix: this ensures `ACCESS_DENIED` kind messages surface the
+ * `assignee audit-verify` hint AND are classified with
+ * PROVISIONING_ERROR_CODES.ACCESS_DENIED (not UNKNOWN).
+ */
+function enrichAccessDeniedForUserPrefix(raw: string): string {
+  const lower = raw.toLowerCase();
+  // If it matches a more specific pattern (DDB attr-defs or not-authorized),
+  // use that more specific enrichment first — those already include the
+  // `assignee setup` hint which is equally actionable.
+  if (lower.includes(DDB_ATTR_DEFS_MISMATCH_SUBSTRING)) {
+    return `${DDB_ATTR_DEFS_HINT}\n\nAWS message: ${raw}`;
+  }
+  if (lower.includes(NOT_AUTHORIZED_SUBSTRING)) {
+    return `${NOT_AUTHORIZED_HINT}\n\nAWS message: ${raw}`;
+  }
+  // Pure CCAPI AccessDeniedException / PERMISSION_DENIED pathway.
+  return `${PERMISSION_DENIED_HINT}\n\nAWS message: ${raw}`;
+}
+
+function enrichAccessDeniedForShortMessage(raw: string): string {
+  const lower = raw.toLowerCase();
+  if (lower.includes(DDB_ATTR_DEFS_MISMATCH_SUBSTRING)) {
+    return `${DDB_ATTR_DEFS_HINT} (raw: ${raw})`;
+  }
+  if (lower.includes(NOT_AUTHORIZED_SUBSTRING)) {
+    return `${NOT_AUTHORIZED_HINT} (raw: ${raw})`;
+  }
+  return `${PERMISSION_DENIED_HINT} (raw: ${raw})`;
+}
+
+/**
+ * DF-A4/D6: Returns true when the ACCESS_DENIED error message is a pure
+ * "access denied" variant (not "not authorized to perform" which is
+ * separately handled). Used by tests to verify the routing decision.
+ * Exported for unit tests only.
+ */
+export function isRawAccessDeniedMessage(raw: string): boolean {
+  const lower = raw.toLowerCase();
+  return (
+    isPermissionDeniedMessage(lower) &&
+    !lower.includes(NOT_AUTHORIZED_SUBSTRING)
+  );
 }
 
 /**
@@ -195,10 +289,14 @@ const ERROR_DISPATCH: Record<
     userPrefix: enrichForUserPrefix,
     shortMessage: enrichForShortMessage,
   },
+  // DF-A4/D6 fix: ACCESS_DENIED kind now maps to
+  // PROVISIONING_ERROR_CODES.ACCESS_DENIED (was UNKNOWN) so downstream
+  // hint-registry / result-formatter branches see a distinct error code.
+  // The enricher surfaces the `assignee audit-verify` hint + raw message.
   [ProvisioningErrorKind.ACCESS_DENIED]: {
-    errorCode: PROVISIONING_ERROR_CODES.UNKNOWN,
-    userPrefix: enrichForUserPrefix,
-    shortMessage: enrichForShortMessage,
+    errorCode: PROVISIONING_ERROR_CODES.ACCESS_DENIED,
+    userPrefix: enrichAccessDeniedForUserPrefix,
+    shortMessage: enrichAccessDeniedForShortMessage,
   },
   [ProvisioningErrorKind.SERVICE_ERROR]: {
     errorCode: PROVISIONING_ERROR_CODES.UNKNOWN,

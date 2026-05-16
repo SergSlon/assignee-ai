@@ -22,6 +22,7 @@ import { placeholderResourceIdGuard } from "./guards/placeholder-resource-id.js"
 import { sentinelPasswordGuard } from "./guards/sentinel-password.js";
 import { vpcExistenceGuard } from "./guards/vpc-existence.js";
 import { managedPolicyGuard } from "./guards/managed-policy.js";
+import { lambdaIamAutoRoleGuard } from "./guards/lambda-iam-autorole.js";
 
 export const defaultPreflightGuards: readonly PreflightGuard[] = [
   requiredFieldsGuard, // cheap: schema "required" check
@@ -30,4 +31,8 @@ export const defaultPreflightGuards: readonly PreflightGuard[] = [
   sentinelPasswordGuard, // cheap: RDS placeholder password sentinel
   vpcExistenceGuard, // hits AWS: ec2:DescribeVpcs (skip if no VpcId)
   managedPolicyGuard, // hits AWS: iam:GetPolicy per ARN
+  // DF-D5: Lambda auto-role IAM preflight — checks iam:CreateRole +
+  // iam:AttachRolePolicy when the intent will auto-create an execution role.
+  // Runs after managed-policy so all AWS-touching guards are grouped together.
+  lambdaIamAutoRoleGuard, // hits AWS: iam:SimulatePrincipalPolicy (skip if no IAM tool / no Lambda)
 ];
