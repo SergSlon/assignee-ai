@@ -53,6 +53,7 @@ import { restoreProvisionsCommand } from "./commands/restore-provisions.js";
 import { auditVerifyCommand } from "./commands/audit-verify.js";
 import { updateCommand } from "./commands/update.js";
 import { versionCommand } from "./commands/version.js";
+import { discoverCommand } from "./commands/discover/discover.js";
 import { ProcessExitCode } from "./constants/errors.js";
 import { errorToExitCode } from "./utils/exit-code.js";
 import {
@@ -186,6 +187,7 @@ program.addCommand(applyCommand);
 program.addCommand(reconcileCommand);
 program.addCommand(doctorCommand);
 program.addCommand(updateCommand);
+program.addCommand(discoverCommand);
 
 // Propagate `showGlobalOptions: true` to every subcommand so the root-level
 // `--verbose` (and any future global options) appear in `<subcommand> --help`

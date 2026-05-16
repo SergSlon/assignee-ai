@@ -19,6 +19,70 @@ review methodology notes, see
 
 ### Added
 
+**feat(discover): `assignee discover` interactive catalogue picker (Story 108-A-03)**
+
+Closes Epic 108-A G1 (first-run discoverability). Adds a new top-level command
+`assignee discover` that exposes all 38 supported resource types, 13 compound
+patterns, and 18 CLI commands via a fuzzy-search picker in TTY contexts and a
+paged plain-text list in non-TTY/pipe contexts.
+
+- `apps/cli/src/commands/discover/discover-data.ts` (new): shared data layer
+  with `buildCatalogue(categoryFilter?)` and `fuzzyFilter(items, query)`.
+  Returns `CatalogueItem[]` objects with `{ id, category, description, exampleIntent }`.
+  Deliberately diverges from `plan/discovery.ts` — see AC#5 rationale in story spec.
+- `apps/cli/src/commands/discover/discover.ts` (new): Commander command using
+  `@clack/prompts` `autocomplete` for TTY interactive mode; plain-text paged output
+  for non-TTY; `--json` mode for machine-readable catalogue; `--category` flag to
+  filter by `resource-types | patterns | commands`.
+- `apps/cli/src/index.ts`: `program.addCommand(discoverCommand)` registration.
+- `packages/core/src/__tests__/variant-matrix/index.ts`: `CLI_COMMANDS` tuple
+  updated to 18 entries (added `"discover"`).
+- `packages/core/src/__tests__/variant-matrix/drift-guard.test.ts`: count
+  assertion updated from 17 → 18.
+- `packages/core/src/__tests__/shipped-wired-contract.test.ts`: `--category`
+  added to `PROBE_WHITELIST_FLAGS` (covered by unit tests Axes G/H/I).
+
+**Library choice**: `@clack/prompts` `autocomplete` (already in `apps/cli/package.json`).
+Provides built-in type-ahead filtering via a `filter` hook, consistent with existing
+usage in `init.ts` and `setup.ts`. No new dependency required.
+
+**feat(doctor): intent-routing miss-rate telemetry + doctor check (Story 108-B-04)**
+
+Closes Epic 108-B G6. Adds opt-in local telemetry for intent-routing decisions
+and surfaces miss-rate in `assignee doctor`.
+
+- `packages/core/src/graph/graph-state.ts`: new optional `classifierPath` field
+  (`"keyword" | "llm-primary" | "llm-fallback" | "unsupported" | undefined`) on
+  `AgentState`; last-write-wins reducer; backwards-compatible (default `undefined`).
+- `packages/core/src/telemetry/telemetry-event-schema.ts`: new `IntentRoutingEvent`
+  interface with `eventType`, `timestamp`, `classifierPath`, `patternKey`,
+  `resourceType`, and `durationMs` fields.
+- `packages/core/src/telemetry/local-log-writer.ts` (new): appends
+  `IntentRoutingEvent` objects as JSONL to `~/.assignee/telemetry-events.jsonl`;
+  opt-in via `ASSIGNEE_TELEMETRY_ADAPTER=local`; write errors are swallowed
+  (debug-level log, no crash).
+- `packages/core/src/telemetry/index.ts` (new): telemetry barrel exporting
+  schema types and log writer; registered as `@assignee/core/telemetry` export.
+- `packages/core/src/graph/nodes/intent-parser/index.ts`: `createIntentParserNode`
+  now sets `state.classifierPath` and calls `emitRoutingTelemetry()` at each
+  branch (keyword / llm-primary / llm-fallback / unsupported).
+- `packages/core/src/utils/logger/actions.ts`: added `TELEMETRY_EMIT` action and
+  `DEBUG` log level to `LogLevel`.
+- `packages/core/src/telemetry/otel-exporter.ts`: added `debug: 5` to
+  `SEVERITY_NUMBERS` map (required by `Record<LogLevelType, number>` type).
+- `packages/core/src/constants/env-vars.ts`: registered `ASSIGNEE_TELEMETRY_ADAPTER`
+  in the `EnvVar` catalogue.
+- `apps/cli/src/commands/doctor/checks/intent-routing-health.ts` (new): reads
+  last 100 events; computes `unsupported/total × 100%` miss-rate; renders
+  `"Intent routing miss-rate (last N events): X%"` in `assignee doctor`.
+  Warn threshold: ≥ 10% miss-rate. No file → `"Telemetry not enabled"`.
+- `apps/cli/src/commands/doctor/runner.ts`: added `checkIntentRoutingHealth` as
+  the ninth section in the doctor report.
+- New test files: `telemetry-emit.test.ts` (Axes A–E, K), `local-log-writer.test.ts`
+  (Axes E, F, I), `intent-routing-health.test.ts` (Axes G, H + AC-3/AC-4 contracts).
+- Snapshot baseline: 1 snapshot file pre-change, 0 snapshot updates (optional
+  field with `default: () => undefined` does not appear in existing snapshots).
+
 **feat(plan): cost-leading plan output + `--cost-detail` flag (Story 108-B-03)**
 
 Closes Epic 108-B G1–G4. Every `assignee plan` output now leads with a cost block

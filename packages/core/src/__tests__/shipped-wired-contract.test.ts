@@ -242,6 +242,10 @@ const PROBE_WHITELIST_FLAGS = new Set<string>([
   // unit tests in packages/core/src/graph/nodes/result-formatter/formatters/plan.test.ts
   // (Axes I, J, K: costDetail=false, costDetail=true+perResourceCosts, single-resource).
   "--cost-detail",
+  // Story 108-A-03: --category (discover) — category filter for `assignee discover`.
+  // Behaviour covered by unit tests in apps/cli/src/commands/discover/discover.test.ts
+  // (Axes G, H, I: resource-types, patterns, commands category filters).
+  "--category",
 ]);
 
 /** Extract every `<long-flag>` from Commander `.option("...")` calls. */

@@ -18,6 +18,10 @@ complete -c assignee -n __fish_use_subcommand -a setup -d 'Create IAM users and 
 complete -c assignee -n __fish_use_subcommand -a status -d 'Show summary of managed infrastructure'
 complete -c assignee -n __fish_use_subcommand -a reconcile -d 'Reconcile drifted resources back to desired state'
 complete -c assignee -n __fish_use_subcommand -a doctor -d 'Run a non-destructive health check of credentials, Bedrock, MCP servers, cache, config and best-practices'
+complete -c assignee -n __fish_use_subcommand -a restore-provisions -d 'Restore provisions.json from a dated backup (BCP/DR)'
+complete -c assignee -n __fish_use_subcommand -a audit-verify -d 'Verify the HMAC chain integrity of the local audit log. Exits 0 on a clean chain; non-zero with diagnostics when the chain is broken.'
+complete -c assignee -n __fish_use_subcommand -a update -d 'Refresh a deployed static-website: upload new files to S3 and invalidate CloudFront'
+complete -c assignee -n __fish_use_subcommand -a discover -d 'Browse and search all supported resource types, compound patterns, and CLI commands'
 complete -c assignee -n __fish_use_subcommand -a version -d 'Show version and environment info'
 
 # Options for 'plan'
@@ -125,6 +129,31 @@ complete -c assignee -n "__fish_seen_subcommand_from doctor" -l json -d 'Shortha
 complete -c assignee -n "__fish_seen_subcommand_from doctor" -l skip-bedrock -d 'Skip the Bedrock LLM invoke check'
 complete -c assignee -n "__fish_seen_subcommand_from doctor" -l skip-mcp -d 'Skip the MCP server launch probe'
 complete -c assignee -n "__fish_seen_subcommand_from doctor" -l short -d 'Fast identity-only summary: STS account + ARN + region + active config (replaces the removed `whoami` command)'
+
+# Options for 'restore-provisions'
+complete -c assignee -n "__fish_seen_subcommand_from restore-provisions" -l from -r -d 'Restore from a specific backup date (YYYY-MM-DD). Defaults to most recent backup.'
+complete -c assignee -n "__fish_seen_subcommand_from restore-provisions" -l from-audit-log -d 'Rebuild missing provision records from the HMAC-chained audit log (~/.assignee/audit/audit.log). Reads `apply_resource_created` events and appends a reconstructed record for any ARN absent from provisions.json. Cannot be combined with --from <date>.'
+complete -c assignee -n "__fish_seen_subcommand_from restore-provisions" -l json -d 'Emit machine-readable JSON to stdout instead of human-readable text'
+
+# Options for 'audit-verify'
+complete -c assignee -n "__fish_seen_subcommand_from audit-verify" -l from -r -d 'Start date for verification range (ISO 8601). Scaffold: full chain always verified; range filtering is planned for a future release.'
+complete -c assignee -n "__fish_seen_subcommand_from audit-verify" -l to -r -d 'End date for verification range (ISO 8601). Scaffold: full chain always verified; range filtering is planned for a future release.'
+complete -c assignee -n "__fish_seen_subcommand_from audit-verify" -l log-file -r -d 'Audit log file path (default: /Users/serhii_l/.assignee/audit/audit.log)'
+complete -c assignee -n "__fish_seen_subcommand_from audit-verify" -l json -d 'Emit machine-readable JSON to stdout instead of human-readable text'
+
+# Options for 'update'
+complete -c assignee -n "__fish_seen_subcommand_from update" -l source -s s -r -d 'Path to local directory containing the new site files (required)'
+complete -c assignee -n "__fish_seen_subcommand_from update" -l delete -d 'Delete remote objects that have no local counterpart (default: OFF — additive uploads only)'
+complete -c assignee -n "__fish_seen_subcommand_from update" -l invalidation-paths -r -d 'Comma-separated paths to invalidate on CloudFront (default: \'/*\')'
+complete -c assignee -n "__fish_seen_subcommand_from update" -l no-invalidation -d 'Skip CloudFront cache invalidation entirely'
+complete -c assignee -n "__fish_seen_subcommand_from update" -l wait -d 'Poll until invalidation Status === \'Completed\' (typically 1-5 min)'
+complete -c assignee -n "__fish_seen_subcommand_from update" -l yes -s y -d 'Skip confirmation prompt (for CI/CD)'
+complete -c assignee -n "__fish_seen_subcommand_from update" -l output -s o -r -d 'Output format (json|text)'
+complete -c assignee -n "__fish_seen_subcommand_from update" -l json -d 'Shorthand for --output json (emit machine-readable envelope)'
+
+# Options for 'discover'
+complete -c assignee -n "__fish_seen_subcommand_from discover" -l json -d 'Output the full catalogue as a JSON array'
+complete -c assignee -n "__fish_seen_subcommand_from discover" -l category -r -d 'Filter by category: resource-types | patterns | commands'
 
 # Options for 'version'
 complete -c assignee -n "__fish_seen_subcommand_from version" -l json -d 'Emit machine-readable JSON to stdout instead of human-readable text'
