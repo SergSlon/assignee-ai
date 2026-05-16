@@ -23,7 +23,7 @@ flowchart TD
     CMD -->|"assignee init"| INIT
     CMD -->|"assignee status &lt;token&gt;"| STATUS
 
-    subgraph GRAPH["LangGraph Agent (14 Nodes)"]
+    subgraph GRAPH["LangGraph Agent (15 Nodes)"]
         direction TB
 
         subgraph PHASE1["Phase 1 — Planning"]
@@ -47,7 +47,11 @@ flowchart TD
             RF["14. RESULT_FORMATTER<br/>—————<br/>SUCCESS / FAILED<br/>+ security posture check"]
         end
 
+        QH["15. QUERY_HANDLER<br/>—————<br/>Query-intent branch<br/>Read-only queries bypass<br/>creation pipeline"]
+
         IP --> SF --> OE --> CD --> PG --> VDS --> AG --> BP --> FA --> PF
+        IP -->|"QUERY_INTENT"| QH
+        QH --> DONE
 
         PF -->|"PLAN mode"| RF
         PF -->|"APPLY mode"| HA
@@ -551,7 +555,7 @@ flowchart TD
     WIND --> MCP_SERVER
 
     subgraph INTERNAL["Internal: Reuses CLI Graph"]
-        GRAPH["LangGraph Agent<br/>(same 14 nodes)"]
+        GRAPH["LangGraph Agent<br/>(same 15 nodes)"]
         MCPS["Core MCP Servers<br/>(pricing + docs)"]
         AWS["AWS CloudControl<br/>+ pre-delete hooks"]
     end

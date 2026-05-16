@@ -216,6 +216,37 @@ skew.
 keys, rotate via `assignee setup --profile admin`. For clock skew,
 sync your system clock.
 
+### `STALE_SESSION_TOKEN` — expired or mismatched session token
+
+**Symptom.** Any AWS call fails with `The security token included in the
+request is invalid`, `InvalidClientTokenId`, or `ExpiredToken`, and
+`ASSIGNEE_OPERATOR_ACCESS_KEY_ID` / `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY`
+are present in the environment. The error code surfaced by the CLI hint
+registry is `STALE_SESSION_TOKEN` (defined in
+`packages/core/src/constants/errors.ts`).
+
+**Cause.** The operator credentials are not missing — they are stale.
+The paired `ASSIGNEE_OPERATOR_SESSION_TOKEN` was issued in a previous
+SSO or STS session and has since expired, or it belongs to a different
+AKID than the one currently set. AWS rejects the request because the
+AKID + SECRET + SESSION_TOKEN tuple does not form a valid session.
+
+**Fix (pick one):**
+
+1. **Re-run `assignee setup`** — rotates the long-lived IAM access key
+   and drops any stale `*_SESSION_TOKEN` from your `.env` (behavior
+   added per the env-writer fix on 2026-05-05).
+2. **SSO session**: `aws sso login --profile <name>` then re-export
+   credentials with `aws configure export-credentials`.
+3. **Manual**: delete `ASSIGNEE_OPERATOR_SESSION_TOKEN` (and the
+   `READER` / `AUDITOR` variants) from your `.env` if you are using
+   long-lived IAM keys without STS. Session tokens are only needed with
+   `sts:GetSessionToken` temporary credentials.
+
+This is distinct from `InvalidSessionTokenError` (below), which is
+triggered by a token that is syntactically too short (< 100 characters)
+rather than an expired-but-valid-length token.
+
 ### `InvalidSessionTokenError` — malformed session token
 
 **Symptom.** `session token expired or invalid; run \`aws sso login\` if

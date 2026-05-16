@@ -43,7 +43,7 @@ packages/best-practices
 
 ## LangGraph Agent Graph
 
-The core computation is a **StateGraph** from `@langchain/langgraph` with 14 nodes. <!-- doc-lint: node-count -->
+The core computation is a **StateGraph** from `@langchain/langgraph` with 15 nodes. <!-- doc-lint: node-count -->
 
 ### State (AgentState)
 
@@ -135,7 +135,7 @@ Two registries:
 1. **PricingStrategyRegistry** -- 38 strategies, one per registered resource type plugin. Each provides:
    - `estimate(desiredState)` -> local fallback label
    - `getMcpConfig(desiredState)` -> MCP query parameters for live pricing
-2. **PricingDecomposerRegistry** -- 38 decomposers. Each returns `PricingLineItem[]` with service codes, filters, units for multi-line cost breakdowns. Counts verified by `pnpm doc-lint` (`patterns=11 types=38 strategies=38 decomposers=38`).
+2. **PricingDecomposerRegistry** -- 38 decomposers. Each returns `PricingLineItem[]` with service codes, filters, units for multi-line cost breakdowns. Counts verified by `pnpm doc-lint` (`patterns=13 types=38 strategies=38 decomposers=38`).
 
 ### Best Practices Engine (`packages/best-practices/`)
 
@@ -206,7 +206,7 @@ Seven ports define the package's external surface (`ls packages/core/src/ports/`
 | `audit/`                      | packages/core/src/audit/        | HMAC-chain audit log — `audit-log.ts`, `audit-verifier.ts`, `hmac-chain.ts`                                                              |
 | `rbac/`                       | packages/core/src/rbac/         | RBAC scaffolding — `policy-schema.ts`, `policy-store.ts`, `role-context.ts`; five fixtures (admin/operator/read-only/auditor/restricted) |
 | `provisioning/`               | packages/core/src/provisioning/ | Partition-aware provisioner router — `ccapi-partition-support.ts` matrix + `partition-aware-provisioner.ts`                              |
-| `telemetry/spans.ts`          | packages/core/src/telemetry/    | Per-graph-node span emitter (13/14 nodes at entry + exit; HUMAN_APPROVAL excluded)                                                       |
+| `telemetry/spans.ts`          | packages/core/src/telemetry/    | Per-graph-node span emitter (14/15 nodes at entry + exit; HUMAN_APPROVAL excluded)                                                       |
 | `telemetry/otel-allowlist.ts` | packages/core/src/telemetry/    | `OTEL_FIELD_ALLOWLIST` + `FIELD_PRIVACY_MAP` source-side allowlist with `@privacy: PII/SYSTEM/OPERATIONAL` classification                |
 
 ## Persistence Boundaries and Sensitive-Field Redaction
@@ -264,14 +264,14 @@ Highest to lowest priority (Org `locked` and `always_ask` are special level-0 ov
 
 ### Config Loaders
 
-| Loader                     | Source                           |
-| -------------------------- | -------------------------------- |
-| `user-config-loader.ts`    | `~/.config/assignee/config.yaml` |
-| `project-config-loader.ts` | `.assignee/config.yaml`          |
-| `org-policy-loader.ts`     | Remote org policy endpoint       |
-| `org-policy-cache.ts`      | Cached org policy                |
-| `env-overrides.ts`         | `ASSIGNEE_*` env vars            |
-| `operator-credentials.ts`  | AWS credential resolution        |
+| Loader                                                            | Source                           |
+| ----------------------------------------------------------------- | -------------------------------- |
+| `user-config-loader.ts`                                           | `~/.config/assignee/config.yaml` |
+| `project-config-loader.ts`                                        | `.assignee/config.yaml`          |
+| `org-policy-loader.ts`                                            | Remote org policy endpoint       |
+| `org-policy-cache.ts`                                             | Cached org policy                |
+| `env-overrides.ts`                                                | `ASSIGNEE_*` env vars            |
+| `env-overrides.ts` (via `requireAssigneeCredentials("operator")`) | AWS credential resolution        |
 
 ### Config Schema (`packages/core/src/config/config-schema.ts`)
 

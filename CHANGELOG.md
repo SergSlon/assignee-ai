@@ -76,6 +76,11 @@ Batches the informational-severity findings Quinn logged across three Epic-106 r
 
 Skipped (documented): EPIC-106-2 Variation D arrow-wrapping changes documented semantics+tests — deferred to follow-up story; EPIC-106-5 fallback noncurrent-day tightening deferred pending dogfood evidence; EPIC-106-6 one-way resource_type scoping out of scope per review.
 
+### Changed
+
+- **docs:** swept 10 docs files for code-drift — reconciled node count to 15 (was 14 in 6 files), added `update` command + `restore-provisions --from-audit-log` flag to `commands.md`, added 3 missing compound patterns (`sqs-with-dlq`, `sns-with-email-subscription`, `lambda-with-exec-role`) + promoted `vpc-public-only` in `resource-types.md`, added `STALE_SESSION_TOKEN` entry to `troubleshooting.md`, corrected Node version (20.11+) in `tutorials/getting-started.md`.
+- **scripts(doc-lint):** added `graphNodeCount` + `patternCount` cross-doc guards to `apps/cli/scripts/doc-lint.mjs` so future 14↔15 drift is caught at build time.
+
 ### Removed
 
 - Dead `PricingUnit` parallel constant in `constants/pricing-api.ts` (zero callers except one test, repointed to `PriceUnit.PER_GB_MONTH_LONG`). Closes EPIC-106 strategies-review OOS paydown.
