@@ -68,6 +68,7 @@ import { extractLambdaBody } from "./extractors/lambda-body-extractor.js";
 import { applyRdsTierDefaults } from "./extractors/environment-tier-extractor.js";
 import { extractVpcDefaultHint } from "./extractors/vpc-default-hint-extractor.js";
 import { extractExisting } from "./extractors/existing-resource-extractor.js";
+import { extractRdsVpcSecurityGroups } from "./extractors/rds-intent-extractor.js";
 import { productionResourceDiscoveryPort } from "../../../services/resource-discovery-port.js";
 import { AWS_REGION } from "../../../config/constants/aws.js";
 
@@ -164,6 +165,10 @@ export function extractAssertedValues(
   extractS3Lifecycle(intent, intentLower, resourceType, elicited, advisories);
   extractLambdaBody(intent, resourceType, elicited);
   applyRdsTierDefaults(intent, resourceType, elicited, advisories);
+  // DF-E2: detect missing VPC security groups for standalone RDS intents
+  // and push an elicitation advisory so the user sees the ask before
+  // the skeletal-plan-detector fires at plan-generation time.
+  extractRdsVpcSecurityGroups(intent, resourceType, elicited, advisories);
   // CP-3: detect "vpc-default" / "default VPC" / "existing VPC <id>" — result
   // stored in _VpcDefaultHint for the efs-default-vpc-hint advisor to consume.
   const vpcDefaultHint = extractVpcDefaultHint(intent);

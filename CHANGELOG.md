@@ -42,6 +42,35 @@ extend in their Probes sections.
 
 ### Fixed
 
+**fix(apply): three dogfood apply-blockers from 2026-05-11 run (Story 108-A-02)**
+
+Closes Epic 108-A DF-D5, DF-E2, DF-A4/D6.
+
+- **DF-D5 — Lambda auto-role IAM preflight guard** (`lambda-iam-autorole.ts`, new):
+  `assignee apply "Create a Lambda hello world"` silently failed mid-apply with
+  an opaque CCAPI "not authorized: iam:CreateRole" when the operator lacked the
+  auto-role permissions. New `lambdaIamAutoRoleGuard` simulates `iam:CreateRole` +
+  `iam:AttachRolePolicy` via the IAM MCP tool before apply, surfaces the missing
+  actions with an actionable message naming `--set Role=arn:...` as the escape hatch,
+  and is registered in `registry.ts`. Guard skips gracefully when the IAM MCP tool
+  is unavailable or the caller ARN cannot be resolved.
+
+- **DF-E2 — RDS empty VPC security groups advisory** (`rds-intent-extractor.ts`, new):
+  `assignee plan "rds postgres"` emitted `VPCSecurityGroups: []` which the skeletal-plan
+  detector flagged post-generation. New extractor in the intent-parser pipeline either
+  (a) extracts explicit `sg-XXXX` IDs from the intent or (b) pushes an
+  `RDS_VPC_SECURITY_GROUPS_EMPTY` advisory at extraction time with `--set VPCSecurityGroups=`
+  and `rds-with-vpc` compound pattern hints. The advisory is non-blocking but surfaces
+  earlier than the skeletal-plan warning, consistent with the `applyRdsTierDefaults`
+  advisory pattern.
+
+- **DF-A4/D6 — PERMISSION_DENIED error classification** (`error-classifier.ts`):
+  CloudControl `ACCESS_DENIED` kind mapped to `PROVISIONING_ERROR_CODES.UNKNOWN` (was
+  "An unclassified error was encountered"). Now maps to `PROVISIONING_ERROR_CODES.ACCESS_DENIED`
+  with a dedicated enricher that surfaces `assignee audit-verify` + `assignee setup`
+  as the actionable remediation path, and preserves the original AWS message for
+  grep/support.
+
 **fix(graph): `estimatedMonthlyCost` and `pricingBreakdown` accumulator reducers (Story 108-B-02)**
 
 Fixes a last-write-wins reducer bug where compound plans (N-resource LangGraph loops)
