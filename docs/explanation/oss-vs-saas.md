@@ -29,7 +29,7 @@ audit; it is open and stays open.
 
 ### CLI core, ports, and adapters
 
-The `assignee` CLI binary, the 14-node LangGraph pipeline, the seven
+The `assignee` CLI binary, the 15-node LangGraph pipeline, the seven
 hexagonal ports under `packages/core/src/ports/`, and the MCP server
 (`apps/mcp-server`) are MIT-licensed. That includes:
 

@@ -161,8 +161,6 @@ Provisioning order (6 groups):
 
 Cost: dominated by the NAT Gateway hourly + data-processing fee. Run `assignee plan --json "..."  | jq .estimatedMonthlyCost` for the live monthly estimate in your region.
 
-**Public-only variant**: "simple vpc", "vpc public only" -- creates 9 resources (no NAT, no private subnets). All components are free-tier (VPC, subnets, IGW, route tables); run `assignee optimize` or `assignee plan --json "..."` to confirm against current AWS pricing.
-
 ### WebSocket API (12 resources)
 
 **Trigger keywords**: "websocket api", "realtime api", "chat api", "ws api"
@@ -299,6 +297,99 @@ Cost: the networking layer (VPC + private subnets + route tables) is free-tier. 
 | S3 Upload (post-provision) | SDK: S3 PutObject                      |
 
 All four CCAPI resources are provisioned in dependency order (see "Static Website Compound" section above for the full marker-ref wiring and destroy tier ordering). All public access on S3 is blocked by default. CloudFront serves content via Origin Access Control (OAC). When `--source <path>` is provided, files are uploaded to S3 after provisioning as a post-provision hook.
+
+### VPC with Public Subnets Only (9 resources)
+
+**Pattern ID**: `vpc-public-only`
+
+**Trigger keywords**: "simple vpc", "vpc public only", "vpc public-only", "public-only vpc", "vpc no nat", "vpc without nat", "cheap vpc", "free-tier vpc"
+
+Free-tier VPC variant — no NAT Gateway, no private subnets. All components (VPC, subnets, IGW, route tables) are free-tier. Use this when your workloads only need public internet access and you want to avoid the NAT Gateway hourly charge.
+
+| Resource               | Type                                    | Count |
+| ---------------------- | --------------------------------------- | ----- |
+| VPC                    | `AWS::EC2::VPC`                         | 1     |
+| Public Subnets         | `AWS::EC2::Subnet`                      | 2     |
+| Internet Gateway       | `AWS::EC2::InternetGateway`             | 1     |
+| VPC Gateway Attachment | `AWS::EC2::VPCGatewayAttachment`        | 1     |
+| Public Route Table     | `AWS::EC2::RouteTable`                  | 1     |
+| Public Route           | `AWS::EC2::Route`                       | 1     |
+| Subnet-RT Associations | `AWS::EC2::SubnetRouteTableAssociation` | 2     |
+
+Provisioning order (4 groups):
+
+1. VPC
+2. Public Subnets + IGW (parallel)
+3. IGW Attachment + Public Route Table (parallel)
+4. Public Route → Subnet-RT Associations (parallel)
+
+Cost: $0 networking — IGW and routes are free. Run `assignee optimize` or `assignee plan --json "..."` to confirm against current AWS pricing.
+
+### SQS Queue with Dead-Letter Queue (2 resources)
+
+**Pattern ID**: `sqs-with-dlq` (CP-1, Epic-105)
+
+**Trigger keywords**: "with dlq", "with dead-letter queue", "dead letter queue", "sqs dlq", "sqs with dlq", "queue with dlq", "queue and dlq"
+
+Primary SQS queue wired to a DLQ companion via `RedrivePolicy`. The DLQ is created first so its ARN can be injected into the primary queue's `RedrivePolicy.deadLetterTargetArn` via `markerGetAtt`.
+
+| Resource          | Type              | Notes                                        |
+| ----------------- | ----------------- | -------------------------------------------- |
+| Dead Letter Queue | `AWS::SQS::Queue` | Created first; SSE enabled, 14-day retention |
+| Primary Queue     | `AWS::SQS::Queue` | RedrivePolicy → DLQ ARN, maxReceiveCount: 5  |
+
+Provisioning order (2 groups):
+
+1. Dead Letter Queue
+2. Primary Queue (depends on DLQ ARN)
+
+Both queues have `SqsManagedSseEnabled: true` and `MessageRetentionPeriod: 1209600` (14 days) by default. The `RedrivePolicy` on the primary queue uses `markerGetAtt(DLQ, "Arn")` resolved at apply time.
+
+> **Note**: This pattern is suppressed when the intent includes "lambda", "processor", or "message processing" — those intents match the larger `message-processing` compound pattern instead.
+
+### SNS Topic with Email Subscription (2 resources)
+
+**Pattern ID**: `sns-with-email-subscription` (CP-2, Epic-105)
+
+**Trigger keywords**: "with email subscription", "with subscriber", "sns email", "sns with email", "sns topic email", "topic with email subscription"
+
+SNS Topic + email Subscription pair. The Subscription's `TopicArn` is wired via `markerRef(TOPIC)` so it resolves to the topic ARN returned by CCAPI after the topic is created. The email address is extracted from the intent by `email-extractor.ts` and injected into the Subscription's `Endpoint` field at plan time.
+
+| Resource           | Type                     | Notes                                       |
+| ------------------ | ------------------------ | ------------------------------------------- |
+| SNS Topic          | `AWS::SNS::Topic`        | Created first                               |
+| Email Subscription | `AWS::SNS::Subscription` | Protocol: email, TopicArn: markerRef(Topic) |
+
+Provisioning order (2 groups):
+
+1. SNS Topic
+2. Email Subscription (depends on Topic ARN)
+
+AWS sends a confirmation email to the subscribed address after the Subscription is created — the subscriber must click the confirmation link before messages are delivered.
+
+> **Note**: This pattern is suppressed when the intent includes "lambda", "sqs", "queue", or "message processing".
+
+### Lambda Function with Exec Role (2 resources)
+
+**Pattern ID**: `lambda-with-exec-role` (Wave 13, pre-Epic-105)
+
+**Trigger keywords**: "create a lambda", "create a function", "deploy a lambda", "lambda function", "node lambda", "python lambda", "serverless function", "background worker"
+
+Minimal Lambda + auto-created IAM execution role. Closes the gap where `assignee plan "Create a Lambda"` previously required the user to provide a `--set Role=arn:…` workaround because Lambda's `Role` field is mandatory. With this pattern, plain "create a lambda" intents produce a 2-resource compound: the IAM role is created first, then the Lambda function with the role ARN injected via `markerGetAtt`.
+
+| Resource              | Type                    | Notes                                             |
+| --------------------- | ----------------------- | ------------------------------------------------- |
+| Lambda Execution Role | `AWS::IAM::Role`        | Lambda trust policy + AWSLambdaBasicExecutionRole |
+| Lambda Function       | `AWS::Lambda::Function` | Role injected via markerGetAtt from above         |
+
+Provisioning order (2 groups):
+
+1. IAM Execution Role (lambda.amazonaws.com trust policy, AWS-managed `AWSLambdaBasicExecutionRole` attached)
+2. Lambda Function (Role ARN resolved from step 1)
+
+The auto-named role follows the pattern `assignee-iam-execution-role-<runIdShort>`. If the intent specifies a `FunctionName`, it is preserved end-to-end; the auto-name fires only when the parser did not extract one.
+
+> **Note**: The `serverless-api` pattern (8 resources, includes API Gateway) is registered first and wins for intents like "create a serverless api with lambda". This pattern matches bare "create a lambda" intents that do not reference an API.
 
 ## Usage
 

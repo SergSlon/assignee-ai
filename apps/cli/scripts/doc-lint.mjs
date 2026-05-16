@@ -9,7 +9,8 @@
  * in `README.md` and `docs/integration-architecture.md` that cannot be
  * rendered from a registry at build time.
  *
- * Guards two assertions (Story 56-it1-04, closes it56-1-L3-002):
+ * Guards four assertions (Story 56-it1-04, closes it56-1-L3-002;
+ * cross-doc node/pattern guards added in docs-accuracy-sweep-2026-05-16):
  *
  *   1. `README.md` pattern-table row count must equal
  *      `defaultPatternRegistry.size()`. The table is located by
@@ -21,6 +22,15 @@
  *      "N user-addressable resource type", "N registered plugins",
  *      "N compound architecture patterns", "N strategies" and
  *      "N decomposers" must match the runtime registry values.
+ *
+ *   3. Cross-doc graphNodeCount guard: any doc in CROSS_DOC_TARGETS that
+ *      claims "N-node pipeline/graph/agent", "with N nodes", "same N nodes",
+ *      or "LangGraph Agent (N Nodes)" must match the runtime addNode() count
+ *      from `packages/core/src/graph/create-graph.ts`. Catches the 14→15
+ *      drift class that required a manual sweep in Epic-104.
+ *
+ *   4. Cross-doc patternCount guard: any doc claiming "N compound
+ *      architecture patterns" must match defaultPatternRegistry.size().
  *
  * Exit codes:
  *   0 — every narrative count matches runtime.
@@ -291,6 +301,28 @@ const CROSS_DOC_GUARDS = [
     re: /BP\s+rules?\s*\+\s*(\d+)\s+compound\s+patterns?\b/gi,
     expect: "patternCount",
   },
+  {
+    label: "graph node count (N-node pipeline/graph/agent)",
+    // Catches prose like "14-node LangGraph pipeline", "15-node pipeline",
+    // "15-node graph", "LangGraph Agent (15 Nodes)". The advisory
+    // <!-- doc-lint: node-count --> comment is a doc hint; this guard
+    // enforces the claim regardless of the comment presence.
+    re: /\b(\d+)-node\s+(?:LangGraph\s+)?(?:pipeline|graph|agent)\b/gi,
+    expect: "graphNodeCount",
+  },
+  {
+    label: "graph node count (StateGraph with N nodes / same N nodes / all N nodes)",
+    // Catches prose like "StateGraph … with 15 nodes", "same 15 nodes",
+    // "all 15 nodes", "declares 15 nodes".
+    re: /\b(?:with|same|all|declares?)\s+(\d+)\s+nodes?\b/gi,
+    expect: "graphNodeCount",
+  },
+  {
+    label: "graph node count (N Nodes label)",
+    // Catches mermaid subgraph labels like `LangGraph Agent (15 Nodes)`.
+    re: /LangGraph\s+Agent\s+\((\d+)\s+Nodes?\)/gi,
+    expect: "graphNodeCount",
+  },
 ];
 
 /**
@@ -300,9 +332,12 @@ const CROSS_DOC_GUARDS = [
  */
 const CROSS_DOC_TARGETS = [
   "docs/architecture.md",
-  "docs/testing-guide.md",
-  "docs/explanation/oss-vs-saas.md",
+  "docs/architecture-flows.md",
   "docs/integration-architecture.md",
+  "docs/explanation/ai-architecture.md",
+  "docs/explanation/oss-vs-saas.md",
+  "docs/how-to/quickstart.md",
+  "docs/testing-guide.md",
   "docs/index.md",
   "docs/mcp-server.md",
 ];
