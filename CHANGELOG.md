@@ -15,6 +15,126 @@ review methodology notes, see
 
 ---
 
+## [v1.0.0-rc.1] — 2026-05-17 (EPIC 108 CLOSE — pre-release readiness completion)
+
+Epic 108 closes the pre-release readiness gap analysis. This is a **release candidate**;
+`apps/cli/package.json` remains `"private": true` until all 12 items in
+[`RELEASE_CHECKLIST.md`](./RELEASE_CHECKLIST.md) are checked.
+
+### What changed in this epic
+
+**108-B-01 — Variant-matrix harness scaffold (Story 108-B-01)**
+
+Builds the machine-enumerable variant-matrix harness in
+`packages/core/src/__tests__/variant-matrix/`. Adds `enumerateTypes()`,
+`enumeratePatterns()`, `enumerateCommands()`, `MockLlmAdapter.forScriptedResponse()`,
+a `drift-guard.test.ts` that fails CI when any type or pattern is unregistered,
+and a `type-intent-seed.test.ts` covering 38 types × {CREATE, DESCRIBE, DESTROY} = 114
+combinations with zero skips. New T-1.5 NFR criterion: registry parity enforced at CI
+level.
+
+**108-B-02 — Accumulator reducers for estimatedMonthlyCost + pricingBreakdown
+(Story 108-B-02)**
+
+Fixes a last-write-wins reducer bug in `packages/core/src/graph/graph-state.ts`
+where compound plans (N-resource LangGraph loops) reported only the Nth resource's
+cost. `assignee infra plan "three-tier web app"` now accumulates the correct total.
+This is the most important correctness fix in Epic 108 (per Murat NFR re-score:
+T-2.2 branch-coverage strengthened; pre-fix failure evidence documented). 45 new tests
+across two test files.
+
+**108-A-02 — Dogfood apply-blockers (Story 108-A-02)**
+
+Closes three dogfood blockers from the 2026-05-11 run: DF-D5 Lambda auto-role IAM
+preflight guard (new `lambdaIamAutoRoleGuard`), DF-E2 RDS empty VPC security-groups
+advisory (`rds-intent-extractor.ts`), and DF-A4/D6 `ACCESS_DENIED` error
+classification with actionable remediation hints pointing to `assignee admin audit-verify`
+and `assignee dev setup`.
+
+**108-B-03 — Cost-leading plan output + --cost-detail flag (Story 108-B-03)**
+
+Every `assignee infra plan` output now leads with a cost block printed BEFORE the
+plan box. The `--cost-detail` flag adds a per-resource breakdown table. Cost block
+reiterated before apply Y/N confirmation. `--json` output extended with `costBlock`
+field. Powered by `pricingBreakdown.fixedSubtotal` (not the `estimatedMonthlyCost`
+advisory string) per B-02's accumulator fix.
+
+**108-A-03 — assignee discover interactive picker (Story 108-A-03)**
+
+New `assignee dev discover` command exposes all 38 supported resource types, 13
+compound patterns, and 18 CLI commands via a `@clack/prompts` fuzzy-search picker in
+TTY contexts and a paged plain-text list in non-TTY/pipe contexts. `--json` mode for
+machine-readable catalogue; `--category` flag to filter by
+`resource-types | patterns | commands`. Closes G1 (first-run discoverability).
+
+**108-B-04 — Intent-routing telemetry + assignee doctor section (Story 108-B-04)**
+
+Opt-in local telemetry for intent-routing decisions (disabled by default; enabled via
+`ASSIGNEE_TELEMETRY_ADAPTER=local`). Appends `IntentRoutingEvent` JSONL to
+`~/.assignee/telemetry-events.jsonl`. New `assignee admin doctor` section
+`intent-routing-health` computes miss-rate from the last 100 events; warns at ≥ 10%.
+No telemetry emitted without explicit opt-in — write errors are swallowed at debug
+level. Doctor section count: 8 → 9.
+
+**108-A-04 — Git-history account-ID purge (Story 108-A-04)**
+
+Used `git filter-repo --replace-text` to substitute the real AWS account-ID with
+`112233445566` across all 940 commits. All 933 commits on `main` got new SHAs.
+Full operation record in `_archive/dogfood-sessions/git-history-purge-sign-off.md`.
+Satisfies RR-2 of the release-readiness checklist.
+
+**108-A-05 — Noun-grouped command tree + buildAssigneeProgram factory (Story 108-A-05)**
+
+18 leaf commands organised under three noun groups (`infra` / `admin` / `dev`).
+New shared factory `apps/cli/src/program.ts` exporting `buildAssigneeProgram(): Command`
+consumed by the runtime binary, the completions generator, and the snapshot test.
+Per-shell completion generators updated to emit 2-level completions.
+Commander tree snapshot test guards tree shape; parity-guard test asserts two
+factory calls produce identical trees.
+
+**Breaking change**: scripts calling flat-path commands (`assignee plan`, `assignee setup`,
+etc.) must prepend the noun group. No migration shim ships because both packages are
+`private: true` and nothing has been published — pre-publish API freeze, no external users.
+
+**108-A-06 — Release-readiness checklist + CI gate (Story 108-A-06)**
+
+`RELEASE_CHECKLIST.md` at repo root — 12 BLOCKING items (RR-1 through RR-12) with
+pre-checked evidence citations for resolved items (RR-2/3/4/6/12).
+`.github/workflows/check-release.yml` (manual-dispatch gate) fails if any `[ ]`
+BLOCKING item remains. `docs/explanation/security-threat-model.md` stub created to
+satisfy citation-lint path-existence for RR-5. External dogfood sign-off template
+at `_archive/dogfood-sessions/external-dogfood-template.md`.
+
+### Quality gates met
+
+- NFR re-score: 33/34 (97.1%, +0.5 pp vs Epic 107 baseline at 96.6%)
+- New T-1.5 NFR criterion added: variant-matrix registry parity at CI level
+- All CI checks green on every Epic 108 PR
+- Pre-close probes on HEAD `5e68006d`: 40 PASS / 3 known-tripped / 0 FAIL / 0 setup-failed
+
+### Known carry-over (NOT v1.0 blockers)
+
+- **108-A-07 — Noun-grouped path migration completion** (~292 flat-path strings in
+  `docs/` + source error-catalogue strings that still reference pre-A-05 API; ~197 in
+  docs, ~95 in source). Filed at
+  `_backlog/108-A-07-noun-grouped-path-migration-completion.md`. This migration is a
+  hard dependency of RR-10 (external dogfood) — do not run external dogfood while docs
+  tell users to run flat-path commands that exit 1.
+- **nightly-e2e.yml.disabled** — re-enable before v1.0 final. The nightly workflow
+  that exercised E2E against real AWS was disabled during Epic 108 (confidence flag on
+  Murat T-1.4/T-2.3). Rename the file back before publish.
+
+### Release-readiness checklist status (at this commit)
+
+6 of 12 BLOCKING items checked (RR-2/RR-3/RR-4/RR-6/RR-9/RR-12). 6 remaining:
+RR-1 (private→public flip, requires explicit user authorisation), RR-5 (threat-model
+content — stub exists, full doc is a separate story), RR-7 (LICENSE attribution audit),
+RR-8 (npm provenance workflow), RR-10 (external dogfood — depends on 108-A-07),
+RR-11 (coverage gate cite — coordinator runs ONCE at wave-close). See
+[`RELEASE_CHECKLIST.md`](./RELEASE_CHECKLIST.md).
+
+---
+
 ## [Unreleased]
 
 ### Added
@@ -149,14 +269,6 @@ usage in `init.ts` and `setup.ts`. No new dependency required.
 
 **feat(doctor): intent-routing miss-rate telemetry + doctor check (Story 108-B-04)**
 
-Closes Epic 108-B G6. Adds opt-in local telemetry for intent-routing decisions
-and surfaces miss-rate in `assignee doctor`.
-
-- `packages/core/src/graph/graph-state.ts`: new optional `classifierPath` field
-  (`"keyword" | "llm-primary" | "llm-fallback" | "unsupported" | undefined`) on
-  `AgentState`; last-write-wins reducer; backwards-compatible (default `undefined`).
-  **feat(doctor): intent-routing miss-rate telemetry + doctor check (Story 108-B-04)**
-
 Closes Epic 108-B G6. Adds opt-in local telemetry for intent-routing decisions and
 surfaces miss-rate in `assignee doctor`.
 
@@ -172,19 +284,14 @@ surfaces miss-rate in `assignee doctor`.
   opt-in via `ASSIGNEE_TELEMETRY_ADAPTER=local`; write errors are swallowed
   (debug-level log, no crash).
 - `packages/core/src/telemetry/index.ts` (new): telemetry barrel exporting
-  schema types and log writer; registered as `@assignee/core/telemetry` export.
-  opt-in via `ASSIGNEE_TELEMETRY_ADAPTER=local`; write errors swallowed at
-  debug level (no crash — AC-7).
-- `packages/core/src/telemetry/index.ts` (new): telemetry barrel exporting
   schema types and log writer; registered as `@assignee/core/telemetry` export path.
+  Opt-in via `ASSIGNEE_TELEMETRY_ADAPTER=local`; write errors swallowed at
+  debug level (no crash — AC-7).
 - `packages/core/src/graph/nodes/intent-parser/index.ts`: `createIntentParserNode`
   now sets `state.classifierPath` and calls `emitRoutingTelemetry()` at each
   branch (keyword / llm-primary / llm-fallback / unsupported).
 - `packages/core/src/utils/logger/actions.ts`: added `TELEMETRY_EMIT` action and
   `DEBUG` log level to `LogLevel`.
-- `packages/core/src/telemetry/otel-exporter.ts`: added `debug: 5` to
-  `SEVERITY_NUMBERS` map (required by `Record<LogLevelType, number>` type).
-  `DEBUG` log level to `LogLevel` enum.
 - `packages/core/src/telemetry/otel-exporter.ts`: added `debug: 5` to
   `SEVERITY_NUMBERS` map (required by exhaustive `Record<LogLevelType, number>`).
 - `packages/core/src/constants/env-vars.ts`: registered `ASSIGNEE_TELEMETRY_ADAPTER`
@@ -193,19 +300,13 @@ surfaces miss-rate in `assignee doctor`.
   last 100 events; computes `unsupported/total × 100%` miss-rate; renders
   `"Intent routing miss-rate (last N events): X%"` in `assignee doctor`.
   Warn threshold: ≥ 10% miss-rate. No file → `"Telemetry not enabled"`.
-- `apps/cli/src/commands/doctor/runner.ts`: added `checkIntentRoutingHealth` as
-  the ninth section in the doctor report.
-- New test files: `telemetry-emit.test.ts` (Axes A–E, K), `local-log-writer.test.ts`
-  (Axes E, F, I), `intent-routing-health.test.ts` (Axes G, H + AC-3/AC-4 contracts).
-- Snapshot baseline: 1 snapshot file pre-change, 0 snapshot updates (optional
-  field with `default: () => undefined` does not appear in existing snapshots).
-  Warn threshold ≥ 10%; no file → `"Telemetry not enabled"` (ok status).
 - `apps/cli/src/commands/doctor/runner.ts`: `intentRouting` added as 9th section;
   section count assertion in `doctor.test.ts` updated from 8 → 9.
 - New test files: `telemetry-emit.test.ts` (Axes A–E, K), `local-log-writer.test.ts`
   (Axes E, F, I), `intent-routing-health.test.ts` (Axes G, H + AC-3/AC-4 contracts).
 - Snapshot baseline: 1 snapshot file pre-change, 0 snapshot updates needed
   (optional field with `default: () => undefined` does not appear in serialized state).
+  Warn threshold ≥ 10%; no file → `"Telemetry not enabled"` (ok status).
 
 **feat(plan): cost-leading plan output + `--cost-detail` flag (Story 108-B-03)**
 
