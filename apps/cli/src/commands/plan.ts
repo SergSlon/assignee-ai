@@ -247,7 +247,7 @@ export const planCommand = new Command(CommandName.PLAN)
   .addHelpText(
     "after",
     () =>
-      `\n${SUPPORTED_TYPES_HINT}\n\nExamples:\n  assignee plan "${EXAMPLE_S3_INTENT}"\n  assignee plan "Create an EC2 t3.micro instance"\n  assignee plan "Create a Lambda function for image processing"\n  assignee plan --json "Create an S3 bucket"\n  assignee plan --wizard "Create an EC2 instance"\n  assignee plan --set size=t3.medium "Create an EC2 instance"\n\n${renderDiscoveryBlock()}`,
+      `\n${SUPPORTED_TYPES_HINT}\n\nExamples:\n  assignee infra plan "${EXAMPLE_S3_INTENT}"\n  assignee infra plan "Create an EC2 t3.micro instance"\n  assignee infra plan "Create a Lambda function for image processing"\n  assignee infra plan --json "Create an S3 bucket"\n  assignee infra plan --wizard "Create an EC2 instance"\n  assignee infra plan --set size=t3.medium "Create an EC2 instance"\n\n${renderDiscoveryBlock()}`,
   )
   .action(async (intent: string | undefined, rawOpts: PlanOpts) => {
     // Epic 92 Wave 3.b.1 (D-13): `--wizard` is a user-facing synonym
@@ -317,7 +317,9 @@ export const planCommand = new Command(CommandName.PLAN)
     // plan will target. Suppressed in JSON mode to keep stdout clean.
     if (outputFormat !== "json") {
       const ctx = await resolveIntroContext();
-      process.stderr.write(`assignee plan  [${formatIntroContext(ctx)}]\n`);
+      process.stderr.write(
+        `assignee infra plan  [${formatIntroContext(ctx)}]\n`,
+      );
     }
 
     // Epic 92 Wave 2.c: wrap stdout in JSON mode so the per-resource

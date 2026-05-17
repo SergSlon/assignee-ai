@@ -54,10 +54,10 @@ function reportCredentialState(credentialResult: {
         : "Assignee roles available: none (operator, reader, auditor all unset)";
     clack.log.warn(
       "No AWS credentials detected. The project config will still be created.\n" +
-        "Next steps: run `assignee setup` to create least-privilege IAM users (recommended), " +
-        "OR export `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` before running `assignee plan`.\n" +
+        "Next steps: run `assignee dev setup` to create least-privilege IAM users (recommended), " +
+        "OR export `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` before running `assignee infra plan`.\n" +
         "Note: `AWS_PROFILE` alone is not currently supported — use explicit env vars or run " +
-        "`assignee setup` to create role-specific credentials.\n" +
+        "`assignee dev setup` to create role-specific credentials.\n" +
         rolesLine,
     );
   }
@@ -117,6 +117,6 @@ export async function runProjectInit(
   const profileNote =
     config.profile !== "default" ? ` with profile ${config.profile}` : "";
   clack.outro(
-    `Initialized assignee.ai for region ${config.region}${profileNote}. Run \`assignee plan\` to get started.`,
+    `Initialized assignee.ai for region ${config.region}${profileNote}. Run \`assignee infra plan\` to get started.`,
   );
 }

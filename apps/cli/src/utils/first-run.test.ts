@@ -169,11 +169,15 @@ describe("first-run", () => {
       // Should contain the version
       expect(allOutput).toContain("Assignee.ai v0.1.0");
       // Should include credential detection or next-steps guidance
-      expect(allOutput).toMatch(/credentials|assignee plan|AWS_ACCESS_KEY_ID/);
+      // Story 108-A-05: `assignee plan` → `assignee infra plan`
+      expect(allOutput).toMatch(
+        /credentials|assignee infra plan|AWS_ACCESS_KEY_ID/,
+      );
       // Story 50-2 / 50-3: the `patterns` + `types` standalone commands were
       // removed; their content is now folded into `plan --help`. The welcome
       // message should point users at that unified entrypoint.
-      expect(allOutput).toContain("assignee plan --help");
+      // Story 108-A-05: path is now noun-grouped `assignee infra plan --help`.
+      expect(allOutput).toContain("assignee infra plan --help");
 
       Object.defineProperty(process.stderr, "isTTY", {
         value: origIsTTY,
@@ -295,7 +299,8 @@ describe("first-run", () => {
         expect(allOutput).not.toContain("\u001B[");
         // Content still renders (just plain text now).
         expect(allOutput).toContain("Assignee.ai v0.1.0");
-        expect(allOutput).toContain("assignee plan --help");
+        // Story 108-A-05: path is now noun-grouped `assignee infra plan --help`.
+        expect(allOutput).toContain("assignee infra plan --help");
       } finally {
         chalkMod.default.level = originalLevel;
         Object.defineProperty(process.stderr, "isTTY", {

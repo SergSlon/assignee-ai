@@ -111,7 +111,7 @@ describeE2E(
     });
 
     it("A-03: empty intent in --json mode → MISSING_INTENT envelope", () => {
-      const { stdout, stderr, code } = runCli(["plan", "", "--json"]);
+      const { stdout, stderr, code } = runCli(["infra", "plan", "", "--json"]);
 
       expect(code, `expected non-zero exit; got code=${code}`).not.toBe(0);
 
@@ -149,6 +149,7 @@ describeE2E(
 
     it("A-09: malformed --set token in --json mode → BAD_SET_SYNTAX envelope", () => {
       const { stdout, code } = runCli([
+        "infra",
         "plan",
         "--json",
         "--set",
@@ -185,7 +186,7 @@ describeE2E(
       // Ensure the long-form flag lands in the same branch as the
       // `--json` shorthand; regression-guards the aliasOpts normalization
       // in plan.ts where `opts.output ?? "text"` is read pre-arg-parse.
-      const { stdout, code } = runCli(["plan", "--output", "json"]);
+      const { stdout, code } = runCli(["infra", "plan", "--output", "json"]);
       expect(code).not.toBe(0);
 
       const parsed = JSON.parse(stdout.trim()) as {

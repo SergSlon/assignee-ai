@@ -114,39 +114,45 @@ export function enumerateBpRules(): string[] {
 /**
  * CLI commands registered in `apps/cli/src/index.ts`.
  *
+ * Story 108-A-05: commands are now noun-grouped (infra / admin / dev).
+ * Paths are stored as "group leaf" strings, e.g. "infra plan".
+ *
  * This is a typed tuple rather than a dynamic walk so that adding a new
  * command without updating this list causes a compile-time / drift-guard
- * test failure. To add a command: append its name below AND register a
+ * test failure. To add a command: append its path below AND register a
  * matrix entry in `drift-guard.test.ts`.
  *
- * Current count: 18 (as of Story 108-A-03: added "discover").
+ * Current count: 18 (3 noun groups × leaf commands).
  */
 export const CLI_COMMANDS = [
-  "plan",
-  "apply",
-  "completions",
-  "init",
-  "describe",
-  "destroy",
-  "drift",
-  "optimize",
-  "list",
-  "setup",
-  "status",
-  "reconcile",
-  "doctor",
-  "restore-provisions",
-  "audit-verify",
-  "update",
-  "version",
-  "discover",
+  // infra group
+  "infra plan",
+  "infra apply",
+  "infra destroy",
+  "infra drift",
+  "infra reconcile",
+  "infra optimize",
+  "infra restore-provisions",
+  // admin group
+  "admin audit-verify",
+  "admin doctor",
+  "admin status",
+  "admin list",
+  "admin describe",
+  // dev group
+  "dev init",
+  "dev setup",
+  "dev update",
+  "dev completions",
+  "dev discover",
+  "dev version",
 ] as const;
 
 export type CliCommand = (typeof CLI_COMMANDS)[number];
 
 /**
- * Return the registered CLI command names.
- * Count: `CLI_COMMANDS.length` (currently 17 + any additions).
+ * Return the registered CLI command paths (noun-group + leaf).
+ * Count: `CLI_COMMANDS.length` (currently 18).
  */
 export function enumerateCommands(): readonly CliCommand[] {
   return CLI_COMMANDS;

@@ -29,7 +29,7 @@ const PKG: NotifierPkg = {
 describe("shouldSuppressUpdateCheck", () => {
   it("returns false in an interactive TTY with no suppressing flags", () => {
     const result = shouldSuppressUpdateCheck(
-      ["node", "assignee", "plan", "--verbose"],
+      ["node", "assignee", "infra", "plan", "--verbose"],
       {},
       true,
     );
@@ -38,7 +38,7 @@ describe("shouldSuppressUpdateCheck", () => {
 
   it("returns true when ASSIGNEE_NO_UPDATE_CHECK=1", () => {
     const result = shouldSuppressUpdateCheck(
-      ["node", "assignee", "plan"],
+      ["node", "assignee", "infra", "plan"],
       { ASSIGNEE_NO_UPDATE_CHECK: "1" },
       true,
     );
@@ -49,7 +49,7 @@ describe("shouldSuppressUpdateCheck", () => {
     // Only "1" is the documented opt-out — "true" / "0" / "" stay active
     // so users cannot be accidentally opted out by stale env vars.
     const result = shouldSuppressUpdateCheck(
-      ["node", "assignee", "plan"],
+      ["node", "assignee", "infra", "plan"],
       { ASSIGNEE_NO_UPDATE_CHECK: "true" },
       true,
     );
@@ -58,7 +58,7 @@ describe("shouldSuppressUpdateCheck", () => {
 
   it("returns true when CI=true", () => {
     const result = shouldSuppressUpdateCheck(
-      ["node", "assignee", "plan"],
+      ["node", "assignee", "infra", "plan"],
       { CI: "true" },
       true,
     );
@@ -67,7 +67,7 @@ describe("shouldSuppressUpdateCheck", () => {
 
   it("returns true when CI=1 (GitHub Actions style)", () => {
     const result = shouldSuppressUpdateCheck(
-      ["node", "assignee", "plan"],
+      ["node", "assignee", "infra", "plan"],
       { CI: "1" },
       true,
     );
@@ -76,7 +76,7 @@ describe("shouldSuppressUpdateCheck", () => {
 
   it("does NOT suppress when CI='false' (explicit opt-in for local work)", () => {
     const result = shouldSuppressUpdateCheck(
-      ["node", "assignee", "plan"],
+      ["node", "assignee", "infra", "plan"],
       { CI: "false" },
       true,
     );
@@ -85,7 +85,7 @@ describe("shouldSuppressUpdateCheck", () => {
 
   it("does NOT suppress when CI='0'", () => {
     const result = shouldSuppressUpdateCheck(
-      ["node", "assignee", "plan"],
+      ["node", "assignee", "infra", "plan"],
       { CI: "0" },
       true,
     );
@@ -94,7 +94,7 @@ describe("shouldSuppressUpdateCheck", () => {
 
   it("returns true when stdout is not a TTY (piped / redirected)", () => {
     const result = shouldSuppressUpdateCheck(
-      ["node", "assignee", "plan"],
+      ["node", "assignee", "infra", "plan"],
       {},
       false,
     );
@@ -103,7 +103,7 @@ describe("shouldSuppressUpdateCheck", () => {
 
   it("returns true when --json is in argv", () => {
     const result = shouldSuppressUpdateCheck(
-      ["node", "assignee", "plan", "--json"],
+      ["node", "assignee", "infra", "plan", "--json"],
       {},
       true,
     );
@@ -112,7 +112,7 @@ describe("shouldSuppressUpdateCheck", () => {
 
   it("returns true when `-o json` (two tokens) is in argv", () => {
     const result = shouldSuppressUpdateCheck(
-      ["node", "assignee", "plan", "-o", "json"],
+      ["node", "assignee", "infra", "plan", "-o", "json"],
       {},
       true,
     );
@@ -121,7 +121,7 @@ describe("shouldSuppressUpdateCheck", () => {
 
   it("returns true when `--output json` (two tokens) is in argv", () => {
     const result = shouldSuppressUpdateCheck(
-      ["node", "assignee", "status", "--output", "json"],
+      ["node", "assignee", "admin", "status", "--output", "json"],
       {},
       true,
     );
@@ -130,7 +130,7 @@ describe("shouldSuppressUpdateCheck", () => {
 
   it("returns true when `--output=json` (joined form) is in argv", () => {
     const result = shouldSuppressUpdateCheck(
-      ["node", "assignee", "status", "--output=json"],
+      ["node", "assignee", "admin", "status", "--output=json"],
       {},
       true,
     );
@@ -139,7 +139,15 @@ describe("shouldSuppressUpdateCheck", () => {
 
   it("does NOT match `--jsonify` or similar prefixes as false positives", () => {
     const result = shouldSuppressUpdateCheck(
-      ["node", "assignee", "plan", "--jsonify", "--output-json-path", "out"],
+      [
+        "node",
+        "assignee",
+        "infra",
+        "plan",
+        "--jsonify",
+        "--output-json-path",
+        "out",
+      ],
       {},
       true,
     );
@@ -196,7 +204,7 @@ describe("shouldSuppressUpdateCheck", () => {
     // 'version' (without dashes) is not a help/version fast-path — it is
     // a regular subcommand that may warrant an upgrade banner.
     const result = shouldSuppressUpdateCheck(
-      ["node", "assignee", "version"],
+      ["node", "assignee", "dev", "version"],
       {},
       true,
     );
@@ -205,7 +213,7 @@ describe("shouldSuppressUpdateCheck", () => {
 
   it("does NOT match `-o yaml` — only `json` values trigger suppression", () => {
     const result = shouldSuppressUpdateCheck(
-      ["node", "assignee", "plan", "-o", "yaml"],
+      ["node", "assignee", "infra", "plan", "-o", "yaml"],
       {},
       true,
     );
@@ -224,7 +232,7 @@ describe("checkForUpdates", () => {
   });
 
   it("invokes updateNotifier and .notify() when conditions are permissive", () => {
-    checkForUpdates(PKG, ["node", "assignee", "plan"], {}, true);
+    checkForUpdates(PKG, ["node", "assignee", "infra", "plan"], {}, true);
 
     expect(updateNotifierMock).toHaveBeenCalledTimes(1);
     expect(updateNotifierMock).toHaveBeenCalledWith({
@@ -238,7 +246,7 @@ describe("checkForUpdates", () => {
   it("skips the check entirely when ASSIGNEE_NO_UPDATE_CHECK=1", () => {
     checkForUpdates(
       PKG,
-      ["node", "assignee", "plan"],
+      ["node", "assignee", "infra", "plan"],
       { ASSIGNEE_NO_UPDATE_CHECK: "1" },
       true,
     );
@@ -248,28 +256,43 @@ describe("checkForUpdates", () => {
   });
 
   it("skips the check entirely when CI=true", () => {
-    checkForUpdates(PKG, ["node", "assignee", "plan"], { CI: "true" }, true);
+    checkForUpdates(
+      PKG,
+      ["node", "assignee", "infra", "plan"],
+      { CI: "true" },
+      true,
+    );
 
     expect(updateNotifierMock).not.toHaveBeenCalled();
     expect(notifyMock).not.toHaveBeenCalled();
   });
 
   it("skips the check entirely when stdout is not a TTY", () => {
-    checkForUpdates(PKG, ["node", "assignee", "plan"], {}, false);
+    checkForUpdates(PKG, ["node", "assignee", "infra", "plan"], {}, false);
 
     expect(updateNotifierMock).not.toHaveBeenCalled();
     expect(notifyMock).not.toHaveBeenCalled();
   });
 
   it("skips the check entirely when --json is in argv", () => {
-    checkForUpdates(PKG, ["node", "assignee", "plan", "--json"], {}, true);
+    checkForUpdates(
+      PKG,
+      ["node", "assignee", "infra", "plan", "--json"],
+      {},
+      true,
+    );
 
     expect(updateNotifierMock).not.toHaveBeenCalled();
     expect(notifyMock).not.toHaveBeenCalled();
   });
 
   it("skips the check entirely when `-o json` is in argv", () => {
-    checkForUpdates(PKG, ["node", "assignee", "plan", "-o", "json"], {}, true);
+    checkForUpdates(
+      PKG,
+      ["node", "assignee", "infra", "plan", "-o", "json"],
+      {},
+      true,
+    );
 
     expect(updateNotifierMock).not.toHaveBeenCalled();
     expect(notifyMock).not.toHaveBeenCalled();
@@ -296,7 +319,7 @@ describe("checkForUpdates", () => {
     });
 
     expect(() =>
-      checkForUpdates(PKG, ["node", "assignee", "plan"], {}, true),
+      checkForUpdates(PKG, ["node", "assignee", "infra", "plan"], {}, true),
     ).not.toThrow();
 
     expect(updateNotifierMock).toHaveBeenCalledTimes(1);
@@ -309,7 +332,7 @@ describe("checkForUpdates", () => {
     });
 
     expect(() =>
-      checkForUpdates(PKG, ["node", "assignee", "plan"], {}, true),
+      checkForUpdates(PKG, ["node", "assignee", "infra", "plan"], {}, true),
     ).not.toThrow();
 
     expect(updateNotifierMock).toHaveBeenCalledTimes(1);

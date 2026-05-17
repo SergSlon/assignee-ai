@@ -152,7 +152,7 @@ export const cloudFrontDistributionPlugin: ResourcePlugin = {
           },
         ],
         initialValue: DISTRIBUTION_PRESETS.SPA_WEBSITE,
-        hint: "Pick a starting template. Non-custom presets pre-fill DistributionConfig with a working baseline you can tweak; custom-json drops you into raw-JSON paste mode for full control. Run `assignee plan --help` for the full apply flow.",
+        hint: "Pick a starting template. Non-custom presets pre-fill DistributionConfig with a working baseline you can tweak; custom-json drops you into raw-JSON paste mode for full control. Run `assignee infra plan --help` for the full apply flow.",
       },
       // Preset is a wizard-only field — strip it from the CFN output.
       toCfn: () => undefined,

@@ -144,8 +144,12 @@ export {
 } from "../../constants/mcp.js";
 export { ToolName, type ToolNameType } from "../../constants/tools.js";
 export {
+  CommandGroup,
+  type CommandGroupType,
   CommandName,
   type CommandNameType,
+  CommandPath,
+  type CommandPathType,
   CommandDescription,
   CommandArgs,
   CommandOptions,

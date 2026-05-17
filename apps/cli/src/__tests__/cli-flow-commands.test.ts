@@ -24,7 +24,7 @@ import { describe, it, expect } from "vitest";
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe("command registration and options", () => {
-  it("all commands are defined with correct names", async () => {
+  it("all commands are defined with correct leaf names", async () => {
     const { CommandName } = await import("../constants/commands.js");
     expect(CommandName.PLAN).toBe("plan");
     expect(CommandName.APPLY).toBe("apply");
@@ -35,6 +35,24 @@ describe("command registration and options", () => {
     expect(CommandName.DRIFT).toBe("drift");
     expect(CommandName.RECONCILE).toBe("reconcile");
     expect(CommandName.SETUP).toBe("setup");
+  });
+
+  it("noun groups are defined with correct names (108-A-05)", async () => {
+    const { CommandGroup } = await import("../constants/commands.js");
+    expect(CommandGroup.INFRA).toBe("infra");
+    expect(CommandGroup.ADMIN).toBe("admin");
+    expect(CommandGroup.DEV).toBe("dev");
+  });
+
+  it("full rooted paths are defined for all commands (108-A-05)", async () => {
+    const { CommandPath } = await import("../constants/commands.js");
+    expect(CommandPath.INFRA_PLAN).toBe("infra plan");
+    expect(CommandPath.INFRA_APPLY).toBe("infra apply");
+    expect(CommandPath.INFRA_DESTROY).toBe("infra destroy");
+    expect(CommandPath.ADMIN_STATUS).toBe("admin status");
+    expect(CommandPath.ADMIN_DOCTOR).toBe("admin doctor");
+    expect(CommandPath.DEV_INIT).toBe("dev init");
+    expect(CommandPath.DEV_DISCOVER).toBe("dev discover");
   });
 
   it("all command descriptions are non-empty", async () => {

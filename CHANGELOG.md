@@ -17,6 +17,67 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### Changed
+
+**cli(api-surface): restructure CLI into noun-grouped command tree (Story 108-A-05)**
+
+Closes Epic 108-A G3 (v1.0 API surface freeze). Flat top-level commands
+collapse into three noun groups so the CLI ships a stable, scriptable
+contract before any first publish.
+
+- 18 leaf commands organised under three noun groups:
+  - `infra` (7) — plan, apply, destroy, drift, reconcile, optimize, restore-provisions
+  - `admin` (5) — audit-verify, doctor, status, list, describe
+  - `dev` (6) — init, setup, update, completions, discover, version
+- New shared factory `apps/cli/src/program.ts` exporting
+  `buildAssigneeProgram(): Command`. Consumed by `apps/cli/src/index.ts`
+  (runtime), `apps/cli/scripts/generate-completions.ts` (build-time
+  artifacts), and `apps/cli/src/__tests__/commander-tree-snapshot.test.ts`
+  (regression guard). Single source of truth for the tree shape — no
+  more drift between the production binary, the bundled completion
+  scripts, and the snapshot test.
+- Depth-2 `configureHelp({ showGlobalOptions: true })` cascade so the
+  global `--verbose` / `--json` / `--output` flags appear in every
+  `<group> <leaf> --help` panel.
+- Commander tree snapshot test serialises the full 18-leaf / 3-group
+  shape; plus a parity-guard test that asserts two calls to the factory
+  produce identical trees (catches a future regression of the round-1
+  drift between `index.ts` and `generate-completions.ts`).
+- Axis B test added: spawns the built `dist/index.js` with
+  `infra pla` and asserts Commander's did-you-mean message + exit 1.
+- `apps/cli/scripts/PROBE_MANIFEST.yaml`: every probe `cmd:` header and
+  every bash `probe: |` body migrated to noun-grouped invocations
+  (`$PROBE_CLI_BIN infra plan ...` instead of `$PROBE_CLI_BIN plan ...`).
+  Pre-fix the body invocations would have failed under
+  `pnpm pre-close-probes` because Commander rejects flat paths (round-1
+  Quinn BLOCKER #2).
+- `packages/core/src/constants/commands.ts`: adds `CommandGroup`
+  (INFRA/ADMIN/DEV) and `CommandPath` (full rooted paths) constants
+  alongside the unchanged `CommandName` enum used to register leaves.
+- `packages/core/src/__tests__/variant-matrix/index.ts`: `CLI_COMMANDS`
+  tuple values rewritten as noun-grouped paths (`"infra plan"` etc.).
+  Count drift-guard remains at 18.
+- Per-shell completion generators (`extract.ts` / `zsh.ts` / `bash.ts` /
+  `fish.ts`) walk the tree recursively to emit 2-level completions;
+  `dev completions <shell>` is the runtime entry point and ships
+  matching static `completions/assignee.{zsh,bash,fish}` artifacts.
+- User-facing strings in plan / status / setup / init / drift /
+  reconcile / discover hints + error catalogues (`catalog-aws.ts`,
+  `catalog-checkpoint.ts`, `catalog-generic.ts`) updated to use
+  noun-grouped invocations.
+- All 14 E2E test files migrated to noun-grouped `runCli([...])` /
+  `spawnSync(... [group, leaf, ...])` invocations.
+
+**Breaking change**: any script that calls `assignee plan` /
+`assignee setup` / `assignee status` / etc. directly will fail with
+`error: unknown command '<leaf>'` exit 1. Migration: prepend the noun
+group (e.g. `assignee plan ...` → `assignee infra plan ...`). No
+migration shim ships because both packages are `private: true` and
+nothing has been published — pre-publish API freeze, no external users.
+
+Story spec: `_bmad-output/implementation-artifacts/epic-108-A-05-verb-grouped-command-tree.md`.
+Round 1 Quinn review (BOUNCE → factory refactor): `_archive/reviews/c17355be-review.md`.
+
 ### Security
 
 **security(repo): purge real AWS account-ID from full git history (Story 108-A-04)**

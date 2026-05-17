@@ -107,11 +107,30 @@ async function loadRuntimeCounts() {
   };
 }
 
-/** Count `program.addCommand(...)` calls in apps/cli/src/index.ts. */
+/**
+ * Count leaf CLI commands wired into the program tree.
+ *
+ * Story 108-A-05 round 2: tree-building moved from `apps/cli/src/index.ts`
+ * into the shared factory `apps/cli/src/program.ts`. The factory wires
+ * leaves under three noun groups (`infraGroup.addCommand(...)`,
+ * `adminGroup.addCommand(...)`, `devGroup.addCommand(...)`), then attaches
+ * each group to `program` via `program.addCommand(...)`.
+ *
+ * To report the LEAF count (the meaningful figure for the v1.0 freeze —
+ * 18 user-facing commands), we count `<group>.addCommand(...)` in
+ * `program.ts`, NOT `program.addCommand(...)` (which only yields the
+ * three noun-group count).
+ */
 async function countCommands() {
-  const indexPath = join(REPO_ROOT, "apps", "cli", "src", "index.ts");
-  const text = await readFile(indexPath, "utf8");
-  const matches = text.match(/program\.addCommand\s*\(/g);
+  const programPath = join(
+    REPO_ROOT,
+    "apps",
+    "cli",
+    "src",
+    "program.ts",
+  );
+  const text = await readFile(programPath, "utf8");
+  const matches = text.match(/Group\.addCommand\s*\(/g);
   return matches ? matches.length : 0;
 }
 

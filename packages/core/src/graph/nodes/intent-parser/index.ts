@@ -612,7 +612,7 @@ Request: "${safeIntent}"`;
           errorMessage:
             "I couldn't tell whether you wanted to create, list, or describe something, " +
             "or the resource type you mentioned isn't supported yet. " +
-            `Try \`assignee plan --help\` for examples of supported types. ${SUPPORTED_TYPES_HINT}.`,
+            `Try \`assignee infra plan --help\` for examples of supported types. ${SUPPORTED_TYPES_HINT}.`,
         };
       }
       log({

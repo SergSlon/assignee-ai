@@ -16,14 +16,14 @@ export const GENERIC_ERROR_MESSAGES: Record<string, ErrorMessageEntry> = {
     code: ErrorCode.MISSING_INTENT,
     what: "No intent was provided.",
     why: "The command requires a natural language description of what you want to create.",
-    howToFix: `Provide an intent in quotes: \`assignee plan "${EXAMPLE_S3_INTENT}"\``,
+    howToFix: `Provide an intent in quotes: \`assignee infra plan "${EXAMPLE_S3_INTENT}"\``,
   },
   [ErrorCode.UNSUPPORTED_RESOURCE]: {
     code: ErrorCode.UNSUPPORTED_RESOURCE,
     what: "The requested resource type is not supported.",
     why: "Assignee.ai currently supports a subset of AWS resource types. The resource you requested is not in the supported set.",
     howToFix:
-      "Run `assignee plan --help` to see the list of supported resource types. Try rephrasing your intent to use a supported type.",
+      "Run `assignee infra plan --help` to see the list of supported resource types. Try rephrasing your intent to use a supported type.",
   },
   [ErrorCode.MISSING_REQUIRED_FIELDS]: {
     code: ErrorCode.MISSING_REQUIRED_FIELDS,

@@ -142,8 +142,9 @@ describe("renderSupportedTypesHint — MCP style", () => {
     expect(hint).toContain(`Supported types (${getSupportedTypeCount()})`);
   });
 
-  it("points the reader at `assignee plan --help`", () => {
-    expect(hint).toContain("assignee plan --help");
+  it("points the reader at `assignee infra plan --help`", () => {
+    // Story 108-A-05: path is now noun-grouped `assignee infra plan --help`.
+    expect(hint).toContain("assignee infra plan --help");
   });
 });
 
@@ -390,7 +391,8 @@ describe("buildSupportedTypesBlock + getTypeHint (Epic 92 wave 3.a)", () => {
   it("getTypeHint returns a single-line, compact breadcrumb", () => {
     const hint = getTypeHint();
     expect(hint).not.toContain("\n");
-    expect(hint).toContain("assignee plan --help");
+    // Story 108-A-05: path is now noun-grouped `assignee infra plan --help`.
+    expect(hint).toContain("assignee infra plan --help");
     expect(hint.length).toBeLessThanOrEqual(HINT_MAX_COLUMNS);
   });
 

@@ -19,6 +19,12 @@ export interface CommandInfo {
   aliases: string[];
   options: OptionInfo[];
   args: ArgInfo[];
+  /**
+   * Nested sub-commands (story 108-A-05: noun-group children).
+   * Populated only for noun-group parent commands (infra / admin / dev).
+   * Leaf commands have `subCommands: []`.
+   */
+  subCommands: CommandInfo[];
 }
 
 /** Extracted option metadata. */

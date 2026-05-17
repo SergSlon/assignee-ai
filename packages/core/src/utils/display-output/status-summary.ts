@@ -69,12 +69,12 @@ export function renderStatusSummary(data: StatusData): void {
 }
 
 /**
- * Renders the empty-status message with a hint to run `assignee plan`.
+ * Renders the empty-status message with a hint to run `assignee infra plan`.
  * @see Story 19.6, AC #4
  */
 export function renderEmptyStatus(): void {
   const message =
-    "No resources managed by assignee.ai. Run `assignee plan` to get started.";
+    "No resources managed by assignee.ai. Run `assignee infra plan` to get started.";
   if (process.stdout.isTTY) {
     process.stdout.write(chalk.yellow(message) + "\n");
   } else {

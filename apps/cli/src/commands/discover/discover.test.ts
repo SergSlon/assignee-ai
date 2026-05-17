@@ -181,19 +181,21 @@ describe("Axis C — fuzzy match no results", () => {
 // ---------------------------------------------------------------------------
 
 describe("Axis D — TTY interactive mode full flow", () => {
-  it("each resource type item has a non-empty exampleIntent with 'assignee plan'", () => {
+  it("each resource type item has a non-empty exampleIntent with 'assignee infra plan'", () => {
     const items = buildCatalogue("resource-types");
     for (const item of items) {
       expect(item.exampleIntent).toBeTruthy();
-      expect(item.exampleIntent).toContain("assignee plan");
+      // Story 108-A-05: path is now noun-grouped `assignee infra plan`.
+      expect(item.exampleIntent).toContain("assignee infra plan");
     }
   });
 
-  it("each pattern item has a non-empty exampleIntent with 'assignee plan'", () => {
+  it("each pattern item has a non-empty exampleIntent with 'assignee infra plan'", () => {
     const items = buildCatalogue("patterns");
     for (const item of items) {
       expect(item.exampleIntent).toBeTruthy();
-      expect(item.exampleIntent).toContain("assignee plan");
+      // Story 108-A-05: path is now noun-grouped `assignee infra plan`.
+      expect(item.exampleIntent).toContain("assignee infra plan");
     }
   });
 
@@ -209,7 +211,8 @@ describe("Axis D — TTY interactive mode full flow", () => {
     // Simulate a selection by choosing the first resource type item
     const items = buildCatalogue("resource-types");
     const selected = items[0]!;
-    expect(selected.exampleIntent).toContain("assignee plan");
+    // Story 108-A-05: path is now noun-grouped `assignee infra plan`.
+    expect(selected.exampleIntent).toContain("assignee infra plan");
     expect(selected.id).toBeTruthy();
     expect(selected.description).toBeTruthy();
   });

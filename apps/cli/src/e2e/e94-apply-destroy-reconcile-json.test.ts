@@ -77,9 +77,14 @@ describeE2E(
     });
 
     describe("flag registration", () => {
-      for (const cmd of ["apply", "destroy", "reconcile"] as const) {
-        it(`${cmd} --help exits 0 and lists --json`, () => {
-          const { code, stdout, stderr } = runCli([cmd, "--help"]);
+      // Noun-grouped paths (Story 108-A-05)
+      for (const [group, cmd] of [
+        ["infra", "apply"],
+        ["infra", "destroy"],
+        ["infra", "reconcile"],
+      ] as const) {
+        it(`${group} ${cmd} --help exits 0 and lists --json`, () => {
+          const { code, stdout, stderr } = runCli([group, cmd, "--help"]);
           expect(code).toBe(0);
           const helpText = stdout + stderr;
           expect(helpText).toContain("--json");
@@ -94,7 +99,13 @@ describeE2E(
         // Clearly non-existent bucket ARN (timestamp suffix guarantees
         // no real-world collision) and --yes to skip typed-name prompt.
         const arn = `arn:aws:s3:::nonexistent-e94-n4-${Date.now()}`;
-        const { stdout, code } = runCli(["destroy", arn, "--yes", "--json"]);
+        const { stdout, code } = runCli([
+          "infra",
+          "destroy",
+          arn,
+          "--yes",
+          "--json",
+        ]);
         // Exit code must be non-zero — the destroy failed.
         expect(code).not.toBe(0);
         // stdout must be a single parseable JSON value.
@@ -111,7 +122,7 @@ describeE2E(
     describe("reconcile --json envelope parseability", () => {
       it("reconcile --yes --json emits exactly one parseable JSON value", () => {
         if (!jqAvailable()) return;
-        const { stdout } = runCli(["reconcile", "--yes", "--json"]);
+        const { stdout } = runCli(["infra", "reconcile", "--yes", "--json"]);
         // The envelope may be success (no drifted resources / no
         // provisions) or failure (credentials missing). Either way:
         // one parseable JSON value on stdout.

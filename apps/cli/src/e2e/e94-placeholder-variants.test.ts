@@ -112,6 +112,7 @@ describeE2E(
     // still renders while the apply path stays fail-closed.
     it("`--no-apply` previews an RDS postgres plan end-to-end without blocking", () => {
       const { stdout, code } = runCli([
+        "infra",
         "plan",
         "--output",
         "json",
@@ -152,6 +153,7 @@ describeE2E(
     // complements at the CLI boundary.
     it("default mode (no `--no-apply`) rejects a docs-example VpcId placeholder", () => {
       const { stdout, code } = runCli([
+        "infra",
         "plan",
         "--output",
         "json",

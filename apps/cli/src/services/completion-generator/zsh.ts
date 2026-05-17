@@ -5,6 +5,9 @@
  *
  * Split out of the monolithic `completion-generator.ts` during Epic 51
  * iteration 1 (Story 51-it1-B2).
+ *
+ * Story 108-A-05: updated to handle two-level noun-group command tree
+ * (infra / admin / dev → leaf commands).
  */
 
 import type { CommandInfo } from "./types.js";
@@ -45,7 +48,17 @@ export function generateZshCompletions(
 
   for (const cmd of commands) {
     lines.push(`        ${cmd.name})`);
-    if (cmd.options.length > 0) {
+    if (cmd.subCommands.length > 0) {
+      // Noun-group: emit sub-command completions for the second word.
+      lines.push(`          local -a sub_commands`);
+      lines.push(`          sub_commands=(`);
+      for (const sub of cmd.subCommands) {
+        const subDesc = escapeZshString(sub.description);
+        lines.push(`            '${sub.name}:${subDesc}'`);
+      }
+      lines.push(`          )`);
+      lines.push(`          _describe 'sub-command' sub_commands`);
+    } else if (cmd.options.length > 0) {
       lines.push(`          _arguments \\`);
       const optLines: string[] = [];
       for (const opt of cmd.options) {

@@ -2,96 +2,46 @@
 /**
  * Generate static shell completion scripts for bundling in the npm package.
  *
- * Imports the real command modules to build the program tree, ensuring
- * the generated completions always stay in sync with the actual CLI.
+ * Imports the shared `buildAssigneeProgram()` factory so the build-time
+ * artifacts always reflect the SAME tree shape the runtime CLI ships.
  *
  * Outputs:
  *   completions/assignee.zsh
  *   completions/assignee.bash
  *   completions/assignee.fish
  *
- * Run via: npx tsx scripts/generate-completions.ts
+ * Run via: npx tsx scripts/generate-completions.ts (executed during the
+ * `assignee:postbuild` hook from `package.json`).
  *
- * @see Story 18.2, AC #5
+ * @see Story 108-A-05 — v1.0 API freeze, noun-grouped command tree
+ *      (infra/admin/dev). Round 2 introduces `apps/cli/src/program.ts` as the
+ *      single source of truth so this script and `src/index.ts` cannot drift.
+ *      Pre-refactor this file rebuilt a flat tree, causing the bundled
+ *      completion artifacts to ship 17 flat leaves while the runtime shipped
+ *      the noun-grouped tree (Quinn BOUNCE BLOCKER #1).
  */
 
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Command } from "commander";
 import {
   generateCompletionScript,
   SUPPORTED_SHELLS,
 } from "../src/services/completion-generator.js";
-import { planCommand } from "../src/commands/plan.js";
-import { applyCommand } from "../src/commands/apply.js";
-import { initCommand } from "../src/commands/init.js";
-import { completionsCommand } from "../src/commands/completions.js";
-import { describeCommand } from "../src/commands/describe.js";
-import { destroyCommand } from "../src/commands/destroy.js";
-import { driftCommand } from "../src/commands/drift.js";
-import { optimizeCommand } from "../src/commands/optimize.js";
-import { listCommand } from "../src/commands/list.js";
-import { setupCommand } from "../src/commands/setup.js";
-import { statusCommand } from "../src/commands/status.js";
-import { reconcileCommand } from "../src/commands/reconcile.js";
-import { doctorCommand } from "../src/commands/doctor.js";
-import { versionCommand } from "../src/commands/version.js";
-import { restoreProvisionsCommand } from "../src/commands/restore-provisions.js";
-import { auditVerifyCommand } from "../src/commands/audit-verify.js";
-import { updateCommand } from "../src/commands/update.js";
-import { discoverCommand } from "../src/commands/discover/discover.js";
+import { buildAssigneeProgram } from "../src/program.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const completionsDir = path.resolve(__dirname, "..", "completions");
-
-/**
- * Build the program by importing the real command modules.
- * This avoids manually duplicating flags/args and prevents sync drift.
- */
-function buildProgram(): Command {
-  const program = new Command();
-  program.name("assignee").version("0.1.0");
-
-  // Keep this list in sync with apps/cli/src/index.ts so shell
-  // completions cover every shipping command. Story 50-3 trimmed the
-  // list from 18 → 13 by removing clean, cache, patterns, types, whoami.
-  // Story 108-A-03 round-2 fix: added restore-provisions, audit-verify,
-  // update, and discover (all four were previously missing from this
-  // generator, causing completions to omit them — AC#6 regression fix).
-  program.addCommand(planCommand);
-  program.addCommand(applyCommand);
-  program.addCommand(initCommand);
-  program.addCommand(completionsCommand);
-  program.addCommand(describeCommand);
-  program.addCommand(destroyCommand);
-  program.addCommand(driftCommand);
-  program.addCommand(optimizeCommand);
-  program.addCommand(listCommand);
-  program.addCommand(setupCommand);
-  program.addCommand(statusCommand);
-  program.addCommand(reconcileCommand);
-  program.addCommand(doctorCommand);
-  program.addCommand(restoreProvisionsCommand);
-  program.addCommand(auditVerifyCommand);
-  program.addCommand(updateCommand);
-  program.addCommand(discoverCommand);
-
-  // Story 58-it1-03: `version` is now a standalone command module
-  // (closes it57-1-L3-L1 — the previous inline `.command("version")`
-  // registration in `src/index.ts` meant we had to re-declare a stub
-  // here; now we `addCommand` the real instance so the generator and
-  // the runtime CLI can never drift on name/description again).
-  program.addCommand(versionCommand);
-
-  return program;
-}
 
 // ── Main ────────────────────────────────────────────────────────────────────
 
 fs.mkdirSync(completionsDir, { recursive: true });
 
-const program = buildProgram();
+const program = buildAssigneeProgram();
+// Match the runtime program metadata so the generated completion scripts
+// emit the canonical binary name (`assignee`). Version isn't read by the
+// completion generator but kept here for parity with the runtime.
+program.name("assignee").version("0.1.0");
 
 const shellExtensions: Record<string, string> = {
   zsh: "zsh",

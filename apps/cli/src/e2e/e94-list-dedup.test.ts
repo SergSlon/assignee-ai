@@ -66,6 +66,7 @@ describeE2E("Epic 94 R7 — list --resource-type dedup (RUN_E2E=1)", () => {
 
   it("D-02: 37-types registry grid appears EXACTLY ONCE on stderr", () => {
     const { stderr, code } = runCli([
+      "admin",
       "list",
       "--resource-type",
       "NOT-A-REAL-TYPE",
@@ -88,7 +89,12 @@ describeE2E("Epic 94 R7 — list --resource-type dedup (RUN_E2E=1)", () => {
     // and finally `Error: …` (Commander's fallback). After the
     // fix: `[ERROR] …` once, CONTEXT prefix stripped (D-10), and
     // the Commander fallback suppressed (D-02).
-    const { stderr } = runCli(["list", "--resource-type", "NOT-A-REAL-TYPE"]);
+    const { stderr } = runCli([
+      "admin",
+      "list",
+      "--resource-type",
+      "NOT-A-REAL-TYPE",
+    ]);
     const headlineCount = (
       stderr.match(/Unknown --resource-type "NOT-A-REAL-TYPE"\./g) ?? []
     ).length;
@@ -97,6 +103,7 @@ describeE2E("Epic 94 R7 — list --resource-type dedup (RUN_E2E=1)", () => {
 
   it("JSON envelope invariant (Wave 2.c) preserved on error path", () => {
     const { stdout, stderr, code } = runCli([
+      "admin",
       "list",
       "--json",
       "--resource-type",
@@ -123,7 +130,12 @@ describeE2E("Epic 94 R7 — list --resource-type dedup (RUN_E2E=1)", () => {
     // Safety check: the dedup fix must not accidentally swallow the
     // error — exit code must still be non-zero so downstream shells
     // and CI jobs see the failure.
-    const { code } = runCli(["list", "--resource-type", "NOT-A-REAL-TYPE"]);
+    const { code } = runCli([
+      "admin",
+      "list",
+      "--resource-type",
+      "NOT-A-REAL-TYPE",
+    ]);
     expect(code).not.toBe(0);
   });
 });

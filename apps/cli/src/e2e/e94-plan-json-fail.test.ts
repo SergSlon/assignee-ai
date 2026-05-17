@@ -108,6 +108,7 @@ describeE2E(
 
     it("unsupported intent → stdout is a SINGLE parseable JSON envelope", () => {
       const { stdout, stderr, code } = runCli([
+        "infra",
         "plan",
         "--output",
         "json",
@@ -167,6 +168,7 @@ describeE2E(
 
     it("stderr byte length is non-trivial on the unsupported-resource probe", () => {
       const { stderr, code } = runCli([
+        "infra",
         "plan",
         "--output",
         "json",

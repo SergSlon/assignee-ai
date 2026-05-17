@@ -339,7 +339,8 @@ describe("assignee init command", () => {
       expect(warnCalls).toHaveLength(1);
       const warnText = warnCalls[0]!;
       expect(warnText).toContain("No AWS credentials detected");
-      expect(warnText).toContain("assignee setup");
+      // Story 108-A-05: path is now noun-grouped `assignee dev setup`.
+      expect(warnText).toContain("assignee dev setup");
       expect(warnText).toContain("AWS_ACCESS_KEY_ID");
       expect(warnText).toContain("AWS_SECRET_ACCESS_KEY");
       expect(warnText).toContain("AWS_PROFILE");
@@ -356,7 +357,10 @@ describe("assignee init command", () => {
       expect(
         infoCalls.some((m) => m.includes("Assignee roles available")),
       ).toBe(false);
-      expect(infoCalls.some((m) => m.includes("assignee setup"))).toBe(false);
+      // Story 108-A-05: path is now noun-grouped `assignee dev setup`.
+      expect(infoCalls.some((m) => m.includes("assignee dev setup"))).toBe(
+        false,
+      );
 
       // Config file is still written.
       const configPath = path.join(tmpDir, ".assignee", "config.yaml");
@@ -528,7 +532,8 @@ describe("assignee init command", () => {
       expect.stringContaining("with profile my-profile"),
     );
     expect(clack.outro).toHaveBeenCalledWith(
-      expect.stringContaining("assignee plan"),
+      // Story 108-A-05: path is now noun-grouped `assignee infra plan`.
+      expect.stringContaining("assignee infra plan"),
     );
   });
 

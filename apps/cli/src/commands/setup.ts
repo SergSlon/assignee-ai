@@ -215,7 +215,7 @@ Examples:
               // Timeout after exhausting retries — warn but continue.
               clack.log.warn(
                 `⚠ Keys for ${role.userName} created but AWS hasn't confirmed propagation\n` +
-                  `  after ~30s. This is rare but legal — try \`assignee plan\` in\n` +
+                  `  after ~30s. This is rare but legal — try \`assignee infra plan\` in\n` +
                   `  another minute if your next command fails.`,
               );
             } else {

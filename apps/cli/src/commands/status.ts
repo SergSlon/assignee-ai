@@ -65,7 +65,7 @@ export const statusCommand = new Command(CommandName.STATUS)
   // to go (`list --json`) for per-run queries.
   .argument(
     "[runId]",
-    "Optional run id. `status` is a fleet-level summary and cannot filter by run — when you pass one we emit a warning and point you at `assignee list --json` for the per-run query path.",
+    "Optional run id. `status` is a fleet-level summary and cannot filter by run — when you pass one we emit a warning and point you at `assignee admin list --json` for the per-run query path.",
   )
   // Epic 98 e98.W5.N3 (B-07 / D-16): uniform `--json` + `-o, --output
   // <format>` across every command.
@@ -89,20 +89,20 @@ export const statusCommand = new Command(CommandName.STATUS)
     "after",
     `
 Examples:
-  $ assignee status
+  $ assignee admin status
         Summary of managed resources and recent runs
-  $ assignee status --json
+  $ assignee admin status --json
         Machine-readable status payload
-  $ assignee status --resource-type S3
+  $ assignee admin status --resource-type S3
         Summary scoped to S3 buckets only (shorthand or full CFN form)
-  $ assignee status --bp-coverage
+  $ assignee admin status --bp-coverage
         Best-practice rule coverage dashboard
-  $ assignee status --bp-coverage --gaps-only
+  $ assignee admin status --bp-coverage --gaps-only
         CI mode: exit non-zero if any resource type has zero BP rules
-  $ assignee status <runId>
+  $ assignee admin status <runId>
         status is a fleet-level summary — the positional runId is NOT
         used to filter; we emit a warning and still render the summary.
-        Use \`assignee list --json\` to query a specific run's resources.
+        Use \`assignee admin list --json\` to query a specific run's resources.
 
 status is read-only. No --yes required.
 `,
@@ -160,7 +160,7 @@ status is read-only. No --yes required.
             extras: {
               warning: "runId-positional-ignored",
               suppliedRunId: runId,
-              hint: "`assignee status` is a fleet-level summary. Use `assignee list --json` (optionally filtered by --resource-type / --region) to query a specific run's resources.",
+              hint: "`assignee admin status` is a fleet-level summary. Use `assignee admin list --json` (optionally filtered by --resource-type / --region) to query a specific run's resources.",
             },
           });
           // In non-JSON mode also surface the warning on stderr so a
@@ -170,7 +170,7 @@ status is read-only. No --yes required.
           if (opts.json !== true) {
             process.stderr.write(
               `warning: \`status\` ignores the runId positional ("${runId}"). ` +
-                "Use `assignee list --json` for per-run queries; continuing with fleet-level summary.\n",
+                "Use `assignee admin list --json` for per-run queries; continuing with fleet-level summary.\n",
             );
           }
         }

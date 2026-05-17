@@ -22,8 +22,8 @@ import {
 import { Command } from "commander";
 
 /**
- * Build a test CLI using the real command modules, ensuring completions
- * stay in sync with the actual CLI command tree.
+ * Build a test CLI using the real command modules under noun groups,
+ * mirroring the production noun-grouped tree (Story 108-A-05).
  */
 async function buildTestCli() {
   const { completionsCommand } = await import("./completions.js");
@@ -34,10 +34,17 @@ async function buildTestCli() {
   const program = new Command();
   program.name("assignee").version("0.1.0");
 
-  program.addCommand(planCommand);
-  program.addCommand(applyCommand);
-  program.addCommand(initCommand);
-  program.addCommand(completionsCommand);
+  // infra group
+  const infra = new Command("infra").description("Manage cloud infrastructure");
+  infra.addCommand(planCommand);
+  infra.addCommand(applyCommand);
+  program.addCommand(infra);
+
+  // dev group
+  const dev = new Command("dev").description("Developer tooling");
+  dev.addCommand(initCommand);
+  dev.addCommand(completionsCommand);
+  program.addCommand(dev);
 
   return { program, completionsCommand };
 }
@@ -63,7 +70,7 @@ describe("completions command", () => {
     exitSpy.mockRestore();
   });
 
-  it("outputs zsh completion script to stdout", async () => {
+  it("outputs zsh completion script to stdout (noun-grouped tree)", async () => {
     const { generateCompletionScript } =
       await import("../services/completion-generator.js");
 
@@ -73,12 +80,16 @@ describe("completions command", () => {
     const script = generateCompletionScript(program, "zsh");
 
     expect(script).toContain("#compdef assignee");
-    expect(script).toContain("plan");
-    expect(script).toContain("apply");
-    expect(script).toContain("init");
+    // Noun groups appear at top level
+    expect(script).toContain("'infra:");
+    expect(script).toContain("'dev:");
+    // Leaf commands appear as sub-completions
+    expect(script).toContain("'plan:");
+    expect(script).toContain("'apply:");
+    expect(script).toContain("'init:");
   });
 
-  it("outputs bash completion script to stdout", async () => {
+  it("outputs bash completion script to stdout (noun-grouped tree)", async () => {
     const { generateCompletionScript } =
       await import("../services/completion-generator.js");
 
@@ -88,10 +99,15 @@ describe("completions command", () => {
 
     expect(script).toContain("complete -F");
     expect(script).toContain("_assignee_completions");
+    // Noun groups appear as top-level completions
+    expect(script).toContain("infra");
+    expect(script).toContain("dev");
+    // Leaf commands appear under their noun groups
     expect(script).toContain("plan");
+    expect(script).toContain("init");
   });
 
-  it("outputs fish completion script to stdout", async () => {
+  it("outputs fish completion script to stdout (noun-grouped tree)", async () => {
     const { generateCompletionScript } =
       await import("../services/completion-generator.js");
 
@@ -100,6 +116,10 @@ describe("completions command", () => {
     const script = generateCompletionScript(program, "fish");
 
     expect(script).toContain("complete -c assignee");
+    // Noun groups at top level
+    expect(script).toContain("-a infra");
+    expect(script).toContain("-a dev");
+    // Leaf commands under their noun groups
     expect(script).toContain("-a plan");
   });
 
