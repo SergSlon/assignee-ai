@@ -139,7 +139,7 @@ function renderSupportedTypesHintShort(): string {
  */
 function renderSupportedTypesHintMcp(): string {
   const count = getSupportedTypeCount();
-  return `Supported types (${count}): S3, Lambda, DynamoDB, SQS, SNS, EC2, RDS, IAM Role, SSM Parameter, CloudWatch Logs, EventBridge Rule, and more. Run \`assignee plan --help\` for the full grouped list.`;
+  return `Supported types (${count}): S3, Lambda, DynamoDB, SQS, SNS, EC2, RDS, IAM Role, SSM Parameter, CloudWatch Logs, EventBridge Rule, and more. Run \`assignee infra plan --help\` for the full grouped list.`;
 }
 
 /**

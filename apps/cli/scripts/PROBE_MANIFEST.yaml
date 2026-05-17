@@ -61,18 +61,18 @@ probes:
       they spread into the slot's desiredState.
     must_fail_pre_fix: false
     variations:
-      - cmd: 'plan "create lambda-with-exec-role named my-fn handler handler.main runtime nodejs20.x" --json'
+      - cmd: 'infra plan "create lambda-with-exec-role named my-fn handler handler.main runtime nodejs20.x" --json'
         assertions: "AWS::IAM::Role slot does NOT contain FunctionName key (name-field filter)"
-      - cmd: 'plan "create lambda with role named api-handler handler index.main runtime nodejs20.x" --json'
+      - cmd: 'infra plan "create lambda with role named api-handler handler index.main runtime nodejs20.x" --json'
         assertions: "AWS::IAM::Role slot rejects FunctionName with alt phrasing (compound-keyword variant)"
-      - cmd: 'plan "lambda-with-exec-role called processor handler worker.run runtime python3.11" --json'
+      - cmd: 'infra plan "lambda-with-exec-role called processor handler worker.run runtime python3.11" --json'
         assertions: "AWS::IAM::Role slot rejects FunctionName with 'called' name token + python runtime"
     known_tripwires: []
     probe: |
       assert_desired_state_missing_key_on_type \
         "AWS::IAM::Role" \
         "FunctionName" \
-        $PROBE_CLI_BIN plan \
+        $PROBE_CLI_BIN infra plan \
           "create lambda-with-exec-role named my-fn handler handler.main runtime nodejs20.x" \
           --json
 
@@ -89,11 +89,11 @@ probes:
       AssigneeError in the CLI wrapper.
     must_fail_pre_fix: false
     variations:
-      - cmd: 'apply "create S3 bucket named invalid..name" --yes --json'
+      - cmd: 'infra apply "create S3 bucket named invalid..name" --yes --json'
         assertions: "adjacent-dot bucket name → ok:false, exit non-zero (validator rejects)"
-      - cmd: 'apply "create S3 bucket named INVALID-UPPER" --yes --json'
+      - cmd: 'infra apply "create S3 bucket named INVALID-UPPER" --yes --json'
         assertions: "uppercase bucket name → ok:false, exit non-zero (S3 naming rule)"
-      - cmd: 'apply "create S3 bucket named a" --yes --json'
+      - cmd: 'infra apply "create S3 bucket named a" --yes --json'
         assertions: "1-char bucket name → ok:false, exit non-zero (min length 3)"
     known_tripwires: []
     probe: |
@@ -103,7 +103,7 @@ probes:
       # zero) exit of the CLI inside the pipeline is intentional; the
       # helper captures and inspects the exit itself.
       assert_exit_code_matches_ok non-zero false \
-        $PROBE_CLI_BIN apply "create S3 bucket named invalid..name" --yes --json
+        $PROBE_CLI_BIN infra apply "create S3 bucket named invalid..name" --yes --json
 
   - story: e96.W1.B3
     name: region-regex-no-substring-false-positive
@@ -126,15 +126,15 @@ probes:
       Wave 2 e98.W2.R1 must flip it to PASS.
     must_fail_pre_fix: false
     variations:
-      - cmd: 'plan "Create a lambda named my-abc-1" --json'
+      - cmd: 'infra plan "Create a lambda named my-abc-1" --json'
         assertions: "alpha-alpha-digit name does NOT trigger region false-positive; plan.region defaults"
-      - cmd: 'plan "create S3 bucket named my-bucket-us-east-1-fake region eu-west-2" --json'
+      - cmd: 'infra plan "create S3 bucket named my-bucket-us-east-1-fake region eu-west-2" --json'
         assertions: "explicit region tail (eu-west-2) wins over substring match inside name"
-      - cmd: 'plan "create S3 bucket named log-ap-northeast-2-archive" --json'
+      - cmd: 'infra plan "create S3 bucket named log-ap-northeast-2-archive" --json'
         assertions: "region-shaped substring inside name does NOT clobber default region"
-      - cmd: 'plan "Create a lambda named my-fn in us-west-2" --json'
+      - cmd: 'infra plan "Create a lambda named my-fn in us-west-2" --json'
         assertions: "explicit `in us-west-2` tail lifted into plan.region"
-      - cmd: 'plan "Create an S3 bucket" --json'
+      - cmd: 'infra plan "Create an S3 bucket" --json'
         assertions: "bare intent produces plan with default region (no parse failure)"
     # e98.W2.R1 removed the `my-abc-1` tripwire after landing the two-pass
     # region extractor (tail wins + name-span masking). The invariant is
@@ -146,7 +146,7 @@ probes:
       # a valid region (eu-west-2). The bucket-name substring
       # "us-east-1" should NOT trigger region-parse failure.
       assert_exit_code_matches_ok zero true \
-        $PROBE_CLI_BIN plan \
+        $PROBE_CLI_BIN infra plan \
           "create S3 bucket named my-bucket-us-east-1-fake region eu-west-2" \
           --json
 
@@ -166,22 +166,22 @@ probes:
       name-masking invariants, letting the name-shaped bug survive.
     must_fail_pre_fix: false
     variations:
-      - cmd: 'plan "Create a lambda named my-abc-1" --json'
+      - cmd: 'infra plan "Create a lambda named my-abc-1" --json'
         assertions: "alpha-alpha-digit name does NOT trigger Unknown-region error"
-      - cmd: 'plan "Create an S3 bucket named my-bucket-us-east-1-fake region eu-west-2" --json'
+      - cmd: 'infra plan "Create an S3 bucket named my-bucket-us-east-1-fake region eu-west-2" --json'
         assertions: "explicit `region` tail wins over in-name substring"
-      - cmd: 'plan "Create an SQS queue named sqs-json-1776927324" --json'
+      - cmd: 'infra plan "Create an SQS queue named sqs-json-1776927324" --json'
         assertions: "name with three-letter prefix + digit tail does NOT trigger region false-positive"
-      - cmd: 'plan "Create an S3 bucket" --json'
+      - cmd: 'infra plan "Create an S3 bucket" --json'
         assertions: "bare intent produces plan with default region (no parse failure)"
-      - cmd: 'plan "Create a lambda in us-west-2 named my-fn" --json'
+      - cmd: 'infra plan "Create a lambda in us-west-2 named my-fn" --json'
         assertions: "explicit `in us-west-2` tail lifted into plan without conflict with name"
     known_tripwires: []
     probe: |
       # Variation 1 — the Epic 97 B-09 live-FAIL. After the fix this
       # must PASS with ok:true.
       assert_exit_code_matches_ok zero true \
-        $PROBE_CLI_BIN plan "Create a lambda named my-abc-1" --json
+        $PROBE_CLI_BIN infra plan "Create a lambda named my-abc-1" --json
 
   - story: e96.W1.B4
     name: plan-help-single-examples
@@ -192,15 +192,15 @@ probes:
       `addHelpText` blocks are now the only carriers of `Examples:`.
     must_fail_pre_fix: false
     variations:
-      - cmd: "plan --help"
+      - cmd: "infra plan --help"
         assertions: "`plan --help` emits exactly 1 `Examples:` heading"
-      - cmd: "plan -h"
+      - cmd: "infra plan -h"
         assertions: "short-flag alias emits exactly 1 `Examples:` heading (shared helptext)"
-      - cmd: "help plan"
+      - cmd: "help infra plan"
         assertions: "Commander `help <cmd>` invocation emits exactly 1 `Examples:` heading"
     known_tripwires: []
     probe: |
-      assert_single_examples_block $PROBE_CLI_BIN plan --help
+      assert_single_examples_block $PROBE_CLI_BIN infra plan --help
 
   - story: e96.W1.B5
     name: apply-help-single-examples
@@ -211,15 +211,15 @@ probes:
       `Examples:` section.
     must_fail_pre_fix: false
     variations:
-      - cmd: "apply --help"
+      - cmd: "infra apply --help"
         assertions: "`apply --help` emits exactly 1 `Examples:` heading"
-      - cmd: "apply -h"
+      - cmd: "infra apply -h"
         assertions: "short-flag alias emits exactly 1 `Examples:` heading"
-      - cmd: "help apply"
+      - cmd: "help infra apply"
         assertions: "Commander `help apply` invocation emits exactly 1 `Examples:` heading"
     known_tripwires: []
     probe: |
-      assert_single_examples_block $PROBE_CLI_BIN apply --help
+      assert_single_examples_block $PROBE_CLI_BIN infra apply --help
 
   - story: e96.W3.N2
     name: bp-sg-high-risk-no-fire-on-443
@@ -236,16 +236,16 @@ probes:
       27017 / Redis 6379 / Elasticsearch 9200).
     must_fail_pre_fix: false
     variations:
-      - cmd: 'plan "Create a security group allowing 0.0.0.0/0 on port 443" --json'
+      - cmd: 'infra plan "Create a security group allowing 0.0.0.0/0 on port 443" --json'
         assertions: "BP-SG-004 does NOT fire on HTTPS (not a DB/admin port)"
-      - cmd: 'plan "Create a security group allowing 0.0.0.0/0 on port 80" --json'
+      - cmd: 'infra plan "Create a security group allowing 0.0.0.0/0 on port 80" --json'
         assertions: "BP-SG-004 does NOT fire on HTTP (not a DB/admin port)"
-      - cmd: 'plan "Create a security group allowing 0.0.0.0/0 on port 8080" --json'
+      - cmd: 'infra plan "Create a security group allowing 0.0.0.0/0 on port 8080" --json'
         assertions: "BP-SG-004 does NOT fire on non-DB port 8080"
     known_tripwires: []
     probe: |
       assert_no_bp_finding_id BP-SG-004 \
-        $PROBE_CLI_BIN plan \
+        $PROBE_CLI_BIN infra plan \
           "Create a security group allowing 0.0.0.0/0 on port 443" \
           --json
 
@@ -260,16 +260,16 @@ probes:
       supposed to flag.
     must_fail_pre_fix: false
     variations:
-      - cmd: 'plan "Create a security group allowing 0.0.0.0/0 on port 3306" --json'
+      - cmd: 'infra plan "Create a security group allowing 0.0.0.0/0 on port 3306" --json'
         assertions: "BP-SG-004 fires on MySQL (3306) exposed to world"
-      - cmd: 'plan "Create a security group allowing 0.0.0.0/0 on port 5432" --json'
+      - cmd: 'infra plan "Create a security group allowing 0.0.0.0/0 on port 5432" --json'
         assertions: "BP-SG-004 fires on PostgreSQL (5432) exposed to world"
-      - cmd: 'plan "Create a security group allowing 0.0.0.0/0 on port 27017" --json'
+      - cmd: 'infra plan "Create a security group allowing 0.0.0.0/0 on port 27017" --json'
         assertions: "BP-SG-004 fires on MongoDB (27017) exposed to world"
     known_tripwires: []
     probe: |
       assert_bp_finding_id_present BP-SG-004 \
-        $PROBE_CLI_BIN plan \
+        $PROBE_CLI_BIN infra plan \
           "Create a security group allowing 0.0.0.0/0 on port 3306" \
           --json
 
@@ -287,16 +287,16 @@ probes:
       intent. Both surfaces must render the same 10 groups.
     must_fail_pre_fix: false
     variations:
-      - cmd: 'plan --help && plan "Create a quantum computer" --json'
+      - cmd: 'infra plan --help && plan "Create a quantum computer" --json'
         assertions: "10 family group headers (Compute/Storage/Databases/Networking/Edge-CDN/API/Messaging/Security/Containers/Observability) present in BOTH help text and error hint"
-      - cmd: 'plan "Create a time machine" --json'
+      - cmd: 'infra plan "Create a time machine" --json'
         assertions: "unsupported-intent error hint includes all 10 group headers (shared renderer)"
-      - cmd: 'apply "Create a unicorn" --yes --json'
+      - cmd: 'infra apply "Create a unicorn" --yes --json'
         assertions: "apply error surface shares same group headers (cross-command consistency)"
     known_tripwires: []
     probe: |
-      cli_out="$($PROBE_CLI_BIN plan --help 2>&1)"
-      err_out="$($PROBE_CLI_BIN plan 'Create a quantum computer' --json 2>&1 || true)"
+      cli_out="$($PROBE_CLI_BIN infra plan --help 2>&1)"
+      err_out="$($PROBE_CLI_BIN infra plan 'Create a quantum computer' --json 2>&1 || true)"
       for group in Compute Storage Databases Networking "Edge / CDN" \
                    API Messaging Security Containers Observability; do
         if ! printf '%s' "$cli_out" | grep -Fq "$group"; then
@@ -322,15 +322,15 @@ probes:
       exit 1 (never hangs, never silently accepts).
     must_fail_pre_fix: false
     variations:
-      - cmd: "init --help"
+      - cmd: "dev init --help"
         assertions: "--wizard flag listed in init --help output"
-      - cmd: "init --wizard --yes --region us-east-1"
+      - cmd: "dev init --wizard --yes --region us-east-1"
         assertions: "mutual-exclusivity: exits non-zero with `mutually exclusive` message"
-      - cmd: "init --wizard --yes --global --region us-east-1"
+      - cmd: "dev init --wizard --yes --global --region us-east-1"
         assertions: "global+wizard+yes combo still rejected (mutual-exclusivity applies to global too)"
     known_tripwires: []
     probe: |
-      help_out="$($PROBE_CLI_BIN init --help 2>&1)"
+      help_out="$($PROBE_CLI_BIN dev init --help 2>&1)"
       if ! printf '%s' "$help_out" | grep -q -- '--wizard'; then
         echo "[PROBE-FAIL] init --help does not list --wizard" >&2
         exit 1
@@ -341,7 +341,7 @@ probes:
       tmp_home="$(mktemp -d -t assignee-init-wizard-probe.XXXXXX)"
       trap 'rm -rf "$tmp_home"' EXIT
       set +e
-      combined="$(HOME="$tmp_home" $PROBE_CLI_BIN init --wizard --yes \
+      combined="$(HOME="$tmp_home" $PROBE_CLI_BIN dev init --wizard --yes \
           --region us-east-1 </dev/null 2>&1)"
       rc=$?
       set -e
@@ -372,11 +372,11 @@ probes:
       share the same helper).
     must_fail_pre_fix: false
     variations:
-      - cmd: 'apply "Create a quantum entanglement device" --yes --json'
+      - cmd: 'infra apply "Create a quantum entanglement device" --yes --json'
         assertions: "apply --json: stderr lacks [ERROR]/[CONTEXT]/[FIX]; stdout has {ok:false,error.code}"
-      - cmd: 'plan "Create a quantum entanglement device" --json'
+      - cmd: 'infra plan "Create a quantum entanglement device" --json'
         assertions: "plan --json: stderr lacks human error blocks; stdout envelope valid"
-      - cmd: 'plan "Create a time machine" --output json'
+      - cmd: 'infra plan "Create a time machine" --output json'
         assertions: "--output json alias yields same surgical filter as --json"
     known_tripwires: []
     probe: |
@@ -419,9 +419,9 @@ probes:
         return 0
       }
 
-      check_cmd "apply" $PROBE_CLI_BIN apply \
+      check_cmd "infra apply" $PROBE_CLI_BIN infra apply \
         "Create a quantum entanglement device" --yes --json || exit 1
-      check_cmd "plan" $PROBE_CLI_BIN plan \
+      check_cmd "infra plan" $PROBE_CLI_BIN infra plan \
         "Create a quantum entanglement device" --json || exit 1
 
   - story: e96.W2.R2
@@ -438,11 +438,11 @@ probes:
       124 and the probe fails.
     must_fail_pre_fix: false
     variations:
-      - cmd: "init --global --yes --region us-east-1 --auto-fix ask"
+      - cmd: "dev init --global --yes --region us-east-1 --auto-fix ask"
         assertions: "10s timeout: completes, writes config with region + auto_fix"
-      - cmd: "init --global --yes --region eu-west-1 --auto-fix always"
+      - cmd: "dev init --global --yes --region eu-west-1 --auto-fix always"
         assertions: "non-default region + auto_fix mode threaded through"
-      - cmd: "init --global --yes --region ap-southeast-2 --auto-fix never"
+      - cmd: "dev init --global --yes --region ap-southeast-2 --auto-fix never"
         assertions: "auto_fix=never mode accepted; no prompt hang"
     known_tripwires: []
     probe: |
@@ -455,7 +455,7 @@ probes:
       # cold Node; anything over 10s means the wizard hung on a prompt.
       # </dev/null forces stdin to be a pipe, reproducing the CI case
       # that tripped D-39 the first time.
-      if ! HOME="$tmp_home" timeout 10 $PROBE_CLI_BIN init --global \
+      if ! HOME="$tmp_home" timeout 10 $PROBE_CLI_BIN dev init --global \
           --yes --region us-east-1 --auto-fix ask </dev/null >/dev/null 2>&1; then
         echo "[PROBE-FAIL] init --global --yes exited non-zero or hung" >&2
         exit 1
@@ -500,13 +500,13 @@ probes:
       PASS.
     must_fail_pre_fix: false
     variations:
-      - cmd: 'plan "Create an EC2 t3.micro instance" --json'
+      - cmd: 'infra plan "Create an EC2 t3.micro instance" --json'
         assertions: "t3.micro: CreditSpecification.CPUCredits == 'standard' (plugin default)"
-      - cmd: 'plan "Create an EC2 instance t3.large with 100GB gp3 volume" --json'
+      - cmd: 'infra plan "Create an EC2 instance t3.large with 100GB gp3 volume" --json'
         assertions: "t3.large + volume: CreditSpecification.CPUCredits == 'standard' (NOT empty {})"
-      - cmd: 'plan "Create a t3.medium EC2 instance" --json'
+      - cmd: 'infra plan "Create a t3.medium EC2 instance" --json'
         assertions: "t3.medium: CreditSpecification survives sanitizer with CPUCredits set"
-      - cmd: 'plan "Create a t3.small EC2 instance with CPUCredits unlimited" --json'
+      - cmd: 'infra plan "Create a t3.small EC2 instance with CPUCredits unlimited" --json'
         assertions: "user-stated CPUCredits unlimited wins over plugin default"
     # e98.W2.R2 removed the `result[key] !== undefined` tripwire after
     # landing `isEmptyLeaf` + deep-merge backfill in merge.ts. The
@@ -519,7 +519,7 @@ probes:
       # canonical `CPUCredits` key. Both the presence AND the casing
       # must survive — a fix that keeps the old casing would leave
       # CreditSpecification empty after sanitize and re-trip this probe.
-      stdout="$($PROBE_CLI_BIN plan "Create an EC2 t3.micro instance" --output json 2>/dev/null || true)"
+      stdout="$($PROBE_CLI_BIN infra plan "Create an EC2 t3.micro instance" --output json 2>/dev/null || true)"
       envelope="$(printf '%s' "$stdout" | awk '/^\{/{block=$0; capture=1; next} capture{block=block"\n"$0} END{print block}')"
       if [[ -z "$envelope" ]] || ! printf '%s' "$envelope" | jq . >/dev/null 2>&1; then
         echo "[PROBE-FAIL] no JSON envelope on stdout" >&2
@@ -554,13 +554,13 @@ probes:
       larger-intent case survived.
     must_fail_pre_fix: false
     variations:
-      - cmd: 'plan "Create a t3.micro EC2 instance" --json'
+      - cmd: 'infra plan "Create a t3.micro EC2 instance" --json'
         assertions: "baseline t3.micro: CreditSpecification.CPUCredits == 'standard' (plugin default on empty slot)"
-      - cmd: 'plan "Create an EC2 instance t3.large with 100GB gp3 volume" --json'
+      - cmd: 'infra plan "Create an EC2 instance t3.large with 100GB gp3 volume" --json'
         assertions: "C-R1 regression: larger intent does NOT strip CreditSpecification to empty {}"
-      - cmd: 'plan "Create a t3.medium EC2 instance encrypted" --json'
+      - cmd: 'infra plan "Create a t3.medium EC2 instance encrypted" --json'
         assertions: "t3.medium + elaborate clause: CreditSpecification survives with CPUCredits set"
-      - cmd: 'plan "Create a t3.small EC2 instance with CPUCredits unlimited" --json'
+      - cmd: 'infra plan "Create a t3.small EC2 instance with CPUCredits unlimited" --json'
         assertions: "user-stated CPUCredits=unlimited wins over plugin default (user always wins)"
     known_tripwires: []
     probe: |
@@ -568,7 +568,7 @@ probes:
       # must emit a non-empty CreditSpecification with CPUCredits set
       # to either "standard" (plugin default) or "unlimited" (if user
       # stated otherwise). Empty {} is the failure mode.
-      stdout="$($PROBE_CLI_BIN plan "Create an EC2 instance t3.large with 100GB gp3 volume" --output json 2>/dev/null || true)"
+      stdout="$($PROBE_CLI_BIN infra plan "Create an EC2 instance t3.large with 100GB gp3 volume" --output json 2>/dev/null || true)"
       envelope="$(printf '%s' "$stdout" | awk '/^\{/{block=$0; capture=1; next} capture{block=block"\n"$0} END{print block}')"
       if [[ -z "$envelope" ]] || ! printf '%s' "$envelope" | jq . >/dev/null 2>&1; then
         echo "[PROBE-FAIL] no JSON envelope on stdout" >&2
@@ -599,11 +599,11 @@ probes:
       VPC, etc.). Closes Epic 95 C-02 MED NEW.
     must_fail_pre_fix: false
     variations:
-      - cmd: 'plan "Create an EFS file system" --json'
+      - cmd: 'infra plan "Create an EFS file system" --json'
         assertions: "bare EFS intent → exactly 1 plan, resourceType AWS::EFS::FileSystem"
-      - cmd: 'plan "Create an EFS filesystem" --json'
+      - cmd: 'infra plan "Create an EFS filesystem" --json'
         assertions: "single-word 'filesystem' phrasing routes to singleton"
-      - cmd: 'plan "Create an EFS FS" --json'
+      - cmd: 'infra plan "Create an EFS FS" --json'
         assertions: "abbreviated 'FS' phrasing routes to singleton (no compound spillover)"
     known_tripwires: []
     probe: |
@@ -612,7 +612,7 @@ probes:
       # (single) or `plans` (array). Pre-fix the intent goes through
       # the compound path, which emits 10 plans under `.plans` — the
       # jq expression below fails clean in that case.
-      stdout="$($PROBE_CLI_BIN plan "Create an EFS file system" --json 2>/dev/null || true)"
+      stdout="$($PROBE_CLI_BIN infra plan "Create an EFS file system" --json 2>/dev/null || true)"
       envelope="$(printf '%s' "$stdout" | awk '/^\{/{block=$0; capture=1; next} capture{block=block"\n"$0} END{print block}')"
       if [[ -z "$envelope" ]] || ! printf '%s' "$envelope" | jq . >/dev/null 2>&1; then
         echo "[PROBE-FAIL] no JSON envelope on stdout" >&2
@@ -646,15 +646,15 @@ probes:
       behaviour the pattern was built for.
     must_fail_pre_fix: false
     variations:
-      - cmd: 'plan "Create an EFS file system with a new VPC" --json'
+      - cmd: 'infra plan "Create an EFS file system with a new VPC" --json'
         assertions: "'with a new VPC' qualifier → compound path, ≥5 plans incl AWS::EC2::VPC"
-      - cmd: 'plan "Create an EFS file system and VPC" --json'
+      - cmd: 'infra plan "Create an EFS file system and VPC" --json'
         assertions: "'and VPC' qualifier routes to compound"
-      - cmd: 'plan "Create an EFS file system in a new VPC" --json'
+      - cmd: 'infra plan "Create an EFS file system in a new VPC" --json'
         assertions: "'in a new VPC' qualifier routes to compound"
     known_tripwires: []
     probe: |
-      stdout="$($PROBE_CLI_BIN plan "Create an EFS file system with a new VPC" --json 2>/dev/null || true)"
+      stdout="$($PROBE_CLI_BIN infra plan "Create an EFS file system with a new VPC" --json 2>/dev/null || true)"
       envelope="$(printf '%s' "$stdout" | awk '/^\{/{block=$0; capture=1; next} capture{block=block"\n"$0} END{print block}')"
       if [[ -z "$envelope" ]] || ! printf '%s' "$envelope" | jq . >/dev/null 2>&1; then
         echo "[PROBE-FAIL] no JSON envelope on stdout" >&2
@@ -687,15 +687,15 @@ probes:
       registration didn't accidentally break the mount-target path.
     must_fail_pre_fix: false
     variations:
-      - cmd: 'plan "Create an EFS mount target" --json'
+      - cmd: 'infra plan "Create an EFS mount target" --json'
         assertions: "'EFS mount target' routes to AWS::EFS::MountTarget singleton"
-      - cmd: 'plan "Create an EFS mount-target" --json'
+      - cmd: 'infra plan "Create an EFS mount-target" --json'
         assertions: "hyphenated 'mount-target' routes to singleton"
-      - cmd: 'plan "Create a mount target for EFS" --json'
+      - cmd: 'infra plan "Create a mount target for EFS" --json'
         assertions: "prepositional-phrase 'for EFS' still resolves to MountTarget singleton"
     known_tripwires: []
     probe: |
-      stdout="$($PROBE_CLI_BIN plan "Create an EFS mount target" --json 2>/dev/null || true)"
+      stdout="$($PROBE_CLI_BIN infra plan "Create an EFS mount target" --json 2>/dev/null || true)"
       envelope="$(printf '%s' "$stdout" | awk '/^\{/{block=$0; capture=1; next} capture{block=block"\n"$0} END{print block}')"
       if [[ -z "$envelope" ]] || ! printf '%s' "$envelope" | jq . >/dev/null 2>&1; then
         echo "[PROBE-FAIL] no JSON envelope on stdout" >&2
@@ -931,18 +931,18 @@ probes:
       propagates it to stdout instead of the `PLAN_FAILED` fallback.
     must_fail_pre_fix: false
     variations:
-      - cmd: 'plan "Create an S3 bucket named résumé-bucket" --json'
+      - cmd: 'infra plan "Create an S3 bucket named résumé-bucket" --json'
         assertions: "Latin-1 accented chars → error.code INVALID_NAME, message cites non-ASCII"
-      - cmd: 'plan "Create an S3 bucket named 日本-bucket" --json'
+      - cmd: 'infra plan "Create an S3 bucket named 日本-bucket" --json'
         assertions: "CJK chars → error.code INVALID_NAME"
-      - cmd: 'plan "Create an S3 bucket named 👋-bucket" --json'
+      - cmd: 'infra plan "Create an S3 bucket named 👋-bucket" --json'
         assertions: "emoji chars → error.code INVALID_NAME (not PLAN_FAILED fallback)"
     known_tripwires: []
     probe: |
       # Drive the CLI end-to-end — this path exercises both the intent-
       # parser's stamping AND the plan-orchestrator's error-envelope
       # wiring, which is exactly what the finding was about.
-      stdout="$($PROBE_CLI_BIN plan "Create an S3 bucket named résumé-bucket" --json 2>/dev/null || true)"
+      stdout="$($PROBE_CLI_BIN infra plan "Create an S3 bucket named résumé-bucket" --json 2>/dev/null || true)"
       envelope="$(printf '%s' "$stdout" | awk '/^\{/{block=$0; capture=1; next} capture{block=block"\n"$0} END{print block}')"
       if [[ -z "$envelope" ]] || ! printf '%s' "$envelope" | jq . >/dev/null 2>&1; then
         echo "[PROBE-FAIL] no JSON envelope on stdout" >&2
@@ -980,15 +980,15 @@ probes:
       fetch path + the CLI destroy, and asserts each variation.
     must_fail_pre_fix: false
     variations:
-      - cmd: 'list shows Route primaryIdentifier row with keyKind=primaryIdentifier'
+      - cmd: 'admin list shows Route primaryIdentifier row with keyKind=primaryIdentifier'
         assertions: "Route provision → list includes {resourceType:AWS::EC2::Route, arn:\"\", primaryIdentifier:rtb-...|0.0.0.0/0, keyKind:primaryIdentifier}"
-      - cmd: 'list shows SubnetRouteTableAssociation row'
+      - cmd: 'admin list shows SubnetRouteTableAssociation row'
         assertions: "SRTA provision → list includes {arn:\"\", primaryIdentifier:rtbassoc-..., keyKind:primaryIdentifier}"
-      - cmd: 'list shows VPCGatewayAttachment row'
+      - cmd: 'admin list shows VPCGatewayAttachment row'
         assertions: "VPCGatewayAttachment provision → list includes {arn:\"\", primaryIdentifier:igw-...|vpc-..., keyKind:primaryIdentifier}"
-      - cmd: 'destroy "rtb-NONEXISTENT|0.0.0.0/0" --yes --json → exit non-zero, error.code DESTROY_TARGET_NOT_FOUND'
+      - cmd: 'infra destroy "rtb-NONEXISTENT|0.0.0.0/0" --yes --json → exit non-zero, error.code DESTROY_TARGET_NOT_FOUND'
         assertions: "unresolvable primaryIdentifier emits the new DESTROY_TARGET_NOT_FOUND code (NOT silent success, NOT legacy DESTROY_ERROR)"
-      - cmd: 'list --resource-type AWS::EC2::Route → only Route rows'
+      - cmd: 'admin list --resource-type AWS::EC2::Route → only Route rows'
         assertions: "resourceTypeFilter works against primaryIdentifier-keyed rows (no cross-type leakage)"
     known_tripwires: []
     probe: |
@@ -1097,7 +1097,7 @@ probes:
       # RGTA (no creds → throws) and the provision log → error code
       # must be the new DESTROY_TARGET_NOT_FOUND, NOT legacy DESTROY_ERROR.
       set +e
-      destroy_out="$(HOME="$probe_home" $PROBE_CLI_BIN destroy \
+      destroy_out="$(HOME="$probe_home" $PROBE_CLI_BIN infra destroy \
         "rtb-NONEXISTENT|0.0.0.0/0" --yes --json 2>&1)"
       destroy_rc=$?
       set -e
@@ -1158,11 +1158,11 @@ probes:
       scoped to EC2::Instance, first match wins.
     must_fail_pre_fix: false
     variations:
-      - cmd: 'plan "Create an EC2 instance t3.large with 100GB gp3 volume" --json'
+      - cmd: 'infra plan "Create an EC2 instance t3.large with 100GB gp3 volume" --json'
         assertions: "BlockDeviceMappings[0].Ebs.VolumeSize == 100 (not the LLM's 8)"
-      - cmd: 'plan "Create a t3.micro with 50GB volume" --json'
+      - cmd: 'infra plan "Create a t3.micro with 50GB volume" --json'
         assertions: "BlockDeviceMappings[0].Ebs.VolumeSize == 50"
-      - cmd: 'plan "Create a t3.micro EC2 instance" --json'
+      - cmd: 'infra plan "Create a t3.micro EC2 instance" --json'
         assertions: "no volume-size span → BlockDeviceMappings[0].Ebs.VolumeSize == 8 (default preserved)"
     known_tripwires: []
     probe: |
@@ -1171,14 +1171,14 @@ probes:
       assert_json_path_equals \
         '.plan.desiredState.BlockDeviceMappings[0].Ebs.VolumeSize' \
         '100' \
-        $PROBE_CLI_BIN plan \
+        $PROBE_CLI_BIN infra plan \
           "Create an EC2 instance t3.large with 100GB gp3 volume" \
           --json
       # Variation 2: t3.micro + 50GB — smaller size, different instance type.
       assert_json_path_equals \
         '.plan.desiredState.BlockDeviceMappings[0].Ebs.VolumeSize' \
         '50' \
-        $PROBE_CLI_BIN plan \
+        $PROBE_CLI_BIN infra plan \
           "Create a t3.micro with 50GB volume" \
           --json
       # Variation 3: bare intent, no volume-size span — default must hold.
@@ -1187,7 +1187,7 @@ probes:
       assert_json_path_equals \
         '.plan.desiredState.BlockDeviceMappings[0].Ebs.VolumeSize' \
         '8' \
-        $PROBE_CLI_BIN plan \
+        $PROBE_CLI_BIN infra plan \
           "Create a t3.micro EC2 instance" \
           --json
 
@@ -1215,16 +1215,16 @@ probes:
     parent_reachable: true
     parent_reachable_rationale: "BP-ECS-004 target type AWS::ECS::TaskDefinition is not in SUPPORTED_TYPES_ARRAY; CLI intent resolves ECS intents to AWS::ECS::Cluster. Probe exercises rule-runner no-fire baseline directly. Promote TaskDefinition to first-class to enable a CLI fire-probe."
     variations:
-      - cmd: 'plan "Create an ECS task with env LOG_LEVEL=debug" --json'
+      - cmd: 'infra plan "Create an ECS task with env LOG_LEVEL=debug" --json'
         assertions: "BP-ECS-004 does NOT fire on LOG_LEVEL (safe env, no-fire baseline)"
-      - cmd: 'plan "Create an ECS task definition with APP_ENV=production" --json'
+      - cmd: 'infra plan "Create an ECS task definition with APP_ENV=production" --json'
         assertions: "BP-ECS-004 does NOT fire on APP_ENV (safe env)"
-      - cmd: 'plan "Create an ECS task with env PORT=8080" --json'
+      - cmd: 'infra plan "Create an ECS task with env PORT=8080" --json'
         assertions: "BP-ECS-004 does NOT fire on PORT (safe env)"
     known_tripwires: []
     probe: |
       assert_no_bp_finding_id BP-ECS-004 \
-        $PROBE_CLI_BIN plan \
+        $PROBE_CLI_BIN infra plan \
           "Create an ECS task with env LOG_LEVEL=debug" \
           --json
 
@@ -1247,11 +1247,11 @@ probes:
     parent_reachable: true
     parent_reachable_rationale: "BP-ECS-004 target type AWS::ECS::TaskDefinition is not in SUPPORTED_TYPES_ARRAY. Fire-probe is unreachable from CLI intent-parser today."
     variations:
-      - cmd: 'plan "Create an ECS task with env DB_PASSWORD=secret123" --json'
+      - cmd: 'infra plan "Create an ECS task with env DB_PASSWORD=secret123" --json'
         assertions: "BP-ECS-004 FIRES on ECS task with plaintext secret-named env var (fire-path)"
-      - cmd: 'plan "Create an ECS task definition with environment API_SECRET=mysecret" --json'
+      - cmd: 'infra plan "Create an ECS task definition with environment API_SECRET=mysecret" --json'
         assertions: "BP-ECS-004 FIRES on env named API_SECRET (fire-path)"
-      - cmd: 'plan "Create an ECS task with environment DATABASE_URL=postgres://..." --json'
+      - cmd: 'infra plan "Create an ECS task with environment DATABASE_URL=postgres://..." --json'
         assertions: "BP-ECS-004 FIRES on env named DATABASE_URL (fire-path)"
     known_tripwires: []
     probe: |
@@ -1260,7 +1260,7 @@ probes:
       # matching resource. Probe deliberately fails until TaskDefinition
       # is first-class. must_fail_pre_fix: true marks this as expected.
       assert_bp_finding_id_present BP-ECS-004 \
-        $PROBE_CLI_BIN plan \
+        $PROBE_CLI_BIN infra plan \
           "Create an ECS task with env DB_PASSWORD=secret123" \
           --json
 
@@ -1303,16 +1303,16 @@ probes:
     parent_reachable: true
     parent_reachable_rationale: "BP-SNS-004 target type AWS::SNS::Topic is in SUPPORTED_TYPES_ARRAY. Fire-path deferred: CLI plan generator does not emit wildcard-Principal TopicPolicy content; probe exercises no-fire baseline via rule-runner directly. Add fire-probe when plan generator emits inline TopicPolicy (Epic 99 backlog)."
     variations:
-      - cmd: 'plan "Create an SNS topic named notifications" --json'
+      - cmd: 'infra plan "Create an SNS topic named notifications" --json'
         assertions: "BP-SNS-004 does NOT fire on a plain SNS topic (no public policy, no-fire baseline)"
-      - cmd: 'plan "Create an SNS topic for order-events with KMS encryption" --json'
+      - cmd: 'infra plan "Create an SNS topic for order-events with KMS encryption" --json'
         assertions: "BP-SNS-004 does NOT fire on an encrypted SNS topic"
-      - cmd: 'plan "Create an SNS topic for internal service alerts" --json'
+      - cmd: 'infra plan "Create an SNS topic for internal service alerts" --json'
         assertions: "BP-SNS-004 does NOT fire on an internal SNS topic"
     known_tripwires: []
     probe: |
       assert_no_bp_finding_id BP-SNS-004 \
-        $PROBE_CLI_BIN plan \
+        $PROBE_CLI_BIN infra plan \
           "Create an SNS topic named notifications" \
           --json
 
@@ -1332,11 +1332,11 @@ probes:
     parent_reachable: true
     parent_reachable_rationale: "BP-SNS-004 target type AWS::SNS::Topic is in SUPPORTED_TYPES_ARRAY. Fire-path deferred: CLI does not emit wildcard-Principal TopicPolicy content. Probe is unreachable until plan generator learns to emit inline TopicPolicy."
     variations:
-      - cmd: 'plan "Create an SNS topic with policy allowing all principals" --json'
+      - cmd: 'infra plan "Create an SNS topic with policy allowing all principals" --json'
         assertions: "BP-SNS-004 FIRES on SNS topic with unconditioned wildcard-Principal policy (fire-path)"
-      - cmd: 'plan "Create a public SNS topic with open access policy" --json'
+      - cmd: 'infra plan "Create a public SNS topic with open access policy" --json'
         assertions: "BP-SNS-004 FIRES on SNS topic with open Principal:* policy (fire-path)"
-      - cmd: 'plan "Create an SNS topic with TopicPolicy granting sns:Publish to *" --json'
+      - cmd: 'infra plan "Create an SNS topic with TopicPolicy granting sns:Publish to *" --json'
         assertions: "BP-SNS-004 FIRES on SNS topic with explicit wildcard-resource publish grant (fire-path)"
     known_tripwires: []
     probe: |
@@ -1344,7 +1344,7 @@ probes:
       # content today. Probe deliberately fails until plan generator
       # learns to emit inline TopicPolicy. must_fail_pre_fix: true.
       assert_bp_finding_id_present BP-SNS-004 \
-        $PROBE_CLI_BIN plan \
+        $PROBE_CLI_BIN infra plan \
           "Create an SNS topic with policy allowing all principals" \
           --json
 
@@ -1384,16 +1384,16 @@ probes:
     parent_reachable: true
     parent_reachable_rationale: "BP-S3-011 target type AWS::S3::BucketPolicy is in SUPPORTED_TYPES_ARRAY. Fire-path deferred: CLI plan generator does not emit a separate BucketPolicy resource alongside S3 buckets; probe exercises no-fire baseline via rule-runner directly. Add fire-probe when plan generator emits BucketPolicy (Epic 99 backlog)."
     variations:
-      - cmd: 'plan "Create an S3 bucket named logs-archive" --json'
+      - cmd: 'infra plan "Create an S3 bucket named logs-archive" --json'
         assertions: "BP-S3-011 does NOT fire on a plain S3 bucket with no BucketPolicy resource (no-fire baseline)"
-      - cmd: 'plan "Create an S3 bucket named app-data with versioning enabled" --json'
+      - cmd: 'infra plan "Create an S3 bucket named app-data with versioning enabled" --json'
         assertions: "BP-S3-011 does NOT fire on a versioned S3 bucket (still no BucketPolicy resource)"
-      - cmd: 'plan "Create an encrypted S3 bucket for backups" --json'
+      - cmd: 'infra plan "Create an encrypted S3 bucket for backups" --json'
         assertions: "BP-S3-011 does NOT fire on an encrypted backup bucket"
     known_tripwires: []
     probe: |
       assert_no_bp_finding_id BP-S3-011 \
-        $PROBE_CLI_BIN plan \
+        $PROBE_CLI_BIN infra plan \
           "Create an S3 bucket named logs-archive" \
           --json
 
@@ -1414,11 +1414,11 @@ probes:
     parent_reachable: true
     parent_reachable_rationale: "BP-S3-011 target type AWS::S3::BucketPolicy is in SUPPORTED_TYPES_ARRAY. Fire-path deferred: CLI does not emit a separate BucketPolicy resource on S3 bucket plans today. Probe is unreachable until plan generator emits BucketPolicy."
     variations:
-      - cmd: 'plan "Create a public S3 bucket with a bucket policy" --json'
+      - cmd: 'infra plan "Create a public S3 bucket with a bucket policy" --json'
         assertions: "BP-S3-011 FIRES on S3 BucketPolicy missing ssl-deny Deny statement (fire-path)"
-      - cmd: 'plan "Create an S3 bucket with policy allowing public read" --json'
+      - cmd: 'infra plan "Create an S3 bucket with policy allowing public read" --json'
         assertions: "BP-S3-011 FIRES on BucketPolicy without aws:SecureTransport Deny (fire-path)"
-      - cmd: 'plan "Create an S3 bucket with policy granting s3:GetObject to everyone" --json'
+      - cmd: 'infra plan "Create an S3 bucket with policy granting s3:GetObject to everyone" --json'
         assertions: "BP-S3-011 FIRES on explicit open-access BucketPolicy missing ssl-deny (fire-path)"
     known_tripwires: []
     probe: |
@@ -1427,7 +1427,7 @@ probes:
       # plan generator learns to emit BucketPolicy resources.
       # must_fail_pre_fix: true.
       assert_bp_finding_id_present BP-S3-011 \
-        $PROBE_CLI_BIN plan \
+        $PROBE_CLI_BIN infra plan \
           "Create a public S3 bucket with a bucket policy" \
           --json
 
@@ -2238,25 +2238,25 @@ probes:
       zero leaked prefixes.
     must_fail_pre_fix: false
     variations:
-      - cmd: 'plan --help'
+      - cmd: 'infra plan --help'
         assertions: "plan registers both --json + -o, --output <format> (surface parity)"
-      - cmd: 'apply --help'
+      - cmd: 'infra apply --help'
         assertions: "apply registers both --json + -o, --output <format>"
-      - cmd: 'destroy --help'
+      - cmd: 'infra destroy --help'
         assertions: "destroy registers both --json + -o, --output <format>"
-      - cmd: 'reconcile --help'
+      - cmd: 'infra reconcile --help'
         assertions: "reconcile registers both --json + -o, --output <format>"
-      - cmd: 'list --help'
+      - cmd: 'admin list --help'
         assertions: "list registers both --json + -o, --output <format> (NEW in W5.N3 — closes B-07/D-16 for list)"
-      - cmd: 'drift --help'
+      - cmd: 'infra drift --help'
         assertions: "drift registers both --json + -o, --output <format> (NEW in W5.N3)"
-      - cmd: 'status --help'
+      - cmd: 'admin status --help'
         assertions: "status registers both --json + -o, --output <format> (NEW in W5.N3)"
-      - cmd: 'doctor --help'
+      - cmd: 'admin doctor --help'
         assertions: "doctor registers both --json + -o, --output <format> (NEW in W5.N3)"
-      - cmd: 'optimize --help'
+      - cmd: 'infra optimize --help'
         assertions: "optimize registers both --json + -o, --output <format> (NEW in W5.N3)"
-      - cmd: 'plan "Create a quantum entanglement device" --output json'
+      - cmd: 'infra plan "Create a quantum entanglement device" --output json'
         assertions: "--output json surface accepts on plan; stderr has zero extended-prefix leak lines (D-01/D-02/D-12/D-23 sweep)"
     known_tripwires: []
     probe: |
@@ -2264,14 +2264,18 @@ probes:
 
       # Assertion 1 — each of the 9 commands must register BOTH
       # `--json` AND `-o, --output <format>` (B-07 / D-16 closure).
-      for cmd in plan apply destroy reconcile list drift status doctor optimize; do
-        help_out="$($PROBE_CLI_BIN $cmd --help 2>&1)"
+      # Story 108-A-05: paths now noun-grouped (`infra plan`, `admin list`, …).
+      for cmd_path in \
+        "infra plan" "infra apply" "infra destroy" "infra reconcile" \
+        "infra drift" "infra optimize" \
+        "admin list" "admin status" "admin doctor"; do
+        help_out="$($PROBE_CLI_BIN $cmd_path --help 2>&1)"
         if ! printf '%s' "$help_out" | grep -qE -- '--json\b'; then
-          echo "[PROBE-FAIL] $cmd --help missing --json flag (B-07)" >&2
+          echo "[PROBE-FAIL] $cmd_path --help missing --json flag (B-07)" >&2
           exit 1
         fi
         if ! printf '%s' "$help_out" | grep -qE -- '-o, --output <format>|-o,? *--output'; then
-          echo "[PROBE-FAIL] $cmd --help missing -o, --output <format> flag (D-16)" >&2
+          echo "[PROBE-FAIL] $cmd_path --help missing -o, --output <format> flag (D-16)" >&2
           exit 1
         fi
       done
@@ -2285,7 +2289,7 @@ probes:
       trap 'rm -f "$out_file" "$err_file"' EXIT
 
       set +e
-      $PROBE_CLI_BIN plan "Create a quantum entanglement device" \
+      $PROBE_CLI_BIN infra plan "Create a quantum entanglement device" \
         --output json >"$out_file" 2>"$err_file"
       plan_rc=$?
       set -e
@@ -2349,16 +2353,16 @@ probes:
     parent_reachable: true
     parent_reachable_rationale: "BP-SNS-003 target type AWS::SNS::Topic is in SUPPORTED_TYPES_ARRAY. Fire-path deferred: CLI plan generator does not emit inline TopicPolicy with Resource grants; probe exercises no-fire baseline via rule-runner directly. Add fire-probe when plan generator emits inline TopicPolicy (Epic 99 backlog)."
     variations:
-      - cmd: 'plan "Create an SNS topic named order-events" --json'
+      - cmd: 'infra plan "Create an SNS topic named order-events" --json'
         assertions: "BP-SNS-003 does NOT fire on a plain SNS topic (no inline TopicPolicy, no-fire baseline)"
-      - cmd: 'plan "Create an SNS topic for user-signups with KMS encryption" --json'
+      - cmd: 'infra plan "Create an SNS topic for user-signups with KMS encryption" --json'
         assertions: "BP-SNS-003 does NOT fire on an encrypted SNS topic"
-      - cmd: 'plan "Create an SNS topic for platform alerts" --json'
+      - cmd: 'infra plan "Create an SNS topic for platform alerts" --json'
         assertions: "BP-SNS-003 does NOT fire on a plain platform alerts topic"
     known_tripwires: []
     probe: |
       assert_no_bp_finding_id BP-SNS-003 \
-        $PROBE_CLI_BIN plan \
+        $PROBE_CLI_BIN infra plan \
           "Create an SNS topic named order-events" \
           --json
   - story: e98.W4.B5
@@ -2402,18 +2406,18 @@ probes:
     parent_reachable: true
     parent_reachable_rationale: "BP-IAM-010 target type AWS::IAM::Role is in SUPPORTED_TYPES_ARRAY. Fire-path deferred: CLI plan generator emits service-principal trusts (Lambda exec roles, ECS task roles) — legitimately out-of-scope for cross-account-no-external-id rule. Add fire-probe when plan generator supports cross-account AWS-ARN trust intents (Epic 99 backlog)."
     variations:
-      - cmd: 'plan "Create a lambda function called daily-report handler index.main runtime nodejs20.x" --json'
+      - cmd: 'infra plan "Create a lambda function called daily-report handler index.main runtime nodejs20.x" --json'
         assertions: "BP-IAM-010 does NOT fire on a Lambda exec role with service-principal trust (no-fire baseline)"
-      - cmd: 'plan "Create an ECS task with env LOG_LEVEL=debug" --json'
+      - cmd: 'infra plan "Create an ECS task with env LOG_LEVEL=debug" --json'
         assertions: "BP-IAM-010 does NOT fire on an ECS task role (service-principal trust)"
-      - cmd: 'plan "Create a step functions state machine for order processing" --json'
+      - cmd: 'infra plan "Create a step functions state machine for order processing" --json'
         assertions: "BP-IAM-010 does NOT fire on a Step Functions role (service-principal trust)"
-      - cmd: 'plan "Create an EC2 instance profile role for app workers" --json'
+      - cmd: 'infra plan "Create an EC2 instance profile role for app workers" --json'
         assertions: "BP-IAM-010 does NOT fire on an EC2 instance-profile role (service-principal trust)"
     known_tripwires: []
     probe: |
       assert_no_bp_finding_id BP-IAM-010 \
-        $PROBE_CLI_BIN plan \
+        $PROBE_CLI_BIN infra plan \
           "Create a lambda function called daily-report handler index.main runtime nodejs20.x" \
           --json
   - story: e98.W5.P1
@@ -2454,24 +2458,24 @@ probes:
       the YAML manifest + bp-all-rules-audit test pass.
     must_fail_pre_fix: false
     variations:
-      - cmd: 'plan "Create a t3.micro EC2 instance" --json'
+      - cmd: 'infra plan "Create a t3.micro EC2 instance" --json'
         assertions: "BP-EC2-018 (idle CPU) fires at INFO severity on every EC2::Instance plan"
-      - cmd: 'plan "Create a t3.xlarge EC2 instance" --json'
+      - cmd: 'infra plan "Create a t3.xlarge EC2 instance" --json'
         assertions: "BP-EC2-019 (over-provisioned) fires at INFO severity on every EC2::Instance plan"
-      - cmd: 'plan "Create an EC2 instance with 100GB gp3 volume" --json'
+      - cmd: 'infra plan "Create an EC2 instance with 100GB gp3 volume" --json'
         assertions: "BP-EC2-020 (EBS underutilized) fires at INFO severity; BP-EC2-021 (snapshot backup) fires at MEDIUM"
-      - cmd: 'plan "Create an m5.large EC2 instance for app workers" --json'
+      - cmd: 'infra plan "Create an m5.large EC2 instance for app workers" --json'
         assertions: "BP-EC2-023 (backup plan) fires at MEDIUM severity on every EC2::Instance plan"
-      - cmd: 'plan "Create an RDS instance named orders-db engine postgres" --json'
+      - cmd: 'infra plan "Create an RDS instance named orders-db engine postgres" --json'
         assertions: "BP-RDS-013 (idle RDS) fires at INFO severity on every RDS::DBInstance plan"
-      - cmd: 'plan "Create a DynamoDB table named orders with partition key orderId" --json'
+      - cmd: 'infra plan "Create a DynamoDB table named orders with partition key orderId" --json'
         assertions: "BP-DYNAMODB-006 (provisioned capacity) fires at INFO severity on every DynamoDB::Table plan"
-      - cmd: 'plan "Create a t3.small EC2 instance in us-east-1" --json'
+      - cmd: 'infra plan "Create a t3.small EC2 instance in us-east-1" --json'
         assertions: "BP-EC2-018/019 both fire at INFO severity (cost_optimization rules)"
     known_tripwires: []
     probe: |
       assert_bp_finding_id_present BP-EC2-018 \
-        $PROBE_CLI_BIN plan \
+        $PROBE_CLI_BIN infra plan \
           "Create a t3.micro EC2 instance" \
           --json
   - story: e98.W5.P2
@@ -2656,23 +2660,23 @@ probes:
       isolation.
     must_fail_pre_fix: false
     variations:
-      - cmd: 'plan --help mentions "interactive configuration wizard"'
+      - cmd: 'infra plan --help mentions "interactive configuration wizard"'
         assertions: "D-14 closure — plan's --wizard help text harmonised. Pre-fix said `Alias for --quick`."
-      - cmd: 'apply --help mentions "interactive configuration wizard"'
+      - cmd: 'infra apply --help mentions "interactive configuration wizard"'
         assertions: "apply's --wizard anchor — pin the phrasing so plan drift is caught going forward"
-      - cmd: 'plan --help NEGATIVE: no longer says `Alias for --quick`'
+      - cmd: 'infra plan --help NEGATIVE: no longer says `Alias for --quick`'
         assertions: "Regression guard — the pre-N5 wording must not come back under a refactor"
-      - cmd: 'drift --help: `-y, --yes` flag DROPPED'
+      - cmd: 'infra drift --help: `-y, --yes` flag DROPPED'
         assertions: "D-15 closure — the contradictory CI-compat flag removed; auto-apply belongs on reconcile"
-      - cmd: 'drift --help footer no longer says `No --yes flag is needed`'
+      - cmd: 'infra drift --help footer no longer says `No --yes flag is needed`'
         assertions: "Help text cleanup — the contradicting sentence companion to --yes removal is also gone"
     known_tripwires: []
     probe: |
       strip_env_leaks
 
-      plan_help="$($PROBE_CLI_BIN plan --help 2>&1)"
-      apply_help="$($PROBE_CLI_BIN apply --help 2>&1)"
-      drift_help="$($PROBE_CLI_BIN drift --help 2>&1)"
+      plan_help="$($PROBE_CLI_BIN infra plan --help 2>&1)"
+      apply_help="$($PROBE_CLI_BIN infra apply --help 2>&1)"
+      drift_help="$($PROBE_CLI_BIN infra drift --help 2>&1)"
 
       # Variation 1: plan --wizard help mentions "interactive
       # configuration wizard" (D-14 harmonisation).

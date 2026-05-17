@@ -65,5 +65,5 @@ export function buildSupportedTypesBlock(): string {
  * should use `buildSupportedTypesBlock()` and only on `--help` output.
  */
 export function getTypeHint(): string {
-  return "Run `assignee plan --help` for the list of supported resource types and architecture patterns.";
+  return "Run `assignee infra plan --help` for the list of supported resource types and architecture patterns.";
 }

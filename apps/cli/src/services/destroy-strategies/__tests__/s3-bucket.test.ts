@@ -90,7 +90,8 @@ describe("s3BucketStrategy", () => {
     const outcome = await s3BucketStrategy.preDestroy!(makeCtx());
     expect(outcome?.success).toBe(false);
     expect(outcome?.error).toContain("s3:ListBucketVersions");
-    expect(outcome?.error).toContain("assignee setup");
+    // Story 108-A-05: path is now noun-grouped `assignee dev setup`.
+    expect(outcome?.error).toContain("assignee dev setup");
   });
 
   it("breaks out of the loop if IsTruncated=true but both markers are missing (V1 N5)", async () => {

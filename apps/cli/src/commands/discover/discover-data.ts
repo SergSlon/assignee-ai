@@ -169,7 +169,7 @@ function buildTypeItems(): CatalogueItem[] {
       id: type,
       category: "resource-types" as const,
       description: label,
-      exampleIntent: `assignee plan "Create a ${shortName}"`,
+      exampleIntent: `assignee infra plan "Create a ${shortName}"`,
     };
   });
 }
@@ -179,7 +179,7 @@ function buildPatternItems(): CatalogueItem[] {
     id: p.patternId,
     category: "patterns" as const,
     description: `${p.displayName} (${p.resourceList.length} resources)`,
-    exampleIntent: `assignee plan "Create a ${p.displayName.toLowerCase()}"`,
+    exampleIntent: `assignee infra plan "Create a ${p.displayName.toLowerCase()}"`,
   }));
 }
 

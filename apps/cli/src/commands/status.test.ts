@@ -180,7 +180,8 @@ describe("status command", () => {
 
     const output = stdoutSpy.mock.calls.map((c: unknown[]) => c[0]).join("");
     expect(output).toContain("No resources managed by assignee.ai");
-    expect(output).toContain("assignee plan");
+    // Story 108-A-05: path is now noun-grouped `assignee infra plan`.
+    expect(output).toContain("assignee infra plan");
   });
 
   it("error state renders error with helpful message", async () => {
@@ -307,7 +308,8 @@ describe("status command options registration", () => {
     // word-wraps long descriptions across lines, so normalise
     // whitespace before asserting the phrase is present.
     const collapsed = helpText.replace(/\s+/g, " ");
-    expect(collapsed).toContain("assignee list --json");
+    // Story 108-A-05: path is now noun-grouped `assignee admin list --json`.
+    expect(collapsed).toContain("assignee admin list --json");
   });
 });
 
@@ -720,7 +722,8 @@ describe("status observability — Epic 92 e92.u.a", () => {
     const extras = warn!["extras"] as Record<string, unknown>;
     expect(extras["warning"]).toBe("runId-positional-ignored");
     expect(extras["suppliedRunId"]).toBe("stale-run-id-abc-123");
-    expect(extras["hint"]).toContain("assignee list --json");
+    // Story 108-A-05: path is now noun-grouped `assignee admin list --json`.
+    expect(extras["hint"]).toContain("assignee admin list --json");
 
     // Human-facing stderr line is emitted outside --json so operators
     // without --verbose still see the warning.
@@ -729,7 +732,8 @@ describe("status observability — Epic 92 e92.u.a", () => {
       .join("");
     expect(stderrOutput).toContain("warning:");
     expect(stderrOutput).toContain("stale-run-id-abc-123");
-    expect(stderrOutput).toContain("assignee list --json");
+    // Story 108-A-05: path is now noun-grouped `assignee admin list --json`.
+    expect(stderrOutput).toContain("assignee admin list --json");
 
     // And the default summary did NOT get blocked — buildStatusData ran.
     expect(fetchManagedResources).toHaveBeenCalled();

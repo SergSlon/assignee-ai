@@ -3,8 +3,12 @@
  * `@assignee/core/constants/commands` (Story 50-4 Wave 5 Pass C-2).
  */
 export {
+  CommandGroup,
+  type CommandGroupType,
   CommandName,
   type CommandNameType,
+  CommandPath,
+  type CommandPathType,
   CommandDescription,
   CommandArgs,
   CommandOptions,

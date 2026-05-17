@@ -105,6 +105,7 @@ describeE2E("Epic 94 R8 — S3 name extractor (unicode + multi-word)", () => {
 
   it("A-05: unicode name `dögfood-ünicode` → ok:false + non-ASCII message", () => {
     const { stdout, stderr, code } = runCli([
+      "infra",
       "plan",
       "--output",
       "json",
@@ -129,6 +130,7 @@ describeE2E("Epic 94 R8 — S3 name extractor (unicode + multi-word)", () => {
 
   it("A-06: multi-word name `bad bucket name` → ok:true + NAME_REMAINDER_IGNORED advisory", () => {
     const { stdout, code } = runCli([
+      "infra",
       "plan",
       "--output",
       "json",

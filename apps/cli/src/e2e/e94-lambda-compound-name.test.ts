@@ -115,6 +115,7 @@ describeE2E("Epic 94 R2 — Lambda compound FunctionName preservation", () => {
   it("FunctionName from intent lands on the Lambda plan (A-02 regression fix)", () => {
     if (!jqAvailable()) return;
     const { stdout, code } = runCli([
+      "infra",
       "plan",
       "--output",
       "json",
@@ -142,6 +143,7 @@ describeE2E("Epic 94 R2 — Lambda compound FunctionName preservation", () => {
   it("IAM Role companion is still present in the compound envelope (pattern integrity)", () => {
     if (!jqAvailable()) return;
     const { stdout } = runCli([
+      "infra",
       "plan",
       "--output",
       "json",

@@ -51,7 +51,7 @@ export function eventbridgeNoTargetHint(
 
   return [
     `${AdviceIcon.WARNING} Detected EventBridge rule with no targets — this rule will fire on schedule but discard all events (non-functional). ` +
-      `Run 'assignee plan "scheduled lambda <your-schedule>"' for a working 4-resource compound, ` +
+      `Run 'assignee infra plan "scheduled lambda <your-schedule>"' for a working 4-resource compound, ` +
       `or pass --set Targets=... to wire an explicit target ARN.`,
   ];
 }

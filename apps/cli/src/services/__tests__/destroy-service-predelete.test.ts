@@ -802,7 +802,8 @@ describe("destroySingleResource", () => {
       // a downstream BucketNotEmpty on non-empty buckets.
       expect(result.success).toBe(false);
       expect(result.error).toContain("empty S3 bucket");
-      expect(result.error).toContain("assignee setup");
+      // Story 108-A-05: path is now noun-grouped `assignee dev setup`.
+      expect(result.error).toContain("assignee dev setup");
       // CloudControl delete MUST NOT have been attempted
       expect(mockDeleteResource).not.toHaveBeenCalled();
     });

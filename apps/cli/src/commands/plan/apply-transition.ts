@@ -96,7 +96,7 @@ export async function runPlanToApply(
     renderError(
       phase1State.errorMessage ??
         "Apply could not start — the planning phase did not produce a valid plan.",
-      "Run `assignee plan <intent>` first to see the full node trace. If the plan succeeds there, re-run `assignee apply` against the saved checkpoint in .assignee/. If the plan also fails, add `--verbose` to surface which node returned FAILED.",
+      "Run `assignee infra plan <intent>` first to see the full node trace. If the plan succeeds there, re-run `assignee infra apply` against the saved checkpoint in .assignee/. If the plan also fails, add `--verbose` to surface which node returned FAILED.",
     );
     return { success: false };
   }

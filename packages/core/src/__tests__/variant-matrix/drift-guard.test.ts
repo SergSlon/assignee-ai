@@ -206,7 +206,7 @@ describe("Drift-guard — command coverage", () => {
   beforeEach(() => resetMatrixRegistry());
   afterEach(() => resetMatrixRegistry());
 
-  it("CLI_COMMANDS tuple has 18 commands (Story 108-A-03: added 'discover')", () => {
+  it("CLI_COMMANDS tuple has 18 commands (Story 108-A-05: noun-grouped paths)", () => {
     expect(CLI_COMMANDS.length).toBe(18);
   });
 

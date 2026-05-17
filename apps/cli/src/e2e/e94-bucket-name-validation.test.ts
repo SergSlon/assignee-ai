@@ -132,6 +132,7 @@ describeE2E("Epic 94 R1 — bucket-name validation JSON envelope", () => {
     it(`${label} → stdout envelope ok:false + error.code:INVALID_DESIRED_STATE`, () => {
       if (!jqAvailable()) return;
       const { stdout, stderr, code } = runCli([
+        "infra",
         "plan",
         "--output",
         "json",

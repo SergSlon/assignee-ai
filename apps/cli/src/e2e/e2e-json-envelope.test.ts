@@ -100,6 +100,7 @@ describeE2E("Epic 92 Wave 2.c — JSON envelope e2e (RUN_E2E=1)", () => {
     it("error path — unsupported intent emits parseable { ok:false } envelope", () => {
       if (!jqAvailable()) return;
       const { stdout, stderr, code } = runCli([
+        "infra",
         "plan",
         "--output",
         "json",
@@ -123,6 +124,7 @@ describeE2E("Epic 92 Wave 2.c — JSON envelope e2e (RUN_E2E=1)", () => {
     it("success path — single resource emits parseable { ok:true, plan:{...} } envelope", () => {
       if (!jqAvailable()) return;
       const { stdout } = runCli([
+        "infra",
         "plan",
         "--no-apply",
         "--output",
@@ -140,6 +142,7 @@ describeE2E("Epic 92 Wave 2.c — JSON envelope e2e (RUN_E2E=1)", () => {
     it("success path — compound emits parseable { ok:true, plans:[...] } envelope (A-02)", () => {
       if (!jqAvailable()) return;
       const { stdout } = runCli([
+        "infra",
         "plan",
         "--no-apply",
         "--output",
@@ -164,6 +167,7 @@ describeE2E("Epic 92 Wave 2.c — JSON envelope e2e (RUN_E2E=1)", () => {
     it("error path — unknown --resource-type emits parseable { ok:false } envelope (D-30)", () => {
       if (!jqAvailable()) return;
       const { stdout, stderr, code } = runCli([
+        "admin",
         "list",
         "--json",
         "--resource-type",
@@ -187,7 +191,7 @@ describeE2E("Epic 92 Wave 2.c — JSON envelope e2e (RUN_E2E=1)", () => {
       // envelope. The legacy `Array.isArray(parsed)` assertion that
       // locked the bare-array shape is updated to the new envelope
       // shape — NOT weakened. See `94-n2-list-json-envelope.md`.
-      const { stdout } = runCli(["list", "--json"]);
+      const { stdout } = runCli(["admin", "list", "--json"]);
       const jq = jqParse(stdout);
       expect(jq.code).toBe(0);
       const parsed = JSON.parse(stdout.trim());
@@ -206,6 +210,7 @@ describeE2E("Epic 92 Wave 2.c — JSON envelope e2e (RUN_E2E=1)", () => {
       if (!jqAvailable()) return;
       const { stdout, stderr } = runCli([
         "--verbose",
+        "infra",
         "plan",
         "--no-apply",
         "--output",

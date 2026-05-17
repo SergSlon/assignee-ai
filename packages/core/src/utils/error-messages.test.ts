@@ -326,7 +326,8 @@ describe("ErrorMessageRegistry — checkpoint errors", () => {
     const err = new CheckpointError("Checkpoint file not found: ENOENT");
     const entry = defaultErrorMessageRegistry.resolve(err);
     expect(entry.code).toBe("CHECKPOINT_NOT_FOUND");
-    expect(entry.howToFix).toContain("assignee plan");
+    // Story 108-A-05: path is now noun-grouped `assignee infra plan`.
+    expect(entry.howToFix).toContain("assignee infra plan");
   });
 
   it("resolves checkpoint expired", () => {
@@ -461,7 +462,8 @@ describe("ErrorMessageRegistry — MISSING_INTENT", () => {
     // Tier C: dropped redundant toBeDefined() — get!() + property accesses
     const entry = defaultErrorMessageRegistry.get("MISSING_INTENT")!;
     expect(entry.code).toBe("MISSING_INTENT");
-    expect(entry.howToFix).toContain("assignee plan");
+    // Story 108-A-05: path is now noun-grouped `assignee infra plan`.
+    expect(entry.howToFix).toContain("assignee infra plan");
   });
 });
 
@@ -676,7 +678,8 @@ describe("inline context tokens (Story 48.5)", () => {
     expect(entry.howToFix).toContain(
       "credentials have the necessary IAM permissions for this action.",
     );
-    expect(entry.howToFix).toContain("Run `assignee setup`");
+    // Story 108-A-05: path is now noun-grouped `assignee dev setup`.
+    expect(entry.howToFix).toContain("Run `assignee dev setup`");
     assertClean(entry.howToFix);
   });
 
@@ -696,7 +699,8 @@ describe("inline context tokens (Story 48.5)", () => {
       "ResourceNotFoundException: Role not found",
     );
     expect(entry.howToFix).toContain("in your AWS account and region.");
-    expect(entry.howToFix).toContain("Re-run `assignee plan`");
+    // Story 108-A-05: path is now noun-grouped `assignee infra plan`.
+    expect(entry.howToFix).toContain("Re-run `assignee infra plan`");
     assertClean(entry.howToFix);
   });
 

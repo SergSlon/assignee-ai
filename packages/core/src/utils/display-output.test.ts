@@ -565,7 +565,8 @@ describe("renderEmptyStatus — non-TTY", () => {
     renderEmptyStatus();
     const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
     expect(output).toContain("No resources managed");
-    expect(output).toContain("assignee plan");
+    // Story 108-A-05: path is now noun-grouped `assignee infra plan`.
+    expect(output).toContain("assignee infra plan");
     writeSpy.mockRestore();
     Object.defineProperty(process.stdout, "isTTY", {
       value: undefined,

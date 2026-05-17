@@ -61,7 +61,7 @@ function runInitWithPipedStdin(args: string[]): {
 } {
   const devnull = fs.openSync("/dev/null", "r");
   try {
-    const res = spawnSync("node", [CLI_DIST, "init", ...args], {
+    const res = spawnSync("node", [CLI_DIST, "dev", "init", ...args], {
       encoding: "utf-8",
       timeout: 30_000,
       stdio: [devnull, "pipe", "pipe"],

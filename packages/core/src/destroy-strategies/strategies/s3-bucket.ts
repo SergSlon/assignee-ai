@@ -240,7 +240,7 @@ export const s3BucketStrategy: DestroyStrategy = {
           error:
             `Cannot empty S3 bucket "${resource.identifier}" before delete — the operator role lacks ` +
             `s3:ListBucketVersions / s3:DeleteObjectVersion. These are already in iam-actions.ts for ` +
-            `S3_BUCKET; run \`assignee setup\` to refresh AssigneeOperatorPolicy in AWS. ` +
+            `S3_BUCKET; run \`assignee dev setup\` to refresh AssigneeOperatorPolicy in AWS. ` +
             `Original AWS error: ${errMsg}`,
         };
       }

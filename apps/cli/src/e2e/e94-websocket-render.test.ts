@@ -293,6 +293,7 @@ describeE2E(
 
     it("B-2: plan --output json 'Create a websocket-api' produces parseable envelope with ≥12 resources, ProtocolType=WEBSOCKET, RouteSelectionExpression=$request.body.action", () => {
       const { stdout, code, stderr } = runCli([
+        "infra",
         "plan",
         "--no-apply",
         "--output",
@@ -351,6 +352,7 @@ describeE2E(
 
     it("B-3: companion resources carry provisionable:false; exactly 3 are provisionable (IAM role + Lambda + LogGroup)", () => {
       const { stdout } = runCli([
+        "infra",
         "plan",
         "--no-apply",
         "--output",

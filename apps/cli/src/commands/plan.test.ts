@@ -298,7 +298,8 @@ describe("planCommand — help text (Epic 92 C-24 / D-01)", () => {
     const { planCommand } = await import("./plan.js");
     const helpText = captureFullPlanHelp(planCommand);
     // Plan-specific invocations must appear.
-    expect(helpText).toContain('assignee plan "');
+    // Story 108-A-05: path is now noun-grouped `assignee infra plan`.
+    expect(helpText).toContain('assignee infra plan "');
     // The per-command block includes the alias examples that do
     // NOT appear in the global block — presence of these two strings
     // confirms the per-command block rendered.
@@ -309,8 +310,9 @@ describe("planCommand — help text (Epic 92 C-24 / D-01)", () => {
   it("plan --help Examples block shows --wizard and --json alias examples", async () => {
     const { planCommand } = await import("./plan.js");
     const helpText = captureFullPlanHelp(planCommand);
-    expect(helpText).toContain("assignee plan --wizard");
-    expect(helpText).toContain("assignee plan --json");
+    // Story 108-A-05: examples now use noun-grouped `assignee infra plan` path.
+    expect(helpText).toContain("assignee infra plan --wizard");
+    expect(helpText).toContain("assignee infra plan --json");
   });
 });
 
@@ -671,7 +673,8 @@ describe("planCommand — run callback (no --no-apply)", () => {
     // blame-flavored "Check the error details above".
     expect(renderError).toHaveBeenCalledWith(
       "Apply failed",
-      expect.stringContaining("assignee plan"),
+      // Story 108-A-05: path is now noun-grouped `assignee infra plan`.
+      expect.stringContaining("assignee infra plan"),
     );
     const [, hint] = vi.mocked(renderError).mock.calls[0]!;
     expect(hint).toMatch(/--verbose/);

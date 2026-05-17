@@ -34,26 +34,8 @@ if (_dotenvResult.assigneeKeysLoaded) {
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { Command } from "commander";
 import chalk from "chalk";
-import { planCommand } from "./commands/plan.js";
-import { applyCommand } from "./commands/apply.js";
-import { completionsCommand } from "./commands/completions.js";
-import { initCommand } from "./commands/init.js";
-import { describeCommand } from "./commands/describe.js";
-import { destroyCommand } from "./commands/destroy.js";
-import { driftCommand } from "./commands/drift.js";
-import { optimizeCommand } from "./commands/optimize.js";
-import { listCommand } from "./commands/list.js";
-import { setupCommand } from "./commands/setup.js";
-import { statusCommand } from "./commands/status.js";
-import { reconcileCommand } from "./commands/reconcile.js";
-import { doctorCommand } from "./commands/doctor.js";
-import { restoreProvisionsCommand } from "./commands/restore-provisions.js";
-import { auditVerifyCommand } from "./commands/audit-verify.js";
-import { updateCommand } from "./commands/update.js";
-import { versionCommand } from "./commands/version.js";
-import { discoverCommand } from "./commands/discover/discover.js";
+import { buildAssigneeProgram } from "./program.js";
 import { ProcessExitCode } from "./constants/errors.js";
 import { errorToExitCode } from "./utils/exit-code.js";
 import {
@@ -102,7 +84,12 @@ if (!_isHelpOrVersion) {
 // First-run detection: auto-create ~/.assignee/ and show welcome (Story 29.6)
 bootstrapFirstRun(getPkg().version);
 
-const program = new Command();
+// Story 108-A-05 round 2: program tree shape lives in `./program.ts` so the
+// build-time completions generator (`scripts/generate-completions.ts`) and the
+// snapshot test (`__tests__/commander-tree-snapshot.test.ts`) consume the SAME
+// tree. Pre-factory drift caused the bundled completion artifacts to ship a
+// flat 17-leaf tree while the runtime shipped 3 noun groups (BOUNCE BLOCKER).
+const program = buildAssigneeProgram();
 
 program
   .name("assignee")
@@ -160,42 +147,9 @@ program.hook("preSubcommand", (thisCommand) => {
   }
 });
 
-// Dedicated version subcommand (in addition to --version flag) — shows
-// richer info including Node version, platform, and the pinned MCP
-// server versions. MCP pins are relevant for bug reports because they
-// carry their own feature sets; an issue against the pricing or docs
-// server is much easier to triage with the exact version stamp.
-//
-// Story 58-it1-03: extracted to `./commands/version.ts` so the
-// completion generator (which walks `program.commands` via
-// `program.addCommand`) sees it without needing a hand-maintained stub.
-program.addCommand(versionCommand);
-
-program.addCommand(completionsCommand);
-program.addCommand(describeCommand);
-program.addCommand(destroyCommand);
-program.addCommand(driftCommand);
-program.addCommand(optimizeCommand);
-program.addCommand(initCommand);
-program.addCommand(listCommand);
-program.addCommand(planCommand);
-program.addCommand(setupCommand);
-program.addCommand(statusCommand);
-program.addCommand(restoreProvisionsCommand);
-program.addCommand(auditVerifyCommand);
-program.addCommand(applyCommand);
-program.addCommand(reconcileCommand);
-program.addCommand(doctorCommand);
-program.addCommand(updateCommand);
-program.addCommand(discoverCommand);
-
-// Propagate `showGlobalOptions: true` to every subcommand so the root-level
-// `--verbose` (and any future global options) appear in `<subcommand> --help`
-// output. Commander's configureHelp on the root program does not auto-cascade
-// to subcommands, so we explicitly walk the command tree once.
-for (const sub of program.commands) {
-  sub.configureHelp({ showGlobalOptions: true });
-}
+// Noun-group tree (3 groups / 18 leaves) and depth-2 `configureHelp` cascade
+// are built inside `buildAssigneeProgram()` — see `./program.ts`. The factory
+// is shared with `scripts/generate-completions.ts` and the snapshot test.
 
 // EPIPE: stdout pipe closed (e.g. piped to grep/head that exits early).
 // Node.js throws by default; suppress and exit cleanly instead.

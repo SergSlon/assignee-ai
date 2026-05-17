@@ -286,6 +286,7 @@ describeE2E(
     // Checking IGW + Subnet together is sufficient per acceptance probe.
     it("B-2: 'Create a VPC with public subnets only' routes to the public-only compound (has IGW + Subnet; no NatGateway)", () => {
       const { stdout, code } = runCli([
+        "infra",
         "plan",
         "--output",
         "json",
@@ -319,6 +320,7 @@ describeE2E(
     // no public-only cue must still produce the single-resource VPC.
     it("B-3: 'Create a VPC' (bare) still returns a single-resource VPC plan", () => {
       const { stdout, code } = runCli([
+        "infra",
         "plan",
         "--output",
         "json",

@@ -91,7 +91,7 @@ describeE2E("Epic 94 N2 — list --json success envelope (RUN_E2E=1)", () => {
 
   it("A-04: success envelope — ok:true, resources[], count, region", () => {
     if (!jqAvailable()) return;
-    const { stdout, code } = runCli(["list", "--json"]);
+    const { stdout, code } = runCli(["admin", "list", "--json"]);
     // `list` is read-only; success exit code is 0 regardless of count.
     expect(code).toBe(0);
     // Single-JSON-value contract (not NDJSON).
@@ -112,7 +112,7 @@ describeE2E("Epic 94 N2 — list --json success envelope (RUN_E2E=1)", () => {
 
   it("A-04: success envelope carries NO `.error` field", () => {
     if (!jqAvailable()) return;
-    const { stdout } = runCli(["list", "--json"]);
+    const { stdout } = runCli(["admin", "list", "--json"]);
     const parsed = JSON.parse(stdout.trim());
     expect(parsed.ok).toBe(true);
     expect(parsed.error).toBeUndefined();
@@ -121,6 +121,7 @@ describeE2E("Epic 94 N2 — list --json success envelope (RUN_E2E=1)", () => {
   it("R7 regression guard: error envelope — ok:false, error.code", () => {
     if (!jqAvailable()) return;
     const { stdout, code } = runCli([
+      "admin",
       "list",
       "--json",
       "--resource-type",
@@ -142,8 +143,9 @@ describeE2E("Epic 94 N2 — list --json success envelope (RUN_E2E=1)", () => {
 
   it("A-04: success and error envelopes are discriminable by `.ok` alone", () => {
     if (!jqAvailable()) return;
-    const successOut = runCli(["list", "--json"]).stdout;
+    const successOut = runCli(["admin", "list", "--json"]).stdout;
     const errorOut = runCli([
+      "admin",
       "list",
       "--json",
       "--resource-type",
@@ -164,7 +166,13 @@ describeE2E("Epic 94 N2 — list --json success envelope (RUN_E2E=1)", () => {
     // from the default, so we can assert the envelope echoes it
     // regardless of the operator's configured AWS_REGION.
     const explicit = "eu-west-1";
-    const { stdout } = runCli(["list", "--json", "--region", explicit]);
+    const { stdout } = runCli([
+      "admin",
+      "list",
+      "--json",
+      "--region",
+      explicit,
+    ]);
     const parsed = JSON.parse(stdout.trim());
     expect(parsed.ok).toBe(true);
     expect(parsed.region).toBe(explicit);

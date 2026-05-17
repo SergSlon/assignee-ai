@@ -123,10 +123,10 @@ export function showFirstRunWelcome(version: string): void {
       `       ${chalk.cyan("$Env:AWS_SECRET_ACCESS_KEY='<your-secret>'")}`,
       "",
       `  ${chalk.bold("2.")} ${chalk.bold("Or")} create least-privilege IAM users (recommended):`,
-      `       ${chalk.cyan("assignee setup")}`,
+      `       ${chalk.cyan("assignee dev setup")}`,
       "",
       `  ${chalk.bold("3.")} Try your first plan:`,
-      `       ${chalk.cyan('assignee plan "Create an S3 bucket for my static site"')}`,
+      `       ${chalk.cyan('assignee infra plan "Create an S3 bucket for my static site"')}`,
       "",
       chalk.gray("  More: https://github.com/SergSlon/assignee-ai"),
       "",
@@ -141,24 +141,24 @@ export function showFirstRunWelcome(version: string): void {
       chalk.gray("       PowerShell:"),
       `       ${chalk.cyan("$Env:AWS_ACCESS_KEY_ID='...'; $Env:AWS_SECRET_ACCESS_KEY='...'")}`,
       "",
-      "  • Or run `assignee setup` to create least-privilege IAM users",
+      "  • Or run `assignee dev setup` to create least-privilege IAM users",
       "",
     );
   } else {
     // operator or standard — credentials work, just show next step
     lines.push(
       chalk.gray("  Try:"),
-      `  ${chalk.cyan('  assignee plan "Create an S3 bucket for my static site"')}`,
+      `  ${chalk.cyan('  assignee infra plan "Create an S3 bucket for my static site"')}`,
       "",
     );
   }
 
   // Discoverability hints for first-time users. Story 50-3 removed the
   // dedicated `patterns` / `types` listing commands — their content is
-  // folded into `assignee plan --help`, so that is the right pointer.
+  // folded into `assignee infra plan --help`, so that is the right pointer.
   lines.push(
     chalk.gray("  Discover what assignee can build:"),
-    `  ${chalk.cyan("  assignee plan --help")}    ${chalk.gray("# list supported resource types + compound patterns")}`,
+    `  ${chalk.cyan("  assignee infra plan --help")}    ${chalk.gray("# list supported resource types + compound patterns")}`,
     "",
   );
 

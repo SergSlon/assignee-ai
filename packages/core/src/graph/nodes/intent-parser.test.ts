@@ -110,7 +110,8 @@ describe("intentParserNode", () => {
     expect(result.executionStatus).toBe(ExecutionStatus.UNSUPPORTED_RESOURCE);
     // Must NOT hint at Bedrock connectivity for a Zod validation error.
     expect(result.errorMessage).not.toContain("Bedrock connectivity");
-    expect(result.errorMessage).toContain("assignee plan --help");
+    // Story 108-A-05: path is now noun-grouped `assignee infra plan --help`.
+    expect(result.errorMessage).toContain("assignee infra plan --help");
   });
 
   it("SUPPORTED_TYPES contains all expected resource types", () => {

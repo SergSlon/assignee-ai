@@ -1051,7 +1051,8 @@ describe("setup command", () => {
     expect(warnMock).toHaveBeenCalled();
     const warnText = warnMock.mock.calls.map((c) => String(c[0])).join("\n");
     expect(warnText).toContain("hasn't confirmed propagation");
-    expect(warnText).toContain("assignee plan");
+    // Story 108-A-05: path is now noun-grouped `assignee infra plan`.
+    expect(warnText).toContain("assignee infra plan");
 
     // Despite the timeout warning, .env is still written
     expect(mockMergeEnvFile).toHaveBeenCalledTimes(1);

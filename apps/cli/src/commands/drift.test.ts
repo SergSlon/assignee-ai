@@ -68,7 +68,8 @@ describe("drift command", () => {
 
     const output = stdoutSpy.mock.calls.map((c) => c[0]).join("");
     expect(output).toContain("No managed resources found");
-    expect(output).toContain("assignee plan");
+    // Story 108-A-05: path is now noun-grouped `assignee infra plan`.
+    expect(output).toContain("assignee infra plan");
   });
 
   it("reports that credentials are needed when no drift port is set", async () => {

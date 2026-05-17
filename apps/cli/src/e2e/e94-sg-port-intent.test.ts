@@ -105,6 +105,7 @@ describeE2E(
     for (const port of [22, 3306, 3389]) {
       it(`intent "allowing port ${port}" → desiredState.SecurityGroupIngress[0].FromPort === ${port}`, () => {
         const { stdout, code } = runCli([
+          "infra",
           "plan",
           "--output",
           "json",

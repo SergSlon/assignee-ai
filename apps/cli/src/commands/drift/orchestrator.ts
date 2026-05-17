@@ -28,7 +28,7 @@ export async function runDrift(
 
   if (rawProvisions.length === 0) {
     process.stdout.write(
-      "No managed resources found. Run `assignee plan` and `assignee apply` to provision resources.\n",
+      "No managed resources found. Run `assignee infra plan` and `assignee infra apply` to provision resources.\n",
     );
     return;
   }

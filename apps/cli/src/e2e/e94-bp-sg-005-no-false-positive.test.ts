@@ -118,6 +118,7 @@ describeE2E(
 
     it("port 443 from 0.0.0.0/0 → NO BP-SG-005 finding", () => {
       const { stdout, code } = runCli([
+        "infra",
         "plan",
         "--output",
         "json",
@@ -136,6 +137,7 @@ describeE2E(
 
     it("port 80 from 0.0.0.0/0 → NO BP-SG-005 finding (second non-RDP probe)", () => {
       const { stdout, code } = runCli([
+        "infra",
         "plan",
         "--output",
         "json",
@@ -154,6 +156,7 @@ describeE2E(
 
     it("RDP from 0.0.0.0/0 → BP-SG-005 DOES fire (genuine exposure)", () => {
       const { stdout, code } = runCli([
+        "infra",
         "plan",
         "--output",
         "json",

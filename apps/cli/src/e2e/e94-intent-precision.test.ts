@@ -115,6 +115,7 @@ describeE2E(
 
     it("C-07: `Create a static-website pattern` → static-website compound (>=3 resources)", () => {
       const { stdout } = runCli([
+        "infra",
         "plan",
         "--no-apply",
         "--output",
@@ -129,6 +130,7 @@ describeE2E(
 
     it("C-08: `Create an EFS mount target` → singleton AWS::EFS::MountTarget classification", () => {
       const { stdout } = runCli([
+        "infra",
         "plan",
         "--no-apply",
         "--output",
@@ -160,6 +162,7 @@ describeE2E(
 
     it("C-09: `Create an HTTP API Gateway` → singleton AWS::ApiGatewayV2::Api", () => {
       const { stdout } = runCli([
+        "infra",
         "plan",
         "--no-apply",
         "--output",
@@ -175,6 +178,7 @@ describeE2E(
 
     it("D-05: `Create a logs group foo with 14 days retention` → BP_ADJUSTED_VALUE advisory", () => {
       const { stdout } = runCli([
+        "infra",
         "plan",
         "--no-apply",
         "--output",
@@ -196,6 +200,7 @@ describeE2E(
 
     it("A-15: `Create an S3 bucket named 192.168.1.1` → INVALID_DESIRED_STATE or NAME_REWRITTEN advisory", () => {
       const { stdout } = runCli([
+        "infra",
         "plan",
         "--no-apply",
         "--output",

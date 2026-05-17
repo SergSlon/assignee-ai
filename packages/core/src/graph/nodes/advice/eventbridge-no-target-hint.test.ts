@@ -24,7 +24,8 @@ describe("eventbridgeNoTargetHint", () => {
     });
     expect(result).toHaveLength(1);
     expect(result[0]).toContain("no targets");
-    expect(result[0]).toContain("assignee plan");
+    // Story 108-A-05: path is now noun-grouped `assignee infra plan`.
+    expect(result[0]).toContain("assignee infra plan");
     expect(result[0]).toContain("scheduled lambda");
     expect(result[0]).toContain("--set Targets=");
   });
@@ -114,7 +115,8 @@ describe("eventbridgeNoTargetHint", () => {
   it("advisory mentions the compound plan command for discoverability", () => {
     const result = eventbridgeNoTargetHint(EVENTS_RULE, {});
     expect(result).toHaveLength(1);
-    expect(result[0]).toContain("assignee plan");
+    // Story 108-A-05: path is now noun-grouped `assignee infra plan`.
+    expect(result[0]).toContain("assignee infra plan");
     expect(result[0]).toContain("scheduled lambda");
   });
 
