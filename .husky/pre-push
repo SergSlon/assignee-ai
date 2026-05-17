@@ -95,6 +95,23 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   # Skip deletions (push :branch)
   [ "$local_sha" = "0000000000000000000000000000000000000000" ] && continue
 
+  # Safety-ref guard (Quinn epic-108-close F-06): reject pushes of refs that
+  # retain pre-rewrite history containing the real AWS account-ID purged in
+  # Story 108-A-04. These refs are intentionally retained local-only as a
+  # disaster-recovery snapshot; pushing them would re-leak the literal ID to
+  # the published repo. See `_archive/dogfood-sessions/git-history-purge-sign-off.md`.
+  case "$local_ref" in
+    refs/heads/main-pre-rewrite-backup|refs/original/*)
+      echo "" >&2
+      echo "Safety-ref guard: refusing to push '$local_ref'." >&2
+      echo "This ref retains pre-rewrite history containing the real AWS account-ID" >&2
+      echo "purged in Story 108-A-04. Local-only retention is intentional; pushing it" >&2
+      echo "would re-leak the literal ID. See _archive/dogfood-sessions/git-history-purge-sign-off.md" >&2
+      echo "" >&2
+      exit 1
+    ;;
+  esac
+
   # Tag-push handling (R3-003 fix): a blanket tag exemption was a security
   # regression of MASTER-004 — an operator could `git tag <unreviewed-sha>
   # && git push origin <tag>` to bypass the reviewer-evidence gate. The

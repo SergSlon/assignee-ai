@@ -183,12 +183,38 @@ function buildPatternItems(): CatalogueItem[] {
   }));
 }
 
+const COMMAND_NOUN_GROUP: Record<
+  DiscoverCommandName,
+  "infra" | "admin" | "dev"
+> = {
+  plan: "infra",
+  apply: "infra",
+  destroy: "infra",
+  drift: "infra",
+  reconcile: "infra",
+  optimize: "infra",
+  "restore-provisions": "infra",
+  "audit-verify": "admin",
+  doctor: "admin",
+  status: "admin",
+  list: "admin",
+  describe: "admin",
+  init: "dev",
+  setup: "dev",
+  update: "dev",
+  completions: "dev",
+  discover: "dev",
+  version: "dev",
+};
+
 function buildCommandItems(): CatalogueItem[] {
   return DISCOVER_COMMAND_LIST.map((cmd) => ({
     id: cmd,
     category: "commands" as const,
-    description: COMMAND_DESCRIPTIONS[cmd] ?? `assignee ${cmd} command`,
-    exampleIntent: `assignee ${cmd} --help`,
+    description:
+      COMMAND_DESCRIPTIONS[cmd] ??
+      `assignee ${COMMAND_NOUN_GROUP[cmd]} ${cmd} command`,
+    exampleIntent: `assignee ${COMMAND_NOUN_GROUP[cmd]} ${cmd} --help`,
   }));
 }
 
