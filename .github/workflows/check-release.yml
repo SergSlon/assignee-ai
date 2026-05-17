@@ -1,0 +1,54 @@
+name: Release Checklist Gate
+
+# Manual-dispatch only — runs on demand before a publish attempt.
+#
+# WHY workflow_dispatch only:
+#   This gate is intentionally NOT a required check on every PR/push.
+#   Several BLOCKING items (RR-1, RR-7, RR-8, RR-9, RR-10) require manual
+#   coordination or user authorisation that is not yet complete. Running the
+#   gate automatically would fail every PR until every item is resolved.
+#
+#   Invoke this workflow immediately before `pnpm publish` to confirm the
+#   checklist is fully resolved. At that point all items MUST be checked.
+#
+# Usage:
+#   gh workflow run check-release.yml
+#   # or via GitHub UI: Actions → "Release Checklist Gate" → Run workflow
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-release:
+    name: Parse RELEASE_CHECKLIST.md for unchecked BLOCKING items
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Parse RELEASE_CHECKLIST.md
+        run: |
+          set -euo pipefail
+
+          if [ ! -f RELEASE_CHECKLIST.md ]; then
+            echo "ERROR: RELEASE_CHECKLIST.md not found at repo root."
+            exit 1
+          fi
+
+          # Extract rows for BLOCKING items (lines starting with "| RR-")
+          # and filter to those that are still unchecked (contain "[ ]").
+          unchecked=$(grep -E "^\| RR-" RELEASE_CHECKLIST.md | grep -F "[ ]" || true)
+
+          if [ -n "$unchecked" ]; then
+            echo "BLOCKING items still unchecked — cannot proceed to publish:"
+            echo ""
+            echo "$unchecked"
+            echo ""
+            echo "Resolve each item above and update RELEASE_CHECKLIST.md before publishing."
+            exit 1
+          fi
+
+          echo "All BLOCKING release-checklist items are checked. Safe to proceed."

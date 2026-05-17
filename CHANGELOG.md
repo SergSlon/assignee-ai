@@ -17,6 +17,25 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### Added
+
+**release(checklist): publish release-readiness checklist and CI gate (Story 108-A-06)**
+
+Closes Epic 108-A G4 (defined and met release-readiness checklist; `pnpm publish` gate).
+
+- `RELEASE_CHECKLIST.md` at repo root — all 12 BLOCKING items (RR-1 through RR-12) with
+  pre-checked evidence citations for resolved items (RR-2, RR-3, RR-4, RR-6, RR-12).
+- `.github/workflows/check-release.yml` — manual-dispatch CI gate (`workflow_dispatch`)
+  that fails if any `[ ]` BLOCKING item remains; invoke before every publish attempt.
+- `apps/cli/scripts/test-release-checklist-gate.sh` — bash unit test covering Axes A/B/C
+  (all-checked → exit 0; one unchecked → exit 1 + names item; all unchecked → exit 1 + all rows).
+- `docs/explanation/security-threat-model.md` stub — satisfies citation-lint path-existence
+  for RR-5; full content tracked in `_backlog/rr-5-threat-model-content.md`.
+- `_archive/dogfood-sessions/external-dogfood-template.md` — RR-10 sign-off template for
+  external user dogfood sessions.
+- `_backlog/rr-5-threat-model-content.md`, `_backlog/rr-7-license-attribution.md`,
+  `_backlog/rr-8-npm-provenance.md` — backlog stubs for items requiring separate stories.
+
 ### Changed
 
 **cli(api-surface): restructure CLI into noun-grouped command tree (Story 108-A-05)**
