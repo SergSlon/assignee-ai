@@ -17,6 +17,27 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### Security
+
+**security(repo): purge real AWS account-ID from full git history (Story 108-A-04)**
+
+Closes Epic 108-A G8 — Real AWS account-ID purged from git history;
+hard dependency of G4 (release-readiness checklist RR-2).
+
+- Used `git filter-repo --replace-text` to substitute the real
+  12-digit account-ID with `112233445566` (per
+  `feedback_no_real_account_ids_in_repo` non-denylisted placeholder)
+  across all 940 commits parsed.
+- 45 commits on `main` previously contained the literal ID (now 0);
+  91 across all branches (now 0).
+- All 933 commits on `main` got new SHAs (cascade from earliest
+  affected commit 2026-03-15).
+- Full operation record, verification evidence, branch-protection
+  delta, and user sign-off quote in
+  `_archive/dogfood-sessions/git-history-purge-sign-off.md`.
+- `apps/cli/package.json` remained `"private": true` throughout; no
+  npm publish occurred.
+
 ### Added
 
 **feat(discover): `assignee discover` interactive catalogue picker (Story 108-A-03)**
