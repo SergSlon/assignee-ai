@@ -136,18 +136,62 @@ authorization above.
 
 ## Cascade impact
 
-- **45 commits on main** previously contained the literal ID (now 0).
-- **91 commits across all branches** previously contained it; current
-  rewritten state has 0 hits on every branch.
+- **45 commits on main** previously contained the literal ID (now 0
+  on `origin/main`).
+- **91 commits across all refs** previously contained it. After the
+  rewrite + force-push:
+  - `origin/main` (the published repo): **0 hits**. Verified post-purge.
+  - Local-only refs intentionally retained: still carry the
+    pre-rewrite history as a disaster-recovery snapshot complementing
+    the `full-history-backup-<date>.bundle` file. These refs are
+    never pushed:
+    - `refs/heads/main-pre-rewrite-backup` (1 ref; pre-rewrite main tip)
+    - `refs/original/refs/heads/main` (1 ref; created by the filter
+      tooling's safety backup)
+    - 22 `refs/heads/worktree-agent-*` branches tied to currently
+      locked worktrees (not yet pruned because the worktrees are
+      still on disk for past-session diff comparison)
+    - ~21 pre-rewrite feature branches (`refs/heads/feat/epic-*`,
+      `refs/heads/chore/epic-*`, etc.) from past epics — these
+      duplicate state already captured in squash-merged history on
+      `origin/main` (new SHAs) and could be deleted once disaster-
+      recovery confidence is established
 - All 933 commits on `main` got new SHAs (cascade from earliest
   affected commit `c081952b` 2026-03-15).
 - **0 open PRs** at the time of the operation — no in-flight reviews
   invalidated.
-- **22 local worktrees** retained their pre-rewrite refs (they're on
-  feature/`worktree-agent-*` branches, not `main`); they were not
-  affected by the rewrite. Future use of those worktrees will require
-  `git fetch origin && git rebase origin/main` if they want to pick up
-  the rewritten main.
+
+### Verification command for RR-2
+
+The `RELEASE_CHECKLIST.md` RR-2 row scopes its verification to the
+**published** repo state, not the local-only safety refs:
+
+```
+git log refs/remotes/origin/main --full-history -S "<ACCOUNT_ID>" --format="%h" | wc -l
+# Expected: 0
+```
+
+This is the canonical "what does a fresh clone of the public repo
+see" check. The local-only safety refs above are NEVER part of a
+clone's state because Git's clone protocol only fetches `refs/heads/*`
+(via `refs/remotes/origin/*` on the consumer) — local branches with
+no remote-tracking equivalent are never transferred.
+
+If you want to eventually delete the local safety refs (after enough
+time has passed to be confident the rewrite is correct):
+
+```
+git branch -D main-pre-rewrite-backup
+git update-ref -d refs/original/refs/heads/main
+git reflog expire --expire=now --all
+git gc --prune=now --aggressive
+# Then individually remove worktrees + their tied branches via:
+# git worktree remove <path>
+# git branch -D worktree-agent-<id>
+```
+
+That cleanup is OUT OF SCOPE for the publish gate; the bundle file
+already captures the disaster-recovery state.
 
 ## Hashes — before / after
 
