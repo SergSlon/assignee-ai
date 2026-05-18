@@ -1250,8 +1250,13 @@ describe("resourceProvisionerNode", () => {
       // throw — that is the failure path this test exercises (unable to
       // create the keys dir, so the .pem write must NOT happen and the
       // already-created AWS keypair must be cleaned up).
+      // Windows: path.join() emits backslash separators ("\.assignee\keys")
+      // while POSIX uses forward slash. Match both so the mock fires on
+      // either platform; the previous Unix-only regex caused the mkdirSync
+      // mock to no-op on Windows runners, letting writeFileSync execute
+      // and tripping the "spy not called" assertion below.
       mockMkdirSync.mockImplementation((p: string) => {
-        if (/\.assignee\/keys$/.test(p)) {
+        if (/[\\/]\.assignee[\\/]keys$/.test(p)) {
           throw Object.assign(new Error("EACCES: permission denied"), {
             code: "EACCES",
           });
