@@ -475,7 +475,7 @@ export function operatorPolicy(
         //      resource specification possible for bucket-level operations).
         //   2. Every non-S3 destructive action remains tag-scoped (blast
         //      radius of a leaked operator credential is limited to S3).
-        //   3. Bucket policy attached at `assignee apply` time (compensating
+        //   3. Bucket policy attached at `assignee infra apply` time (compensating
         //      control) re-establishes per-bucket tagging enforcement at the
         //      resource-policy boundary (resource-based policies DO evaluate
         //      bucket tags correctly for bucket-level operations).

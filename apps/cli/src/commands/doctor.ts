@@ -1,5 +1,5 @@
 /**
- * `assignee doctor` command — non-destructive end-to-end health check.
+ * `assignee admin doctor` command — non-destructive end-to-end health check.
  *
  * Verifies the critical preconditions for a successful `plan`/`apply`:
  *   1. AWS credentials for each of the 3 IAM roles (live STS GetCallerIdentity)
@@ -161,7 +161,7 @@ export async function runShortDoctor(
   if (!creds) {
     stderr(
       "No AWS credentials configured.\n" +
-        "Run `assignee setup` to create least-privilege IAM users, or set\n" +
+        "Run `assignee dev setup` to create least-privilege IAM users, or set\n" +
         `${EnvVar.OPERATOR_ACCESS_KEY} + ${EnvVar.OPERATOR_SECRET_KEY}.\n`,
     );
     return ProcessExitCode.GENERIC_ERROR;
@@ -246,7 +246,7 @@ export async function runShortDoctor(
     `Config:   ${configLine}`,
     `Redact:   ${redactLine}`,
     "",
-    "For full diagnostics, run `assignee doctor`.",
+    "For full diagnostics, run `assignee admin doctor`.",
     "",
   ];
 
@@ -270,13 +270,13 @@ export const doctorCommand = new Command(CommandName.DOCTOR)
     "after",
     `
 Examples:
-  $ assignee doctor
+  $ assignee admin doctor
         Run every pre-flight check (credentials, region, Bedrock, MCP probes)
-  $ assignee doctor --short
+  $ assignee admin doctor --short
         Fast whoami-style identity summary (one STS call, no MCP probes)
-  $ assignee doctor --json > report.json
+  $ assignee admin doctor --json > report.json
         Emit a structured report (useful for CI and bug reports)
-  $ assignee doctor --skip-bedrock --skip-mcp
+  $ assignee admin doctor --skip-bedrock --skip-mcp
         Fast offline check: credentials + config only
 
 doctor is read-only — it never mutates AWS state, so no --yes is needed.

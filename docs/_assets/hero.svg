@@ -2,7 +2,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 120" width="600" height="120">
   <title>Assignee.ai hero demo — placeholder</title>
   <rect width="600" height="120" fill="#1a1a1a"/>
-  <text x="20" y="30" font-family="monospace" font-size="14" fill="#d4d4d4">$ assignee plan "Create an S3 bucket"</text>
+  <text x="20" y="30" font-family="monospace" font-size="14" fill="#d4d4d4">$ assignee infra plan "Create an S3 bucket"</text>
   <text x="20" y="55" font-family="monospace" font-size="12" fill="#888">  [placeholder — real asciinema cast lands in v0.2]</text>
   <text x="20" y="80" font-family="monospace" font-size="12" fill="#6fbf73">  Proceed with apply? [y/N]</text>
   <text x="20" y="105" font-family="monospace" font-size="12" fill="#6fbf73">  See README "30-second hero" for full transcript</text>

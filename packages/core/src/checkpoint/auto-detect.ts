@@ -2,7 +2,7 @@
  * Checkpoint auto-detect — scans a directory for checkpoint files, filters
  * by TTL / preflight / non-empty desiredState, returns the newest valid one.
  *
- * Used by `assignee apply` to resume the most recent plan without the user
+ * Used by `assignee infra apply` to resume the most recent plan without the user
  * having to name the runId.
  *
  * Extracted from apps/cli during Wave-6c; promoted to @assignee/core by

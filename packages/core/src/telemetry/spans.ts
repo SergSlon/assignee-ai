@@ -13,7 +13,7 @@
  *     (L1-F52). Downstream OTEL collectors can reconstruct parent/child
  *     span trees from the `spanId` + `traceId` pair.
  *   - `traceId` = `runId` for CLI invocations so every span in a single
- *     `assignee apply` session is co-located in one trace.
+ *     `assignee infra apply` session is co-located in one trace.
  *   - Duration is computed at exit and backfilled into the `durationMs`
  *     field on the exit span.
  *

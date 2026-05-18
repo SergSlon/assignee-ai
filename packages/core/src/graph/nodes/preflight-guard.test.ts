@@ -757,7 +757,7 @@ describe("preflightGuardNode", () => {
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
       expect(result.errorMessage).toMatch(/expired|invalid/i);
       // Actionable remediation: the user must know how to unblock.
-      expect(result.errorMessage).toMatch(/assignee setup|refresh/i);
+      expect(result.errorMessage).toMatch(/assignee dev setup|refresh/i);
     });
 
     it("Wave 4 F2: fails CLOSED on InvalidClientTokenId", async () => {
@@ -907,7 +907,7 @@ describe("preflightGuardNode", () => {
           "ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS",
         );
         expect(result.errorMessage).toMatch(/unset.*fall back/i);
-        expect(result.errorMessage).toMatch(/assignee setup|refresh/i);
+        expect(result.errorMessage).toMatch(/assignee dev setup|refresh/i);
       });
 
       it("flag=1 — per-ARN auth failure still fail-closed with unchanged message", async () => {

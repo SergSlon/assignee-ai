@@ -443,7 +443,7 @@ describe("renderResourceTable — non-TTY", () => {
     // Warning row must follow the main row.
     expect(output).toContain("Compensating bucket policy missing");
     expect(output).toContain("AccessDenied: PutBucketPolicy not allowed");
-    expect(output).toContain("re-run `assignee setup` to retry");
+    expect(output).toContain("re-run `assignee dev setup` to retry");
     // L2 fix: pin the non-TTY-specific `WARNING:` prefix so the
     // plain-path branch of `renderPlainTable` is not silently
     // collapsed into the TTY-only chalk-yellow path. The TTY
@@ -510,7 +510,7 @@ describe("renderEmptyList — non-TTY", () => {
     renderEmptyList();
     const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
     expect(output).toContain("No resources managed");
-    expect(output).toContain("assignee apply");
+    expect(output).toContain("assignee infra apply");
     writeSpy.mockRestore();
     Object.defineProperty(process.stdout, "isTTY", {
       value: undefined,

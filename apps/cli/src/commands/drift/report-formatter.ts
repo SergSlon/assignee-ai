@@ -1,5 +1,5 @@
 /**
- * Terminal formatting for `assignee drift`.
+ * Terminal formatting for `assignee infra drift`.
  * Wave-6d F4: split out of drift.ts (SRP).
  *
  * Exposes pure rendering helpers — every mutation goes through
@@ -72,8 +72,8 @@ export function renderDriftTable(
  * rather than being collapsed into `errors`. A missing checkpoint
  * is not an error — it means the resource was provisioned outside
  * assignee (or its checkpoint TTL has expired), which is a common
- * operator state that should be actionable (run `assignee reconcile`
- * or `assignee drift --baseline`), not a failure.
+ * operator state that should be actionable (run `assignee infra reconcile`
+ * or `assignee infra drift --baseline`), not a failure.
  */
 export function renderSummary(results: DriftResult[]): void {
   const total = results.length;

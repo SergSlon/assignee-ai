@@ -1,5 +1,5 @@
 /**
- * `assignee update <target> --source <dir>` command.
+ * `assignee dev update <target> --source <dir>` command.
  *
  * Refreshes a deployed static-website in one shot: uploads new files
  * to S3, optionally deletes remote orphans, and invalidates the
@@ -47,16 +47,16 @@ export const updateCommand = new Command(CommandName.UPDATE)
   .addHelpText(
     "after",
     `\nExamples:\n` +
-      `  assignee update my-marketing-site --source ./dist\n` +
-      `  assignee update my-marketing-site --source ./dist --delete\n` +
-      `  assignee update arn:aws:s3:::my-marketing-site --source ./dist --invalidation-paths "/index.html,/css/*"\n` +
-      `  assignee update <runId-uuid> --source ./dist --no-invalidation\n` +
-      `  assignee update my-marketing-site --source ./dist --wait --yes --json\n` +
+      `  assignee dev update my-marketing-site --source ./dist\n` +
+      `  assignee dev update my-marketing-site --source ./dist --delete\n` +
+      `  assignee dev update arn:aws:s3:::my-marketing-site --source ./dist --invalidation-paths "/index.html,/css/*"\n` +
+      `  assignee dev update <runId-uuid> --source ./dist --no-invalidation\n` +
+      `  assignee dev update my-marketing-site --source ./dist --wait --yes --json\n` +
       `\nPrerequisites:\n` +
       `  Requires operator IAM policy with: s3:PutObject, s3:DeleteObject (if --delete),\n` +
       `  s3:ListBucket, cloudfront:CreateInvalidation, cloudfront:ListDistributions,\n` +
       `  cloudfront:GetInvalidation (if --wait).\n` +
-      `  Run 'assignee setup' to provision.\n`,
+      `  Run 'assignee dev setup' to provision.\n`,
   )
   .action(async (target: string, rawOpts: UpdateOpts) => {
     await updateAction(target, rawOpts);

@@ -50,7 +50,7 @@
  *   AND the rationale is documented next to the marker. Example:
  *     # Cleanup-after-test pattern; failure here is recoverable.
  *     # AUDIT_NO_SUPPRESS_OK: tracked in epic-XYZ
- *     assignee destroy --all <suppression-idiom>
+ *     assignee infra destroy --all <suppression-idiom>
  *
  * TODO (off-ownership follow-up): ci-security.yml's audit-no-suppress
  * step `name:` text references this script and historically contained

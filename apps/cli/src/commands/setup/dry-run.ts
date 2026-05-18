@@ -1,5 +1,5 @@
 /**
- * Dry-run plan printer for `assignee setup`.
+ * Dry-run plan printer for `assignee dev setup`.
  *
  * INVARIANT (tested): dry-run MUST make ZERO AWS calls. This module is
  * pure — it only writes to clack.log. No IAMClient, STSClient, Bedrock,

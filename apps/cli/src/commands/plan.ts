@@ -1,5 +1,5 @@
 /**
- * `assignee plan` command — Sprint 1 demo gate.
+ * `assignee infra plan` command — Sprint 1 demo gate.
  * Runs the graph in plan mode (no HITL, no provisioning), outputs a formatted plan box.
  *
  * Wave-6d F4: decomposed into `plan/` sub-modules. This file is now a

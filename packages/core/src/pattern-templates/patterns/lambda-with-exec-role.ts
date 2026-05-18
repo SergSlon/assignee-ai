@@ -2,7 +2,7 @@
  * Wave 13 — minimal Lambda + auto-created exec role pattern.
  *
  * Closes the Phase 2 lifecycle smoke test gap where
- * `assignee plan "Create a Lambda"` required the user to remember the
+ * `assignee infra plan "Create a Lambda"` required the user to remember the
  * `--set Role=arn:aws:iam::...:role/...` workaround because Lambda's
  * IAM execution role is mandatory but the user was never asked for
  * one. With this pattern, plain "create a lambda" intents now produce
@@ -180,7 +180,7 @@ export const lambdaWithExecRolePattern: ArchitecturePattern = {
       // plugin defaults here so plain "Create a lambda" intents work
       // end-to-end. The placeholder ZipFile is a 200-OK echo handler —
       // users can replace it after the function exists, but the goal
-      // here is to make `assignee apply` succeed against AWS.
+      // here is to make `assignee infra apply` succeed against AWS.
       Code: {
         ZipFile:
           "exports.handler = async (event) => ({ statusCode: 200, body: 'placeholder' });",

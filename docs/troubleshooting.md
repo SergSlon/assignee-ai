@@ -33,17 +33,17 @@ Jump to the section for the failure mode you're seeing.
 
 The CLI follows a stable exit-code contract — scripts can branch on it.
 
-| Code  | Meaning                                                                                                                                                                               |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `0`   | Success — plan/apply/destroy completed; drift reported no changes                                                                                                                     |
-| `1`   | Generic failure — unclassified error; rerun with `ASSIGNEE_LOG_LEVEL=debug`                                                                                                           |
-| `2`   | `assignee doctor` warnings-only — no hard failures, but at least one check returned `!` (e.g. optional role credentials not set, stale checkpoints); non-blocking but worth reviewing |
-| `10`  | Policy / safety abort — state guard, preflight rejection, typed-confirm mismatch, IAM safety allowlist, drift threshold, best-practice block                                          |
-| `11`  | MCP server startup failure — the spawned MCP server (cfn-mcp, aws-pricing, etc.) failed to start; check pin freshness and Python/uv install                                           |
-| `12`  | Not implemented — feature is recognised but not yet wired (e.g. `--target-account` cross-account provisioning); upgrade to a newer release or omit the flag                           |
-| `73`  | Usage error — invalid CLI flags / arguments (e.g. unrecognised option, mutually exclusive flags). Surfaces as `USAGE_ERROR` from `packages/core/src/constants/errors.ts:27`           |
-| `130` | Interrupted via `SIGINT` (Ctrl-C)                                                                                                                                                     |
-| `143` | Terminated via `SIGTERM`                                                                                                                                                              |
+| Code  | Meaning                                                                                                                                                                                     |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0`   | Success — plan/apply/destroy completed; drift reported no changes                                                                                                                           |
+| `1`   | Generic failure — unclassified error; rerun with `ASSIGNEE_LOG_LEVEL=debug`                                                                                                                 |
+| `2`   | `assignee admin doctor` warnings-only — no hard failures, but at least one check returned `!` (e.g. optional role credentials not set, stale checkpoints); non-blocking but worth reviewing |
+| `10`  | Policy / safety abort — state guard, preflight rejection, typed-confirm mismatch, IAM safety allowlist, drift threshold, best-practice block                                                |
+| `11`  | MCP server startup failure — the spawned MCP server (cfn-mcp, aws-pricing, etc.) failed to start; check pin freshness and Python/uv install                                                 |
+| `12`  | Not implemented — feature is recognised but not yet wired (e.g. `--target-account` cross-account provisioning); upgrade to a newer release or omit the flag                                 |
+| `73`  | Usage error — invalid CLI flags / arguments (e.g. unrecognised option, mutually exclusive flags). Surfaces as `USAGE_ERROR` from `packages/core/src/constants/errors.ts:27`                 |
+| `130` | Interrupted via `SIGINT` (Ctrl-C)                                                                                                                                                           |
+| `143` | Terminated via `SIGTERM`                                                                                                                                                                    |
 
 Any other non-zero code is a Node-level crash — capture the stderr JSON
 log lines (`error` / `warn` events persist under `~/.assignee/logs/`)
@@ -53,7 +53,7 @@ when filing a bug.
 
 ## Exit 12 — not implemented
 
-**Symptom.** `assignee plan --target-account <ID>` (or `apply` / `destroy`
+**Symptom.** `assignee infra plan --target-account <ID>` (or `apply` / `destroy`
 with the same flag) exits immediately with code 12 and prints to stderr:
 
 ```
@@ -74,9 +74,9 @@ backlog for a status update on cross-account support.
 
 ## Exit 1 — generic failure (and the drift exception)
 
-### Symptom: `assignee drift` exits 1
+### Symptom: `assignee infra drift` exits 1
 
-**Cause.** This is **not a bug.** `assignee drift` returns exit 1 when
+**Cause.** This is **not a bug.** `assignee infra drift` returns exit 1 when
 it finds at least one managed resource whose live state has diverged
 from the Assignee-managed state — i.e. drift was **detected**. Finding
 drift is the designed outcome of the command, not an error. The
@@ -88,7 +88,7 @@ attention-needed` pattern.
 failure:
 
 ```bash
-assignee drift
+assignee infra drift
 case $? in
   0)  echo "clean — no drift" ;;
   1)  echo "drift detected — review the drift table and decide" ;;
@@ -98,11 +98,11 @@ esac
 ```
 
 If you only want the "something actually broke" codes, branch on
-`>= 2 && != 1` — or prefer `assignee drift --json` and parse the
+`>= 2 && != 1` — or prefer `assignee infra drift --json` and parse the
 structured output for a deterministic view of which resources drifted.
 
 **Fix.** Inspect the drift report (`--detailed` shows all fields, not
-just diverging ones), then either (a) `assignee apply` to reconcile
+just diverging ones), then either (a) `assignee infra apply` to reconcile
 live → desired, (b) update your intent so desired matches the new
 reality, or (c) mark the drift as accepted in state. Exit 1 from
 `drift` will persist until the divergence is resolved.
@@ -128,7 +128,7 @@ hallucinations — the canonical pattern is `arn:aws:iam::123456789012:…`
 (twelve "123…012" digits). This is not a real account; the LLM produced
 it instead of asking the operator.
 
-**Fix.** Edit your intent to pass a concrete ARN (run `assignee doctor --short`
+**Fix.** Edit your intent to pass a concrete ARN (run `assignee admin doctor --short`
 for your real account ID) or let the wizard prompt for it. See
 [invariants.md](explanation/invariants.md#placeholder-arn-preflight)
 for the enforcing code path.
@@ -140,7 +140,7 @@ already exists in your account. Assignee refuses to overwrite it
 rather than silently drift.
 
 **Fix.** Pick a different identifier in your intent, import the
-existing resource (`assignee drift <arn> --baseline`), or delete the
+existing resource (`assignee infra drift <arn> --baseline`), or delete the
 conflict first. S3 buckets are exempt from this guard because
 `GetResource` returns false positives on globally unique names — see
 [invariants.md](explanation/invariants.md#s3-state-guard).
@@ -165,8 +165,8 @@ get-resource --type-name <T> --identifier <id>` — it should 404 too.
 
 ### Tag-API cache (stale entries up to ~1h)
 
-**Symptom.** `assignee list` keeps showing a resource you just
-destroyed. `assignee destroy <id>` reports NotFound immediately.
+**Symptom.** `assignee admin list` keeps showing a resource you just
+destroyed. `assignee infra destroy <id>` reports NotFound immediately.
 
 **Cause.** AWS Resource Groups Tagging API caches delete-visibility for
 up to an hour. This is a documented AWS behavior, not a bug in
@@ -179,7 +179,7 @@ assignee.
 ### IAM roles missing from `list`
 
 **Symptom.** Operator-created IAM roles with the `ManagedBy:assignee`
-tag do not appear in `assignee list`.
+tag do not appear in `assignee admin list`.
 
 **Cause.** AWS Resource Groups Tagging API does **not** return IAM
 roles — the service is silently excluded. Assignee works around this
@@ -199,7 +199,7 @@ perform: <action>`.
 **Cause.** The operator IAM policy is out of date relative to the
 resource types in your plan.
 
-**Fix.** Run `assignee setup --profile admin` to refresh the three
+**Fix.** Run `assignee dev setup --profile admin` to refresh the three
 managed operator policies (they are versioned — setup is idempotent).
 If you use a custom operator role, widen its policy to include the
 action named in the error.
@@ -213,7 +213,7 @@ action named in the error.
 skew.
 
 **Fix.** For SSO, `aws sso login --profile <p>` then retry. For static
-keys, rotate via `assignee setup --profile admin`. For clock skew,
+keys, rotate via `assignee dev setup --profile admin`. For clock skew,
 sync your system clock.
 
 ### `STALE_SESSION_TOKEN` — expired or mismatched session token
@@ -233,7 +233,7 @@ AKID + SECRET + SESSION_TOKEN tuple does not form a valid session.
 
 **Fix (pick one):**
 
-1. **Re-run `assignee setup`** — rotates the long-lived IAM access key
+1. **Re-run `assignee dev setup`** — rotates the long-lived IAM access key
    and drops any stale `*_SESSION_TOKEN` from your `.env` (behavior
    added per the env-writer fix on 2026-05-05).
 2. **SSO session**: `aws sso login --profile <name>` then re-export
@@ -313,7 +313,7 @@ added to the supported list — verify your region is in
 
 ### Bedrock model end-of-life
 
-**Symptom.** `assignee doctor` Bedrock section shows:
+**Symptom.** `assignee admin doctor` Bedrock section shows:
 `[!] Model <id> is in LEGACY lifecycle status` with an optional
 end-of-life date.
 
@@ -328,10 +328,10 @@ that deadline to avoid a hard failure on EOL day.
 export ASSIGNEE_LLM_DEFAULT=bedrock/amazon.nova-lite-v1:0
 ```
 
-Confirm the new model is ACTIVE by re-running `assignee doctor` — the
+Confirm the new model is ACTIVE by re-running `assignee admin doctor` — the
 `Model lifecycle` sub-check should show `ok (ACTIVE)`.
 
-**Detection.** `assignee doctor` calls `bedrock:GetFoundationModel` on
+**Detection.** `assignee admin doctor` calls `bedrock:GetFoundationModel` on
 startup and surfaces the lifecycle warning proactively, before the model
 actually stops responding. If the SDK call fails (permissions, region,
 etc.) the sub-check is silently skipped — it will not surface a false
@@ -361,7 +361,7 @@ broken).
 **Cause.** The pinned MCP server binary could not be spawned. Usually
 missing `uvx` / `npx` / the process ran out of memory.
 
-**Fix.** `assignee doctor --skip-bedrock` to isolate; install the
+**Fix.** `assignee admin doctor --skip-bedrock` to isolate; install the
 missing runtime; check `~/.assignee/logs/` for the child stderr.
 
 ### `CloudFormation DescribeType failed`
@@ -429,13 +429,13 @@ for the enforcement detail.
 
 ### `Checkpoint not found` / `Checkpoint expired`
 
-**Symptom.** `assignee apply --checkpoint …` errors before any AWS
+**Symptom.** `assignee infra apply --checkpoint …` errors before any AWS
 call.
 
 **Cause.** Checkpoints have a TTL so apply can't ship a stale plan
 from last week. Expired checkpoints are rejected at load time.
 
-**Fix.** Re-run `assignee plan` to mint a fresh checkpoint, then
+**Fix.** Re-run `assignee infra plan` to mint a fresh checkpoint, then
 apply. Checkpoints live under `.assignee/checkpoint-<runId>.json`.
 
 ---
@@ -444,7 +444,7 @@ apply. Checkpoints live under `.assignee/checkpoint-<runId>.json`.
 
 ### Audit log chain broken
 
-**Symptom.** `assignee audit-verify` reports:
+**Symptom.** `assignee admin audit-verify` reports:
 `Chain broken at index <N>: <reason>` — records around that index are
 suspect.
 
@@ -487,7 +487,7 @@ a permissions issue or a full disk on `~/.assignee/audit/`.
 (`ls -la ~/.assignee/audit/`). The audit log lives in a single file at
 `~/.assignee/audit/audit.log`. The MCP server continues operating after
 an append failure, but the affected operation will not appear in
-`assignee audit-verify` output.
+`assignee admin audit-verify` output.
 
 ---
 
@@ -501,16 +501,16 @@ under `~/.assignee/backups/`:
 
 ```bash
 # Restore from the most recent backup file in ~/.assignee/backups/
-assignee restore-provisions
+assignee infra restore-provisions
 
 # Restore from a specific dated backup (e.g. ~/.assignee/backups/provisions-2026-04-01.json)
-assignee restore-provisions --from 2026-04-01
+assignee infra restore-provisions --from 2026-04-01
 ```
 
 The command uses overwrite-with-safety-copy semantics: the existing
 `~/.assignee/memory/provisions.json` is moved aside as
 `provisions.json.bak-<timestamp>` before the chosen backup file
-replaces it. After restoration, run `assignee drift` to verify the
+replaces it. After restoration, run `assignee infra drift` to verify the
 restored baseline is consistent with live state.
 
 ---
@@ -520,12 +520,12 @@ restored baseline is consistent with live state.
 - `ASSIGNEE_LOG_LEVEL=debug` — verbose JSON logs to stderr.
 - `~/.assignee/logs/cli-YYYY-MM-DD.jsonl` — persistent warn/error log,
   retained for `ASSIGNEE_LOG_RETENTION_DAYS` (default 14).
-- `assignee version --json` — compact self-describe blob (CLI version,
+- `assignee dev version --json` — compact self-describe blob (CLI version,
   Node version, platform, arch, AWS region, audit-key source) — paste
   this into any bug report to provide full environment context.
-- `assignee doctor --json` — structured snapshot suitable for bug
+- `assignee admin doctor --json` — structured snapshot suitable for bug
   reports.
-- `assignee doctor --short` — resolved account/region/profile before any
+- `assignee admin doctor --short` — resolved account/region/profile before any
   mutation.
 
 If the failure is not covered above, file an issue at

@@ -112,7 +112,7 @@ export async function runDrift(
       const pathCheck = validateOutputPath(opts.outputFile);
       if (!pathCheck.ok) {
         process.stderr.write(
-          `assignee drift: --output-file rejected: ${pathCheck.reason}\n`,
+          `assignee infra drift: --output-file rejected: ${pathCheck.reason}\n`,
         );
         process.exitCode = ProcessExitCode.GENERIC_ERROR;
         return;

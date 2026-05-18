@@ -1,5 +1,5 @@
 /**
- * Bulk-destroy orchestrator for `assignee destroy --all`.
+ * Bulk-destroy orchestrator for `assignee infra destroy --all`.
  *
  * Pipeline:
  *   1. Enumerate managed resources via fetchManagedResources (RGTA + IAM roles + provision log).
@@ -316,9 +316,9 @@ function renderPlan(
 
   const header = isTTY
     ? chalk.bold.red("╔══════════════════════════════════════════╗\n") +
-      chalk.bold.red("║       assignee destroy --all  DRY-RUN   ║\n") +
+      chalk.bold.red("║       assignee infra destroy --all  DRY-RUN   ║\n") +
       chalk.bold.red("╚══════════════════════════════════════════╝")
-    : "=== assignee destroy --all  DRY-RUN ===";
+    : "=== assignee infra destroy --all  DRY-RUN ===";
 
   process.stdout.write(header + "\n\n");
 
@@ -822,7 +822,7 @@ export async function runBulkDestroyAction(
     if (excludedResources.length > 0) {
       process.stdout.write(
         `\n${excludedResources.length} resource${excludedResources.length !== 1 ? "s were" : " was"} excluded (self-lockout protection). ` +
-          `Run \`assignee list\` to verify.\n`,
+          `Run \`assignee admin list\` to verify.\n`,
       );
     }
   }

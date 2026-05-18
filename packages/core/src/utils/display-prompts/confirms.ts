@@ -12,9 +12,9 @@ import { UserMessage } from "../../config/constants/ui.js";
 
 /**
  * Unified plan-approval confirm used on BOTH flows:
- *   - `assignee plan` → "Apply now? ..." (plan orchestrator, before re-entering
+ *   - `assignee infra plan` → "Apply now? ..." (plan orchestrator, before re-entering
  *      graph in APPLY mode with checkpointResumed=true)
- *   - `assignee apply` → "Apply now? ..." (human-approval node, single prompt)
+ *   - `assignee infra apply` → "Apply now? ..." (human-approval node, single prompt)
  *
  * Story 50-2: collapsed `renderApplyNowConfirm` and the older
  * `renderHitlConfirm` into a single implementation. The prior

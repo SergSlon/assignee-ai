@@ -1,5 +1,5 @@
 /**
- * `assignee apply` command — two-phase HITL invoke pattern.
+ * `assignee infra apply` command — two-phase HITL invoke pattern.
  *
  * Phase 1: graph runs intent_parser → schema_fetcher → option_elicitor →
  *          compound_dispatcher → plan_generator → preflight_guard → human_approval,
@@ -16,7 +16,7 @@
  * Epic 92 Wave 3.b.1 (C-24 / D-02 / D-13): the help surface was
  * collapsed into a SINGLE `addHelpText("after", ...)` block and the
  * Examples section now shows apply-specific invocations (previously
- * it contained `assignee plan "..."` entries leaked from the plan
+ * it contained `assignee infra plan "..."` entries leaked from the plan
  * command). The flag surface keeps the existing `--wizard` (opt-in
  * interactive wizard, wires to `noWizard=false` in phase1-planner)
  * and `--quick` (skip defaulted prompts) — both are preserved
@@ -127,7 +127,7 @@ function synthesiseFailureError(result: ApplyRunResult): AssigneeError {
         ? failure.practiceIds.join(", ")
         : "an unspecified blocking finding";
     return new AssigneeError(
-      `Apply blocked by best-practice findings: ${idsSummary}.\n→ Run \`assignee plan --wizard\` to remediate interactively, or re-phrase your intent to avoid the violation.\n→ See docs/best-practices.md for rule details.`,
+      `Apply blocked by best-practice findings: ${idsSummary}.\n→ Run \`assignee infra plan --wizard\` to remediate interactively, or re-phrase your intent to avoid the violation.\n→ See docs/best-practices.md for rule details.`,
       ErrorCode.BP_BLOCKED,
       { alreadyRendered: true },
     );
@@ -254,11 +254,11 @@ export const applyCommand = new Command(CommandName.APPLY)
   )
   // Epic 92 Wave 3.b.1 (C-24 / D-02): ONE consolidated addHelpText
   // block with APPLY-specific examples. Before this fix the Examples
-  // block leaked `assignee plan "..."` invocations under
-  // `assignee apply --help`.
+  // block leaked `assignee infra plan "..."` invocations under
+  // `assignee infra apply --help`.
   .addHelpText(
     "after",
-    `\n${SUPPORTED_TYPES_HINT}\n\nExamples:\n  assignee apply "${EXAMPLE_S3_INTENT}"\n  assignee apply --yes "Create an S3 bucket"\n  assignee apply --checkpoint .assignee/checkpoint-abc.json\n  assignee apply --wizard "Create an EC2 instance"\n  assignee apply --set size=t3.medium "Create an EC2 instance"\n  assignee apply --json --yes "Create an S3 bucket"`,
+    `\n${SUPPORTED_TYPES_HINT}\n\nExamples:\n  assignee infra apply "${EXAMPLE_S3_INTENT}"\n  assignee infra apply --yes "Create an S3 bucket"\n  assignee infra apply --checkpoint .assignee/checkpoint-abc.json\n  assignee infra apply --wizard "Create an EC2 instance"\n  assignee infra apply --set size=t3.medium "Create an EC2 instance"\n  assignee infra apply --json --yes "Create an S3 bucket"`,
   )
   .action(async (intent: string | undefined, rawOpts: ApplyOptsWithJson) => {
     // W3-04 (Epic 100 Round 5): validate --target-account early.
@@ -301,7 +301,7 @@ export const applyCommand = new Command(CommandName.APPLY)
     if (!jsonMode) {
       const introCtx = await resolveIntroContext();
       process.stderr.write(
-        `assignee apply  [${formatIntroContext(introCtx)}]\n`,
+        `assignee infra apply  [${formatIntroContext(introCtx)}]\n`,
       );
     }
 

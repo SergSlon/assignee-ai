@@ -1,5 +1,5 @@
 /**
- * Tests for `assignee apply` command — flag parsing.
+ * Tests for `assignee infra apply` command — flag parsing.
  * Story 11.1: Verifies --no-wizard flag is parsed and passed to graph state.
  * Story 11.3: Verifies --checkpoint flag is registered and parsed.
  * Epic 92 Wave 3.b.1: Help-text consolidation (C-24 / D-02) and flag
@@ -151,7 +151,7 @@ describe("applyCommand — help text (Epic 92 C-24 / D-02)", () => {
     // Apply-specific invocations must all be present (these only
     // appear in the per-command block — the global block uses plan
     // examples).
-    expect(helpText).toContain('assignee apply "');
+    expect(helpText).toContain('assignee infra apply "');
     expect(helpText).toContain("--checkpoint");
     expect(helpText).toContain("--wizard");
     expect(helpText).toContain("--set");

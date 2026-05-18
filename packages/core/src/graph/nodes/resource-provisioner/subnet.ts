@@ -17,7 +17,7 @@
  *      MapPublicIpOnLaunch === false — the instance will not get a public
  *      IP automatically, which may cause SSH to fail.
  *   4. On credential error: surface actionable message referencing
- *      ASSIGNEE_READER_* env vars and `assignee setup`.
+ *      ASSIGNEE_READER_* env vars and `assignee dev setup`.
  *
  * Per feedback_lazy_credential_resolution_in_mcp: credentials are resolved
  * lazily via tryAssigneeCredentials("reader") with try/catch — NOT
@@ -104,7 +104,7 @@ export async function ensureSubnet(
     process.stderr.write(
       "[33m⚠️  Reader credentials not configured — SubnetId placeholder cleared. " +
         "The instance will launch in the default VPC subnet. " +
-        "Set ASSIGNEE_READER_ACCESS_KEY_ID / ASSIGNEE_READER_SECRET_ACCESS_KEY or run `assignee setup` " +
+        "Set ASSIGNEE_READER_ACCESS_KEY_ID / ASSIGNEE_READER_SECRET_ACCESS_KEY or run `assignee dev setup` " +
         "to enable explicit subnet selection.[0m\n",
     );
     // LOW-1: set to undefined rather than delete — the key remains present
@@ -133,7 +133,7 @@ export async function ensureSubnet(
         ok: false,
         errorMessage:
           "No default VPC found in your account. " +
-          "Create a VPC first via `assignee apply 'Create a VPC'`, then re-run this command.",
+          "Create a VPC first via `assignee infra apply 'Create a VPC'`, then re-run this command.",
       };
     }
 
@@ -145,7 +145,7 @@ export async function ensureSubnet(
         errorMessage:
           `Default VPC (${defaultVpc.VpcId}) is in state "${defaultVpc.State ?? "unknown"}" — ` +
           `only "available" VPCs can be used for subnet resolution. ` +
-          "Wait for the VPC state to become available, or run `assignee apply 'Create a VPC'` to create a new one.",
+          "Wait for the VPC state to become available, or run `assignee infra apply 'Create a VPC'` to create a new one.",
       };
     }
 
@@ -168,7 +168,7 @@ export async function ensureSubnet(
         ok: false,
         errorMessage:
           `Default VPC (${vpcId}) has no subnets in "available" state — ` +
-          "wait for AWS provisioning to complete or run `assignee apply 'Create a VPC'`.",
+          "wait for AWS provisioning to complete or run `assignee infra apply 'Create a VPC'`.",
       };
     }
 

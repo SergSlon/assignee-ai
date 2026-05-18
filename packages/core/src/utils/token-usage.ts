@@ -10,7 +10,7 @@
  * (intent_parser → classify, plan_generator → JSON, advice_generator →
  * hints, etc.). Without instrumentation we cannot answer:
  *   - which node is the token hog?
- *   - what does ONE `assignee plan` actually cost?
+ *   - what does ONE `assignee infra plan` actually cost?
  *   - is the per-command cost stable across resource types or does
  *     compound-VPC blow up?
  * These questions gate the Phase 3 SaaS unit economics.

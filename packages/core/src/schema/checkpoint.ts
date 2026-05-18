@@ -33,7 +33,7 @@ const CheckpointResourceSpecSchema = z.object({
 /**
  * Minimal outcome record for a resource the compound-provisioning
  * loop has already fully provisioned. When the user re-runs
- * `assignee apply` against the same checkpoint, the plan-generator
+ * `assignee infra apply` against the same checkpoint, the plan-generator
  * skips over every resource whose ARN shows up here and resumes from
  * `currentResourceIndex`. We intentionally persist only ARN + type
  * (not the full `ResourceResult` shape) so the on-disk checkpoint

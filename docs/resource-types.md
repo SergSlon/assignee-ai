@@ -159,7 +159,7 @@ Provisioning order (6 groups):
 5. Private Route
 6. Subnet-RT Associations (parallel)
 
-Cost: dominated by the NAT Gateway hourly + data-processing fee. Run `assignee plan --json "..."  | jq .estimatedMonthlyCost` for the live monthly estimate in your region.
+Cost: dominated by the NAT Gateway hourly + data-processing fee. Run `assignee infra plan --json "..."  | jq .estimatedMonthlyCost` for the live monthly estimate in your region.
 
 ### WebSocket API (12 resources)
 
@@ -282,7 +282,7 @@ Provisioning order (4 groups):
 
 **Why private-only?** Public subnets + lax SGs are the canonical "open NFS to the world" misconfiguration. If you need outbound internet from the EFS-mounting workload, combine with the full `vpc-networking` pattern (`"create a vpc with EFS"` — matches vpc-networking first and EFS is added separately).
 
-Cost: the networking layer (VPC + private subnets + route tables) is free-tier. EFS storage is billed per GB-month — run `assignee optimize` for the live rate from the Pricing MCP in your region.
+Cost: the networking layer (VPC + private subnets + route tables) is free-tier. EFS storage is billed per GB-month — run `assignee infra optimize` for the live rate from the Pricing MCP in your region.
 
 ### Static Website
 
@@ -323,7 +323,7 @@ Provisioning order (4 groups):
 3. IGW Attachment + Public Route Table (parallel)
 4. Public Route → Subnet-RT Associations (parallel)
 
-Cost: $0 networking — IGW and routes are free. Run `assignee optimize` or `assignee plan --json "..."` to confirm against current AWS pricing.
+Cost: $0 networking — IGW and routes are free. Run `assignee infra optimize` or `assignee infra plan --json "..."` to confirm against current AWS pricing.
 
 ### SQS Queue with Dead-Letter Queue (2 resources)
 
@@ -375,7 +375,7 @@ AWS sends a confirmation email to the subscribed address after the Subscription 
 
 **Trigger keywords**: "create a lambda", "create a function", "deploy a lambda", "lambda function", "node lambda", "python lambda", "serverless function", "background worker"
 
-Minimal Lambda + auto-created IAM execution role. Closes the gap where `assignee plan "Create a Lambda"` previously required the user to provide a `--set Role=arn:…` workaround because Lambda's `Role` field is mandatory. With this pattern, plain "create a lambda" intents produce a 2-resource compound: the IAM role is created first, then the Lambda function with the role ARN injected via `markerGetAtt`.
+Minimal Lambda + auto-created IAM execution role. Closes the gap where `assignee infra plan "Create a Lambda"` previously required the user to provide a `--set Role=arn:…` workaround because Lambda's `Role` field is mandatory. With this pattern, plain "create a lambda" intents produce a 2-resource compound: the IAM role is created first, then the Lambda function with the role ARN injected via `markerGetAtt`.
 
 | Resource              | Type                    | Notes                                             |
 | --------------------- | ----------------------- | ------------------------------------------------- |
@@ -395,10 +395,10 @@ The auto-named role follows the pattern `assignee-iam-execution-role-<runIdShort
 
 ```bash
 # Single resource
-assignee plan "create an S3 bucket named logs-prod"
+assignee infra plan "create an S3 bucket named logs-prod"
 
 # Compound pattern
-assignee plan "create a VPC with public and private subnets"
+assignee infra plan "create a VPC with public and private subnets"
 
 # The CLI auto-detects whether your intent matches a compound pattern
 # and provisions all resources in dependency order

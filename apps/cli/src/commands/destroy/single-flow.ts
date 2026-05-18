@@ -54,7 +54,7 @@ export async function singleDestroyAction(
     taggingClient = createTaggingClient(awsConfig);
   } catch {
     throw new ConfigurationError(
-      "AWS credentials are not configured. Set ASSIGNEE_OPERATOR_ACCESS_KEY_ID and ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY environment variables, or run `assignee setup`.",
+      "AWS credentials are not configured. Set ASSIGNEE_OPERATOR_ACCESS_KEY_ID and ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY environment variables, or run `assignee dev setup`.",
     );
   }
 
@@ -80,7 +80,7 @@ export async function singleDestroyAction(
     const provRecord = await findProvisionRecord(resource);
     if (!provRecord) {
       throw new AssigneeError(
-        `No managed resource found matching "${resource}". Run 'assignee list' to see managed resources.`,
+        `No managed resource found matching "${resource}". Run 'assignee admin list' to see managed resources.`,
         ErrorCode.DESTROY_TARGET_NOT_FOUND,
       );
     }
@@ -88,7 +88,7 @@ export async function singleDestroyAction(
       // Non-taggable construct: identifier IS the CCAPI primaryIdentifier.
       if (!isNonTaggableConstruct(provRecord.resourceType)) {
         throw new AssigneeError(
-          `No managed resource found matching "${resource}". Run 'assignee list' to see managed resources.`,
+          `No managed resource found matching "${resource}". Run 'assignee admin list' to see managed resources.`,
           ErrorCode.DESTROY_TARGET_NOT_FOUND,
         );
       }
@@ -187,7 +187,7 @@ export async function singleDestroyAction(
   if (!result.success) {
     throw new AssigneeError(
       result.error ??
-        `Destroy call returned no error message — the resource may already be gone or AWS accepted the call without confirming. Run \`assignee list\` to verify, and check \`~/.assignee/logs/\` for the full structured trace.`,
+        `Destroy call returned no error message — the resource may already be gone or AWS accepted the call without confirming. Run \`assignee admin list\` to verify, and check \`~/.assignee/logs/\` for the full structured trace.`,
       ErrorCode.DESTROY_ERROR,
     );
   }

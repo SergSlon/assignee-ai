@@ -2,7 +2,7 @@
  * Doctor check #5 — project config file presence + YAML validity.
  *
  * The file is optional (the CLI works without it), but if present we
- * surface its path. Schema validation lives in `assignee init`; doctor
+ * surface its path. Schema validation lives in `assignee dev init`; doctor
  * only confirms the file parses as YAML.
  */
 

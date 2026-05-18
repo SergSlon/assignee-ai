@@ -53,7 +53,7 @@ function isParseableDollarAmount(s: string): boolean {
 
 /**
  * Unifies the per-month cost label so the destroy-savings line matches the
- * `$X.XX/mo` shape that `assignee list` shows in `pricing-enricher.ts`.
+ * `$X.XX/mo` shape that `assignee admin list` shows in `pricing-enricher.ts`.
  *
  * Inputs (any of these) → `$X.XX/mo`:
  *   - `$1.0000/key-month` (mcp-parser.ts emits 4-decimal `key-month` for
@@ -91,7 +91,7 @@ function normalizeMonthlyCostLabel(s: string): string {
 export function formatSavingsDisplay(actualMonthlyCost: string): string {
   // Normalize KMS-style `$1.0000/key-month` and other per-month variants
   // to the canonical `$1.00/mo` so the destroy savings line matches the
-  // `assignee list` cost column. Non-monthly units (e.g. `/GB-Mo`, `/hr`)
+  // `assignee admin list` cost column. Non-monthly units (e.g. `/GB-Mo`, `/hr`)
   // pass through unchanged. Sentinel buckets (Free / No-charge) also
   // pass through because the regex demands a leading `$` + digit.
   const unified = normalizeMonthlyCostLabel(actualMonthlyCost);
@@ -154,12 +154,12 @@ export async function fetchBillingData(
 
 /**
  * Gets cost savings estimate for a specific resource.
- * Used by `assignee destroy` to show savings when removing a resource.
+ * Used by `assignee infra destroy` to show savings when removing a resource.
  *
  * Epic 92 Wave 4 (e92.4.a) — sanitized output:
  *   - parseable dollar amount (`$0.02/month`) → `"$0.02/mo saved"`
  *     (polish 2026-05-09: per-month variants are normalised to the
- *     canonical `$X.XX/mo` shape rendered by `assignee list`)
+ *     canonical `$X.XX/mo` shape rendered by `assignee admin list`)
  *   - `CostEstimateLabel.FREE` / `CostEstimateLabel.NO_CHARGE` →
  *     `"Free, $0.00 savings"` (closes B-21 + D-18)
  *   - anything else (incl. `CostEstimateLabel.NA`,
@@ -172,7 +172,7 @@ export async function fetchBillingData(
  * provision-log fallback both return nothing AND a `resourceType` is
  * known, fall back to the per-resource pricing decomposer registry
  * (the same path that powers the `$1.00/mo` rendering in
- * `assignee list` for a fresh KMS key). The destroy path used to ship
+ * `assignee admin list` for a fresh KMS key). The destroy path used to ship
  * `UNKNOWN_FALLBACK` as the resourceType, which fed the cost-explorer
  * lookup a service it could never resolve, and then short-circuited
  * straight to "No cost savings" — even for KMS keys where the list
@@ -244,7 +244,7 @@ export async function getCostSavingsEstimate(
     // ── Defect 3: decomposer-registry fallback ──────────────────────
     // Cost-explorer + provision-log both empty. If we know the
     // resourceType, ask the same per-resource pricing decomposer that
-    // `assignee list` uses to compute $X.XX/mo from rate-card data.
+    // `assignee admin list` uses to compute $X.XX/mo from rate-card data.
     // Skip when resourceType is unknown — we'd just spin up an MCP
     // client to query a service we can't name.
     if (resourceType && resourceType !== UNKNOWN_FALLBACK) {
@@ -263,14 +263,14 @@ export async function getCostSavingsEstimate(
 
 /**
  * Defect 3 helper: invoke the canonical per-resource pricing enricher
- * (the one `assignee list` uses) for a single resource and extract the
+ * (the one `assignee admin list` uses) for a single resource and extract the
  * resulting cost label. Returns `undefined` on any failure (no
  * decomposer, MCP unavailable, registry mismatch) so the caller can
  * fall through to the "No cost savings" sentinel.
  *
  * Reuses `createListPricingEnricher` from `@assignee/core/list-resources`
  * — the SAME function path that powers the `$1.00/mo` rendering for KMS
- * keys in `assignee list`. Calling it from the destroy path keeps the
+ * keys in `assignee admin list`. Calling it from the destroy path keeps the
  * two surfaces in sync (no two-source-of-truth drift).
  */
 async function tryDecomposerCostLabel(

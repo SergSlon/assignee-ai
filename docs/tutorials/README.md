@@ -28,7 +28,7 @@ Heuristics:
 
 - "How to do X for the first time, explained step-by-step" → tutorial.
 - "How to override a BP rule" (assumes familiarity) → how-to.
-- "What every flag of `assignee plan` means" (lookup, no narrative) → reference.
+- "What every flag of `assignee infra plan` means" (lookup, no narrative) → reference.
 - "Why assignee uses a run-ledger instead of a state file" (conceptual) → explanation.
 
 ---

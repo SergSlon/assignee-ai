@@ -102,7 +102,7 @@ function renderTTYTable(resources: ManagedResource[]): void {
       ? `: ${r.compensatingPolicyError}`
       : "";
     const warning = chalk.yellow(
-      `  ⚠ Compensating bucket policy missing${reason} — re-run \`assignee setup\` to retry.`,
+      `  ⚠ Compensating bucket policy missing${reason} — re-run \`assignee dev setup\` to retry.`,
     );
     return [main, warning];
   });
@@ -137,7 +137,7 @@ function renderPlainTable(resources: ManagedResource[]): void {
       : "";
     return [
       main,
-      `  WARNING: Compensating bucket policy missing${reason} — re-run \`assignee setup\` to retry.`,
+      `  WARNING: Compensating bucket policy missing${reason} — re-run \`assignee dev setup\` to retry.`,
     ];
   });
   process.stdout.write([header, ...rows].join("\n") + "\n");
@@ -152,12 +152,12 @@ export function renderResourceTable(resources: ManagedResource[]): void {
 }
 
 /**
- * Renders the empty-list message with a hint to run `assignee apply`.
+ * Renders the empty-list message with a hint to run `assignee infra apply`.
  * @see Story 18.4, AC #5
  */
 export function renderEmptyList(): void {
   const message =
-    "No resources managed by assignee.ai found. Run `assignee apply` to provision your first resource.";
+    "No resources managed by assignee.ai found. Run `assignee infra apply` to provision your first resource.";
   if (process.stdout.isTTY) {
     process.stdout.write(chalk.yellow(message) + "\n");
   } else {

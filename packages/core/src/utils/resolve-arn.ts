@@ -8,7 +8,7 @@
  * FunctionName, TableName, etc.). Without this resolver, `assignee
  * apply`'s success line displayed the bare name in the `ARN:` field —
  * which is unusable for scripting because users can't pipe it back
- * into `assignee destroy <arn>`.
+ * into `assignee infra destroy <arn>`.
  *
  * Closes Phase 2 smoke test BUG-5.
  *
@@ -23,7 +23,7 @@
  * `arn:aws:iam:::role/foo` (truthy + passes isArn() = bypasses every
  * downstream `?? state.resourceArn` fallback). Wave 10 P1-3 wrapped
  * the STS call in a 5-second timeout so a regional outage cannot stall
- * `assignee apply`'s display step indefinitely.
+ * `assignee infra apply`'s display step indefinitely.
  */
 
 import { STSClient, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
@@ -266,7 +266,7 @@ export async function resolveResourceArn(args: {
   //   - Events::EventBus→ bus name (D-20)
   // which surfaced as the bare primary identifier in the apply success
   // line and got stamped into the provision record as the "ARN" — so
-  // the user couldn't pipe that value back into `assignee destroy`
+  // the user couldn't pipe that value back into `assignee infra destroy`
   // (nor could billing / security posture resolve it).
   //
   // Synthesize the canonical ARN locally for these types when the

@@ -7,7 +7,9 @@ canonical: true
 
 # Commands Reference
 
-All commands follow the pattern: `assignee <command> [args] [options]`
+All commands follow the pattern: `assignee <group> <command> [args] [options]`
+
+where `<group>` is one of `infra`, `admin`, or `dev`. For example: `assignee infra plan "..."`, `assignee admin status`, `assignee dev init`.
 
 Global options: `--version`, `--help`, `--verbose`
 
@@ -17,36 +19,36 @@ Jump to a command by name. The CLI's full command surface is registered
 in [`apps/cli/src/index.ts`](../apps/cli/src/index.ts); the rows below
 are the user-facing subset.
 
-| Command                                     | Purpose                                                                  |
-| ------------------------------------------- | ------------------------------------------------------------------------ |
-| [`plan`](#plan)                             | Generate an infrastructure plan from a natural-language intent           |
-| [`apply`](#apply)                           | Provision a previously generated plan via CloudControl                   |
-| [`list`](#list)                             | List all resources tagged `managed-by=assignee-ai`                       |
-| [`status`](#status)                         | Aggregated metrics + BP coverage dashboard                               |
-| [`destroy`](#destroy)                       | Delete a single managed resource (typed-confirmation gate)               |
-| [`drift`](#drift)                           | Compare desired vs live state for managed resources                      |
-| [`reconcile`](#reconcile)                   | Reconcile drifted resources back to desired state                        |
-| [`optimize`](#optimize)                     | Cost-rightsizing recommendations from the Pricing MCP                    |
-| [`init`](#init)                             | Initialize project or global configuration                               |
-| [`setup`](#setup)                           | Create the three IAM users and policies for least-privilege provisioning |
-| [`doctor`](#doctor)                         | Non-destructive end-to-end health check                                  |
-| [`completions`](#completions)               | Output shell completion scripts                                          |
-| [`audit-verify`](#audit-verify)             | Verify the integrity of the on-disk audit log chain                      |
-| [`restore-provisions`](#restore-provisions) | Restore the provision registry from a backup snapshot                    |
-| [`update`](#update)                         | Re-sync a deployed static website to S3 and invalidate CloudFront        |
-| [`version`](#version)                       | Print the CLI's version string                                           |
-| [`describe`](#describe)                     | Self-describe blob suitable for bug reports                              |
+| Full command path                                 | Purpose                                                                  |
+| ------------------------------------------------- | ------------------------------------------------------------------------ |
+| [`infra plan`](#plan)                             | Generate an infrastructure plan from a natural-language intent           |
+| [`infra apply`](#apply)                           | Provision a previously generated plan via CloudControl                   |
+| [`admin list`](#list)                             | List all resources tagged `managed-by=assignee-ai`                       |
+| [`admin status`](#status)                         | Aggregated metrics + BP coverage dashboard                               |
+| [`infra destroy`](#destroy)                       | Delete a single managed resource (typed-confirmation gate)               |
+| [`infra drift`](#drift)                           | Compare desired vs live state for managed resources                      |
+| [`infra reconcile`](#reconcile)                   | Reconcile drifted resources back to desired state                        |
+| [`infra optimize`](#optimize)                     | Cost-rightsizing recommendations from the Pricing MCP                    |
+| [`dev init`](#init)                               | Initialize project or global configuration                               |
+| [`dev setup`](#setup)                             | Create the three IAM users and policies for least-privilege provisioning |
+| [`admin doctor`](#doctor)                         | Non-destructive end-to-end health check                                  |
+| [`dev completions`](#completions)                 | Output shell completion scripts                                          |
+| [`admin audit-verify`](#audit-verify)             | Verify the integrity of the on-disk audit log chain                      |
+| [`infra restore-provisions`](#restore-provisions) | Restore the provision registry from a backup snapshot                    |
+| [`dev update`](#update)                           | Re-sync a deployed static website to S3 and invalidate CloudFront        |
+| [`dev version`](#version)                         | Print the CLI's version string                                           |
+| [`admin describe`](#describe)                     | Self-describe blob suitable for bug reports                              |
 
-The `--verbose` flag is registered on the root program and must appear **before** the subcommand name (the same rule as `--version` and `--help`):
+The `--verbose` flag is registered on the root program and must appear **before** the group name (the same rule as `--version` and `--help`):
 
 ```bash
-assignee --verbose plan "Create an SSM parameter named test"
-assignee --verbose apply --yes "Create an S3 bucket named audit-logs"
+assignee --verbose infra plan "Create an SSM parameter named test"
+assignee --verbose infra apply --yes "Create an S3 bucket named audit-logs"
 ```
 
 When set, structured JSON diagnostic logs are written to stderr. Without it, info-level logs are suppressed so they never pollute terminal output (`warn`/`error` events are still persisted to `~/.assignee/logs/cli-YYYY-MM-DD.jsonl` regardless). You can also enable verbose output via `ASSIGNEE_LOG_LEVEL=debug` or `ASSIGNEE_VERBOSITY=verbose` environment variables — the CLI flag has the highest priority. See [configuration.md](./configuration.md#--verbose-flag) for the full precedence rules.
 
-> **Note:** `assignee drift` has a local `--detailed` option that controls drift-table verbosity (showing all fields including matching ones). To get JSON diagnostic logs during a drift run, pass the global flag first: `assignee --verbose drift`. Both can be combined: `assignee --verbose drift --detailed`.
+> **Note:** `assignee infra drift` has a local `--detailed` option that controls drift-table verbosity (showing all fields including matching ones). To get JSON diagnostic logs during a drift run, pass the global flag first: `assignee --verbose infra drift`. Both can be combined: `assignee --verbose infra drift --detailed`.
 
 ## Exit Codes
 
@@ -54,7 +56,7 @@ When set, structured JSON diagnostic logs are written to stderr. Without it, inf
 | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `0`   | Success                                                                                                                                                                                                                                      |
 | `1`   | General error¹                                                                                                                                                                                                                               |
-| `2`   | `assignee doctor` returned warnings only (no hard failures, see `--short`)                                                                                                                                                                   |
+| `2`   | `assignee admin doctor` returned warnings only (no hard failures, see `--short`)                                                                                                                                                             |
 | `10`  | Policy / safety abort (typed-confirm mismatch, state guard, preflight rejection, BP block, etc.) — includes `BP_BLOCKED` envelope when a blocking best-practice finding blocks the apply path (see `packages/core/src/constants/errors.ts`)  |
 | `11`  | MCP server startup failure                                                                                                                                                                                                                   |
 | `12`  | Not implemented — `--target-account` was passed but cross-account provisioning is not yet available. Scripts can detect this code to fall back gracefully without treating it as a general error.                                            |
@@ -62,7 +64,7 @@ When set, structured JSON diagnostic logs are written to stderr. Without it, inf
 | `130` | Interrupted via SIGINT (Ctrl-C)                                                                                                                                                                                                              |
 | `143` | Terminated via SIGTERM                                                                                                                                                                                                                       |
 
-¹ Plan failure, provision failure, or — from `assignee drift` — drift
+¹ Plan failure, provision failure, or — from `assignee infra drift` — drift
 detected. The drift case is the **designed outcome** of the `drift`
 command, not a bug: exit 1 simply signals that at least one managed
 resource diverged from state. Scripts branching on exit codes should
@@ -83,7 +85,7 @@ the contract is stable.
 Generate an infrastructure plan from natural language intent.
 
 ```
-assignee plan [intent] [options]
+assignee infra plan [intent] [options]
 ```
 
 **Arguments:**
@@ -119,16 +121,16 @@ assignee plan [intent] [options]
 **Examples:**
 
 ```bash
-assignee plan "Create an S3 bucket named my-bucket"
-assignee plan "Create an EC2 t3.micro instance"
-assignee plan "Create a Lambda function for image processing"
-assignee plan --no-apply "Create a VPC with public and private subnets"
-assignee plan -o json "Create a DynamoDB table named users" | jq .
-assignee plan --set BucketName=my-logs "Create an S3 bucket"
+assignee infra plan "Create an S3 bucket named my-bucket"
+assignee infra plan "Create an EC2 t3.micro instance"
+assignee infra plan "Create a Lambda function for image processing"
+assignee infra plan --no-apply "Create a VPC with public and private subnets"
+assignee infra plan -o json "Create a DynamoDB table named users" | jq .
+assignee infra plan --set BucketName=my-logs "Create an S3 bucket"
 # Compound patterns — auto-detected from the intent
-assignee plan "Create an EFS file system for shared Lambda storage"
-assignee plan "Create a scheduled lambda that runs every 5 minutes"
-assignee plan --set ScheduleExpression="cron(0 12 * * ? *)" "Create a nightly cleanup lambda"
+assignee infra plan "Create an EFS file system for shared Lambda storage"
+assignee infra plan "Create a scheduled lambda that runs every 5 minutes"
+assignee infra plan --set ScheduleExpression="cron(0 12 * * ? *)" "Create a nightly cleanup lambda"
 ```
 
 ### apply
@@ -136,7 +138,7 @@ assignee plan --set ScheduleExpression="cron(0 12 * * ? *)" "Create a nightly cl
 Execute an infrastructure plan -- provisions real AWS resources.
 
 ```
-assignee apply [intent] [options]
+assignee infra apply [intent] [options]
 ```
 
 **Arguments:**
@@ -169,12 +171,12 @@ assignee apply [intent] [options]
 **Examples:**
 
 ```bash
-assignee apply "Create an S3 bucket named my-bucket"
-assignee apply --checkpoint .assignee/checkpoint-abc123.json
-assignee apply --yes "Create an S3 bucket named logs-prod"
-assignee apply --wizard "Create an EC2 t3.micro instance"
-assignee apply --set InstanceType=t3.small "Create an EC2 instance"
-assignee apply  # auto-detects latest checkpoint
+assignee infra apply "Create an S3 bucket named my-bucket"
+assignee infra apply --checkpoint .assignee/checkpoint-abc123.json
+assignee infra apply --yes "Create an S3 bucket named logs-prod"
+assignee infra apply --wizard "Create an EC2 t3.micro instance"
+assignee infra apply --set InstanceType=t3.small "Create an EC2 instance"
+assignee infra apply  # auto-detects latest checkpoint
 ```
 
 ---
@@ -186,7 +188,7 @@ assignee apply  # auto-detects latest checkpoint
 List all resources managed by assignee.ai.
 
 ```
-assignee list [options]
+assignee admin list [options]
 ```
 
 **Options:**
@@ -208,11 +210,11 @@ When `--total-cost` is set, the command sums the parseable monthly costs into a 
 **Examples:**
 
 ```bash
-assignee list
-assignee list --json
-assignee list --region us-west-2
-assignee list --total-cost
-assignee list --json | jq '.[].ResourceARN'
+assignee admin list
+assignee admin list --json
+assignee admin list --region us-west-2
+assignee admin list --total-cost
+assignee admin list --json | jq '.[].ResourceARN'
 ```
 
 ### status
@@ -220,7 +222,7 @@ assignee list --json | jq '.[].ResourceARN'
 Show summary of managed infrastructure with aggregated metrics.
 
 ```
-assignee status [options]
+assignee admin status [options]
 ```
 
 **Options:**
@@ -244,13 +246,13 @@ When `--gaps-only` is set alongside `--bp-coverage`, the full dashboard is repla
 **Examples:**
 
 ```bash
-assignee status
-assignee status --json
-assignee status --region us-east-1
-assignee status --bp-coverage
-assignee status --bp-coverage --json
-assignee status --bp-coverage --gaps-only          # CI gate: fails if any type has 0 rules
-assignee status --bp-coverage --gaps-only --json   # machine-readable gap list
+assignee admin status
+assignee admin status --json
+assignee admin status --region us-east-1
+assignee admin status --bp-coverage
+assignee admin status --bp-coverage --json
+assignee admin status --bp-coverage --gaps-only          # CI gate: fails if any type has 0 rules
+assignee admin status --bp-coverage --gaps-only --json   # machine-readable gap list
 ```
 
 ### destroy
@@ -258,7 +260,7 @@ assignee status --bp-coverage --gaps-only --json   # machine-readable gap list
 Safely destroy a single managed AWS resource.
 
 ```
-assignee destroy <resource> [options]
+assignee infra destroy <resource> [options]
 ```
 
 **Arguments:**
@@ -283,14 +285,14 @@ assignee destroy <resource> [options]
 
 - Resolves the resource via the Resource Groups Tagging API, displays resource details (type, ARN, region, estimated cost savings), requires typing the identifier for confirmation (strict typed-name confirmation, not Y/n), deletes via CloudControl API and polls for completion.
 - Uses SDK fallback for types that CloudControl cannot model (see [resource-types.md](./resource-types.md#ccapi-fallback-types) for the current redirect list).
-- Bulk destroy (`--all` / `--include-iam`) is no longer supported. Delete resources one at a time, or pipe `assignee list --json` through `jq` + a `destroy` loop for scripted sweeps.
+- Bulk destroy (`--all` / `--include-iam`) is no longer supported. Delete resources one at a time, or pipe `assignee admin list --json` through `jq` + a `destroy` loop for scripted sweeps.
 
 **Examples:**
 
 ```bash
-assignee destroy arn:aws:s3:::my-bucket
-assignee destroy my-bucket
-assignee destroy --yes arn:aws:lambda:us-east-1:123456789012:function:my-fn
+assignee infra destroy arn:aws:s3:::my-bucket
+assignee infra destroy my-bucket
+assignee infra destroy --yes arn:aws:lambda:us-east-1:123456789012:function:my-fn
 ```
 
 ### update
@@ -298,7 +300,7 @@ assignee destroy --yes arn:aws:lambda:us-east-1:123456789012:function:my-fn
 Refresh a deployed static-website: upload new files to S3 and invalidate CloudFront.
 
 ```
-assignee update <target> [options]
+assignee dev update <target> [options]
 ```
 
 **Arguments:**
@@ -326,16 +328,16 @@ Replaces the manual `aws s3 sync && aws cloudfront create-invalidation` two-step
 
 **Prerequisites:**
 
-Operator IAM policy must include: `s3:PutObject`, `s3:ListBucket`, `cloudfront:CreateInvalidation`, `cloudfront:ListDistributions`; plus `s3:DeleteObject` when `--delete` is used; plus `cloudfront:GetInvalidation` when `--wait` is used. Run `assignee setup` to provision the operator role.
+Operator IAM policy must include: `s3:PutObject`, `s3:ListBucket`, `cloudfront:CreateInvalidation`, `cloudfront:ListDistributions`; plus `s3:DeleteObject` when `--delete` is used; plus `cloudfront:GetInvalidation` when `--wait` is used. Run `assignee dev setup` to provision the operator role.
 
 **Examples:**
 
 ```bash
-assignee update my-marketing-site --source ./dist
-assignee update my-marketing-site --source ./dist --delete
-assignee update arn:aws:s3:::my-marketing-site --source ./dist --invalidation-paths "/index.html,/css/*"
-assignee update <runId-uuid> --source ./dist --no-invalidation
-assignee update my-marketing-site --source ./dist --wait --yes --json
+assignee dev update my-marketing-site --source ./dist
+assignee dev update my-marketing-site --source ./dist --delete
+assignee dev update arn:aws:s3:::my-marketing-site --source ./dist --invalidation-paths "/index.html,/css/*"
+assignee dev update <runId-uuid> --source ./dist --no-invalidation
+assignee dev update my-marketing-site --source ./dist --wait --yes --json
 ```
 
 ---
@@ -347,7 +349,7 @@ assignee update my-marketing-site --source ./dist --wait --yes --json
 Check managed resources for configuration drift.
 
 ```
-assignee drift [resource-id] [options]
+assignee infra drift [resource-id] [options]
 ```
 
 **Arguments:**
@@ -387,7 +389,7 @@ After the drift scan, the provision log is deduped by ARN keeping the newest ent
 | `ERROR`            | Could not check (permissions, API error) |
 | `BASELINE_MISSING` | No checkpoint found for comparison       |
 
-The summary line renders `BASELINE_MISSING` as its own `no-baseline` bucket rather than collapsing it into `errors` — a missing checkpoint is an actionable operator state (run `assignee reconcile` or `drift --baseline`), not a failure.
+The summary line renders `BASELINE_MISSING` as its own `no-baseline` bucket rather than collapsing it into `errors` — a missing checkpoint is an actionable operator state (run `assignee infra reconcile` or `drift --baseline`), not a failure.
 
 **`--baseline` adoption flow:**
 
@@ -396,22 +398,22 @@ When `--baseline` is set alongside a positional `<resource-id>` ARN, the command
 1. Infers the CloudFormation resource type from the ARN.
 2. Calls CCAPI `GetResource` for the live state.
 3. Writes a baseline payload to `~/.assignee/baselines/<slugified-arn>.json` containing the live state, resource type, and an ISO timestamp.
-4. Future `assignee drift` runs will find the baseline via the checkpoint fallback in `resolve-desired-state.ts` and compare against it instead of reporting `BASELINE_MISSING`.
+4. Future `assignee infra drift` runs will find the baseline via the checkpoint fallback in `resolve-desired-state.ts` and compare against it instead of reporting `BASELINE_MISSING`.
 
 Checkpoints still win over baselines — the baseline is a last-resort fallback for resources adopted AFTER they were provisioned. To drop an adopted baseline, delete its file directly from `~/.assignee/baselines/` (there is no dedicated CLI command for this — baselines are plain JSON files keyed by slugified ARN).
 
 **Examples:**
 
 ```bash
-assignee drift
-assignee drift arn:aws:s3:::my-bucket
-assignee drift --resource AWS::S3::Bucket
-assignee drift --status DRIFTED
-assignee drift --exclude BASELINE_MISSING  # CI mode: ignore unadopted rows
-assignee drift --baseline arn:aws:s3:::adopted-bucket
-assignee drift --json --output-file drift-report.json
-assignee drift --concurrency 20
-assignee drift --detailed
+assignee infra drift
+assignee infra drift arn:aws:s3:::my-bucket
+assignee infra drift --resource AWS::S3::Bucket
+assignee infra drift --status DRIFTED
+assignee infra drift --exclude BASELINE_MISSING  # CI mode: ignore unadopted rows
+assignee infra drift --baseline arn:aws:s3:::adopted-bucket
+assignee infra drift --json --output-file drift-report.json
+assignee infra drift --concurrency 20
+assignee infra drift --detailed
 ```
 
 ### reconcile
@@ -419,7 +421,7 @@ assignee drift --detailed
 Reconcile drifted resources back to desired state.
 
 ```
-assignee reconcile [options]
+assignee infra reconcile [options]
 ```
 
 **Options:**
@@ -439,15 +441,15 @@ Runs drift detection, then for each drifted resource presents three choices:
 2. **Accept** -- accept the current live state as the new desired state
 3. **Skip** -- leave the resource as-is
 
-Pass `-y` / `--yes` for CI/CD usage to reconcile every drifted resource without prompts. The legacy `--auto-reconcile` flag still works but is deprecated — prefer `--yes`, which matches the idiom used by `assignee apply` and `assignee destroy`.
+Pass `-y` / `--yes` for CI/CD usage to reconcile every drifted resource without prompts. The legacy `--auto-reconcile` flag still works but is deprecated — prefer `--yes`, which matches the idiom used by `assignee infra apply` and `assignee infra destroy`.
 
 **Examples:**
 
 ```bash
-assignee reconcile
-assignee reconcile --dry-run
-assignee reconcile --yes
-assignee reconcile --resource AWS::S3::Bucket --yes
+assignee infra reconcile
+assignee infra reconcile --dry-run
+assignee infra reconcile --yes
+assignee infra reconcile --resource AWS::S3::Bucket --yes
 ```
 
 ### optimize
@@ -458,7 +460,7 @@ parallel for the current instance configuration and a cheaper
 alternative, then ranks recommendations by estimated monthly savings.
 
 ```
-assignee optimize [resource-id] [options]
+assignee infra optimize [resource-id] [options]
 ```
 
 **Arguments:**
@@ -469,14 +471,14 @@ assignee optimize [resource-id] [options]
 
 **Options:**
 
-| Flag                    | Description                                                                  | Default      |
-| ----------------------- | ---------------------------------------------------------------------------- | ------------ |
-| `--region <region>`     | AWS region to scan                                                           | `AWS_REGION` |
-| `--json`                | Emit recommendations as JSON instead of a table                              | false        |
-| `-o, --output <format>` | Output format (`json` or `text`) — equivalent to `--json` when `json`        | `text`       |
-| `--min-savings <usd>`   | Suppress recommendations whose monthly savings fall below this USD threshold | `0`          |
-| `--apply`               | Reserved — print the suggested `assignee plan` commands without running them | false        |
-| `--resource <type>`     | Restrict the scan to a single CloudFormation type                            | all types    |
+| Flag                    | Description                                                                        | Default      |
+| ----------------------- | ---------------------------------------------------------------------------------- | ------------ |
+| `--region <region>`     | AWS region to scan                                                                 | `AWS_REGION` |
+| `--json`                | Emit recommendations as JSON instead of a table                                    | false        |
+| `-o, --output <format>` | Output format (`json` or `text`) — equivalent to `--json` when `json`              | `text`       |
+| `--min-savings <usd>`   | Suppress recommendations whose monthly savings fall below this USD threshold       | `0`          |
+| `--apply`               | Reserved — print the suggested `assignee infra plan` commands without running them | false        |
+| `--resource <type>`     | Restrict the scan to a single CloudFormation type                                  | all types    |
 
 **Supported resource types:**
 
@@ -497,7 +499,7 @@ CloudWatch Metrics.
 1. Enumerates managed resources via the Resource Groups Tagging API
    (scoped by `managed-by=assignee-ai`).
 2. For each resource, loads the checkpointed desiredState via the
-   same scanner `assignee drift` uses. Resources without a checkpoint
+   same scanner `assignee infra drift` uses. Resources without a checkpoint
    are silently skipped — the optimizer cannot recommend changes
    without knowing the user's original intent.
 3. For EC2/RDS/Lambda resources, queries the Pricing MCP for the
@@ -518,10 +520,10 @@ recommendation" instead of a stale price.
 **Examples:**
 
 ```bash
-assignee optimize
-assignee optimize --json
-assignee optimize i-0123456789abcdef0
-assignee optimize --json --min-savings 5
+assignee infra optimize
+assignee infra optimize --json
+assignee infra optimize i-0123456789abcdef0
+assignee infra optimize --json --min-savings 5
 ```
 
 **Sample output:**
@@ -537,12 +539,12 @@ assignee optimize --json --min-savings 5
 │                                                                     │
 ╰─────────────────────────────────────────────────────────────────────╯
 
-3 of 3 resources analyzed, 3 recommendations. Est. total monthly savings: <sum of live Pricing MCP savings — fetched at plan time via `assignee optimize --json`>
+3 of 3 resources analyzed, 3 recommendations. Est. total monthly savings: <sum of live Pricing MCP savings — fetched at plan time via `assignee infra optimize --json`>
 
 Suggested reconcile commands (copy/paste):
-  assignee plan "Change AWS::EC2::Instance i-0abc... from t3.large to t4g.large"
-  assignee plan "Change AWS::RDS::DBInstance prod-primary from db.r5.large to db.r6g.large"
-  assignee plan "Change AWS::Lambda::Function prod-handler from x86_64 to arm64"
+  assignee infra plan "Change AWS::EC2::Instance i-0abc... from t3.large to t4g.large"
+  assignee infra plan "Change AWS::RDS::DBInstance prod-primary from db.r5.large to db.r6g.large"
+  assignee infra plan "Change AWS::Lambda::Function prod-handler from x86_64 to arm64"
 ```
 
 The trailing asterisk on the Lambda row flags that the savings figure
@@ -552,10 +554,10 @@ real dollar amount scales linearly with actual invocation volume.
 The "N of M analyzed" phrasing in the summary line separates the
 total resources scanned (via RGTA) from the subset that had a
 resolvable checkpoint. When every scanned resource lacks a
-checkpoint (common for operators testing `assignee optimize` on
+checkpoint (common for operators testing `assignee infra optimize` on
 an account with pre-existing unmanaged resources), the summary
-instead prints an actionable hint pointing at `assignee plan` and
-`assignee drift --baseline <arn>` as the two adoption paths.
+instead prints an actionable hint pointing at `assignee infra plan` and
+`assignee infra drift --baseline <arn>` as the two adoption paths.
 
 ---
 
@@ -566,7 +568,7 @@ instead prints an actionable hint pointing at `assignee plan` and
 Initialize project or global configuration.
 
 ```
-assignee init [options]
+assignee dev init [options]
 ```
 
 **Options:**
@@ -596,13 +598,13 @@ assignee init [options]
 - Resource naming prefix
 - Auto-fix mode (ask/apply/skip)
 
-Both modes prompt before overwriting existing config files. `assignee init` does **not** require AWS credentials — it only writes a local config file. Provision credentials separately with `assignee setup` (or by editing `.env`) before running `plan`/`apply`.
+Both modes prompt before overwriting existing config files. `assignee dev init` does **not** require AWS credentials — it only writes a local config file. Provision credentials separately with `assignee dev setup` (or by editing `.env`) before running `plan`/`apply`.
 
 **Examples:**
 
 ```bash
-assignee init
-assignee init --global
+assignee dev init
+assignee dev init --global
 ```
 
 ### setup
@@ -610,7 +612,7 @@ assignee init --global
 Create IAM users and policies for least-privilege credential separation.
 
 ```
-assignee setup [options]
+assignee dev setup [options]
 ```
 
 **Options:**
@@ -651,23 +653,23 @@ Access keys are written to `.env` in the current directory. Idempotent -- safe t
 **Examples:**
 
 ```bash
-assignee setup
-assignee setup --profile admin-user
-assignee setup --yes
-assignee setup --dry-run                # preview the IAM plan, no AWS calls
-assignee setup --enable-llm-logging     # opt in to plaintext Bedrock logs
-assignee setup --disable-llm-logging    # turn plaintext Bedrock logs back off (idempotent fast path)
-assignee setup --disable-llm-logging --dry-run  # preview the disable action, no AWS calls
+assignee dev setup
+assignee dev setup --profile admin-user
+assignee dev setup --yes
+assignee dev setup --dry-run                # preview the IAM plan, no AWS calls
+assignee dev setup --enable-llm-logging     # opt in to plaintext Bedrock logs
+assignee dev setup --disable-llm-logging    # turn plaintext Bedrock logs back off (idempotent fast path)
+assignee dev setup --disable-llm-logging --dry-run  # preview the disable action, no AWS calls
 ```
 
-> NOTE: `--disable-llm-logging` only calls Bedrock's `PutModelInvocationLoggingConfiguration` with `textDataDeliveryEnabled=false`. It does NOT re-create IAM users, policies, access keys, or the CloudWatch log group, and it never writes `.env`. Use it whenever you want to turn LLM body capture off after a previous `assignee setup --enable-llm-logging` run.
+> NOTE: `--disable-llm-logging` only calls Bedrock's `PutModelInvocationLoggingConfiguration` with `textDataDeliveryEnabled=false`. It does NOT re-create IAM users, policies, access keys, or the CloudWatch log group, and it never writes `.env`. Use it whenever you want to turn LLM body capture off after a previous `assignee dev setup --enable-llm-logging` run.
 
 ### doctor
 
 A non-destructive end-to-end health check (think `flutter doctor` / `brew doctor`). Runs every check, prints results in column form, and exits non-zero if anything failed. Doctor never mutates state — every check is read-only.
 
 ```
-assignee doctor [options]
+assignee admin doctor [options]
 ```
 
 **Options:**
@@ -727,7 +729,7 @@ Doctor summary (assignee.ai 0.1.0):
 Output shell completion scripts.
 
 ```
-assignee completions <shell>
+assignee dev completions <shell>
 ```
 
 **Arguments:**
@@ -739,9 +741,9 @@ assignee completions <shell>
 **Examples:**
 
 ```bash
-eval "$(assignee completions zsh)"    # add to ~/.zshrc
-eval "$(assignee completions bash)"   # add to ~/.bashrc
-assignee completions fish | source    # Fish shell
+eval "$(assignee dev completions zsh)"    # add to ~/.zshrc
+eval "$(assignee dev completions bash)"   # add to ~/.bashrc
+assignee dev completions fish | source    # Fish shell
 ```
 
 ---
@@ -753,7 +755,7 @@ assignee completions fish | source    # Fish shell
 Verify the integrity of the on-disk audit log chain. Each audit event is HMAC-signed with `ASSIGNEE_AUDIT_KEY`; this command re-derives the chain hash from the beginning of the log and reports the first record (if any) where the chain breaks.
 
 ```
-assignee audit-verify [options]
+assignee admin audit-verify [options]
 ```
 
 **Options:**
@@ -774,8 +776,8 @@ When `ASSIGNEE_AUDIT_KEY` is unset (which causes `assignee` to auto-generate a p
 **Examples:**
 
 ```bash
-assignee audit-verify
-assignee audit-verify --json
+assignee admin audit-verify
+assignee admin audit-verify --json
 ```
 
 ---
@@ -787,7 +789,7 @@ assignee audit-verify --json
 Restore `~/.assignee/memory/provisions.json` from a backup snapshot under `~/.assignee/backups/`. Useful after moving to a new machine or recovering from accidental deletion of the memory directory.
 
 ```
-assignee restore-provisions [options]
+assignee infra restore-provisions [options]
 ```
 
 **Options:**
@@ -806,14 +808,14 @@ assignee restore-provisions [options]
 
 With `--from-audit-log`, the command rebuilds from the HMAC-chained audit log instead of a backup snapshot file. It reads `apply_resource_created` events from `~/.assignee/audit/audit.log` and appends a reconstructed provision record for any ARN that is absent from the current `provisions.json`. This mode is mutually exclusive with `--from <date>` — passing both flags exits with code `73` (`USAGE_ERROR`) before performing any I/O.
 
-The command does **not** read JSONL from stdin and does not accept a positional path argument — the backup location is canonical (`~/.assignee/backups/`). After restoration, run `assignee drift` to verify the restored baseline is consistent with live state.
+The command does **not** read JSONL from stdin and does not accept a positional path argument — the backup location is canonical (`~/.assignee/backups/`). After restoration, run `assignee infra drift` to verify the restored baseline is consistent with live state.
 
 **Examples:**
 
 ```bash
-assignee restore-provisions
-assignee restore-provisions --from 2026-04-01
-assignee restore-provisions --json
+assignee infra restore-provisions
+assignee infra restore-provisions --from 2026-04-01
+assignee infra restore-provisions --json
 ```
 
 ---
@@ -825,17 +827,17 @@ assignee restore-provisions --json
 Print the CLI's version string. Registered at `apps/cli/src/index.ts:171`.
 
 ```
-assignee version
+assignee dev version
 ```
 
-Outputs the package version of the `assignee` CLI on a single line. No flags. Use `assignee doctor --short` for a richer self-describe blob (account, region, role, redact mode, config path).
+Outputs the package version of the `assignee` CLI on a single line. No flags. Use `assignee admin doctor --short` for a richer self-describe blob (account, region, role, redact mode, config path).
 
 ### describe
 
 Self-describe blob — prints a compact JSON / text snapshot suitable for bug reports (CLI version, Node version, platform, arch, AWS region, audit-key source). Registered at `apps/cli/src/index.ts:174` alongside `version`.
 
 ```
-assignee describe
+assignee admin describe
 ```
 
 The describe output is the canonical artefact to attach to a bug report — it captures every detail the maintainer needs to reproduce environment-specific issues without having to ask follow-up questions.

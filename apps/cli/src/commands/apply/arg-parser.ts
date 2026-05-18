@@ -53,7 +53,7 @@ async function resolveExplicitCheckpoint(
     } catch (err) {
       if (err instanceof CheckpointError) throw err;
       throw new AssigneeError(
-        `Checkpoint file not found: ${cpPath}. Run \`assignee plan\` to create a new plan.`,
+        `Checkpoint file not found: ${cpPath}. Run \`assignee infra plan\` to create a new plan.`,
         ErrorCode.CHECKPOINT_ERROR,
       );
     }
@@ -79,8 +79,8 @@ async function resolveExplicitCheckpoint(
 
     if (!resolved) {
       throw new AssigneeError(
-        `Usage: assignee apply "${EXAMPLE_S3_INTENT}"\n` +
-          "       assignee apply --checkpoint .assignee/checkpoint-<runId>.json",
+        `Usage: assignee infra apply "${EXAMPLE_S3_INTENT}"\n` +
+          "       assignee infra apply --checkpoint .assignee/checkpoint-<runId>.json",
         ErrorCode.USAGE_ERROR,
       );
     }
@@ -93,7 +93,7 @@ async function resolveExplicitCheckpoint(
 /**
  * Validate --source dir exists, non-empty, counts files; warn on truncation.
  *
- * `assignee update` follow-on: exported so `commands/update/arg-parser.ts`
+ * `assignee dev update` follow-on: exported so `commands/update/arg-parser.ts`
  * can reuse the same validation logic (existence, non-empty, truncation
  * warning) without duplicating the call to `countSourceFiles`.
  */

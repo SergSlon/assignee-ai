@@ -1,5 +1,5 @@
 /**
- * SSH-bundle Story iv — `assignee describe` service helper.
+ * SSH-bundle Story iv — `assignee admin describe` service helper.
  *
  * Composes a `RenderableState` for a previously-applied resource, given
  * either a runId (UUID-shaped) or a full resource ARN. The composition
@@ -41,7 +41,7 @@
  * Credential pick: `tryAssigneeCredentials("operator")`. Justification:
  *   - `apply-single.ts` (Story ii) calls DescribeInstances with
  *     `requireAssigneeCredentials("operator")` — the apply-time write
- *     side. `assignee describe` is the read side of that same wire.
+ *     side. `assignee admin describe` is the read side of that same wire.
  *   - `apps/cli/src/services/list-resources.ts` (the closest sibling
  *     CLI service for "look up an existing resource") also uses
  *     `tryAssigneeCredentials("operator")`. We match that file rather
@@ -91,7 +91,7 @@ function sanitizeKeyNameForDescribe(name: string): string {
 
 /**
  * Pre-demo audit (2026-05-05): mirror the apply-single.ts existsSync gate
- * so `assignee describe` does NOT render a Connect line pointing to a
+ * so `assignee admin describe` does NOT render a Connect line pointing to a
  * `.pem` that doesn't exist on this box (cross-machine describe scenario).
  * The renderer's `if (!keyName) return;` guard then silently suppresses
  * the Connect line, matching apply-time semantics.
@@ -125,7 +125,7 @@ export class DescribeNotFoundError extends AssigneeError {
  * matching instance is found — the caller falls back to provision-
  * record-only rendering.
  *
- * No caching — every `assignee describe` invocation issues a fresh
+ * No caching — every `assignee admin describe` invocation issues a fresh
  * DescribeInstances call. DescribeInstances is uncharged by AWS, and
  * the primary verification scenario (stop/start cycle reissues the
  * public IP, user re-runs `describe` to see the new IP) MUST observe

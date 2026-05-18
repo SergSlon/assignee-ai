@@ -3,7 +3,7 @@
 Assignee writes a tamper-evident audit trail for every plan, apply, and
 destroy operation. Each log entry is HMAC-SHA256–linked to the previous
 entry so that any alteration (deletion, tampering, re-ordering) breaks the
-chain and is detectable via `assignee audit-verify`.
+chain and is detectable via `assignee admin audit-verify`.
 
 ---
 
@@ -87,7 +87,7 @@ To rotate the audit key:
    export ASSIGNEE_AUDIT_KEY="$(openssl rand -hex 32)"
    ```
 
-> **Note**: Records written with the old key will fail `assignee audit-verify`
+> **Note**: Records written with the old key will fail `assignee admin audit-verify`
 > after rotation. This is intentional — the old key is required to verify
 > the old chain. Keep backups of old keys if historical verification is
 > needed.
@@ -111,7 +111,7 @@ If the key file is absent and no env var is set:
 Prior to this change (pre-2026-04-29), the fallback was a
 **per-process random key** that was discarded when the process exited.
 Any audit records written with the old per-process key will fail
-`assignee audit-verify` — those chains were already unverifiable across
+`assignee admin audit-verify` — those chains were already unverifiable across
 process boundaries. No migration tooling is provided; re-run the
 operations to produce a fresh, verifiable chain with the new persistent key.
 
@@ -148,7 +148,7 @@ These properties are unit-tested in
 ## Verifying the audit log
 
 ```bash
-assignee audit-verify
+assignee admin audit-verify
 ```
 
 Reads `~/.assignee/audit/audit.log` (default location) and re-computes every

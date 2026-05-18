@@ -1,5 +1,5 @@
 /**
- * `assignee destroy` command — safely destroys a single managed AWS resource
+ * `assignee infra destroy` command — safely destroys a single managed AWS resource
  * or, with `--all`, bulk-destroys every managed resource with safety guards.
  *
  * Two modes:
@@ -197,7 +197,7 @@ const KMS_KEY_ARN_RE = /^arn:aws[\w-]*:kms:[\w-]*:\d*:key\//;
 const SECRETS_ARN_RE = /^arn:aws[\w-]*:secretsmanager:[\w-]*:\d*:secret:/;
 
 /**
- * Main action handler for `assignee destroy`.
+ * Main action handler for `assignee infra destroy`.
  *
  * Three-stage dispatch:
  *   1. Validate the argument.
@@ -217,7 +217,7 @@ export async function destroyAction(
 ): Promise<"already_pending" | void> {
   if (!resource) {
     throw new AssigneeError(
-      "Destroy needs to know what to destroy. Pass a resource ARN or name as the positional argument, e.g. `assignee destroy my-bucket` or `assignee destroy arn:aws:s3:::my-bucket`.",
+      "Destroy needs to know what to destroy. Pass a resource ARN or name as the positional argument, e.g. `assignee infra destroy my-bucket` or `assignee infra destroy arn:aws:s3:::my-bucket`.",
       ErrorCode.DESTROY_ERROR,
     );
   }
@@ -253,7 +253,7 @@ export async function destroyAction(
     opts.forceDeleteWithoutRecovery === true;
   if (!argMatchesSpecial && !flagsRequireSpecial) {
     // Forward `noConfirm` so per-resource invocations triggered by
-    // `assignee destroy --all` don't re-emit the per-key
+    // `assignee infra destroy --all` don't re-emit the per-key
     // "--yes flag used in interactive session" warning. The bulk-destroy
     // parent already collected the typed-account-ID confirmation once.
     return genericDestroyAction(resource, {
@@ -333,7 +333,7 @@ export async function destroyAction(
   const billingTools = await getBillingMcpToolsAsync();
   // Defect 3 fix (2026-05-09): pass the resolved resourceType so the
   // estimator can reach the same per-type decomposer registry that
-  // `assignee list` uses (KMS → $1.00/mo, etc.) when cost-explorer +
+  // `assignee admin list` uses (KMS → $1.00/mo, etc.) when cost-explorer +
   // provision-log are both silent.
   const savingsEstimate = await getCostSavingsEstimate(
     resolved.arn,
@@ -476,7 +476,7 @@ async function resolveForDestroy(
     taggingClient = createTaggingClient(awsConfig);
   } catch {
     throw new ConfigurationError(
-      "AWS credentials are not configured. Set ASSIGNEE_OPERATOR_ACCESS_KEY_ID and ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY environment variables, or run `assignee setup`.",
+      "AWS credentials are not configured. Set ASSIGNEE_OPERATOR_ACCESS_KEY_ID and ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY environment variables, or run `assignee dev setup`.",
     );
   }
 
@@ -490,7 +490,7 @@ async function resolveForDestroy(
 
   if (!resolution) {
     throw new AssigneeError(
-      `No managed resource found matching "${resource}". Run 'assignee list' to see managed resources.`,
+      `No managed resource found matching "${resource}". Run 'assignee admin list' to see managed resources.`,
       ErrorCode.DESTROY_ERROR,
     );
   }
@@ -979,25 +979,25 @@ export const destroyCommand = new Command(CommandName.DESTROY)
     "after",
     `
 Examples:
-  $ assignee destroy arn:aws:s3:::my-bucket
+  $ assignee infra destroy arn:aws:s3:::my-bucket
         Destroy a single resource (typed-name confirmation required)
-  $ assignee destroy my-bucket --yes
+  $ assignee infra destroy my-bucket --yes
         Non-interactive destroy for CI/CD (skips typed confirmation)
-  $ assignee destroy arn:aws:kms:us-east-1:112233445566:key/<uuid> \\
+  $ assignee infra destroy arn:aws:kms:us-east-1:112233445566:key/<uuid> \\
         --pending-window-in-days 7 --yes
         KMS key: schedules deletion with a 7-day window
-  $ assignee destroy arn:aws:secretsmanager:us-east-1:112233445566:secret:my-secret \\
+  $ assignee infra destroy arn:aws:secretsmanager:us-east-1:112233445566:secret:my-secret \\
         --force-delete-without-recovery --yes
         SecretsManager: immediate delete, no recovery window
-  $ assignee destroy my-bucket --yes --json
+  $ assignee infra destroy my-bucket --yes --json
         Machine-readable envelope for CI scripts
-  $ assignee destroy --all
+  $ assignee infra destroy --all
         Dry-run: show what would be destroyed (no AWS writes)
-  $ assignee destroy --all --yes
+  $ assignee infra destroy --all --yes
         Bulk-destroy all managed resources (typed-account-ID confirmation required)
-  $ assignee destroy --all --yes --no-confirm
+  $ assignee infra destroy --all --yes --no-confirm
         Bulk-destroy without confirmation prompt (CI/CD only)
-  $ assignee destroy --all --json
+  $ assignee infra destroy --all --json
         Machine-readable dry-run plan envelope
 
 Safety: typed-name confirmation is required for single-resource
@@ -1036,8 +1036,8 @@ the resource is still billing and recoverable during the window.
         if (resource !== undefined) {
           process.stderr.write(
             `[destroy] ERROR: --all and a resource argument are mutually exclusive.\n` +
-              `  Use \`assignee destroy --all\` (no resource) to bulk-destroy,\n` +
-              `  or \`assignee destroy <arn>\` (no --all) to destroy a single resource.\n`,
+              `  Use \`assignee infra destroy --all\` (no resource) to bulk-destroy,\n` +
+              `  or \`assignee infra destroy <arn>\` (no --all) to destroy a single resource.\n`,
           );
           process.exitCode = ProcessExitCode.GENERIC_ERROR;
           return;
@@ -1134,7 +1134,7 @@ the resource is still billing and recoverable during the window.
               : "UNKNOWN_ERROR";
             const hint = isTyped
               ? ((runErrored as { hint?: string }).hint ??
-                "Run `assignee list` to verify the resource ARN or name.")
+                "Run `assignee admin list` to verify the resource ARN or name.")
               : "Run with --verbose for full stack trace.";
             suppressor.flushError(code, runErrored.message, hint);
           } else {

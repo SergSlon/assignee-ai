@@ -238,7 +238,7 @@ export async function runPlan(
     : true;
   if (!state.preflightPassed && hasBlocking) {
     clack.log.warn(
-      "Cannot apply: blocking best-practice findings detected. Fix the issues above and re-run `assignee plan`.",
+      "Cannot apply: blocking best-practice findings detected. Fix the issues above and re-run `assignee infra plan`.",
     );
     return { success: false };
   }

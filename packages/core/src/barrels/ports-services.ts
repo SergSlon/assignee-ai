@@ -124,7 +124,7 @@ export {
   type UploadProgress,
 } from "../services/s3-upload.js";
 
-// Services — CloudFront cache invalidation (`assignee update` follow-on)
+// Services — CloudFront cache invalidation (`assignee dev update` follow-on)
 export {
   createInvalidation,
   waitForInvalidation,

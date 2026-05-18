@@ -1,5 +1,5 @@
 /**
- * Shared types for the `assignee reconcile` phases.
+ * Shared types for the `assignee infra reconcile` phases.
  * Wave-6d F4: split out of reconcile.ts.
  */
 

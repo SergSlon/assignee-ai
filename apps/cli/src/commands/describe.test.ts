@@ -461,7 +461,7 @@ describe("assignee describe — text-mode error paths", () => {
       expect(mockRenderError).toHaveBeenCalledTimes(1);
       expect(mockRenderError).toHaveBeenCalledWith(
         'No provision record found for "not-a-real-id".',
-        "Run `assignee list` to see all managed resources, or `assignee list --json | jq` to find a specific run id or ARN.",
+        "Run `assignee admin list` to see all managed resources, or `assignee admin list --json | jq` to find a specific run id or ARN.",
         {
           why: "No matching record exists in ~/.assignee/memory/provisions.json.",
         },

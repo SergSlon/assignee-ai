@@ -1,5 +1,5 @@
 /**
- * Terminal output for `assignee optimize`.
+ * Terminal output for `assignee infra optimize`.
  *
  * Wave-6d F4: split from optimize.ts.
  *
@@ -88,7 +88,7 @@ export function renderSummary(
     if (analyzed === 0) {
       process.stdout.write(
         `\n${totalResourcesScanned} resources scanned, 0 analyzable (no checkpoint found). ` +
-          `Run \`assignee plan\` to provision new resources, or \`assignee drift --baseline <arn>\` to adopt existing ones.\n`,
+          `Run \`assignee infra plan\` to provision new resources, or \`assignee infra drift --baseline <arn>\` to adopt existing ones.\n`,
       );
       return;
     }

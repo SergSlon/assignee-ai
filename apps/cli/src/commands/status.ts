@@ -1,5 +1,5 @@
 /**
- * `assignee status` command — shows a summary of managed infrastructure.
+ * `assignee admin status` command — shows a summary of managed infrastructure.
  *
  * Queries AWS for resources tagged with `managed-by=assignee-ai` and
  * aggregates them by type and region with cost totals. Supports `--json`
@@ -8,13 +8,13 @@
  * Also supports `--bp-coverage` for BP coverage dashboard.
  *
  * This is a direct SDK command (no LangGraph graph), following the same
- * pattern as `assignee list`.
+ * pattern as `assignee admin list`.
  *
  * Epic 92 uncluster e92.u.a (A-12, D-08, D-36):
  *   - [runId] positional: accepted now but `status` is a fleet-level
  *     summary that cannot filter by run id. When the caller passes a
  *     runId we emit a `[WARN]` structured log event pointing them at
- *     `assignee list --json` (the per-run query surface) and continue
+ *     `assignee admin list --json` (the per-run query surface) and continue
  *     to render the default summary so the command is still useful.
  *   - Structured log envelope: `STATUS_STARTED` at entry, `STATUS_COMPLETE`
  *     at success / error. Matches the plan / optimize envelope so
@@ -293,7 +293,7 @@ async function runStatusBody(opts: {
         const message = err instanceof Error ? err.message : String(err);
         renderError(
           `Failed to validate --resource-type "${opts.resourceType}".`,
-          "Check the value and try again — see `assignee status --help` for supported types.",
+          "Check the value and try again — see `assignee admin status --help` for supported types.",
           { why: message },
         );
       }

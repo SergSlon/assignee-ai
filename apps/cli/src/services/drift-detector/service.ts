@@ -147,7 +147,7 @@ export class DriftDetectorService {
    * Check a single resource for drift.
    *
    * Public method retained for callers that operate on one resource at a
-   * time (e.g. `assignee drift --resource`).
+   * time (e.g. `assignee infra drift --resource`).
    */
   async checkResource(
     typeName: string,

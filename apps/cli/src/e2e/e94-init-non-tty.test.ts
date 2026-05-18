@@ -1,16 +1,16 @@
 /**
- * Epic 94 R6 (D-01) — E2E CLI probe: `assignee init` non-TTY guard.
+ * Epic 94 R6 (D-01) — E2E CLI probe: `assignee dev init` non-TTY guard.
  *
  * Regression: Epic 92 u.d shipped a non-TTY guard that emitted a
  * friendly `[ERROR]+[FIX]` envelope and exited 1 when the user piped
- * `assignee init` without supplying `--yes`. But the guard predicate
+ * `assignee dev init` without supplying `--yes`. But the guard predicate
  * used `process.stdout.isTTY === false`, and Node actually reports
  * `isTTY === undefined` (NOT `false`) for streams that are pipes or
  * redirections. So the canonical CI invocation
- *   $ assignee init </dev/null
+ *   $ assignee dev init </dev/null
  * never tripped the guard — clack saw piped stdin, aborted the prompt
  * silently, and the CLI exited 0 without writing any config. Every CI
- * pipeline that invokes `assignee init` without `--yes` has been
+ * pipeline that invokes `assignee dev init` without `--yes` has been
  * silently broken since Epic 92 u.d landed.
  *
  * After R6: stdin from `/dev/null` → guard fires → exit 1 → stderr
@@ -51,7 +51,7 @@ const CLI_DIST = path.resolve(
 
 /**
  * Spawn the CLI with stdin redirected from /dev/null — the exact
- * pattern a CI shell uses when it runs `assignee init < /dev/null` or
+ * pattern a CI shell uses when it runs `assignee dev init < /dev/null` or
  * when the parent process has no stdin attached.
  */
 function runInitWithPipedStdin(args: string[]): {
@@ -99,7 +99,7 @@ describeE2E("Epic 94 R6 — init non-TTY guard predicate (D-01)", () => {
   it("stderr carries [ERROR] and [FIX] envelope on the non-TTY path", () => {
     const { stderr } = runInitWithPipedStdin([]);
     expect(stderr).toContain("[ERROR] init requires a TTY OR --yes flag");
-    expect(stderr).toContain("[FIX] Re-run with: assignee init --yes");
+    expect(stderr).toContain("[FIX] Re-run with: assignee dev init --yes");
   });
 
   it("init with stdin=/dev/null AND --yes still proceeds (CI mode)", () => {

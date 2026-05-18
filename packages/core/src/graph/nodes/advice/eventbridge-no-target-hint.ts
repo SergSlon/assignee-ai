@@ -9,7 +9,7 @@
  *
  *   1. Why the rule is non-functional (no Target means the event is
  *      discarded — EventBridge does not buffer untargeted events).
- *   2. How to get a working compound (`assignee plan "scheduled lambda ..."`).
+ *   2. How to get a working compound (`assignee infra plan "scheduled lambda ..."`).
  *   3. How to pass an explicit target ARN via `--set Targets=...`.
  *
  * Guard: only fires when `resourceType` is `AWS::Events::Rule` AND

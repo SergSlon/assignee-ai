@@ -1,5 +1,5 @@
 /**
- * `assignee reconcile` command — reconciles drifted resources back to desired state.
+ * `assignee infra reconcile` command — reconciles drifted resources back to desired state.
  *
  * Wave-6d F4: decomposed into `reconcile/` sub-modules. This file is
  * now a thin Commander wrapper + re-export surface so existing
@@ -89,15 +89,15 @@ export const reconcileCommand = new Command(CommandName.RECONCILE)
     "after",
     `
 Examples:
-  $ assignee reconcile
+  $ assignee infra reconcile
         Detect drift and prompt per-resource (interactive)
-  $ assignee reconcile --dry-run
+  $ assignee infra reconcile --dry-run
         Preview reconcile decisions without calling AWS
-  $ assignee reconcile --yes
+  $ assignee infra reconcile --yes
         Reconcile every drifted resource (CI-friendly)
-  $ assignee reconcile --resource AWS::S3::Bucket --yes
+  $ assignee infra reconcile --resource AWS::S3::Bucket --yes
         Reconcile only S3 buckets, non-interactive
-  $ assignee reconcile --yes --json
+  $ assignee infra reconcile --yes --json
         Machine-readable envelope for CI scripts
 `,
   )
@@ -130,7 +130,7 @@ Examples:
             : "UNKNOWN_ERROR";
           const hint = isTyped
             ? ((runErrored as { hint?: string }).hint ??
-              "Check AWS credentials and run `assignee drift` for details.")
+              "Check AWS credentials and run `assignee infra drift` for details.")
             : "Run with --verbose for full stack trace.";
           suppressor.flushError(code, runErrored.message, hint);
         } else {

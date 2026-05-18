@@ -1,5 +1,5 @@
 /**
- * AWS credential and region auto-detection for `assignee init`.
+ * AWS credential and region auto-detection for `assignee dev init`.
  *
  * Detects credentials from (in priority order):
  * 1. `ASSIGNEE_OPERATOR_ACCESS_KEY_ID` / `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` env vars

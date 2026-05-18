@@ -1,5 +1,5 @@
 /**
- * `assignee setup` command — creates IAM users, policies, and access keys
+ * `assignee dev setup` command — creates IAM users, policies, and access keys
  * for the 3-user credential separation model.
  *
  * Requires admin/root AWS credentials. Idempotent: safe to re-run.
@@ -71,13 +71,13 @@ export const setupCommand = new Command(CommandName.SETUP)
     "after",
     `
 Examples:
-  $ assignee setup --profile admin
+  $ assignee dev setup --profile admin
         Interactive wizard (creates Operator/Reader/Auditor IAM users)
-  $ assignee setup --profile admin --yes
+  $ assignee dev setup --profile admin --yes
         Non-interactive setup (skips all confirmations, for CI bootstrap)
-  $ assignee setup --profile admin --dry-run
+  $ assignee dev setup --profile admin --dry-run
         Print the plan without calling any IAM APIs
-  $ assignee setup --profile admin --disable-llm-logging
+  $ assignee dev setup --profile admin --disable-llm-logging
         Turn off Bedrock invocation text logging (idempotent)
 `,
   )
@@ -173,7 +173,7 @@ Examples:
         clack.log.error(
           "Operator role failed to provision. The operator user is REQUIRED " +
             "for every assignee command. Aborting setup without writing .env. " +
-            "Inspect the IAM error above and re-run `assignee setup`.",
+            "Inspect the IAM error above and re-run `assignee dev setup`.",
         );
         clack.outro("Setup aborted: operator role is required.");
         process.exitCode = ProcessExitCode.GENERIC_ERROR;
@@ -223,7 +223,7 @@ Examples:
               clack.log.error(
                 `Credential verification failed for ${role.userName}: ${result.lastError}\n` +
                   `  Keys were created but could not be verified with AWS STS.\n` +
-                  `  Re-run \`assignee setup\` or check IAM/STS connectivity.`,
+                  `  Re-run \`assignee dev setup\` or check IAM/STS connectivity.`,
               );
               clack.outro("Setup aborted: credential verification failed.");
               process.exitCode = ProcessExitCode.GENERIC_ERROR;

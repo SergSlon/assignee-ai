@@ -118,7 +118,7 @@ export async function reconcileResource(
     process.stdout.write(
       chalk.yellow(
         `  WARNING: ${skipped.path} is a create-only (immutable) property — skipped. ` +
-          `Use \`assignee plan\` to recreate the resource.\n`,
+          `Use \`assignee infra plan\` to recreate the resource.\n`,
       ),
     );
   }

@@ -2,13 +2,13 @@
 
 > Diátaxis: **explanation** (understanding-oriented). Why Assignee.ai
 > tags every resource with a run identifier, what the ledger buys
-> today, and why `assignee destroy --run-id <uuid>` is a future-work
+> today, and why `assignee infra destroy --run-id <uuid>` is a future-work
 > sketch rather than a shipped feature (the current build uses the
-> existing per-resource `assignee destroy <resource>` flow).
+> existing per-resource `assignee infra destroy <resource>` flow).
 
 ## What the run-ledger is
 
-Every `assignee plan` (and the matching `assignee apply`) generates a
+Every `assignee infra plan` (and the matching `assignee infra apply`) generates a
 **`runId`** — a UUID created when the LangGraph pipeline instantiates
 its `AgentState`. The runId flows through the graph and lands in three
 places:
@@ -35,7 +35,7 @@ on memory persistence`).
    (Ctrl-C after the typed-name confirm) the checkpoint writer at
    [`apps/cli/src/commands/plan/checkpoint-writer.ts`](../../apps/cli/src/commands/plan/checkpoint-writer.ts)
    serialises the graph state into `.assignee/checkpoint-<runId>.json`.
-   `assignee apply --checkpoint <path>` resumes from that file and
+   `assignee infra apply --checkpoint <path>` resumes from that file and
    preserves the original runId for audit continuity.
 
 The three artifacts together form the **run-ledger**: a local,
@@ -65,7 +65,7 @@ A tag-based design that imposes near-zero switching cost is comfortable
 for users but hostile to long-term retention if no workflow stickiness
 exists. The run-ledger is the one piece of infrastructure that creates
 _workflow_ stickiness without _data_ stickiness — the user types
-`assignee destroy <resource>` instead of hand-writing
+`assignee infra destroy <resource>` instead of hand-writing
 `aws cloudformation delete-stack`, and the tag-based lookup "just
 works" for every resource assignee touched.
 
@@ -76,14 +76,14 @@ The following run-ledger operations work in the current build:
 | Operation                                          | Command                                                                                                         | Source of truth             |
 | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | --------------------------- |
 | Enumerate resources from a run via the AWS tag API | `aws resourcegroupstaggingapi get-resources --tag-filters Key=assignee-run-id,Values=<uuid>`                    | Resource Groups Tagging API |
-| List every managed resource in the account         | `assignee list`                                                                                                 | `managed-by` tag            |
-| Destroy a single resource by ARN or name           | `assignee destroy <arn-or-name>`                                                                                | Resource resolver + CCAPI   |
-| Resume a paused plan                               | `assignee apply --checkpoint .assignee/checkpoint-<runId>.json`                                                 | Checkpoint file             |
+| List every managed resource in the account         | `assignee admin list`                                                                                           | `managed-by` tag            |
+| Destroy a single resource by ARN or name           | `assignee infra destroy <arn-or-name>`                                                                          | Resource resolver + CCAPI   |
+| Resume a paused plan                               | `assignee infra apply --checkpoint .assignee/checkpoint-<runId>.json`                                           | Checkpoint file             |
 | Replay a past intent                               | _not implemented_ — provision records carry the desired-state hash, not the raw intent. Deliberate — see below. | —                           |
 
-## What is deferred — `assignee destroy --run-id <uuid>`
+## What is deferred — `assignee infra destroy --run-id <uuid>`
 
-A natural extension is `assignee destroy --run-id <uuid>`: "undo
+A natural extension is `assignee infra destroy --run-id <uuid>`: "undo
 everything this run created, in one call." The design implications:
 
 1. **Re-introduces multi-resource destroy.** A previous iteration cut
@@ -107,21 +107,21 @@ everything this run created, in one call." The design implications:
    flow needs a topological sort + rollback-on-error policy that we
    have not designed yet.
 
-A safer path forward, sketched as future work: ship `assignee destroy
+A safer path forward, sketched as future work: ship `assignee infra destroy
 --run-id <uuid>` once the dependency-ordering and bulk-confirm UX
 questions below have been resolved. The current build ships the
 _read-only_ audit trail plus the existing per-resource
-`assignee destroy <resource>` primitive — that is deliberate, and
+`assignee infra destroy <resource>` primitive — that is deliberate, and
 this section is a future-work sketch, not a committed feature for
 this course-submission build.
 
 ## What the design might look like (sketch, non-binding)
 
-If `assignee destroy --run-id <uuid>` were implemented, the shape
+If `assignee infra destroy --run-id <uuid>` were implemented, the shape
 might be:
 
 ```text
-$ assignee destroy --run-id 0f8e1c…
+$ assignee infra destroy --run-id 0f8e1c…
 
   Preview: 7 resources tagged assignee-run-id=0f8e1c…
     1. arn:aws:s3:::my-app-data         (S3 bucket, ~$0.50/mo)

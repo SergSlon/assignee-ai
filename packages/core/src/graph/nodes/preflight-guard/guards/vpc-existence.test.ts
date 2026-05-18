@@ -249,7 +249,7 @@ describe("vpc-existence guard", () => {
     expect(result.kind).toBe("fail");
     if (result.kind === "fail") {
       expect(result.errorMessage).toContain("credentials expired");
-      expect(result.errorMessage).toContain("assignee setup");
+      expect(result.errorMessage).toContain("assignee dev setup");
     }
   });
 

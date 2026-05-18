@@ -112,8 +112,8 @@ function auditorEnv(region = AWS_REGION): Record<string, string> {
  *   - Docs:    no AWS creds — public documentation API via uvx subprocess
  *
  * Graceful degradation (REG-N2): the Pricing server requires reader creds,
- * but operator-only environments (e.g. `assignee plan` in dry-run, `assignee
- * setup`, `assignee init`) must still be able to spawn the rest of the MCP
+ * but operator-only environments (e.g. `assignee infra plan` in dry-run, `assignee
+ * setup`, `assignee dev init`) must still be able to spawn the rest of the MCP
  * stack and fall back to local pricing estimates. We therefore catch
  * MissingAssigneeCredentialsError per-server and OMIT the entry rather than
  * throwing — mirroring the contract enshrined in

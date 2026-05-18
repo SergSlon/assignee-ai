@@ -170,20 +170,22 @@ describe("display.ts — non-TTY (CI) mode", () => {
       expect(output).toContain("Subnet/RT Association");
       // (iv) Recovery actions
       expect(output).toContain("Next steps:");
-      expect(output).toContain("assignee destroy subnet-0def");
-      expect(output).toContain("assignee destroy vpc-0abc");
+      expect(output).toContain("assignee infra destroy subnet-0def");
+      expect(output).toContain("assignee infra destroy vpc-0abc");
       // Reverse-order destroy: subnet destroy line must come BEFORE vpc destroy line
-      const subnetDestroyIdx = output.indexOf("assignee destroy subnet-0def");
-      const vpcDestroyIdx = output.indexOf("assignee destroy vpc-0abc");
+      const subnetDestroyIdx = output.indexOf(
+        "assignee infra destroy subnet-0def",
+      );
+      const vpcDestroyIdx = output.indexOf("assignee infra destroy vpc-0abc");
       expect(subnetDestroyIdx).toBeGreaterThan(-1);
       expect(vpcDestroyIdx).toBeGreaterThan(subnetDestroyIdx);
-      // Resume command points users at `assignee apply --checkpoint <path>`
+      // Resume command points users at `assignee infra apply --checkpoint <path>`
       // (the real resume flow) — NOT `assignee status <runId> --resume`,
       // which never existed on the status subcommand and used to ship as
       // a broken suggestion. See apps/cli/src/commands/apply.ts:51-54 for
       // the -c, --checkpoint <path> option that owns resumption.
       expect(output).toContain(
-        "assignee apply --checkpoint .assignee/checkpoint-run-abc-123.json",
+        "assignee infra apply --checkpoint .assignee/checkpoint-run-abc-123.json",
       );
       // Stronger guard: the output must NOT mention the old broken suggestion.
       // Running `assignee status <runId> --resume` hits
@@ -280,10 +282,15 @@ describe("display.ts — non-TTY (CI) mode", () => {
         destroy: new Set<string>(),
       };
 
-      // Extract every `assignee <cmd> ... --<flag>` pair from the output.
-      // The regex is greedy within a single line; we walk all matches so a
-      // line with multiple flags is still covered.
-      const pairRegex = /assignee\s+(\S+)(?:\s+[^\n]*?)?(\s--[\w-]+)/g;
+      // Extract every `assignee [<group>] <cmd> ... --<flag>` pair from the
+      // output. The regex is greedy within a single line; we walk all
+      // matches so a line with multiple flags is still covered. The
+      // optional non-capturing `(?:infra|admin|dev)\s+` prefix accepts the
+      // post-Story-108-A-07 noun-grouped CLI surface (`assignee infra
+      // apply --checkpoint ...`) while still recognising the leaf
+      // subcommand as the lookup key into `KNOWN_FLAGS`.
+      const pairRegex =
+        /assignee\s+(?:(?:infra|admin|dev)\s+)?(\S+)(?:\s+[^\n]*?)?(\s--[\w-]+)/g;
       const pairs: Array<{ cmd: string; flag: string; line: string }> = [];
       for (const line of output.split("\n")) {
         for (const m of line.matchAll(pairRegex)) {
@@ -344,13 +351,13 @@ describe("display.ts — non-TTY (CI) mode", () => {
 
       const output = chunks.join("");
       // RouteTable gets a normal destroy line
-      expect(output).toContain("assignee destroy rtb-0abc");
+      expect(output).toContain("assignee infra destroy rtb-0abc");
       // But Route (composite id) gets a comment, not a destroy command
       expect(output).toMatch(
         /# AWS::EC2::Route: cascades from parent.*rtb-0abc\|0.0.0.0\/0/,
       );
       // And does NOT emit a bogus destroy command with the pipe character
-      expect(output).not.toContain("assignee destroy rtb-0abc|0.0.0.0/0");
+      expect(output).not.toContain("assignee infra destroy rtb-0abc|0.0.0.0/0");
     });
 
     it("renders 'nothing was provisioned' when completed is empty", async () => {
@@ -382,7 +389,7 @@ describe("display.ts — non-TTY (CI) mode", () => {
       expect(output).toContain("InvalidVpcRange");
       expect(output).toContain("Nothing was provisioned");
       // No destroy/resume commands when nothing landed
-      expect(output).not.toContain("assignee destroy");
+      expect(output).not.toContain("assignee infra destroy");
       expect(output).not.toContain("--resume");
       expect(output).not.toContain("--checkpoint");
     });

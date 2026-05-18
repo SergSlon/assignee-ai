@@ -6,10 +6,10 @@
  * surfaced as the raw unhandled string "An unclassified error was encountered.
  * This may be a bug" because the ACCESS_DENIED ProvisioningErrorKind was mapped
  * to PROVISIONING_ERROR_CODES.UNKNOWN instead of PROVISIONING_ERROR_CODES.ACCESS_DENIED,
- * and the enricher did not include the `assignee audit-verify` actionable hint.
+ * and the enricher did not include the `assignee admin audit-verify` actionable hint.
  *
  * These tests FAIL against the pre-fix code (ACCESS_DENIED mapped to UNKNOWN,
- * no `assignee audit-verify` in the hint) and PASS after the fix.
+ * no `assignee admin audit-verify` in the hint) and PASS after the fix.
  *
  * Story 108-A-02 — Probe axes exercised:
  *   Axis I — PERMISSION_DENIED / AccessDeniedException error code classification
@@ -27,7 +27,7 @@ import { classifyCreateError } from "./error-classifier.js";
 // See _archive/reviews/<sha>-review.md F3 for rationale.
 
 // ---------------------------------------------------------------------------
-// Axis I — PERMISSION_DENIED → ACCESS_DENIED code + assignee audit-verify hint
+// Axis I — PERMISSION_DENIED → ACCESS_DENIED code + assignee admin audit-verify hint
 // ---------------------------------------------------------------------------
 
 describe("DF-A4/D6 — ACCESS_DENIED kind → PERMISSION_DENIED structured classification", () => {
@@ -46,7 +46,7 @@ describe("DF-A4/D6 — ACCESS_DENIED kind → PERMISSION_DENIED structured class
     expect(result.errorCode).toBe(PROVISIONING_ERROR_CODES.ACCESS_DENIED);
   });
 
-  it("Axis I-2: bare AccessDeniedException hint contains `assignee audit-verify`", () => {
+  it("Axis I-2: bare AccessDeniedException hint contains `assignee admin audit-verify`", () => {
     const result = classifyCreateError(
       {
         kind: ProvisioningErrorKind.ACCESS_DENIED,
@@ -56,8 +56,8 @@ describe("DF-A4/D6 — ACCESS_DENIED kind → PERMISSION_DENIED structured class
       "AWS::RDS::DBInstance",
     );
 
-    expect(result.userPrefix).toContain("assignee audit-verify");
-    expect(result.shortMessage).toContain("assignee audit-verify");
+    expect(result.userPrefix).toContain("assignee admin audit-verify");
+    expect(result.shortMessage).toContain("assignee admin audit-verify");
   });
 
   it("Axis I-3: PERMISSION_DENIED literal in message triggers structured classification", () => {
@@ -72,8 +72,8 @@ describe("DF-A4/D6 — ACCESS_DENIED kind → PERMISSION_DENIED structured class
     );
 
     expect(result.errorCode).toBe(PROVISIONING_ERROR_CODES.ACCESS_DENIED);
-    // NOT_AUTHORIZED_SUBSTRING path also surfaces `assignee setup`
-    expect(result.userPrefix).toContain("assignee setup");
+    // NOT_AUTHORIZED_SUBSTRING path also surfaces `assignee dev setup`
+    expect(result.userPrefix).toContain("assignee dev setup");
     // Raw AWS message preserved
     expect(result.userPrefix).toContain(rawMsg);
     expect(result.shortMessage).toContain(rawMsg);
@@ -113,7 +113,9 @@ describe("DF-A4/D6 — ACCESS_DENIED kind → PERMISSION_DENIED structured class
 
     expect(result.errorCode).toBe(PROVISIONING_ERROR_CODES.ACCESS_DENIED);
     // Must contain the actionable hint for IAM permission gaps
-    expect(result.userPrefix).toMatch(/assignee setup|assignee audit-verify/);
+    expect(result.userPrefix).toMatch(
+      /assignee dev setup|assignee admin audit-verify/,
+    );
   });
 });
 

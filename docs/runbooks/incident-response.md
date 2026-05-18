@@ -7,12 +7,12 @@
 
 ## 1. Incident Classification Matrix
 
-| Severity | Label               | Definition                                                                                                                                                               | Example Scenarios                                                                                                                        | Initial Response Time         | Escalation Path                                                            |
-| -------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- | -------------------------------------------------------------------------- |
-| **SEV1** | Catastrophic        | All managed infrastructure unreachable or actively being destroyed; credential leak with confirmed exfiltration; audit chain confirmed tampered                          | Operator credential key published to public repo; bulk `assignee destroy` loop running unattended; `provisions.json` deleted + no backup | **Immediate** (within 15 min) | On-call lead → security team → CTO; AWS Support case (Business/Enterprise) |
-| **SEV2** | High impact         | Apply/destroy commands consistently failing; AWS throttling blocking all provisioning; `assignee doctor` hard failure on credentials; drift detected across ≥5 resources | All `assignee apply` invocations exit 1; `sts:GetCallerIdentity` failing for operator role; Bedrock endpoint returning 5xx on every call | **Within 1 hour**             | On-call lead → engineering lead                                            |
-| **SEV3** | Partial degradation | Subset of commands failing; single resource stuck in drift; MCP server startup failure; Bedrock Guardrail blocking legitimate requests                                   | `assignee drift` exits 1 for one resource; `assignee doctor` exits 2 (warnings only); one MCP server fails probe                         | **Within 4 hours**            | On-call lead; engineering lead if unresolved after 2h                      |
-| **SEV4** | Cosmetic            | Output formatting issues; non-blocking warnings; stale checkpoint notifications; `BASELINE_MISSING` rows in drift output                                                 | Unexpected colour rendering; `assignee doctor` cache warning; BASELINE_MISSING rows for resources provisioned before tracking began      | **Next business day**         | Ticket in backlog                                                          |
+| Severity | Label               | Definition                                                                                                                                                                     | Example Scenarios                                                                                                                              | Initial Response Time         | Escalation Path                                                            |
+| -------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- | -------------------------------------------------------------------------- |
+| **SEV1** | Catastrophic        | All managed infrastructure unreachable or actively being destroyed; credential leak with confirmed exfiltration; audit chain confirmed tampered                                | Operator credential key published to public repo; bulk `assignee infra destroy` loop running unattended; `provisions.json` deleted + no backup | **Immediate** (within 15 min) | On-call lead → security team → CTO; AWS Support case (Business/Enterprise) |
+| **SEV2** | High impact         | Apply/destroy commands consistently failing; AWS throttling blocking all provisioning; `assignee admin doctor` hard failure on credentials; drift detected across ≥5 resources | All `assignee infra apply` invocations exit 1; `sts:GetCallerIdentity` failing for operator role; Bedrock endpoint returning 5xx on every call | **Within 1 hour**             | On-call lead → engineering lead                                            |
+| **SEV3** | Partial degradation | Subset of commands failing; single resource stuck in drift; MCP server startup failure; Bedrock Guardrail blocking legitimate requests                                         | `assignee infra drift` exits 1 for one resource; `assignee admin doctor` exits 2 (warnings only); one MCP server fails probe                   | **Within 4 hours**            | On-call lead; engineering lead if unresolved after 2h                      |
+| **SEV4** | Cosmetic            | Output formatting issues; non-blocking warnings; stale checkpoint notifications; `BASELINE_MISSING` rows in drift output                                                       | Unexpected colour rendering; `assignee admin doctor` cache warning; BASELINE_MISSING rows for resources provisioned before tracking began      | **Next business day**         | Ticket in backlog                                                          |
 
 ---
 
@@ -23,7 +23,7 @@ Run these steps in order. Stop and escalate when any step reveals a hard failure
 ### Step 1 — Environment health
 
 ```bash
-assignee doctor
+assignee admin doctor
 ```
 
 - Exit 0 → credentials + Bedrock + MCP all green. Proceed to step 2.
@@ -32,13 +32,13 @@ assignee doctor
 
 ```bash
 # Machine-readable form — useful for scripted triage:
-assignee doctor --json | jq '.checks[] | select(.status == "fail")'
+assignee admin doctor --json | jq '.checks[] | select(.status == "fail")'
 ```
 
 ### Step 2 — Audit-log chain integrity
 
 ```bash
-assignee audit-verify
+assignee admin audit-verify
 ```
 
 - Exit 0 → chain intact from the first record.
@@ -52,15 +52,15 @@ assignee audit-verify
 > `ASSIGNEE_AUDIT_KEY` persistently in the operator environment and
 > re-run `audit-verify`.
 
-> **Background:** Every audit event is HMAC-signed. `assignee audit-verify` re-derives the chain from record 0 and halts at the first mismatch. See [`packages/core/src/audit/audit-verifier.ts`](../../packages/core/src/audit/audit-verifier.ts).
+> **Background:** Every audit event is HMAC-signed. `assignee admin audit-verify` re-derives the chain from record 0 and halts at the first mismatch. See [`packages/core/src/audit/audit-verifier.ts`](../../packages/core/src/audit/audit-verifier.ts).
 
 ### Step 3 — Managed-resource inventory
 
 ```bash
-# `assignee list --json` returns an envelope: { ok, resources, count, region }.
+# `assignee admin list --json` returns an envelope: { ok, resources, count, region }.
 # Use `.count` (or `.resources | length`) — `jq 'length'` returns 4 (the
 # envelope key count), not the resource count.
-assignee list --json | jq '.count'
+assignee admin list --json | jq '.count'
 ```
 
 Compare the count against the last-known baseline. Unexpected drops (resources missing) → SEV1/SEV2. An increase when no apply was intended → investigate who ran it.
@@ -68,7 +68,7 @@ Compare the count against the last-known baseline. Unexpected drops (resources m
 ### Step 4 — Drift detection
 
 ```bash
-assignee drift --json
+assignee infra drift --json
 ```
 
 - Exit 0 → all resources in sync.
@@ -76,7 +76,7 @@ assignee drift --json
 
 ```bash
 # Surface only drifted resources:
-assignee drift --json | jq '.[] | select(.status == "DRIFTED")'
+assignee infra drift --json | jq '.[] | select(.status == "DRIFTED")'
 ```
 
 ### Step 5 — Log inspection
@@ -139,7 +139,7 @@ cp ~/.assignee/memory/provisions.json /tmp/incident-${INCIDENT_DATE}-provisions.
 ls -lt ~/.assignee/backups/provisions-*.json | head -3
 # Then restore from the chosen backup date (no --dry-run flag exists; the
 # command is idempotent and merges by run ID):
-assignee restore-provisions --from YYYY-MM-DD
+assignee infra restore-provisions --from YYYY-MM-DD
 ```
 
 The nightly backup primitive (`pnpm backup-provisions`) rotates backups under `~/.assignee/backups/` with 7-day retention. See [`scripts/backup-provisions.ts`](../../scripts/backup-provisions.ts).
@@ -173,7 +173,7 @@ aws cloudcontrol get-resource-request-status \
 
 ### 3e — Bedrock invocation logs (if Guardrail audit-mode active)
 
-If `BEDROCK_GUARDRAIL_ID` is set and `assignee setup --enable-llm-logging` was run:
+If `BEDROCK_GUARDRAIL_ID` is set and `assignee dev setup --enable-llm-logging` was run:
 
 1. Open CloudWatch Logs → log group `/aws/bedrock/modelinvocations`.
 2. Filter to the incident time window.
@@ -185,24 +185,24 @@ If `BEDROCK_GUARDRAIL_ID` is set and `assignee setup --enable-llm-logging` was r
 
 ### 4a — Drift detected on a managed resource
 
-**Symptom:** `assignee drift` exits 1 with one or more `DRIFTED` rows.
+**Symptom:** `assignee infra drift` exits 1 with one or more `DRIFTED` rows.
 
 ```bash
 # 1. Identify the drifted resource (note its ARN). The drift report is an
 #    array of per-resource entries; each entry's status is `.status`.
-assignee drift --json | jq '.[] | select(.status == "DRIFTED") | .resourceArn'
+assignee infra drift --json | jq '.[] | select(.status == "DRIFTED") | .resourceArn'
 
 # 2. Preview what reconcile would do:
-assignee reconcile --resource <type-filter> --dry-run
+assignee infra reconcile --resource <type-filter> --dry-run
 
 # 3. Reconcile (interactive — presents choices per resource):
-assignee reconcile
+assignee infra reconcile
 
 # 4. Non-interactive (CI/CD mode — auto-reconciles all drifted resources):
-assignee reconcile --auto-reconcile --yes
+assignee infra reconcile --auto-reconcile --yes
 ```
 
-After reconcile, re-run `assignee drift` to confirm exit 0.
+After reconcile, re-run `assignee infra drift` to confirm exit 0.
 
 See [`docs/drift-detection.md`](../drift-detection.md) for the full drift workflow.
 
@@ -210,7 +210,7 @@ See [`docs/drift-detection.md`](../drift-detection.md) for the full drift workfl
 
 ### 4b — Stale checkpoint blocking apply
 
-**Symptom:** `assignee apply` uses a checkpoint older than 72 hours or references a resource that no longer exists.
+**Symptom:** `assignee infra apply` uses a checkpoint older than 72 hours or references a resource that no longer exists.
 
 ```bash
 # 1. List checkpoints sorted by age:
@@ -218,13 +218,13 @@ ls -lt ~/.assignee/checkpoint-*.json
 
 # 2. Inspect which checkpoint would be auto-selected:
 #    Re-run plan and read the output (apply does not have a --dry-run flag).
-assignee plan "<original intent>"
+assignee infra plan "<original intent>"
 
 # 3. Restore ledger from a known-good backup date if needed:
-assignee restore-provisions --from YYYY-MM-DD
+assignee infra restore-provisions --from YYYY-MM-DD
 
 # 4. Re-plan from scratch once checkpoint is cleared:
-assignee plan "<original intent>"
+assignee infra plan "<original intent>"
 ```
 
 See [`docs/commands.md`](../commands.md#restore-provisions) for `restore-provisions` options. Backup rotation is implemented in [`scripts/backup-provisions.ts`](../../scripts/backup-provisions.ts).
@@ -233,7 +233,7 @@ See [`docs/commands.md`](../commands.md#restore-provisions) for `restore-provisi
 
 ### 4c — AWS service throttling cascading
 
-**Symptom:** `assignee apply` or `assignee drift` emits repeated `ThrottlingException` warnings; provisioning takes much longer than usual.
+**Symptom:** `assignee infra apply` or `assignee infra drift` emits repeated `ThrottlingException` warnings; provisioning takes much longer than usual.
 
 **Action:**
 
@@ -270,10 +270,10 @@ aws iam delete-access-key \
   --access-key-id AKIA<leaked-key-id>
 
 # 4. Verify new credentials work:
-assignee doctor
+assignee admin doctor
 
 # 5. Review recent audit log for unexpected operations:
-assignee audit-verify
+assignee admin audit-verify
 # The audit log itself has no `level` field (entries are
 # {index, timestamp, role, record, prevHmac, hmac} — see
 # packages/core/src/audit/audit-log.ts). For error-level events,
@@ -281,18 +281,18 @@ assignee audit-verify
 grep '"level":"error"' ~/.assignee/logs/cli-$(date +%Y-%m-%d).jsonl | tail -50
 
 # 6. Check current security posture:
-assignee status --bp-coverage
+assignee admin status --bp-coverage
 
 # 7. Review CloudTrail for unauthorized API calls in the incident window.
 ```
 
-> **Safety:** The IAM safety allowlist (see [`docs/explanation/invariants.md`](../explanation/invariants.md)) is preserved in the codebase as a guard against any future bulk-sweep feature that might be revived; today the CLI exposes no `--all` / `--include-iam` flags, so the operator-side risk is hand-rolled `while read arn; assignee destroy` loops over `assignee list`. The allowlist unconditionally excludes `AssigneeOperator`, `AssigneeReader`, `AssigneeAuditor`, and `AssigneeBedrock*` roles to prevent self-lockout.
+> **Safety:** The IAM safety allowlist (see [`docs/explanation/invariants.md`](../explanation/invariants.md)) is preserved in the codebase as a guard against any future bulk-sweep feature that might be revived; today the CLI exposes no `--all` / `--include-iam` flags, so the operator-side risk is hand-rolled `while read arn; assignee infra destroy` loops over `assignee admin list`. The allowlist unconditionally excludes `AssigneeOperator`, `AssigneeReader`, `AssigneeAuditor`, and `AssigneeBedrock*` roles to prevent self-lockout.
 
 ---
 
 ### 4e — Bedrock Guardrail violation in production output
 
-**Symptom:** `assignee plan` or `assignee apply` returns an error referencing a Guardrail block; output is empty or truncated.
+**Symptom:** `assignee infra plan` or `assignee infra apply` returns an error referencing a Guardrail block; output is empty or truncated.
 
 ```bash
 # 1. Identify the Guardrail in use:
@@ -310,7 +310,7 @@ echo $BEDROCK_GUARDRAIL_VERSION
 #    Do NOT remove the guardrail entirely in production.
 
 # 5. If adjustment is needed immediately, temporarily override the guardrail:
-BEDROCK_GUARDRAIL_ID="" assignee plan "<intent>"
+BEDROCK_GUARDRAIL_ID="" assignee infra plan "<intent>"
 
 # 6. Verify the updated policy allows the intended request, then remove the override.
 ```
@@ -346,7 +346,7 @@ See [`packages/core/src/graph/nodes/advice-generator.ts`](../../packages/core/sr
 
 ### 4g — Path-traversal attempt in `--output-file`
 
-**Symptom:** `assignee drift --output <path>` or similar rejects the path with a "path-traversal" error; suspicious `--output-file` values appear in CLI invocation logs.
+**Symptom:** `assignee infra drift --output <path>` or similar rejects the path with a "path-traversal" error; suspicious `--output-file` values appear in CLI invocation logs.
 
 ```bash
 # 1. The guard rejects pre-write (CWE-22 guard in safe-output-path.ts):
@@ -368,15 +368,15 @@ See [`apps/cli/src/utils/safe-output-path.ts`](../../apps/cli/src/utils/safe-out
 
 ### 4h — Partial MCP credential failure
 
-**Symptom:** `assignee plan` returns no cost estimates or cost fields show `n/a`; `assignee doctor` reports MCP servers started but Pricing-MCP tools fail at runtime with credential or 403 errors. Four of five MCP servers appear healthy; only the Pricing MCP is silently degraded.
+**Symptom:** `assignee infra plan` returns no cost estimates or cost fields show `n/a`; `assignee admin doctor` reports MCP servers started but Pricing-MCP tools fail at runtime with credential or 403 errors. Four of five MCP servers appear healthy; only the Pricing MCP is silently degraded.
 
-**Background:** MCP credential builders resolve credentials lazily per-server with `try/catch`. A missing or expired `ASSIGNEE_OPERATOR_*` / `ASSIGNEE_READER_*` / `ASSIGNEE_AUDITOR_*` credential does not prevent the other MCP servers from starting; it surfaces only when the affected MCP tool is first invoked. `assignee doctor` shows MCP _startup_ status; a credential-only-partial failure may appear downstream as "no pricing data" rather than an explicit MCP error.
+**Background:** MCP credential builders resolve credentials lazily per-server with `try/catch`. A missing or expired `ASSIGNEE_OPERATOR_*` / `ASSIGNEE_READER_*` / `ASSIGNEE_AUDITOR_*` credential does not prevent the other MCP servers from starting; it surfaces only when the affected MCP tool is first invoked. `assignee admin doctor` shows MCP _startup_ status; a credential-only-partial failure may appear downstream as "no pricing data" rather than an explicit MCP error.
 
 **Diagnosis:**
 
 ```bash
 # Surface any MCP sub-check that is not OK:
-assignee doctor --json | jq '.checks[].subs[] | select((.label | contains("MCP")) and .status != "ok")'
+assignee admin doctor --json | jq '.checks[].subs[] | select((.label | contains("MCP")) and .status != "ok")'
 
 # Check logs for credential errors from the Pricing MCP:
 grep -i "pricing\|credential\|forbidden\|403" ~/.assignee/logs/cli-$(date +%Y-%m-%d).jsonl | tail -30
@@ -384,7 +384,7 @@ grep -i "pricing\|credential\|forbidden\|403" ~/.assignee/logs/cli-$(date +%Y-%m
 
 **Recovery (per failing MCP server):**
 
-MCP credentials are injected via the `env` block of the host IDE's MCP config file — there is no `assignee init --mcp` flag. Update the config for your client:
+MCP credentials are injected via the `env` block of the host IDE's MCP config file — there is no `assignee dev init --mcp` flag. Update the config for your client:
 
 - **Cursor / Windsurf:** `~/.cursor/mcp.json` / `~/.windsurf/mcp.json`
 - **Claude Code:** `.claude/mcp_config.json`
@@ -412,18 +412,18 @@ After saving, **restart the IDE** (or reload the MCP config) so the updated env 
 
 ```bash
 # Verify recovery:
-assignee doctor
+assignee admin doctor
 ```
 
-**Verification:** `assignee doctor` exits 0 and `assignee plan "<any intent>"` returns cost estimates.
+**Verification:** `assignee admin doctor` exits 0 and `assignee infra plan "<any intent>"` returns cost estimates.
 
-See [`docs/mcp-server.md`](../mcp-server.md) § Troubleshooting for per-server credential requirements and the expected `assignee doctor` output shape.
+See [`docs/mcp-server.md`](../mcp-server.md) § Troubleshooting for per-server credential requirements and the expected `assignee admin doctor` output shape.
 
 ---
 
 ### 4i — Regional LLM outage
 
-**Symptom:** `assignee plan` (and all other LLM-backed commands) fail with Bedrock 503, `EndpointResolutionError`, or `Service Unavailable` for all calls; retries do not recover; the [AWS Service Health Dashboard](https://health.aws.amazon.com/) confirms `bedrock.<region>.amazonaws.com` is degraded or offline.
+**Symptom:** `assignee infra plan` (and all other LLM-backed commands) fail with Bedrock 503, `EndpointResolutionError`, or `Service Unavailable` for all calls; retries do not recover; the [AWS Service Health Dashboard](https://health.aws.amazon.com/) confirms `bedrock.<region>.amazonaws.com` is degraded or offline.
 
 **This is distinct from a per-call transient 503** (those resolve within minutes via the built-in exponential backoff in `status-poller.ts`). A regional outage means every call fails over an extended window.
 
@@ -438,11 +438,11 @@ export ANTHROPIC_API_KEY="<your-anthropic-api-key>"
 export ASSIGNEE_LLM_DEFAULT="anthropic/claude-opus-4-7"
 
 # 3. Verify the switch took effect:
-assignee doctor
+assignee admin doctor
 # Expect: Bedrock section shows warning or skip; LLM section shows "Anthropic direct"
 
 # 4. Run the blocked command:
-assignee plan "<intent>"
+assignee infra plan "<intent>"
 ```
 
 **Revert when Bedrock recovers:**
@@ -451,10 +451,10 @@ assignee plan "<intent>"
 # Unset the override — assignee will revert to the configured Bedrock model:
 unset ASSIGNEE_LLM_DEFAULT
 unset ANTHROPIC_API_KEY
-assignee doctor  # confirm Bedrock green
+assignee admin doctor  # confirm Bedrock green
 ```
 
-> **Note on `ASSIGNEE_AUDIT_KEY` and chain re-anchor:** If this outage coincided with a container restart or machine wipe that deleted `~/.assignee/audit-key`, `assignee audit-verify` will report "chain broken" because a _new_ key was auto-generated — not because of tampering. To distinguish key-loss from tampering: look for `WARNING: cannot persist audit key` in recent log output. If key-loss is confirmed, archive (don't delete) the broken chain — `mv ~/.assignee/audit ~/.assignee/audit.broken-$(date +%s)` — and re-run `assignee audit-verify` to establish a new genesis record. Set `ASSIGNEE_AUDIT_KEY=<secret>` persistently in your environment as the durable production pattern to survive restarts.
+> **Note on `ASSIGNEE_AUDIT_KEY` and chain re-anchor:** If this outage coincided with a container restart or machine wipe that deleted `~/.assignee/audit-key`, `assignee admin audit-verify` will report "chain broken" because a _new_ key was auto-generated — not because of tampering. To distinguish key-loss from tampering: look for `WARNING: cannot persist audit key` in recent log output. If key-loss is confirmed, archive (don't delete) the broken chain — `mv ~/.assignee/audit ~/.assignee/audit.broken-$(date +%s)` — and re-run `assignee admin audit-verify` to establish a new genesis record. Set `ASSIGNEE_AUDIT_KEY=<secret>` persistently in your environment as the durable production pattern to survive restarts.
 
 **Reference links:**
 
@@ -469,20 +469,20 @@ assignee doctor  # confirm Bedrock green
 
 ```bash
 # Confirmation requires typing the resource identifier — not Y/n.
-assignee destroy <resource-arn>
+assignee infra destroy <resource-arn>
 
 # Non-interactive (CI/CD mode):
-assignee destroy --yes <resource-arn>
+assignee infra destroy --yes <resource-arn>
 ```
 
 > **Note:** Bulk destroy (`--all` / `--include-iam`) was removed; the CLI no longer exposes those flags. Destroy one resource at a time. For scripted sweeps:
 
 ```bash
-# `assignee list --json` envelopes resources under `.resources[]`; each
+# `assignee admin list --json` envelopes resources under `.resources[]`; each
 # element exposes the ARN at `.arn` (see
 # packages/core/src/list-resources/types.ts).
-assignee list --json | jq -r '.resources[].arn' | while read arn; do
-  assignee destroy --yes "$arn"
+assignee admin list --json | jq -r '.resources[].arn' | while read arn; do
+  assignee infra destroy --yes "$arn"
 done
 ```
 
@@ -492,13 +492,13 @@ See [`docs/commands.md`](../commands.md#destroy).
 
 ```bash
 # Dry-run first to preview changes:
-assignee reconcile --dry-run
+assignee infra reconcile --dry-run
 
 # Apply reconciliation with per-resource prompts:
-assignee reconcile
+assignee infra reconcile
 
 # Apply all without prompting (CI/CD mode):
-assignee reconcile --auto-reconcile --yes
+assignee infra reconcile --auto-reconcile --yes
 ```
 
 Reconcile re-applies the checkpointed desired state via CloudControl `UpdateResource`. It does **not** re-run the plan pipeline. If the checkpoint is missing or stale, re-plan first.
@@ -510,10 +510,10 @@ Reconcile re-applies the checkpointed desired state via CloudControl `UpdateReso
 ls -lt ~/.assignee/backups/provisions-*.json
 
 # Restore from a specific date (merges by run ID, deduplicates):
-assignee restore-provisions --from YYYY-MM-DD
+assignee infra restore-provisions --from YYYY-MM-DD
 
 # Restore from the most recent backup (omit --from to use latest):
-assignee restore-provisions
+assignee infra restore-provisions
 ```
 
 See [`docs/commands.md`](../commands.md#restore-provisions) and the backup script at [`scripts/backup-provisions.ts`](../../scripts/backup-provisions.ts).

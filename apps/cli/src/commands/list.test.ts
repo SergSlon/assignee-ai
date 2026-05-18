@@ -331,7 +331,7 @@ describe("assignee list command", () => {
 
       expect(freshRenderError).toHaveBeenCalledWith(
         expect.stringContaining('Failed to validate --resource-type "ec2"'),
-        expect.stringContaining("`assignee list --help`"),
+        expect.stringContaining("`assignee admin list --help`"),
         expect.objectContaining({ why: "simulated upstream failure" }),
       );
     } finally {

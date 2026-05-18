@@ -1,6 +1,6 @@
 /**
  * Shared list-resources types — the canonical shape for resources
- * returned by `assignee list` and the `list_managed_resources` MCP
+ * returned by `assignee admin list` and the `list_managed_resources` MCP
  * tool, plus the provision-log entry shape both apps read from
  * `~/.assignee/memory/provisions.json`.
  *
@@ -38,7 +38,7 @@ export interface ManagedResource {
    * `attachCompensatingBucketPolicy` SDK call failed for this S3 bucket.
    * Undefined for non-S3 resources, S3 buckets where the policy attach
    * succeeded (the field is also undefined to keep the happy path
-   * minimal — `assignee list` only flags the failure case), and pre-bug
+   * minimal — `assignee admin list` only flags the failure case), and pre-bug
    * provision records. The CLI list renderer surfaces a warning row
    * when the field is `false`.
    */
@@ -46,7 +46,7 @@ export interface ManagedResource {
   /**
    * bug-s3-bucket-policy-attach-failure-observability — human-readable
    * reason captured from the failed `PutBucketPolicy` call so the
-   * `assignee list` warning row can echo the same message the operator
+   * `assignee admin list` warning row can echo the same message the operator
    * saw on stderr at apply time. Undefined when
    * `compensatingPolicyAttached` is unset or `true`.
    */

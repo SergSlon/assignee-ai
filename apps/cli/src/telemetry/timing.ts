@@ -202,7 +202,7 @@ function effectiveTotalBudgetMs(): number {
 /**
  * DF-PLAN-BUDGET-WARNING-AFTER-SUCCESS (live verify 2026-05-12): the
  * `total` timer fires its BUDGET EXCEEDED warning after a successful
- * `assignee plan` that genuinely took 81s due to slow MCP cold-start
+ * `assignee infra plan` that genuinely took 81s due to slow MCP cold-start
  * + LLM latency. The original "60s rule" intent was to catch silent
  * hangs — when the command succeeded, the user already got their
  * answer; the warning is pure noise (and contradicts the ✓ Operation

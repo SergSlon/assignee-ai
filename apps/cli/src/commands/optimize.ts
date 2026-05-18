@@ -1,5 +1,5 @@
 /**
- * `assignee optimize` — cost-optimization slice (2026-04-08, A7).
+ * `assignee infra optimize` — cost-optimization slice (2026-04-08, A7).
  *
  * Wave-6d F4: decomposed into `optimize/` sub-modules. This file is
  * now a thin Commander wrapper. Read-only: never mutates AWS state or
@@ -43,15 +43,15 @@ export const optimizeCommand = new Command("optimize")
     "after",
     `
 Examples:
-  $ assignee optimize
+  $ assignee infra optimize
         Scan all managed resources for rightsizing opportunities
-  $ assignee optimize --region ${DEFAULT_AWS_REGION} --min-savings 10
+  $ assignee infra optimize --region ${DEFAULT_AWS_REGION} --min-savings 10
         Only show recommendations projecting ≥$10/mo savings
-  $ assignee optimize <arn> --json
+  $ assignee infra optimize <arn> --json
         Machine-readable output for a single resource
 
 optimize is read-only — it prints recommendations but never mutates AWS
-state. Apply changes via \`assignee plan\` / \`assignee apply\`; no --yes
+state. Apply changes via \`assignee infra plan\` / \`assignee infra apply\`; no --yes
 flag is needed here.
 
 Use the global \`--no-color\` flag (see Global Options) to disable ANSI

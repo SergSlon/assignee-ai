@@ -1,12 +1,12 @@
 /**
- * W4-04 (Epic 100 Round 3) — `assignee restore-provisions` command.
+ * W4-04 (Epic 100 Round 3) — `assignee infra restore-provisions` command.
  *
  * Restores `~/.assignee/memory/provisions.json` from a dated backup
  * created by `scripts/backup-provisions.ts`. Idempotent — restoring the
  * same backup twice is safe (overwrites the target with identical content).
  *
  * Usage:
- *   assignee restore-provisions [--from <YYYY-MM-DD>]
+ *   assignee infra restore-provisions [--from <YYYY-MM-DD>]
  *
  * Options:
  *   --from <date>   Restore from a specific date (YYYY-MM-DD). When omitted

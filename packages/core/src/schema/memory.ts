@@ -24,7 +24,7 @@ export const ProvisionRecordSchema = z.object({
    * on the renderable state. Optional + additive: pre-Story-iv
    * provision records validate without it, and non-EC2 resources
    * (S3 / RDS / Lambda) never carry a value. Used by
-   * `assignee describe` to render the `(was X at apply time)`
+   * `assignee admin describe` to render the `(was X at apply time)`
    * annotation when the live IP differs (stop/start gives EC2 a
    * new public IP).
    */
@@ -34,7 +34,7 @@ export const ProvisionRecordSchema = z.object({
    * `attachCompensatingBucketPolicy` returned `{ attached: true }` for an
    * S3 bucket at apply time, `false` when the SDK call failed (throttle,
    * IAM gap, network), `undefined` for non-S3 resources and pre-bug
-   * provision records. `assignee list` surfaces a warning row when the
+   * provision records. `assignee admin list` surfaces a warning row when the
    * field is `false` so the operator can spot buckets where the
    * per-bucket tag boundary is not in effect.
    */
@@ -48,9 +48,9 @@ export const ProvisionRecordSchema = z.object({
    */
   compensatingPolicyError: z.string().optional(),
   /**
-   * `assignee update` follow-on: real DNS-resolvable CloudFront hostname
+   * `assignee dev update` follow-on: real DNS-resolvable CloudFront hostname
    * (e.g. `d1eka2i9dtl8tu.cloudfront.net`) captured at apply time for
-   * static-website compounds. Lets `assignee update` print the live URL
+   * static-website compounds. Lets `assignee dev update` print the live URL
    * on subsequent runs without an extra GetDistribution roundtrip.
    * Optional and additive — pre-feature provision records validate
    * without it, and non-CloudFront resources never carry a value.

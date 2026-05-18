@@ -52,7 +52,7 @@ export function bootstrapOperatorCredentials(
       ok: false,
       error: buildErrorResponse(
         `Operator credentials are required to destroy resources: ${message}`,
-        "Set ASSIGNEE_OPERATOR_ACCESS_KEY_ID and ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY in the MCP server environment, or run 'assignee setup' to create the IAM users.",
+        "Set ASSIGNEE_OPERATOR_ACCESS_KEY_ID and ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY in the MCP server environment, or run 'assignee dev setup' to create the IAM users.",
       ),
     };
   }

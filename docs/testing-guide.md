@@ -228,7 +228,7 @@ test:coverage` for the live count).
 
 ### Cost
 
-Actual AWS costs for a full end-to-end run vary by region and pricing changes. Most resources are free-tier; RDS, ELB, and NAT Gateway are the usual cost drivers. Run `assignee plan <intent>` for a pre-flight cost estimate (pricing fetched live from the AWS Pricing MCP at plan time) before invoking the suite if cost visibility matters.
+Actual AWS costs for a full end-to-end run vary by region and pricing changes. Most resources are free-tier; RDS, ELB, and NAT Gateway are the usual cost drivers. Run `assignee infra plan <intent>` for a pre-flight cost estimate (pricing fetched live from the AWS Pricing MCP at plan time) before invoking the suite if cost visibility matters.
 
 ### Duration
 
@@ -550,12 +550,12 @@ suite instead.
 | 19  | Lambda Function single-resource plan with elicitation                                        | ⬜     |
 | 20  | DynamoDB Table single-resource plan                                                          | ⬜     |
 | 21  | Pattern detection logged — no Bedrock call for compound intents                              | ⬜     |
-| 22  | `assignee list` — shows managed resources                                                    | ⬜     |
-| 23  | `assignee destroy` — safe teardown with "yes" confirmation                                   | ⬜     |
-| 24  | `assignee status` — summary with cost totals                                                 | ⬜     |
-| 25  | `assignee init` — project setup                                                              | ⬜     |
-| 26  | `assignee plan --quick` — non-interactive plan (accepts wizard defaults)                     | ⬜     |
-| 27  | `assignee apply --yes --checkpoint` — CI mode auto-confirm                                   | ⬜     |
+| 22  | `assignee admin list` — shows managed resources                                              | ⬜     |
+| 23  | `assignee infra destroy` — safe teardown with "yes" confirmation                             | ⬜     |
+| 24  | `assignee admin status` — summary with cost totals                                           | ⬜     |
+| 25  | `assignee dev init` — project setup                                                          | ⬜     |
+| 26  | `assignee infra plan --quick` — non-interactive plan (accepts wizard defaults)               | ⬜     |
+| 27  | `assignee infra apply --yes --checkpoint` — CI mode auto-confirm                             | ⬜     |
 | 28  | Best practices findings in plan output                                                       | ⬜     |
 | 29  | Memory hints ("Previous provision: <live monthly cost from Pricing MCP>") in plan output     | ⬜     |
 | 30  | Static Website Deploy — S3 + CloudFront + file upload via `--source`                         | ⬜     |

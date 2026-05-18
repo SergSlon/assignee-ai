@@ -12,7 +12,7 @@
  * (Story 54-it1-04).
  *
  * Widths in the underlying renderer are capped at 100 columns so
- * `assignee plan --help` reads cleanly on a standard 100-col terminal.
+ * `assignee infra plan --help` reads cleanly on a standard 100-col terminal.
  */
 
 import { renderPatternsHint, renderSupportedTypesHint } from "@assignee/core";
@@ -35,7 +35,7 @@ export const PATTERNS_HINT = renderPatternsHint("cli");
 
 /** Examples hint shown in help text. */
 export const EXAMPLES_HINT = `Examples:
-  assignee plan "Create an S3 bucket"             Plan a single resource
-  assignee plan "Create a serverless API"          Plan a multi-resource architecture
-  assignee apply "Create a Lambda function"        Plan and deploy in one step
-  assignee drift                                   Check all resources for drift`;
+  assignee infra plan "Create an S3 bucket"             Plan a single resource
+  assignee infra plan "Create a serverless API"          Plan a multi-resource architecture
+  assignee infra apply "Create a Lambda function"        Plan and deploy in one step
+  assignee infra drift                                   Check all resources for drift`;

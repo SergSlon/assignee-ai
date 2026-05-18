@@ -64,7 +64,7 @@ pnpm link --global
 Verify the binary is on your `PATH`:
 
 ```bash
-assignee version
+assignee dev version
 ```
 
 You should see a version banner. If `assignee` isn't found, see the
@@ -73,7 +73,7 @@ linking notes in [`../how-to/quickstart.md`](../how-to/quickstart.md).
 Confirm assignee can talk to AWS and Bedrock:
 
 ```bash
-assignee doctor --short
+assignee admin doctor --short
 ```
 
 A green check means you're ready. Red lines tell you exactly what to
@@ -87,7 +87,7 @@ Make a fresh working directory and run `init`:
 
 ```bash
 mkdir my-first-assignee && cd my-first-assignee
-assignee init
+assignee dev init
 ```
 
 The wizard asks a few questions (region, default tags, auto-fix mode)
@@ -103,7 +103,7 @@ Pick a unique bucket name. S3 bucket names are **globally unique**
 across all of AWS, so add a random suffix:
 
 ```bash
-assignee plan "create an S3 bucket called my-tutorial-bucket-$RANDOM"
+assignee infra plan "create an S3 bucket called my-tutorial-bucket-$RANDOM"
 ```
 
 assignee will:
@@ -129,7 +129,7 @@ Read the plan box. If a field looks wrong, you can re-run with
 When the plan looks right, apply it:
 
 ```bash
-assignee apply
+assignee infra apply
 ```
 
 With no arguments, `apply` picks up the latest checkpoint, asks you to
@@ -166,7 +166,7 @@ Tutorials shouldn't leave resources behind, and assignee makes cleanup
 easy. Pass the resource ARN (the most reliable identifier) to `destroy`:
 
 ```bash
-assignee destroy arn:aws:s3:::my-tutorial-bucket-NNNN
+assignee infra destroy arn:aws:s3:::my-tutorial-bucket-NNNN
 ```
 
 Replace `NNNN` with whatever suffix you picked. (Bare-name resolution
@@ -198,7 +198,7 @@ write.
 
 ### Next steps
 
-- Try a **compound pattern**: `assignee plan "create a VPC with public
+- Try a **compound pattern**: `assignee infra plan "create a VPC with public
 and private subnets"` provisions an entire networking stack in
   dependency order.
 - Browse the [How-to guides](../how-to/) for task-specific recipes

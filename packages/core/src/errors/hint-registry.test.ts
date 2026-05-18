@@ -27,7 +27,7 @@ describe("ErrorHintRegistry", () => {
       new ProvisioningError("Stale plan", "StateMismatch"),
     );
     expect(hint).toBe(
-      "Resource already exists. Choose a different name and re-run 'assignee plan'.",
+      "Resource already exists. Choose a different name and re-run 'assignee infra plan'.",
     );
   });
 
@@ -36,7 +36,7 @@ describe("ErrorHintRegistry", () => {
       new ProvisioningError("Not found", "NotFound"),
     );
     expect(hint).toBe(
-      "Resource was removed during provisioning. Re-run `assignee plan` to get a fresh plan.",
+      "Resource was removed during provisioning. Re-run `assignee infra plan` to get a fresh plan.",
     );
   });
 

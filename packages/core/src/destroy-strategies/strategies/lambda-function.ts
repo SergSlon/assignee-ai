@@ -2,7 +2,7 @@
  * Lambda Function destroy strategy — cascades to the companion IAM exec
  * role created by the `lambda-with-exec-role` compound pattern.
  *
- * When `assignee apply "Create a Lambda"` runs, it auto-creates an IAM
+ * When `assignee infra apply "Create a Lambda"` runs, it auto-creates an IAM
  * role named `assignee-iam-execution-role-<runId8>` and a Lambda with
  * the same runId suffix. The provision log records both resources under
  * the same runId. Without this cascade, destroying the Lambda orphans
@@ -140,7 +140,7 @@ export const lambdaFunctionStrategy: DestroyStrategy = {
 
       ctx.warn("lambda_cascade_role_delete_timeout", {
         roleName,
-        hint: `Run \`assignee destroy arn:aws:iam::...:role/${roleName}\` to clean up manually.`,
+        hint: `Run \`assignee infra destroy arn:aws:iam::...:role/${roleName}\` to clean up manually.`,
       });
     } catch (err) {
       // Non-fatal: log so the user knows, but the Lambda destroy succeeded.

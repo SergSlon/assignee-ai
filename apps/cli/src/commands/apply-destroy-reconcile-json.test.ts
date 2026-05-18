@@ -408,7 +408,7 @@ describe("applyCommand — --json envelope (Epic 94 N4 / A-14)", () => {
     expect(parsed.ok).toBe(false);
     expect(parsed.error.code).toBe("BP_BLOCKED");
     expect(parsed.error.message).toBe(
-      "Apply blocked by best-practice findings: BP-IGW-001.\n→ Run `assignee plan --wizard` to remediate interactively, or re-phrase your intent to avoid the violation.\n→ See docs/best-practices.md for rule details.",
+      "Apply blocked by best-practice findings: BP-IGW-001.\n→ Run `assignee infra plan --wizard` to remediate interactively, or re-phrase your intent to avoid the violation.\n→ See docs/best-practices.md for rule details.",
     );
     expect(parsed.error.detail.practiceIds).toEqual(["BP-IGW-001"]);
   });

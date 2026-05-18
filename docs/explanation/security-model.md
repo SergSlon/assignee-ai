@@ -10,7 +10,7 @@ with their compensating controls.
 
 ## Overview
 
-Assignee provisions three IAM users during `assignee setup`:
+Assignee provisions three IAM users during `assignee dev setup`:
 
 | User                | Policy                                                                                           | Purpose                                          |
 | ------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
@@ -60,7 +60,7 @@ managed-by": "assignee-ai" } }`, the StringEquals comparison receives
 implicit deny — the user sees "no identity-based policy allows the
 s3:DeleteBucket action" even though the bucket carries the correct tag.
 
-This causes `assignee destroy <s3-arn>` to fail with AccessDenied for all
+This causes `assignee infra destroy <s3-arn>` to fail with AccessDenied for all
 assignee-managed S3 buckets.
 
 ### Empirical confirmation (2026-05-07)
@@ -124,7 +124,7 @@ Mitigations:
 1. **Narrow resource scope**: `Resource: "arn:aws:s3:::*"` limits the
    blast to S3 only. All other services remain tag-scoped.
 
-2. **Compensating control — bucket policy**: When `assignee apply` creates
+2. **Compensating control — bucket policy**: When `assignee infra apply` creates
    an S3 bucket, it also attaches a bucket policy granting the operator
    destructive permissions on that specific bucket. Bucket policies (resource-
    based policies) DO evaluate bucket tags correctly at the resource-policy
@@ -142,7 +142,7 @@ Mitigations:
 ### Operator setup requirement
 
 This is an IAM policy schema change. Existing operators must re-run
-`assignee setup` after pulling this update to receive the new
+`assignee dev setup` after pulling this update to receive the new
 `S3BucketDestructiveResourcePrefixScoped` statement.
 
 ---
@@ -168,7 +168,7 @@ Any change to the operator policy schema (new statement, action added or
 removed, Condition changed) requires existing operators to re-run:
 
 ```sh
-assignee setup
+assignee dev setup
 ```
 
 The setup command compares the desired policy document with the currently-

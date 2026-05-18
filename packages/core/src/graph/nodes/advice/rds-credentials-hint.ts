@@ -32,7 +32,7 @@ export function rdsCredentialsHint(
   return [
     `${AdviceIcon.WARNING} [${RDS_MASTER_USER_PASSWORD_REQUIRED}] ` +
       `MasterUserPassword is required for RDS. ` +
-      `Pass it with --set MasterUserPassword=<your-password> when running "assignee plan". ` +
+      `Pass it with --set MasterUserPassword=<your-password> when running "assignee infra plan". ` +
       `Roadmap: Solutions A (SecretsManager dynamic-reference compound) and ` +
       `B (locally-generated random + no-echo) are deferred to follow-up stories.`,
   ];

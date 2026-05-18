@@ -391,7 +391,7 @@ describe("LlmAdapter", () => {
       );
       expect(written).toContain("BEDROCK_GUARDRAIL_ID");
       expect(written).toContain("BEDROCK_GUARDRAIL_DISABLE=1");
-      expect(written).toContain("assignee doctor");
+      expect(written).toContain("assignee admin doctor");
     });
 
     it("does NOT emit Bedrock warning when guardrailId is provided", () => {

@@ -27,7 +27,7 @@ export const STORAGE_ACTIONS: Record<string, string[]> = {
     "elasticfilesystem:DeleteMountTarget",
   ],
   // A14 (2026-04-09): AWS::CloudFront::Distribution first-class.
-  // `assignee update` follow-on: CreateInvalidation + GetInvalidation are
+  // `assignee dev update` follow-on: CreateInvalidation + GetInvalidation are
   // required by the new `cloudfront-invalidate` service so the post-upload
   // cache refresh step does not require a separate IAM grant. Both
   // actions only target `cloudfront:*Distribution/<id>`, so least-privilege

@@ -1,5 +1,5 @@
 /**
- * Discovery help block for `assignee plan --help`.
+ * Discovery help block for `assignee infra plan --help`.
  *
  * Story 50-3 removed the dedicated `assignee patterns` and
  * `assignee types` commands. Their content now lives here as a

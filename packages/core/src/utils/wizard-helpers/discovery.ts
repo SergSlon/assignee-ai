@@ -109,7 +109,7 @@ export async function resolveDynamicFields(
     clack.log.warn(
       "Reader credentials not configured (ASSIGNEE_READER_ACCESS_KEY_ID / ASSIGNEE_READER_SECRET_ACCESS_KEY). " +
         "Live discovery (subnets, security groups, key pairs, AMIs…) is disabled. " +
-        "To enable dropdowns, set the reader env vars or run `assignee setup`. " +
+        "To enable dropdowns, set the reader env vars or run `assignee dev setup`. " +
         "Falling back to manual entry for all discovered fields.",
     );
   }

@@ -964,7 +964,7 @@ probes:
       e98.W1.B1 (Epic 97 B-02 BLOCKER): non-taggable CFN constructs
       (Route / SubnetRouteTableAssociation / VPCGatewayAttachment)
       previously applied successfully but did NOT surface in
-      `assignee list` (RGTA doesn't return them) and could NOT be
+      `assignee admin list` (RGTA doesn't return them) and could NOT be
       destroyed (resource-resolver only scanned RGTA). Every apply
       orphaned AWS state that the tool forgot about.
 

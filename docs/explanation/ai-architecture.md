@@ -178,7 +178,7 @@ Every LLM invocation emits one structured `token_usage` event (`packages/core/sr
 }
 ```
 
-A process-local accumulator in `packages/core/src/utils/token-usage.ts` maintains per-callsite tallies. At end-of-command a `token_usage_summary` event exposes the full breakdown. Example from a real `assignee plan` run:
+A process-local accumulator in `packages/core/src/utils/token-usage.ts` maintains per-callsite tallies. At end-of-command a `token_usage_summary` event exposes the full breakdown. Example from a real `assignee infra plan` run:
 
 ```
 totalCallCount: 3,
@@ -385,7 +385,7 @@ These extend §6's check-type table. Any BP YAML that references `nested_array_p
 
 ## 9. A real end-to-end run
 
-The best way to understand the pipeline is to watch it run. Here's the token-usage summary from an actual `assignee plan "Create an S3 bucket named hero-demo-bucket"` invocation on 2026-04-20 (run-id `REDACTED`):
+The best way to understand the pipeline is to watch it run. Here's the token-usage summary from an actual `assignee infra plan "Create an S3 bucket named hero-demo-bucket"` invocation on 2026-04-20 (run-id `REDACTED`):
 
 ```
 plan_started           → intent="Create an S3 bucket named hero-demo-bucket"

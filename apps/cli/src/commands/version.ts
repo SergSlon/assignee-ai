@@ -1,5 +1,5 @@
 /**
- * `assignee version` command — richer version + environment info.
+ * `assignee dev version` command — richer version + environment info.
  *
  * Distinct from the built-in `--version` flag: this subcommand also prints
  * Node.js version, platform/arch, and the pinned MCP server versions.
@@ -25,7 +25,7 @@ import { DEFAULT_AUDIT_KEY_FILE } from "@assignee/core/audit";
  * Resolve the CLI version from `apps/cli/package.json`.
  *
  * Matches the lookup used by the root `program.version(pkg.version)` call
- * in `src/index.ts`, so `assignee --version` and `assignee version` can
+ * in `src/index.ts`, so `assignee --version` and `assignee dev version` can
  * never drift apart.
  *
  * Epic 61-it1-01 (L3-001): when the package.json read/parse fails (damaged
@@ -57,7 +57,7 @@ export function readPackageVersion(): string {
  *
  * Epic 65-it1-01 (L3-001 MED): the dynamic `import("../config/mcp-servers.js")`
  * call in the action handler is now wrapped in try/catch. On failure we warn
- * the operator and substitute an empty pins record so `assignee version`
+ * the operator and substitute an empty pins record so `assignee dev version`
  * still prints CLI version + Node + platform — the exact triage info a bug
  * report needs when the MCP server wiring itself is broken.
  */
@@ -105,7 +105,7 @@ export async function loadMcpPinsOrFallback(): Promise<McpPinsRecord> {
  * Detect whether the audit key is sourced from the `ASSIGNEE_AUDIT_KEY`
  * env var ("env") or falls back to the on-disk key file ("file").
  *
- * PR-030 (W24c-S3): included in `assignee version --json` so bug reports
+ * PR-030 (W24c-S3): included in `assignee dev version --json` so bug reports
  * carry the audit-key provenance without exposing the key material itself.
  */
 function resolveAuditKeySource(): "env" | "file" {

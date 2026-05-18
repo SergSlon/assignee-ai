@@ -310,7 +310,7 @@ structured warning via `mcpLogError`:
 ```
 
 The server continues operating after an append failure, but the affected
-operation will not appear in `assignee audit-verify` output. Check disk
+operation will not appear in `assignee admin audit-verify` output. Check disk
 space and permissions under `~/.assignee/logs/`.
 
 ### `destroy_resource` failures
@@ -319,4 +319,4 @@ Every first-class supported type flows through the CloudControl API for destroy 
 
 - **Resource not found / tag not propagated**: Tags take ~60s to propagate after creation. If the resource was just provisioned, wait and retry.
 - **CCAPI NotFound short-circuit**: If CloudControl returns NotFound, the destroy pipeline treats it as success (the resource is already gone). This is by design — see `packages/core/src/destroy-strategies/`.
-- **Insufficient IAM permissions**: The operator IAM user must have `cloudcontrol:DeleteResource` for the resource type. Run `assignee doctor` to verify the IAM posture.
+- **Insufficient IAM permissions**: The operator IAM user must have `cloudcontrol:DeleteResource` for the resource type. Run `assignee admin doctor` to verify the IAM posture.

@@ -1,7 +1,7 @@
 /**
  * SSH-bundle IAM teardown — post-destroy companion to `ensureSshIamProfile`.
  *
- * Pre-demo audit (2026-05-05) H3: when the user runs `assignee destroy
+ * Pre-demo audit (2026-05-05) H3: when the user runs `assignee infra destroy
  * <ec2-arn>`, the existing flow tears down the EC2 instance + KeyPair +
  * SecurityGroup but leaves the auto-created `assignee-ssh-<runId-suffix>`
  * IAM Role and InstanceProfile orphaned. They sit in the account

@@ -2,7 +2,7 @@
  * Guard: verify a plan-referenced VPC actually exists via
  * `ec2:DescribeVpcs` (Epic 92 finding B-10).
  *
- * Problem: `assignee plan "Create a subnet in a nonexistent VPC
+ * Problem: `assignee infra plan "Create a subnet in a nonexistent VPC
  * vpc-doesnotexist99999" --output json --no-apply` emits a plan with
  * that bogus VpcId and FULFILLED preflight; CloudControl later
  * rejects on apply. This guard short-circuits that path before any
@@ -154,7 +154,7 @@ export function buildVpcExistenceGuard(
           return failResult(
             `AWS credentials expired or invalid — unable to construct EC2 client ` +
               `for VPC existence check (${errMsg}). ` +
-              `Run \`assignee setup\` or refresh your AWS session and re-run.`,
+              `Run \`assignee dev setup\` or refresh your AWS session and re-run.`,
           );
         }
         log({
@@ -209,7 +209,7 @@ export function buildVpcExistenceGuard(
                 `AWS credentials expired or invalid while verifying ` +
                   `VpcId ${vpcId} (${errName || errCode || "auth failure"}: ${errMsg}). ` +
                   `Preflight cannot validate the plan without working ` +
-                  `credentials. Run \`assignee setup\` or refresh your AWS ` +
+                  `credentials. Run \`assignee dev setup\` or refresh your AWS ` +
                   `session (e.g. \`aws sso login\`) and re-run.`,
               );
             }
@@ -304,7 +304,7 @@ function buildNotFoundMessage(vpcId: string): string {
     `VpcId ${vpcId} does not exist in the current account/region ` +
     `(${AWS_REGION}). Either:\n` +
     `  1. Create the VPC first via a compound pattern ` +
-    `(e.g. \`assignee plan "Create a VPC with public and private subnets"\`).\n` +
+    `(e.g. \`assignee infra plan "Create a VPC with public and private subnets"\`).\n` +
     `  2. List existing VPCs with ` +
     `\`aws ec2 describe-vpcs --query 'Vpcs[].VpcId'\` and re-run with ` +
     `--set VpcId=<real-id>.\n` +

@@ -989,7 +989,7 @@ async function main() {
   }
 
   // CLI drift + clean
-  console.log("\nRunning assignee drift...");
+  console.log("\nRunning assignee infra drift...");
   try {
     const driftOutput = execSync(
       `node ${resolve(ROOT, "apps/cli/dist/index.js")} drift`,

@@ -1,5 +1,5 @@
 /**
- * `assignee init` command — optional project-level or global config setup.
+ * `assignee dev init` command — optional project-level or global config setup.
  *
  * Without flags: creates `.assignee/config.yaml` in the current project.
  * With `--global`: creates `~/.config/assignee/config.yaml` for user-wide defaults.
@@ -66,12 +66,12 @@ function parseAutoFixFlag(raw: string): AutoFixModeType {
  *
  * Node reports `process.std{in,out}.isTTY` as `undefined` (NOT `false`)
  * for streams that are pipes or redirections — e.g. the canonical CI
- * invocation `assignee init </dev/null` has `stdin.isTTY === undefined`,
- * and `assignee init | tee log.txt` has `stdout.isTTY === undefined`.
+ * invocation `assignee dev init </dev/null` has `stdin.isTTY === undefined`,
+ * and `assignee dev init | tee log.txt` has `stdout.isTTY === undefined`.
  * The previous `=== false` check missed both cases, so the D-39
  * guard-and-exit envelope never fired; clack's prompt saw a non-TTY
  * stdin, resolved immediately, and the CLI exited 0 without writing a
- * config. Every non-interactive `assignee init` without `--yes` was
+ * config. Every non-interactive `assignee dev init` without `--yes` was
  * silently broken since Epic 92 u.d landed.
  *
  * The fix: require BOTH stdin AND stdout to be an explicit TTY
@@ -148,22 +148,22 @@ export const initCommand = new Command(CommandName.INIT)
     "after",
     `
 Examples:
-  $ assignee init
+  $ assignee dev init
         Create a project config in .assignee/ (interactive, asks auto-fix mode)
-  $ assignee init --wizard
+  $ assignee dev init --wizard
         Same as above — explicit opt-in to the interactive wizard
-  $ assignee init --global
+  $ assignee dev init --global
         Create/update ~/.config/assignee/config.yaml for the current user
-  $ assignee init --yes --region ${DEFAULT_AWS_REGION} --auto-fix ask
+  $ assignee dev init --yes --region ${DEFAULT_AWS_REGION} --auto-fix ask
         Non-interactive, CI-friendly: skip all prompts, use supplied values
-  $ assignee init --profile enterprise-sso
+  $ assignee dev init --profile enterprise-sso
         Resolve credentials via the "enterprise-sso" AWS profile (SSO-friendly)
-  $ AWS_PROFILE=enterprise-sso assignee init
+  $ AWS_PROFILE=enterprise-sso assignee dev init
         Same — profile can also be set via environment variable
 
 The wizard offers three auto-fix modes (ask / apply / skip) that persist
-to preferences.auto_fix and control how \`assignee plan\` reacts to best
--practice findings. Re-run \`assignee init\` to change the mode later.
+to preferences.auto_fix and control how \`assignee infra plan\` reacts to best
+-practice findings. Re-run \`assignee dev init\` to change the mode later.
 `,
   )
   .action(async (options: InitOptions) => {
@@ -189,7 +189,7 @@ to preferences.auto_fix and control how \`assignee plan\` reacts to best
       const autoFix = options.autoFix ?? AutoFixMode.ASK;
       process.stderr.write(
         "error: init requires a TTY OR --yes flag\n" +
-          `fix: Re-run with: assignee init --yes --region ${region} --auto-fix ${autoFix}\n`,
+          `fix: Re-run with: assignee dev init --yes --region ${region} --auto-fix ${autoFix}\n`,
       );
       process.exitCode = ProcessExitCode.GENERIC_ERROR;
       return;

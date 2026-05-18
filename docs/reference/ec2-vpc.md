@@ -22,13 +22,13 @@ A dedicated plugin handles schema elicitation, default injection, and best-pract
 ### Typical intent examples
 
 ```bash
-assignee plan "Create a VPC"
-assignee apply "Create a VPC named my-ec2-vpc"
+assignee infra plan "Create a VPC"
+assignee infra apply "Create a VPC named my-ec2-vpc"
 ```
 
 ### Best-practice rules
 
-Best-practice rules for this type live under `packages/best-practices/ec2/` (per-service subdirectories). Run `assignee plan` to see which rules apply to your specific configuration.
+Best-practice rules for this type live under `packages/best-practices/ec2/` (per-service subdirectories). Run `assignee infra plan` to see which rules apply to your specific configuration.
 
 ### Pricing
 

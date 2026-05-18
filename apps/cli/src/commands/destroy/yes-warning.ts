@@ -6,7 +6,7 @@
  *   - `destroy.ts` (CCAPI-bypass `confirmDestroy` for KMS / Secrets / EventBus)
  *
  * Background: the warning was duplicated across both call sites and fired
- * for every per-resource iteration of `assignee destroy --all`, even though
+ * for every per-resource iteration of `assignee infra destroy --all`, even though
  * the bulk-destroy parent had already collected the typed
  * `DESTROY-EVERYTHING` confirmation once. The helper accepts a
  * `noConfirm: true` signal that the bulk-destroy orchestrator threads in

@@ -6,7 +6,7 @@
  * ──────────────────────────────────────────────────────────────────────────
  * Discovery is a best-effort, read-only feature used by the option-elicitor
  * to populate dropdowns (subnets, AMIs, key pairs, RDS classes, etc.). A user
- * running `assignee plan` with only operator credentials configured — but no
+ * running `assignee infra plan` with only operator credentials configured — but no
  * reader credentials — must still be able to run the wizard with manual-entry
  * fallbacks. We therefore use `tryAssigneeCredentials` (non-throwing) and
  * return `undefined` so each discover*() function can short-circuit to `[]`

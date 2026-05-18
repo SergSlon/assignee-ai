@@ -69,7 +69,7 @@ export async function ensurePolicy(
         // @see SECURITY-AUDIT.md — M-S12
         if (nonDefault.length === 0) {
           process.stderr.write(
-            `[assignee setup] WARNING: policy ${policyName} has 5 versions ` +
+            `[assignee dev setup] WARNING: policy ${policyName} has 5 versions ` +
               `but none are non-default. Skipping policy update to avoid a ` +
               `LimitExceeded error. Inspect the policy in the AWS console.\n`,
           );

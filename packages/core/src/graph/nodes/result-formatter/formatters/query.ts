@@ -3,7 +3,7 @@
  *
  * Called by the result-formatter registry when `executionStatus=QUERY_INTENT`.
  * Renders the list of matching managed resources using the same display
- * primitives as `assignee list`, plus a completion footer confirming that
+ * primitives as `assignee admin list`, plus a completion footer confirming that
  * zero AWS writes were performed.
  *
  * HIGH 4 fix: honours `state.outputFormat === "json"` — emits a structured
@@ -66,8 +66,8 @@ export async function formatQueryResult(
     const msg =
       state.errorMessage ??
       "I couldn't determine what you were looking for. " +
-        "Try `assignee list` to see all managed resources, " +
-        "or `assignee describe <arn>` to inspect a specific resource.";
+        "Try `assignee admin list` to see all managed resources, " +
+        "or `assignee admin describe <arn>` to inspect a specific resource.";
 
     clack.log.info(msg);
     clack.log.info("Query completed. Zero AWS writes performed.");
@@ -81,10 +81,10 @@ export async function formatQueryResult(
       : " managed resource";
     const emptyMsg = queryResult.resourceType
       ? `No${typeLabel}s found in your account. ` +
-        `Run \`assignee list\` to see all managed resources, ` +
-        `or \`assignee apply\` to create one.`
+        `Run \`assignee admin list\` to see all managed resources, ` +
+        `or \`assignee infra apply\` to create one.`
       : "No managed resources found in your account. " +
-        "Run `assignee list` to verify, or `assignee apply` to create resources.";
+        "Run `assignee admin list` to verify, or `assignee infra apply` to create resources.";
 
     renderEmptyList();
     clack.log.info(emptyMsg);
@@ -92,7 +92,7 @@ export async function formatQueryResult(
     return {};
   }
 
-  // Resources found — render the same table as `assignee list`.
+  // Resources found — render the same table as `assignee admin list`.
   renderResourceTable(queryResult.resources);
 
   clack.log.success(

@@ -31,7 +31,7 @@ export function writeEnvAndSummary(envUpdates: Record<string, string>): void {
     );
   }
 
-  clack.outro("Run `assignee plan` to verify the new credentials work.");
+  clack.outro("Run `assignee infra plan` to verify the new credentials work.");
   clack.log.info(
     "ℹ Subsequent assignee commands in this shell will pick up the new\n" +
       "  credentials automatically (.env is auto-loaded at CLI startup).\n" +

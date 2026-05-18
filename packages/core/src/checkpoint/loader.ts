@@ -99,7 +99,7 @@ export async function loadCheckpointFromPath(
   if (raw === undefined) {
     throw new CheckpointError(
       options.missingFileMessage ??
-        `Checkpoint file not found: ${filePath}. Run \`assignee plan\` to create a new plan.`,
+        `Checkpoint file not found: ${filePath}. Run \`assignee infra plan\` to create a new plan.`,
     );
   }
 
@@ -141,7 +141,7 @@ export async function loadCheckpointFromPath(
     throw new CheckpointError(
       options.expiredMessage
         ? options.expiredMessage(createdDate, cp.ttl_hours)
-        : `Checkpoint expired: created ${createdDate}, TTL ${cp.ttl_hours}h. Run \`assignee plan\` to create a new plan.`,
+        : `Checkpoint expired: created ${createdDate}, TTL ${cp.ttl_hours}h. Run \`assignee infra plan\` to create a new plan.`,
     );
   }
 
@@ -149,14 +149,14 @@ export async function loadCheckpointFromPath(
   if (!cp.preflightPassed) {
     throw new CheckpointError(
       options.preflightFailedMessage ??
-        `Checkpoint did not pass preflight validation. Run \`assignee plan\` to create a new plan.`,
+        `Checkpoint did not pass preflight validation. Run \`assignee infra plan\` to create a new plan.`,
     );
   }
 
   if (!cp.desiredState || Object.keys(cp.desiredState).length === 0) {
     throw new CheckpointError(
       options.emptyDesiredStateMessage ??
-        `Checkpoint has no desiredState. Run \`assignee plan\` to create a new plan.`,
+        `Checkpoint has no desiredState. Run \`assignee infra plan\` to create a new plan.`,
     );
   }
 

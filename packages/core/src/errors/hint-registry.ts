@@ -36,7 +36,7 @@ defaultErrorHintRegistry.register(
 );
 defaultErrorHintRegistry.register(
   PROVISIONING_ERROR_CODES.NOT_FOUND,
-  "Resource was removed during provisioning. Re-run `assignee plan` to get a fresh plan.",
+  "Resource was removed during provisioning. Re-run `assignee infra plan` to get a fresh plan.",
 );
 defaultErrorHintRegistry.register(
   PROVISIONING_ERROR_CODES.THROTTLED,
@@ -44,5 +44,5 @@ defaultErrorHintRegistry.register(
 );
 defaultErrorHintRegistry.register(
   PROVISIONING_ERROR_CODES.STATE_MISMATCH,
-  "Resource already exists. Choose a different name and re-run 'assignee plan'.",
+  "Resource already exists. Choose a different name and re-run 'assignee infra plan'.",
 );

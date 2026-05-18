@@ -299,7 +299,7 @@ export class LlmAdapter implements LlmPort {
           "WARNING: Bedrock invocations are running WITHOUT a Guardrail. LLM-generated\n" +
             "content may include PII, harmful topics, or jailbreak responses. Set\n" +
             "BEDROCK_GUARDRAIL_ID + BEDROCK_GUARDRAIL_VERSION to enable, or set\n" +
-            "BEDROCK_GUARDRAIL_DISABLE=1 to suppress this warning. See `assignee doctor`\n" +
+            "BEDROCK_GUARDRAIL_DISABLE=1 to suppress this warning. See `assignee admin doctor`\n" +
             "for setup guidance.\n",
         );
       }

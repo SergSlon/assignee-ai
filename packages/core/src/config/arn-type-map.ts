@@ -100,7 +100,7 @@ export const SERVICE_SUBTYPE_MAP: Readonly<
   // Story e92.1.b-followup — dispatch Events ARNs to the correct CFN
   // type by resource segment. Prior to this split, SERVICE_TYPE_MAP
   // forced every Events ARN (EventBus, Connection, ApiDestination) to
-  // classify as AWS::Events::Rule, breaking `assignee list` and every
+  // classify as AWS::Events::Rule, breaking `assignee admin list` and every
   // other arn-type-map consumer. Wave-1 e92.1.b put a targeted
   // DeleteEventBus bypass in `destroy.ts`; this follow-up is the
   // root-cause classifier fix.
@@ -119,7 +119,7 @@ export const SERVICE_SUBTYPE_MAP: Readonly<
   // by resource segment. Prior to this split, SERVICE_TYPE_MAP forced
   // every RDS ARN to classify as AWS::RDS::DBInstance, misclassifying
   // DBSubnetGroup, DBParameterGroup, DBSnapshot, DBCluster, etc. in
-  // `assignee list`, provision-record classification, and every other
+  // `assignee admin list`, provision-record classification, and every other
   // arn-type-map consumer.
   //
   // Canonical RDS ARN shapes (AWS ARN reference):
@@ -136,7 +136,7 @@ export const SERVICE_SUBTYPE_MAP: Readonly<
   // use literal CFN type strings because those subtypes are not (yet)
   // in the `RESOURCE_TYPES` registry — we do not currently create /
   // destroy them as first-class resources. This is a classification-
-  // only fix: a misclassified ARN in `assignee list` is the D-03 bug;
+  // only fix: a misclassified ARN in `assignee admin list` is the D-03 bug;
   // promoting any of these to provisionable types is a separate
   // future epic.
   //

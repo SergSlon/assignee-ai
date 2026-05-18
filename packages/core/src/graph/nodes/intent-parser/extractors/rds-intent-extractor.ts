@@ -2,7 +2,7 @@
 // rds-intent-extractor.ts — RDS-specific VPC security group advisory.
 // ---------------------------------------------------------------------------
 //
-// DF-E2 fix (dogfood 2026-05-11): `assignee plan "rds postgres"` emitted an
+// DF-E2 fix (dogfood 2026-05-11): `assignee infra plan "rds postgres"` emitted an
 // empty `VPCSecurityGroups: []` in the plan output. The skeletal-plan-detector
 // already flags this as `isSkeletal=true`, but the user sees it only AFTER
 // the plan is generated — at which point the apply path is already marked
@@ -115,7 +115,7 @@ export function extractRdsVpcSecurityGroups(
       "Add a security group that allows ingress on the DB port via " +
       "`--set VPCSecurityGroups=<sg-id>` (e.g. `--set VPCSecurityGroups=sg-0a1b2c3d4e5f67890`), " +
       "or route through the `rds-with-vpc` compound pattern which creates an engine-aware security group automatically " +
-      '(e.g. `assignee plan "Create RDS Postgres with VPC"`). ' +
+      '(e.g. `assignee infra plan "Create RDS Postgres with VPC"`). ' +
       "Alternatively, list your existing security groups with " +
       "`aws ec2 describe-security-groups --query 'SecurityGroups[].GroupId'`.",
   });

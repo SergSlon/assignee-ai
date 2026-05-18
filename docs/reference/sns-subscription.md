@@ -22,13 +22,13 @@ A dedicated plugin handles schema elicitation, default injection, and best-pract
 ### Typical intent examples
 
 ```bash
-assignee plan "Create an SNS subscription"
-assignee apply "Create an SNS subscription named my-sns-subscription"
+assignee infra plan "Create an SNS subscription"
+assignee infra apply "Create an SNS subscription named my-sns-subscription"
 ```
 
 ### Best-practice rules
 
-Best-practice rules for this type live under `packages/best-practices/sns/` (per-service subdirectories). Run `assignee plan` to see which rules apply to your specific configuration.
+Best-practice rules for this type live under `packages/best-practices/sns/` (per-service subdirectories). Run `assignee infra plan` to see which rules apply to your specific configuration.
 
 ### Pricing
 

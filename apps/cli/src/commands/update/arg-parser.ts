@@ -1,5 +1,5 @@
 /**
- * `assignee update` argument parsing & validation.
+ * `assignee dev update` argument parsing & validation.
  *
  * Separated from `action.ts` for SRP — every input the operator can
  * supply is normalised + validated here, and `action.ts` consumes a
@@ -96,14 +96,14 @@ export function resolveUpdateArgs(
 ): ResolvedUpdateArgs {
   if (!target || target.trim() === "") {
     throw new AssigneeError(
-      "Usage: assignee update <target> --source <dir>\n" +
+      "Usage: assignee dev update <target> --source <dir>\n" +
         "  <target> may be a bucket name, an arn:aws:s3:::… ARN, or a runId UUID.",
       ErrorCode.USAGE_ERROR,
     );
   }
   if (!opts.source || opts.source.trim() === "") {
     throw new AssigneeError(
-      "assignee update requires --source <dir> — point it at the local site files to upload.",
+      "assignee dev update requires --source <dir> — point it at the local site files to upload.",
       ErrorCode.USAGE_ERROR,
     );
   }

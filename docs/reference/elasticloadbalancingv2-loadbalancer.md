@@ -22,13 +22,13 @@ A dedicated plugin handles schema elicitation, default injection, and best-pract
 ### Typical intent examples
 
 ```bash
-assignee plan "Create a load balancer"
-assignee apply "Create a load balancer named my-elasticloadbalancingv2-loadbalancer"
+assignee infra plan "Create a load balancer"
+assignee infra apply "Create a load balancer named my-elasticloadbalancingv2-loadbalancer"
 ```
 
 ### Best-practice rules
 
-Best-practice rules for this type live under `packages/best-practices/elbv2/` (per-service subdirectories). Run `assignee plan` to see which rules apply to your specific configuration.
+Best-practice rules for this type live under `packages/best-practices/elbv2/` (per-service subdirectories). Run `assignee infra plan` to see which rules apply to your specific configuration.
 
 ### Pricing
 

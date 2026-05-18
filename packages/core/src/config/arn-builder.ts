@@ -5,9 +5,9 @@
  * CloudControl's `GetResourceRequestStatus.ProgressEvent.Identifier`
  * returns the resource's PRIMARY identifier, which for most types is
  * the bare name (BucketName, RoleName, FunctionName, TableName, etc.)
- * — NOT the ARN. `assignee apply`'s success output previously displayed
+ * — NOT the ARN. `assignee infra apply`'s success output previously displayed
  * this bare identifier in the `ARN:` field, which is misleading for
- * scripting (users can't pipe it back to `assignee destroy <arn>`).
+ * scripting (users can't pipe it back to `assignee infra destroy <arn>`).
  *
  * This helper centralizes the per-type ARN synthesis so every display
  * path produces consistent, copy-pasteable ARNs. It does NOT do network

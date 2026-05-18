@@ -4,8 +4,8 @@
  *
  * AWS Resource Groups Tagging API supports IAM users, groups, managed
  * policies, server certificates, and SAML providers — but NOT IAM roles.
- * Freshly-tagged roles created by `assignee apply` are therefore invisible
- * to `assignee list` and `assignee destroy --all` if those commands rely
+ * Freshly-tagged roles created by `assignee infra apply` are therefore invisible
+ * to `assignee admin list` and `assignee infra destroy --all` if those commands rely
  * on RGTA alone.
  *
  * This module fills the gap by paginating `iam:ListRoles` + `iam:ListRoleTags`
@@ -50,7 +50,7 @@ export interface ManagedIamRole {
  * non-empty, which let the IAMClient silently fall through to the
  * default AWS credential chain (`~/.aws/credentials`, EC2 instance
  * role, SSO) when ASSIGNEE_OPERATOR_* env vars were unset. On a dev
- * laptop with personal credentials configured, `assignee list` would
+ * laptop with personal credentials configured, `assignee admin list` would
  * silently enumerate IAM in THE WRONG ACCOUNT. Now uses the canonical
  * `requireAssigneeCredentials("operator")` helper from @assignee/core
  * which throws `MissingAssigneeCredentialsError` rather than fall
@@ -110,7 +110,7 @@ function tagsToRecord(
  *
  * Failures from individual ListRoleTags calls are non-fatal — that
  * single role is skipped rather than failing the whole listing. This
- * matches the resilience expectations of `assignee list`.
+ * matches the resilience expectations of `assignee admin list`.
  *
  * @param client - Optional IAMClient (used in tests). Production callers
  *                 should omit and let the helper construct one.
@@ -195,7 +195,7 @@ export async function getManagedIamRoleByArn(
   // "/"-delimited chunk. A trailing "/" (e.g. ".../service-role/")
   // would otherwise produce an empty string from `split('/').pop()`
   // and trip the same ValidationError. assignee.ai itself never creates
-  // path-prefixed roles, but users running `assignee destroy` against
+  // path-prefixed roles, but users running `assignee infra destroy` against
   // pre-existing tagged roles may pass a path-prefixed ARN.
   const match = arn.match(/^arn:aws[\w-]*:iam::\d+:role\/(.+)$/);
   if (!match) return null;
@@ -255,7 +255,7 @@ export async function getManagedIamRoleByArn(
       errName === "UnauthorizedOperation"
     ) {
       throw new Error(
-        `Cannot look up IAM role ${roleName}: the operator policy is missing iam:GetRole or iam:ListRoleTags. Run 'assignee setup' to refresh operator permissions.`,
+        `Cannot look up IAM role ${roleName}: the operator policy is missing iam:GetRole or iam:ListRoleTags. Run 'assignee dev setup' to refresh operator permissions.`,
         { cause: err },
       );
     }

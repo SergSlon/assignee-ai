@@ -43,7 +43,7 @@ export function resolveCredentials(silent: boolean): void {
     }
     if (!silent) {
       const msg1 =
-        "Using AWS_ACCESS_KEY_ID - consider running `assignee setup` to create least-privilege IAM users.";
+        "Using AWS_ACCESS_KEY_ID - consider running `assignee dev setup` to create least-privilege IAM users.";
       process.stderr.write(
         process.stderr.isTTY
           ? chalk.yellow(`[WARN] ${msg1}
@@ -63,7 +63,7 @@ export function resolveCredentials(silent: boolean): void {
     if (!silent) {
       const msg2 =
         `AWS_PROFILE="${hasProfile}" detected - resolving credentials via profile chain. ` +
-        `For least-privilege isolation run \`assignee setup\` to create ASSIGNEE_OPERATOR_* users.`;
+        `For least-privilege isolation run \`assignee dev setup\` to create ASSIGNEE_OPERATOR_* users.`;
       process.stderr.write(
         process.stderr.isTTY
           ? chalk.yellow(`[WARN] ${msg2}\n`)
@@ -84,7 +84,7 @@ export function resolveCredentials(silent: boolean): void {
         "  • AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY (auto-promoted to operator role)\n" +
         "  • AWS_PROFILE=<name> — resolves via ~/.aws/config (supports SSO, assumed-role, static)\n" +
         "  • --profile <name> flag on init/plan/apply/destroy commands\n" +
-        "Run `assignee setup` to create least-privilege IAM users.",
+        "Run `assignee dev setup` to create least-privilege IAM users.",
     );
   }
 }

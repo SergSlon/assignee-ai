@@ -200,7 +200,7 @@ export const DESTRUCTIVE_SERVICE_ACTIONS = new Set<string>([
  * The operator can technically issue s3:DeleteBucket against any S3 bucket
  * in the account. Mitigations:
  *   - Every other action (Lambda / EC2 / etc.) remains tag-scoped.
- *   - Bucket-policy attached at `assignee apply` time (see Part 2 of the
+ *   - Bucket-policy attached at `assignee infra apply` time (see Part 2 of the
  *     bug story) restores per-bucket scoping for assignee-managed buckets.
  *   - Non-assignee buckets are protected by their own bucket policies
  *     (unless they explicitly grant the operator, which only assignee-managed

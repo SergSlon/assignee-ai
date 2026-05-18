@@ -3,7 +3,7 @@
  *
  * Wave 10 P1-5: previously walked iam:ListRoles + iam:ListRoleTags
  * UNCONDITIONALLY before scanning RGTA, which added ~200 AWS API calls
- * to every `assignee destroy <name>` even when the user named a non-IAM
+ * to every `assignee infra destroy <name>` even when the user named a non-IAM
  * resource. RGTA is scanned first now; the IAM fallback only fires when
  * RGTA produced no match.
  *

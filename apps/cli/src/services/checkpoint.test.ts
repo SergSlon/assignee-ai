@@ -431,7 +431,7 @@ describe("loadCheckpointFromPath (Story 11.3)", () => {
     const missingPath = path.join(tmpDir, "checkpoint-nonexistent.json");
 
     await expect(loadCheckpointFromPath(missingPath)).rejects.toThrow(
-      /Checkpoint file not found.*Run `assignee plan`/,
+      /Checkpoint file not found.*Run `assignee infra plan`/,
     );
   });
 
@@ -444,7 +444,7 @@ describe("loadCheckpointFromPath (Story 11.3)", () => {
     const filePath = await saveCheckpoint(checkpoint, tmpDir);
 
     await expect(loadCheckpointFromPath(filePath)).rejects.toThrow(
-      /Checkpoint expired.*TTL 1h.*Run `assignee plan`/,
+      /Checkpoint expired.*TTL 1h.*Run `assignee infra plan`/,
     );
   });
 

@@ -84,7 +84,7 @@ export const LOG_ACTIONS = {
   S3_GET_BUCKET_POLICY_FAILED: "s3_get_bucket_policy_failed",
   /**
    * Epic 92 uncluster e92.u.a (D-36): emitted at the start of every
-   * `assignee status` invocation so `--verbose` users get the same
+   * `assignee admin status` invocation so `--verbose` users get the same
    * structured-log envelope that `plan` / `optimize` already provide.
    * Also fires at WARN level when the user passes a stale/unknown
    * runId positional (A-12) so the informative warning lands on the
@@ -93,7 +93,7 @@ export const LOG_ACTIONS = {
   STATUS_STARTED: "status_started",
   /**
    * Epic 92 uncluster e92.u.a (D-36): emitted at the end of every
-   * `assignee status` invocation with `durationMs` + `result:"ok"|"error"`.
+   * `assignee admin status` invocation with `durationMs` + `result:"ok"|"error"`.
    */
   STATUS_COMPLETE: "status_complete",
   /**

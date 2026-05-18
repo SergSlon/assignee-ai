@@ -97,7 +97,7 @@ export function extractSnsProtocol(
  * FIRST valid email and add an advisory for each additional address.
  * Rationale: AWS::SNS::Subscription is a 1:1 resource; provisioning
  * multiple subscriptions from one intent requires the user to run
- * `assignee plan` again for each additional subscriber, which is the
+ * `assignee infra plan` again for each additional subscriber, which is the
  * clearer UX compared to silently spawning N resources.
  *
  * If the intent has email-subscription phrasing but the email token is
@@ -144,12 +144,12 @@ export function extractEmailForSnsCompound(
   elicited["Endpoint"] = primary;
 
   // Variation D: advise about extra addresses that are NOT provisioned.
-  // AWS::SNS::Subscription is 1:1; run `assignee plan` again per extra subscriber.
+  // AWS::SNS::Subscription is 1:1; run `assignee infra plan` again per extra subscriber.
   for (const extra of allEmails.slice(1)) {
     advisories.push({
       code: "SNS_EXTRA_SUBSCRIBER",
       message: `Additional email '${extra}' not provisioned — only the first subscriber '${primary}' was added.`,
-      hint: `Run 'assignee plan "SNS topic with email subscription to ${extra}"' to add more subscriptions.`,
+      hint: `Run 'assignee infra plan "SNS topic with email subscription to ${extra}"' to add more subscriptions.`,
     });
   }
 }

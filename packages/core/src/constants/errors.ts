@@ -79,7 +79,7 @@ export const ErrorCode = {
    * messages: "The security token included in the request is invalid",
    * "InvalidClientTokenId", "ExpiredToken[Exception]"). Distinct from
    * `MISSING_CREDENTIALS` so the user sees an actionable hint
-   * ("re-run `assignee setup` to refresh credentials") instead of the
+   * ("re-run `assignee dev setup` to refresh credentials") instead of the
    * misleading "No AWS credentials detected" — credentials WERE present,
    * they were just stale-paired with an expired session token. Spec:
    * `_bmad-output/implementation-artifacts/error-message-stale-session-token.md`.
@@ -101,7 +101,7 @@ export const ErrorCode = {
   // rejects the plan (blocking-severity findings remain after
   // any interactive fix pass). Distinct from APPLY_FAILED so
   // automation can decide whether to (a) rephrase the intent,
-  // (b) retry as a compound plan, or (c) run `assignee plan
+  // (b) retry as a compound plan, or (c) run `assignee infra plan
   // --wizard` for interactive remediation —
   // the `error.detail.practiceIds[]` carries the specific
   // practice IDs (e.g. `BP-IGW-001`) that blocked.
