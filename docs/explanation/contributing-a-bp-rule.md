@@ -8,7 +8,7 @@
 
 ## Why BP rules exist
 
-Every `assignee plan` evaluates the user's desired state against the
+Every `assignee infra plan` evaluates the user's desired state against the
 rules shipped in [`packages/best-practices/`](../../packages/best-practices/).
 A rule that fires turns into a finding in the plan box — severity-sorted,
 with a remediation hint, and (when `autoFixable: true`) an auto-applied
@@ -75,7 +75,7 @@ Why the fields are what they are:
   for every check type the engine recognises.
 - **`lastVerified`** — the ISO date you re-read the AWS doc. Rule
   maintenance sweeps look at this field; stale rules trigger warnings
-  in `assignee doctor`.
+  in `assignee admin doctor`.
 - **`autoFixable: false`** — there is no universal "correct" KMS key
   to auto-inject. The remediation depends on the customer's key
   hierarchy. Leave auto-fix off and let the user choose the key.
@@ -157,15 +157,15 @@ Every test must pass, including:
 Use [`.github/PULL_REQUEST_TEMPLATE.md`](../../.github/PULL_REQUEST_TEMPLATE.md)
 — check the "BP rule" type-of-change box, list `BP-EFS-004` in the rule
 ID section, link the Well-Architected pillar, and attach a short
-`assignee plan` transcript showing the finding fire.
+`assignee infra plan` transcript showing the finding fire.
 
 ## What happens after merge
 
 - CI rebuilds the manifest hash. Consumers of `@assignee/best-practices`
   pick up the rule on the next install.
-- The CLI `assignee doctor` command reports the new rule count and the
+- The CLI `assignee admin doctor` command reports the new rule count and the
   refreshed manifest hash.
-- On the next `assignee plan` run, the rule evaluates automatically —
+- On the next `assignee infra plan` run, the rule evaluates automatically —
   no plumbing required. That's the design: **rules are data, not code**.
 
 ## Design rationale

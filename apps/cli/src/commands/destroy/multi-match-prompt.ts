@@ -1,7 +1,7 @@
 /**
  * Multi-match disambiguation picker for single-resource destroy.
  *
- * Story 48.6: When `assignee destroy <name>` matches ≥2 managed resources,
+ * Story 48.6: When `assignee infra destroy <name>` matches ≥2 managed resources,
  * we MUST NOT silently pick the first. This module:
  *  - Prints a numbered list of every candidate with ARN + compact metadata.
  *  - Prompts the user (interactive TTY only) to pick by 1-based index or

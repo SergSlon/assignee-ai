@@ -100,7 +100,7 @@ export async function runStateGuard(
         abort: true,
         partial: {
           executionStatus: ExecutionStatus.FAILED,
-          errorMessage: `Resource already exists (${identifier}). Choose a different name and re-run 'assignee plan'.`,
+          errorMessage: `Resource already exists (${identifier}). Choose a different name and re-run 'assignee infra plan'.`,
           error: new ProvisioningError(
             `Resource already exists (${identifier}). Choose a different name`,
             PROVISIONING_ERROR_CODES.STATE_MISMATCH,

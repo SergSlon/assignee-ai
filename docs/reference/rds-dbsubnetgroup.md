@@ -22,13 +22,13 @@ A dedicated plugin handles schema elicitation, default injection, and best-pract
 ### Typical intent examples
 
 ```bash
-assignee plan "Create a DB subnet group"
-assignee apply "Create a DB subnet group named my-rds-dbsubnetgroup"
+assignee infra plan "Create a DB subnet group"
+assignee infra apply "Create a DB subnet group named my-rds-dbsubnetgroup"
 ```
 
 ### Best-practice rules
 
-Best-practice rules for this type live under `packages/best-practices/rds/` (per-service subdirectories). Run `assignee plan` to see which rules apply to your specific configuration.
+Best-practice rules for this type live under `packages/best-practices/rds/` (per-service subdirectories). Run `assignee infra plan` to see which rules apply to your specific configuration.
 
 ### Pricing
 

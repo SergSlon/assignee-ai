@@ -22,13 +22,13 @@ A dedicated plugin handles schema elicitation, default injection, and best-pract
 ### Typical intent examples
 
 ```bash
-assignee plan "Create a Postgres database"
-assignee apply "Create a Postgres database named my-rds-dbinstance"
+assignee infra plan "Create a Postgres database"
+assignee infra apply "Create a Postgres database named my-rds-dbinstance"
 ```
 
 ### Best-practice rules
 
-Best-practice rules for this type live under `packages/best-practices/rds/` (per-service subdirectories). Run `assignee plan` to see which rules apply to your specific configuration.
+Best-practice rules for this type live under `packages/best-practices/rds/` (per-service subdirectories). Run `assignee infra plan` to see which rules apply to your specific configuration.
 
 ### Pricing
 

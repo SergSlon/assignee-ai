@@ -14,7 +14,7 @@
  *
  * AWS_PROFILE alone is NOT supported because we need to mint long-lived
  * credentials for the operator role; profile-based STS sessions don't
- * provide that lifetime guarantee. Run `assignee setup` to create the
+ * provide that lifetime guarantee. Run `assignee dev setup` to create the
  * 3 IAM users with explicit access keys.
  */
 export {

@@ -49,7 +49,7 @@ export class MissingAssigneeCredentialsError extends Error {
     super(
       `Missing ${role} credentials. Set ${accessKeyVar} and ${secretKeyVar} ` +
         `in your environment (or in the .env file at the project root), ` +
-        `or run 'assignee setup' to create the IAM users. ` +
+        `or run 'assignee dev setup' to create the IAM users. ` +
         `(CLI commands also accept AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY ` +
         `as a fallback — they are auto-promoted to the operator role.)`,
     );
@@ -117,7 +117,7 @@ export function envVarsForRole(role: AssigneeRole): {
 /**
  * Returns the list of Assignee roles that have credentials configured in
  * the current process environment. Single source of truth used by
- * `assignee init` and other detection callers.
+ * `assignee dev init` and other detection callers.
  *
  * MASTER-009: accepts an optional `ConfigPort` and forwards it to
  * `tryAssigneeCredentials`.

@@ -1,5 +1,5 @@
 /**
- * Recommendation gathering for `assignee optimize`.
+ * Recommendation gathering for `assignee infra optimize`.
  *
  * Wave-6d F4: split from optimize.ts. Two input sources:
  *   1. Pricing-MCP-backed per-resource analyzer (EC2/RDS Graviton swap)

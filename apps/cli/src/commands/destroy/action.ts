@@ -27,7 +27,7 @@ export async function destroyAction(
 ): Promise<void> {
   if (!resource) {
     throw new AssigneeError(
-      "Destroy needs to know what to destroy. Pass a resource ARN or name as the positional argument, e.g. `assignee destroy my-bucket` or `assignee destroy arn:aws:s3:::my-bucket`.",
+      "Destroy needs to know what to destroy. Pass a resource ARN or name as the positional argument, e.g. `assignee infra destroy my-bucket` or `assignee infra destroy arn:aws:s3:::my-bucket`.",
       ErrorCode.DESTROY_ERROR,
     );
   }

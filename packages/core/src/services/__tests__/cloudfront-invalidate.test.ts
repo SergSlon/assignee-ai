@@ -256,7 +256,7 @@ describe("createInvalidation — B3 AccessDenied hints", () => {
       expect(err).toBeInstanceOf(AssigneeError);
       expect((err as AssigneeError).code).toBe(ErrorCode.PERMISSION_ERROR);
       expect((err as Error).message).toContain("cloudfront:CreateInvalidation");
-      expect((err as Error).message).toContain("assignee setup");
+      expect((err as Error).message).toContain("assignee dev setup");
     }
   });
 
@@ -383,7 +383,7 @@ describe("waitForInvalidation", () => {
       expect(err).toBeInstanceOf(AssigneeError);
       expect((err as AssigneeError).code).toBe(ErrorCode.PERMISSION_ERROR);
       expect((err as Error).message).toContain("cloudfront:GetInvalidation");
-      expect((err as Error).message).toContain("assignee setup");
+      expect((err as Error).message).toContain("assignee dev setup");
     }
   });
 

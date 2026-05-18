@@ -1,5 +1,5 @@
 /**
- * `assignee update` target resolver.
+ * `assignee dev update` target resolver.
  *
  * Maps the operator-supplied `<target>` (bucket name / ARN / runId)
  * to a fully-qualified update target: bucket + region + (optional)
@@ -164,7 +164,7 @@ function escapeRegex(s: string): string {
  * Read the FULL `ProvisionRecord` set (not just the projected
  * `StoredProvisionRecord`) so we can access the optional
  * `cloudFrontDomainName` slot on CloudFront entries. This makes one
- * extra fs read per `assignee update` invocation; cheap enough that
+ * extra fs read per `assignee dev update` invocation; cheap enough that
  * it's not worth threading the raw shape through `listProvisionRecords`.
  */
 async function loadRawProvisions(): Promise<
@@ -258,7 +258,7 @@ export async function resolveUpdateTarget(
     bucketEntry = matches.find((r) => /::S3::Bucket$/i.test(r.resourceType));
     if (!bucketEntry) {
       throw new AssigneeError(
-        `No S3 bucket found in provision records for run ${rawTarget}. Verify the runId via 'assignee list'.`,
+        `No S3 bucket found in provision records for run ${rawTarget}. Verify the runId via 'assignee admin list'.`,
         ErrorCode.USAGE_ERROR,
       );
     }

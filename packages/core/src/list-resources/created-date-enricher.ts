@@ -1,5 +1,5 @@
 /**
- * Created-date enrichment for `assignee list` (feature-list-created-date-enrichment).
+ * Created-date enrichment for `assignee admin list` (feature-list-created-date-enrichment).
  *
  * Resolves live creation timestamps from AWS describe APIs for resource rows
  * whose `createdDate` would otherwise remain `N/A`. Initial support covers

@@ -5,7 +5,7 @@ these guides show the most direct path to get there.
 
 How-to guides are the most **prescriptive** of the four
 [Diátaxis](https://diataxis.fr/) quadrants. They assume competence —
-you already know what `assignee plan` and `assignee apply` do. The goal
+you already know what `assignee infra plan` and `assignee infra apply` do. The goal
 is the outcome, not the explanation.
 
 ---
@@ -14,8 +14,8 @@ is the outcome, not the explanation.
 
 | Guide                                                | Goal                                                         |
 | ---------------------------------------------------- | ------------------------------------------------------------ |
-| [`quickstart.md`](quickstart.md)                     | Install, bootstrap, and run your first `assignee plan`       |
-| [`read-a-plan-box.md`](read-a-plan-box.md)           | Decode every section of the `assignee plan` output box       |
+| [`quickstart.md`](quickstart.md)                     | Install, bootstrap, and run your first `assignee infra plan` |
+| [`read-a-plan-box.md`](read-a-plan-box.md)           | Decode every section of the `assignee infra plan` output box |
 | [`sso-authentication.md`](sso-authentication.md)     | Configure AWS SSO so `assignee` uses short-lived credentials |
 | [`install-via-homebrew.md`](install-via-homebrew.md) | Install `assignee` via Homebrew on macOS / Linux             |
 | [`release-process.md`](release-process.md)           | Cut a release and publish the CLI artefacts                  |

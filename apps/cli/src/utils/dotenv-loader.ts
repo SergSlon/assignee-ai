@@ -4,7 +4,7 @@
  *
  * Override policy:
  *  - ASSIGNEE_DOTENV_OVERRIDE_KEYS (the 9 access-key triples): `.env` ALWAYS
- *    wins — shell values are stale by definition after `assignee setup` rotates.
+ *    wins — shell values are stale by definition after `assignee dev setup` rotates.
  *  - All other keys: shell wins (set only if the var is not already defined).
  *
  * @see Story — bug-setup-stale-env-credentials (Option C)
@@ -16,7 +16,7 @@ import * as path from "node:path";
 /**
  * The 9 assignee-specific access-key names that `.env` always overrides,
  * even when the shell has a value for the same var. These are the only
- * names `assignee setup` rotates; everything else (AWS_REGION, BEDROCK_*,
+ * names `assignee dev setup` rotates; everything else (AWS_REGION, BEDROCK_*,
  * ASSIGNEE_VERBOSITY, …) defers to the shell.
  */
 export const ASSIGNEE_DOTENV_OVERRIDE_KEYS: readonly string[] = [

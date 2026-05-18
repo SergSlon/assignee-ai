@@ -17,7 +17,7 @@ pnpm install
 pnpm build
 pnpm setup               # pnpm CLI's global-bin bootstrap (writes pnpm bin to $PATH; not assignee-specific). Reload shell after.
 pnpm link --global        # adds 'assignee' to PATH
-assignee doctor --short   # verify AWS credentials + Bedrock region
+assignee admin doctor --short   # verify AWS credentials + Bedrock region
 ```
 
 > **Tip:** If you prefer not to link globally, you can run the built entrypoint directly — `node apps/cli/dist/index.js <args>` — or alias it in your shell: `alias assignee="node $(pwd)/apps/cli/dist/index.js"`. The remaining examples in this guide use the bare `assignee` command.
@@ -48,7 +48,7 @@ No `init` step is required. You can start planning immediately.
 ## Generate Your First Plan
 
 ```bash
-assignee plan "create an S3 bucket named my-app-logs"
+assignee infra plan "create an S3 bucket named my-app-logs"
 ```
 
 What happens:
@@ -65,7 +65,7 @@ What happens:
 > **Tip:** Use `--set key=value` to pre-fill wizard fields without interactive prompts:
 >
 > ```bash
-> assignee plan --set BucketName=my-logs --set Tags=env:prod "Create an S3 bucket"
+> assignee infra plan --set BucketName=my-logs --set Tags=env:prod "Create an S3 bucket"
 > ```
 
 The output is a plan box showing the desired state, estimated monthly cost, and any best practice findings. A checkpoint file is saved to `~/.assignee/checkpoint-<runId>.json` (valid for 72 hours).
@@ -75,7 +75,7 @@ The output is a plan box showing the desired state, estimated monthly cost, and 
 Pass `--quick` to `plan` or `apply` to skip every wizard prompt that has a sensible default. The CLI accepts defaults on each optional field and only asks for required fields that have no default — useful for scripted flows or one-shot provisioning where you trust the out-of-the-box settings.
 
 ```bash
-assignee plan --quick "Create an S3 bucket for cold-storage-backups"
+assignee infra plan --quick "Create an S3 bucket for cold-storage-backups"
 ```
 
 `--quick` pairs naturally with `-o json` for fully non-interactive runs, and with `--set key=value` to pin specific fields while still skipping everything else. A pre-plan summary is shown so you can confirm the defaults the wizard will accept before generation starts.
@@ -84,13 +84,13 @@ assignee plan --quick "Create an S3 bucket for cold-storage-backups"
 
 ```bash
 # Apply directly from intent (runs plan + provision in one step)
-assignee apply "create an S3 bucket named my-app-logs"
+assignee infra apply "create an S3 bucket named my-app-logs"
 
 # Or apply a saved plan checkpoint
-assignee apply --checkpoint ~/.assignee/checkpoint-abc123.json
+assignee infra apply --checkpoint ~/.assignee/checkpoint-abc123.json
 
 # Or just run apply with no args -- auto-detects the latest checkpoint
-assignee apply
+assignee infra apply
 ```
 
 The apply flow adds these steps after planning:
@@ -122,16 +122,16 @@ For compound patterns (e.g., "create a VPC"), the compound_dispatcher expands a 
 Use `-o json` with plan to get machine-readable output:
 
 ```bash
-assignee plan -o json "Create an S3 bucket named my-logs" | jq .
+assignee infra plan -o json "Create an S3 bucket named my-logs" | jq .
 ```
 
 This outputs structured JSON to stdout with all plan details (resource type, desired state, cost estimate, best practice findings). Spinners and interactive prompts are suppressed in JSON mode.
 
 ## Next Steps
 
-- **Compound patterns**: `assignee plan "create a VPC with public and private subnets"` -- provisions 17 resources in dependency order
-- **Drift detection**: `assignee drift` -- compares desired state against live AWS resources
-- **Project config**: `assignee init` -- creates `.assignee/config.yaml` with region, tags, and auto-fix preferences
-- **Global config**: `assignee init --global` -- sets user-wide defaults in `~/.config/assignee/config.yaml`
-- **Infrastructure status**: `assignee status` -- summary of all managed resources with cost totals
-- **Shell completions**: `eval "$(assignee completions zsh)"` -- tab completion for all commands
+- **Compound patterns**: `assignee infra plan "create a VPC with public and private subnets"` -- provisions 17 resources in dependency order
+- **Drift detection**: `assignee infra drift` -- compares desired state against live AWS resources
+- **Project config**: `assignee dev init` -- creates `.assignee/config.yaml` with region, tags, and auto-fix preferences
+- **Global config**: `assignee dev init --global` -- sets user-wide defaults in `~/.config/assignee/config.yaml`
+- **Infrastructure status**: `assignee admin status` -- summary of all managed resources with cost totals
+- **Shell completions**: `eval "$(assignee dev completions zsh)"` -- tab completion for all commands

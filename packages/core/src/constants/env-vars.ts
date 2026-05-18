@@ -230,7 +230,7 @@ export const EnvVar = {
   ASSIGNEE_ROLE: "ASSIGNEE_ROLE",
   /**
    * When set, the CLI skips the built-in OIDC-provider selection dialog
-   * in `assignee init` and uses the specified adapter name directly.
+   * in `assignee dev init` and uses the specified adapter name directly.
    * Intended for CI / automated provisioning flows.
    */
   ASSIGNEE_OIDC_ADAPTER: "ASSIGNEE_OIDC_ADAPTER",

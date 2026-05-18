@@ -144,7 +144,7 @@ export async function formatApplyCompoundSuccess(
   // bug-s3-bucket-policy-attach-failure-observability: this loop now runs
   // BEFORE the provision-record write loop below so we can persist the
   // per-bucket attach outcome (compensatingPolicyAttached + error) on the
-  // provision record. `assignee list` reads the field to flag buckets where
+  // provision record. `assignee admin list` reads the field to flag buckets where
   // the per-bucket tag boundary is not in effect.
   //
   // bug-s3-bucket-policy-compound-serialization: replaces the previous
@@ -197,7 +197,7 @@ export async function formatApplyCompoundSuccess(
               chalk.yellow(
                 `⚠ Compensating bucket policy could not be attached to ${s3Resource.resourceArn}: ${policyResult.reason ?? "unknown error"}\n` +
                   `  The bucket was created successfully but per-bucket tag-scoped destructive access is NOT in effect.\n` +
-                  `  Re-run \`assignee setup\` to retry the policy attachment.\n`,
+                  `  Re-run \`assignee dev setup\` to retry the policy attachment.\n`,
               ),
             );
             log({
@@ -234,7 +234,7 @@ export async function formatApplyCompoundSuccess(
 
   // Story 19.3 — provision records (one per resource) with resolved ARNs.
   // bug-s3-bucket-policy-attach-failure-observability: thread the per-bucket
-  // policy outcome onto the matching S3 record so `assignee list` can flag
+  // policy outcome onto the matching S3 record so `assignee admin list` can flag
   // buckets where the compensating policy is missing.
   for (const completed of updatedCompleted) {
     const arnForRecord =
@@ -253,9 +253,9 @@ export async function formatApplyCompoundSuccess(
             : {}),
         }
       : {};
-    // `assignee update` follow-on: when this completed resource is the
+    // `assignee dev update` follow-on: when this completed resource is the
     // CloudFront distribution, capture the live DomainName so the
-    // future `assignee update <bucket>` resolver can print the URL
+    // future `assignee dev update <bucket>` resolver can print the URL
     // without an extra GetDistribution. We pull from BOTH places the
     // hostname could be carried: (a) the metadata we already stamped
     // on `completedEntry` for the static-website compound (line

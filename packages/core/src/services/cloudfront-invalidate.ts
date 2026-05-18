@@ -1,7 +1,7 @@
 /**
  * CloudFront invalidation service — thin wrappers around
  * `cloudfront:CreateInvalidation` + `cloudfront:GetInvalidation` used
- * by `assignee update` to refresh a CDN cache after the post-upload
+ * by `assignee dev update` to refresh a CDN cache after the post-upload
  * S3 sync.
  *
  * Why this exists
@@ -9,7 +9,7 @@
  * The static-website compound provisions S3 + CloudFront, but a plain
  * `aws s3 sync` does NOT trigger a CloudFront cache refresh — viewers
  * keep seeing the OLD content until the TTL expires (24h by default
- * for the static-site preset). `assignee update` automates both steps
+ * for the static-site preset). `assignee dev update` automates both steps
  * so the user sees fresh content within minutes instead of needing to
  * run a second CLI tool.
  *
@@ -44,7 +44,7 @@ export interface InvalidationArgs {
   /**
    * Idempotency token. AWS treats two CreateInvalidation calls with the
    * SAME CallerReference + DistributionId as a single invalidation. The
-   * `assignee update` command passes its runId so re-invocations within
+   * `assignee dev update` command passes its runId so re-invocations within
    * the same run do not double-bill.
    */
   callerReference?: string;
@@ -134,7 +134,7 @@ export async function createInvalidation(
       msg.includes("cloudfront:CreateInvalidation")
     ) {
       throw new AssigneeError(
-        "Operator IAM policy missing cloudfront:CreateInvalidation. Run 'assignee setup' to refresh credentials, or add the grant manually.",
+        "Operator IAM policy missing cloudfront:CreateInvalidation. Run 'assignee dev setup' to refresh credentials, or add the grant manually.",
         ErrorCode.PERMISSION_ERROR,
       );
     }
@@ -254,7 +254,7 @@ export async function waitForInvalidation(
         msg.includes("cloudfront:GetInvalidation")
       ) {
         throw new AssigneeError(
-          "Operator IAM policy missing cloudfront:GetInvalidation. Run 'assignee setup' to refresh credentials, or add the grant manually.",
+          "Operator IAM policy missing cloudfront:GetInvalidation. Run 'assignee dev setup' to refresh credentials, or add the grant manually.",
           ErrorCode.PERMISSION_ERROR,
         );
       }

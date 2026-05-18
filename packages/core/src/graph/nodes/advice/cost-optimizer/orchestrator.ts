@@ -5,7 +5,7 @@
  * data and emits structured rightsizing recommendations. Unlike the
  * existing `cost-advisor` (which returns free-form string hints during
  * plan generation), this module returns typed `CostOptRecommendation`
- * objects suitable for the `assignee optimize` CLI table + the
+ * objects suitable for the `assignee infra optimize` CLI table + the
  * `--json` output.
  *
  * Scope (A7 sprint slice, 2026-04-08):

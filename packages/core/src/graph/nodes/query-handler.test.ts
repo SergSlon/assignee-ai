@@ -279,7 +279,7 @@ describe("createQueryHandlerNode", () => {
 
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(result.errorMessage).toContain("AccessDeniedException");
-    expect(result.errorMessage).toContain("assignee list");
+    expect(result.errorMessage).toContain("assignee admin list");
     expect(result.queryResult).toBeUndefined();
   });
 
@@ -289,7 +289,7 @@ describe("createQueryHandlerNode", () => {
     const result = await node(state);
 
     expect(result.executionStatus).toBe(ExecutionStatus.QUERY_INTENT);
-    expect(result.errorMessage).toContain("assignee list");
+    expect(result.errorMessage).toContain("assignee admin list");
     expect(result.queryResult?.isEmpty).toBe(true);
   });
 

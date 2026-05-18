@@ -4,7 +4,7 @@
 
 ## What is it?
 
-At intent-parse time, `assignee plan` calls the AWS API (via reader
+At intent-parse time, `assignee infra plan` calls the AWS API (via reader
 credentials) to enumerate resources that already exist in the user's account —
 VPCs, RDS DB subnet groups, ECS clusters, and ALB/NLB load balancers. Matched
 resources appear in the plan output before the Desired-resources block:
@@ -20,7 +20,7 @@ will provision.
 
 ## Destroy isolation invariant (CRITICAL)
 
-**`Existing` nodes are NEVER destroyed by `assignee destroy`.**
+**`Existing` nodes are NEVER destroyed by `assignee infra destroy`.**
 
 This is enforced structurally:
 
@@ -114,7 +114,7 @@ If discovery fails (missing reader creds, network timeout, AWS error):
 
 - Discovery adds at most 4 parallel AWS API calls at plan time.
 - Each call is bounded by `DISCOVERY_TIMEOUT_MS` (6 s).
-- Cache TTL is 300 s (default) — repeated `assignee plan` calls within 5 min
+- Cache TTL is 300 s (default) — repeated `assignee infra plan` calls within 5 min
   hit the in-process cache, zero extra AWS calls.
 - Cache entries are keyed by resource kind, not by region (single-account,
   single-region scope).

@@ -14,14 +14,14 @@ Complete reference of all execution flows, resource types, MCP integrations, and
 flowchart TD
     START(["`**CLI Entry**`"]) --> CMD{Command?}
 
-    CMD -->|"assignee plan &lt;intent&gt;"| PLAN_MODE
-    CMD -->|"assignee apply &lt;intent&gt;"| APPLY_MODE
-    CMD -->|"assignee apply -c checkpoint"| RESUME
-    CMD -->|"assignee destroy &lt;arn&gt;"| DESTROY
-    CMD -->|"assignee list"| LIST
-    CMD -->|"assignee setup"| SETUP
-    CMD -->|"assignee init"| INIT
-    CMD -->|"assignee status &lt;token&gt;"| STATUS
+    CMD -->|"assignee infra plan &lt;intent&gt;"| PLAN_MODE
+    CMD -->|"assignee infra apply &lt;intent&gt;"| APPLY_MODE
+    CMD -->|"assignee infra apply -c checkpoint"| RESUME
+    CMD -->|"assignee infra destroy &lt;arn&gt;"| DESTROY
+    CMD -->|"assignee admin list"| LIST
+    CMD -->|"assignee dev setup"| SETUP
+    CMD -->|"assignee dev init"| INIT
+    CMD -->|"assignee admin status &lt;token&gt;"| STATUS
 
     subgraph GRAPH["LangGraph Agent (15 Nodes)"]
         direction TB

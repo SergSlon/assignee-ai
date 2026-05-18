@@ -46,6 +46,7 @@
  */
 
 import { readFile } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -377,6 +378,7 @@ export async function runDocLint({
   runtimeCounts,
   repoRoot = REPO_ROOT,
   crossDocTargets = CROSS_DOC_TARGETS,
+  skipFlatPathCheck = false,
 }) {
   const errors = [];
   const readmeText = await readFile(readmePath, "utf8");
@@ -440,6 +442,170 @@ export async function runDocLint({
     }
   }
 
+  // Flat-path drift guard: run after the count guards so the error list
+  // is ordered (count errors first, path errors after).
+  if (!skipFlatPathCheck) {
+    const flatPathErrors = await runFlatPathCheck(repoRoot);
+    errors.push(...flatPathErrors);
+  }
+
+  return errors;
+}
+
+// ---------------------------------------------------------------------------
+// Flat-path drift guard (Story 108-A-07)
+//
+// Rejects any new `assignee <leaf>` invocation in user-facing surfaces.
+// After the noun-grouped migration (108-A-05 + 108-A-07), every valid CLI
+// invocation must include the noun-group prefix:
+//   `assignee infra plan` / `assignee admin status` / `assignee dev init`
+//
+// Skip targets:
+//   - test files (**/*.test.ts, **/__tests__/**)
+//   - _archive/** (historical artifacts)
+//   - test-fixtures/**
+//   - _bmad-output/** (planning artifacts)
+//   - CHANGELOG.md (historical narrative entries)
+// ---------------------------------------------------------------------------
+
+/**
+ * Regex matching a bare flat-path CLI invocation that lacks a noun group.
+ * Positive: `assignee plan`, `assignee setup`, etc.
+ * Negative (allowed): `assignee infra plan`, `assignee dev setup`, etc.
+ *
+ * The lookbehind `(?<!infra |admin |dev )` prevents false positives on
+ * already-migrated noun-grouped invocations.
+ */
+export const FLAT_PATH_PATTERN =
+  /\bassignee (plan|apply|destroy|drift|reconcile|optimize|restore-provisions|status|list|doctor|describe|audit-verify|init|setup|update|completions|discover|version)\b/g;
+
+/**
+ * User-facing surfaces scanned by the flat-path guard.
+ * Each entry is a relative path from REPO_ROOT; directories are walked
+ * recursively. Only `.md`, `.ts`, and `.mjs` files are checked.
+ */
+const FLAT_PATH_SCAN_SURFACES = [
+  "docs",
+  "README.md",
+  "apps/cli/src/utils/error-messages",
+  "apps/cli/src/utils/first-run.ts",
+  "apps/cli/src/commands",
+  "packages/core/src/config/help-hints.ts",
+  "packages/core/src/utils/error-messages",
+  "packages/core/src/utils/display-output",
+];
+
+/**
+ * Directories / file patterns to skip during the flat-path scan.
+ * These are suffixes / substrings of the absolute path.
+ */
+const FLAT_PATH_SKIP_PATTERNS = [
+  "/__tests__/",
+  "/test-fixtures/",
+  "/_archive/",
+  "/_bmad-output/",
+  "CHANGELOG.md",
+  ".test.ts",
+  ".test.mjs",
+];
+
+/** Returns true when the given absolute path should be skipped. */
+function shouldSkipFlatPathScan(absPath) {
+  return FLAT_PATH_SKIP_PATTERNS.some((pat) => absPath.includes(pat));
+}
+
+/**
+ * Recursively collect all scannable files under a directory.
+ * Only `.md`, `.ts`, and `.mjs` files are returned.
+ */
+async function collectScanFiles(root) {
+  const files = [];
+  let entries;
+  try {
+    entries = await readdir(root, { withFileTypes: true });
+  } catch {
+    // Not a directory — treat root itself as a single file if readable.
+    files.push(root);
+    return files;
+  }
+  for (const entry of entries) {
+    const full = join(root, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...(await collectScanFiles(full)));
+    } else if (/\.(md|ts|mjs)$/.test(entry.name)) {
+      files.push(full);
+    }
+  }
+  return files;
+}
+
+/**
+ * Check a single file for flat-path CLI invocations.
+ *
+ * @param {string} absPath - absolute path to the file
+ * @param {string} repoRoot - repo root (for error message trimming)
+ * @returns {Promise<string[]>} array of error strings (empty = no issues)
+ */
+export async function checkFileForFlatPaths(absPath, repoRoot) {
+  if (shouldSkipFlatPathScan(absPath)) return [];
+  let text;
+  try {
+    text = await readFile(absPath, "utf8");
+  } catch {
+    return []; // Unreadable / missing — not a flat-path violation.
+  }
+  const relPath = absPath.startsWith(repoRoot)
+    ? absPath.slice(repoRoot.length + 1)
+    : absPath;
+  const errors = [];
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    // Reset lastIndex before each exec loop (flag `g`).
+    FLAT_PATH_PATTERN.lastIndex = 0;
+    let m;
+    while ((m = FLAT_PATH_PATTERN.exec(line)) !== null) {
+      // Allow if the leaf is preceded by a noun-group on the same line.
+      // e.g. "assignee infra plan" — the regex matched "plan" via a
+      // second scan, but the `assignee ` before it is already `assignee infra`.
+      // To detect this, check the substring immediately before the match.
+      const before = line.slice(0, m.index);
+      if (/\bassignee (infra|admin|dev)\s+$/.test(before)) {
+        continue;
+      }
+      errors.push(
+        `${relPath}:${i + 1}: flat-path CLI invocation "${m[0]}" — ` +
+          `use noun-grouped form (e.g. "assignee infra ${m[1]}"). ` +
+          `Story 108-A-07 drift-guard.`,
+      );
+    }
+  }
+  return errors;
+}
+
+/**
+ * Run the flat-path scan across all user-facing surfaces.
+ *
+ * @param {string} repoRoot - absolute path to repo root
+ * @returns {Promise<string[]>} array of error strings (empty = no issues)
+ */
+export async function runFlatPathCheck(repoRoot) {
+  const errors = [];
+  for (const surface of FLAT_PATH_SCAN_SURFACES) {
+    const absRoot = join(repoRoot, surface);
+    let isFile = false;
+    try {
+      const s = await stat(absRoot);
+      isFile = s.isFile();
+    } catch {
+      continue; // Surface absent — skip.
+    }
+    const files = isFile ? [absRoot] : await collectScanFiles(absRoot);
+    for (const f of files) {
+      const fileErrors = await checkFileForFlatPaths(f, repoRoot);
+      errors.push(...fileErrors);
+    }
+  }
   return errors;
 }
 

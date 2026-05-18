@@ -4,7 +4,7 @@
  *
  * Checkpoints are written by the plan-apply pipeline and represent
  * the authoritative "what the user asked for" intent. Baselines are
- * written by `assignee drift --baseline <arn>` and represent the
+ * written by `assignee infra drift --baseline <arn>` and represent the
  * live CCAPI state of a resource the operator adopted AFTER it was
  * provisioned (typically outside assignee). Checkpoints win when
  * both exist — the baseline is a last-resort fallback for adoption.
@@ -38,7 +38,7 @@ export function baselineFilename(resourceArn: string): string {
  *
  * Returns the desiredState from the most recent checkpoint that matches
  * the resource ARN, or — when no checkpoint matches — from the baseline
- * file written by `assignee drift --baseline`.
+ * file written by `assignee infra drift --baseline`.
  */
 export async function resolveDesiredState(
   resourceArn: string,

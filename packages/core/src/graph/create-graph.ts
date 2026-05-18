@@ -99,7 +99,7 @@ export interface CreateGraphOptions {
    * CLI wires `apps/cli/src/services/list-resources.ts`'s implementation;
    * MCP wires its own RGTA wrapper; tests pass a mock.
    * When absent (default), the query_handler returns a helpful message
-   * pointing the user to `assignee list`.
+   * pointing the user to `assignee admin list`.
    *
    * Story: feature-query-intent-classifier
    */

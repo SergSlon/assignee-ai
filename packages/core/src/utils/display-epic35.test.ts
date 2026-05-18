@@ -258,7 +258,7 @@ describe("Epic 35 — Actionable Findings test matrix", () => {
       restore();
 
       const output = chunks.join("");
-      expect(output).not.toContain("assignee init");
+      expect(output).not.toContain("assignee dev init");
       expect(output).not.toContain("can be auto-fixed");
     });
 
@@ -274,11 +274,11 @@ describe("Epic 35 — Actionable Findings test matrix", () => {
       restore();
 
       const output = chunks.join("");
-      expect(output).not.toContain("assignee init");
+      expect(output).not.toContain("assignee dev init");
       expect(output).not.toContain("can be auto-fixed");
     });
 
-    it("9. shows correct count and 'assignee init' message when autoFix disabled + auto-fixable present", async () => {
+    it("9. shows correct count and 'assignee dev init' message when autoFix disabled + auto-fixable present", async () => {
       const { renderPlanBox } = await import("./display.js");
       const { chunks, restore } = captureStream(process.stdout);
 
@@ -295,7 +295,7 @@ describe("Epic 35 — Actionable Findings test matrix", () => {
 
       const output = chunks.join("");
       expect(output).toContain("2 findings can be auto-fixed");
-      expect(output).toContain("assignee init");
+      expect(output).toContain("assignee dev init");
     });
 
     it("10. shows correct pluralization ('1 finding' vs '2 findings')", async () => {

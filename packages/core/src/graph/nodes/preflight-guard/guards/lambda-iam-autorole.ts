@@ -3,7 +3,7 @@
  * a Lambda intent will auto-create an execution role.
  *
  * Problem (DF-D5, dogfood 2026-05-11):
- *   The operator applies `assignee plan "Create a Lambda hello world"`.
+ *   The operator applies `assignee infra plan "Create a Lambda hello world"`.
  *   The intent-parser routes this through the `lambda-with-exec-role`
  *   compound pattern which creates TWO resources:
  *     1. AWS::IAM::Role  (auto-created execution role)
@@ -200,12 +200,12 @@ function buildMissingRolePermissionsMessage(missing: string[]): string {
     `Lambda auto-role creation requires these permissions to create and configure ` +
     `the execution role (AWS::IAM::Role) before the Lambda function is provisioned. ` +
     `To fix:\n` +
-    `  1. Run \`assignee setup\` to refresh the operator policy ` +
+    `  1. Run \`assignee dev setup\` to refresh the operator policy ` +
     `(adds missing actions via CreatePolicyVersion — no user recreation needed).\n` +
     `  2. Or supply an existing execution role ARN via ` +
     `\`--set Role=arn:aws:iam::<account>:role/<role-name>\` ` +
     `to skip auto-role creation entirely.\n` +
-    `  3. Or run \`assignee audit-verify\` to see all required permissions ` +
+    `  3. Or run \`assignee admin audit-verify\` to see all required permissions ` +
     `for this resource type.`
   );
 }

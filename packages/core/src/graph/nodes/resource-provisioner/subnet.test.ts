@@ -224,7 +224,7 @@ describe("ensureSubnet", () => {
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.errorMessage).toContain("No default VPC");
-      expect(r.errorMessage).toContain("assignee apply");
+      expect(r.errorMessage).toContain("assignee infra apply");
     }
   });
 

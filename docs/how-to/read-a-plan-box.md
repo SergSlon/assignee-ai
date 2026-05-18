@@ -1,6 +1,6 @@
 # How to read a plan box
 
-You ran `assignee plan "..."` (for example, `assignee plan "an EC2 box for
+You ran `assignee infra plan "..."` (for example, `assignee infra plan "an EC2 box for
 my homelab"`) and the CLI dropped a cyan-bordered "Plan" frame into your
 terminal — or, on a non-TTY pipe, a plain `=== Plan === / ============`
 block with identical contents. This guide explains every section so you
@@ -66,7 +66,7 @@ failure (you can still apply; cost may be higher than shown).
   rewrote in your config (each line shows `field: old -> new (BP-id: title)`).
 - `Findings` — remaining best-practice findings the auto-fixer could not
   or should not change automatically, grouped by severity.
-- `* N findings can be auto-fixed. Run \`assignee init\` to enable.` —
+- `* N findings can be auto-fixed. Run \`assignee dev init\` to enable.` —
   shown when auto-fix is disabled but auto-fixable findings remain.
 - Memory hints, free-tier notes, and contextual advice may also appear.
 
@@ -80,9 +80,9 @@ that ties this plan to its eventual apply/destroy in the run ledger.
 After the box, the CLI prints `Apply now?` (only on a TTY when
 `--no-apply` was not passed):
 
-- **Accept** — confirm the prompt, or run `assignee apply` later. The
+- **Accept** — confirm the prompt, or run `assignee infra apply` later. The
   same desired state will be provisioned via CloudControl.
 - **Reject** — decline the prompt and refine your intent ("…with 50 GB
-  storage and a public IP"), then re-run `assignee plan`.
+  storage and a public IP"), then re-run `assignee infra plan`.
 - **Inspect more** — re-run with `--verbose` for the run ID and extra
   diagnostics, or check [`../commands.md`](../commands.md) for related flags.

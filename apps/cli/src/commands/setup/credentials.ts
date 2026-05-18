@@ -1,5 +1,5 @@
 /**
- * Admin credential provider + STS verification for `assignee setup`.
+ * Admin credential provider + STS verification for `assignee dev setup`.
  *
  * The setup command needs admin/root credentials — typically in
  * ~/.aws/credentials or via `aws sso login` / `aws login` (AWS Identity
@@ -7,7 +7,7 @@
  *
  * Honors process.env.AWS_PROFILE so users who export AWS_PROFILE in their
  * shell don't silently get the "default" profile when they run
- * `assignee setup` without --profile. Mirrors AWS CLI behavior.
+ * `assignee dev setup` without --profile. Mirrors AWS CLI behavior.
  *
  * Resolution order: SDK provider chain (env vars, SSO, ini, IMDS) → if
  * empty/incomplete or STS rejects, fall back to shelling out to

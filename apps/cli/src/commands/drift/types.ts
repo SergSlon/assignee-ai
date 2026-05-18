@@ -1,5 +1,5 @@
 /**
- * Shared DriftOpts type for the `assignee drift` command phases.
+ * Shared DriftOpts type for the `assignee infra drift` command phases.
  * Wave-6d F4: split out of drift.ts so sibling phase modules share a
  * single source of truth instead of duplicating the inline shape.
  *

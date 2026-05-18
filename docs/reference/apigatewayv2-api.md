@@ -22,13 +22,13 @@ A dedicated plugin handles schema elicitation, default injection, and best-pract
 ### Typical intent examples
 
 ```bash
-assignee plan "Create a WebSocket API"
-assignee apply "Create a WebSocket API named my-apigatewayv2-api"
+assignee infra plan "Create a WebSocket API"
+assignee infra apply "Create a WebSocket API named my-apigatewayv2-api"
 ```
 
 ### Best-practice rules
 
-Best-practice rules for this type live under `packages/best-practices/apigateway/` (per-service subdirectories). Run `assignee plan` to see which rules apply to your specific configuration.
+Best-practice rules for this type live under `packages/best-practices/apigateway/` (per-service subdirectories). Run `assignee infra plan` to see which rules apply to your specific configuration.
 
 ### Pricing
 

@@ -1,7 +1,7 @@
 /**
  * Regression tests for DF-D5 fix — Lambda auto-role IAM preflight guard.
  *
- * Dogfood finding (2026-05-11): `assignee apply "Create a Lambda hello world"`
+ * Dogfood finding (2026-05-11): `assignee infra apply "Create a Lambda hello world"`
  * attempted to create an IAM execution role as part of the lambda-with-exec-role
  * compound pattern. The operator IAM user lacked `iam:CreateRole`. The preflight
  * guard did NOT detect the missing permission in advance — the user saw a
@@ -161,7 +161,7 @@ describe("Axis A — Lambda auto-role: operator lacks iam:CreateRole", () => {
     expect(errorMessage).toContain("iam:CreateRole");
   });
 
-  it("Axis A-3: message also references assignee audit-verify", async () => {
+  it("Axis A-3: message also references assignee admin audit-verify", async () => {
     const mockTool = buildMockIamTool({
       "iam:CreateRole": "implicitDeny",
       "iam:AttachRolePolicy": "allowed",
@@ -172,7 +172,7 @@ describe("Axis A — Lambda auto-role: operator lacks iam:CreateRole", () => {
     const result = await lambdaIamAutoRoleGuard.run(ctx);
 
     const { errorMessage } = result as { kind: "fail"; errorMessage: string };
-    expect(errorMessage).toContain("assignee audit-verify");
+    expect(errorMessage).toContain("assignee admin audit-verify");
   });
 });
 

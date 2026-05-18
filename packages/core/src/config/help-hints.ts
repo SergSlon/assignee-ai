@@ -57,7 +57,7 @@ export const HINT_MAX_COLUMNS = BLOCK_HINT_MAX_COLUMNS;
  * - `buildSupportedTypesBlock()` — full CLI grouped grid. Only emit on
  *   `--help` output; never on error-path [FIX] text (see D-33).
  * - `getTypeHint()` — short single-line breadcrumb for error-path
- *   surfaces. Points users at `assignee plan --help`.
+ *   surfaces. Points users at `assignee infra plan --help`.
  */
 export { buildSupportedTypesBlock, getTypeHint };
 

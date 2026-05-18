@@ -149,7 +149,7 @@ the open side, to keep the OSS surface whole:
 - Cost preflight — the pre-confirm cost estimate stays free.
 - A "pro" version of the CLI binary — the binary is one build, MIT,
   with no feature flags gated on a license server.
-- Plan generation throttling — no rate limit on `assignee plan`.
+- Plan generation throttling — no rate limit on `assignee infra plan`.
 
 ## Related reading
 

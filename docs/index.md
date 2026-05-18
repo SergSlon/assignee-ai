@@ -34,7 +34,7 @@ the backlog of pending how-tos.
 | Doc                                                              | Goal                                                               |
 | ---------------------------------------------------------------- | ------------------------------------------------------------------ |
 | [how-to/quickstart.md](how-to/quickstart.md)                     | Install the CLI, bootstrap AWS, plan and apply your first resource |
-| [how-to/read-a-plan-box.md](how-to/read-a-plan-box.md)           | Decode every section of the `assignee plan` plan box               |
+| [how-to/read-a-plan-box.md](how-to/read-a-plan-box.md)           | Decode every section of the `assignee infra plan` plan box         |
 | [how-to/sso-authentication.md](how-to/sso-authentication.md)     | Authenticate with AWS SSO / Identity Center profiles               |
 | [how-to/install-via-homebrew.md](how-to/install-via-homebrew.md) | Install the CLI via the Homebrew tap                               |
 | [how-to/release-process.md](how-to/release-process.md)           | Run or observe the CLI release pipeline                            |

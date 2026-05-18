@@ -5,14 +5,14 @@
  * Pre-demo audit (2026-05-06) follow-up: closes the deferred
  * Adversarial #4 HIGH from commit 24cc60a4 (env-writer paired-token
  * eviction). The env-writer fix prevents stale tokens from landing in
- * .env after `assignee setup`, but a stale token can still arrive via
+ * .env after `assignee dev setup`, but a stale token can still arrive via
  * a stale shell export, a stale paste of `aws configure
  * export-credentials`, or — most relevant for the customer demo
- * tomorrow — a user who forgets to re-run `assignee setup` after
+ * tomorrow — a user who forgets to re-run `assignee dev setup` after
  * pulling the new operator policy. The matcher fix is the safety net
  * for those user paths: AWS rejects with "The security token included
  * in the request is invalid" / "InvalidClientTokenId" / "ExpiredToken"
- * and the user sees an actionable "re-run `assignee setup`" hint
+ * and the user sees an actionable "re-run `assignee dev setup`" hint
  * instead of the misleading "No AWS credentials detected".
  *
  * @see _bmad-output/implementation-artifacts/error-message-stale-session-token.md
@@ -42,15 +42,15 @@ describe("matcher precedence — stale STS session token", () => {
         const entry = defaultErrorMessageRegistry.resolveMessage(message);
         expect(entry.code).toBe(ErrorCode.STALE_SESSION_TOKEN);
         expect(entry.code).not.toBe(ErrorCode.MISSING_CREDENTIALS);
-        expect(entry.howToFix).toContain("assignee setup");
+        expect(entry.howToFix).toContain("assignee dev setup");
       },
     );
 
-    it("howToFix mentions both `assignee setup` AND the SSO refresh path", () => {
+    it("howToFix mentions both `assignee dev setup` AND the SSO refresh path", () => {
       const entry = defaultErrorMessageRegistry.resolveMessage(
         "The security token included in the request is invalid",
       );
-      expect(entry.howToFix).toContain("assignee setup");
+      expect(entry.howToFix).toContain("assignee dev setup");
       expect(entry.howToFix.toLowerCase()).toMatch(/sso|aws\s+configure/);
     });
 

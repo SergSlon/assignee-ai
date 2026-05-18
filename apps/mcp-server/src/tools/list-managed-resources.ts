@@ -2,7 +2,7 @@
  * list_managed_resources MCP tool — lists resources provisioned by assignee.ai.
  *
  * Queries the Resource Groups Tagging API for resources tagged with
- * `managed-by=assignee-ai` and returns JSON matching `assignee list --json` output.
+ * `managed-by=assignee-ai` and returns JSON matching `assignee admin list --json` output.
  *
  * @see Epic 20, ADR-008, Story 20.4
  */

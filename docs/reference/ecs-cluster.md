@@ -22,13 +22,13 @@ A dedicated plugin handles schema elicitation, default injection, and best-pract
 ### Typical intent examples
 
 ```bash
-assignee plan "Create an ECS cluster"
-assignee apply "Create an ECS cluster named my-ecs-cluster"
+assignee infra plan "Create an ECS cluster"
+assignee infra apply "Create an ECS cluster named my-ecs-cluster"
 ```
 
 ### Best-practice rules
 
-Best-practice rules for this type live under `packages/best-practices/ecs/` (per-service subdirectories). Run `assignee plan` to see which rules apply to your specific configuration.
+Best-practice rules for this type live under `packages/best-practices/ecs/` (per-service subdirectories). Run `assignee infra plan` to see which rules apply to your specific configuration.
 
 ### Pricing
 

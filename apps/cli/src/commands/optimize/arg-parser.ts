@@ -1,5 +1,5 @@
 /**
- * --min-savings validation for `assignee optimize`.
+ * --min-savings validation for `assignee infra optimize`.
  * Wave-6d F4: split from optimize.ts.
  */
 import type { OptimizeOpts } from "./types.js";

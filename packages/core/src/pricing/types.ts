@@ -72,7 +72,7 @@ export interface McpPricingConfig {
  * - `fallback` → produced by a local heuristic / hand-coded constant /
  *                `estimateLocal()`. No live AWS data involved. May be stale.
  * - `offline`  → replayed from a persisted log entry (e.g. previous
- *                `assignee plan` output) when the live MCP path was
+ *                `assignee infra plan` output) when the live MCP path was
  *                unreachable. Historic.
  * - `free`     → the resource is authoritatively free of charge (IAM role,
  *                EC2 internet gateway, ECS cluster control plane, etc.).

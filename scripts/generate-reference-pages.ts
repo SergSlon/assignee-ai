@@ -255,11 +255,11 @@ function generatePage(cfnType: string): string {
     : "A dedicated plugin handles schema elicitation, default injection, and best-practice rule evaluation for this type.";
 
   const bpRulesSentence = bpDir
-    ? `Best-practice rules for this type live under \`packages/best-practices/${bpDir}/\` (per-service subdirectories). Run \`assignee plan\` to see which rules apply to your specific configuration.`
-    : "Best-practice rules for this type live under `packages/best-practices/` (per-service subdirectories: `s3/`, `lambda/`, `iam/`, etc.). Run `assignee plan` to see which rules apply to your specific configuration.";
+    ? `Best-practice rules for this type live under \`packages/best-practices/${bpDir}/\` (per-service subdirectories). Run \`assignee infra plan\` to see which rules apply to your specific configuration.`
+    : "Best-practice rules for this type live under `packages/best-practices/` (per-service subdirectories: `s3/`, `lambda/`, `iam/`, etc.). Run `assignee infra plan` to see which rules apply to your specific configuration.";
 
   // For compound-only types, replace the user-intent example with the
-  // compound-only callout — the example "assignee plan \"Create a VPC
+  // compound-only callout — the example "assignee infra plan \"Create a VPC
   // gateway attachment\"" was actively misleading because that intent
   // resolves to a parent type, never to the compound-only resource.
   const intentBlock = isCompoundOnly
@@ -267,8 +267,8 @@ function generatePage(cfnType: string): string {
       "> [!NOTE]\n> Compound-only — provisioned via a parent compound pattern, not by direct intent.")
     : [
         `\`\`\`bash`,
-        `assignee plan "Create ${phrase}"`,
-        `assignee apply "Create ${phrase} named my-${slug}"`,
+        `assignee infra plan "Create ${phrase}"`,
+        `assignee infra apply "Create ${phrase} named my-${slug}"`,
         `\`\`\``,
       ].join("\n");
 

@@ -115,10 +115,10 @@ describe("classifyCreateError", () => {
       expect(result.shortMessage).toBe("Unable to locate credentials.");
     });
 
-    it("maps ACCESS_DENIED with 'not authorized' to ACCESS_DENIED code with `assignee setup` hint + raw", () => {
+    it("maps ACCESS_DENIED with 'not authorized' to ACCESS_DENIED code with `assignee dev setup` hint + raw", () => {
       // DF-A4/D6 fix: ACCESS_DENIED kind now maps to ACCESS_DENIED errorCode
       // (was UNKNOWN — a pre-fix regression). The enricher surfaces the
-      // `assignee setup` hint (since "is not authorized to perform" matches
+      // `assignee dev setup` hint (since "is not authorized to perform" matches
       // the NOT_AUTHORIZED_SUBSTRING sub-pattern inside the access-denied
       // enricher) AND preserves the original AWS message for grep / support.
       const rawMsg =
@@ -134,9 +134,9 @@ describe("classifyCreateError", () => {
       // DF-A4/D6: errorCode must now be ACCESS_DENIED, not UNKNOWN.
       expect(result.errorCode).toBe(PROVISIONING_ERROR_CODES.ACCESS_DENIED);
       // Actionable guidance present in both surfaces.
-      expect(result.userPrefix).toContain("assignee setup");
+      expect(result.userPrefix).toContain("assignee dev setup");
       expect(result.userPrefix).toContain("CreatePolicyVersion");
-      expect(result.shortMessage).toContain("assignee setup");
+      expect(result.shortMessage).toContain("assignee dev setup");
       // Raw AWS message preserved in both surfaces.
       expect(result.userPrefix).toContain(rawMsg);
       expect(result.shortMessage).toContain(rawMsg);
@@ -160,9 +160,9 @@ describe("classifyCreateError", () => {
         "AWS::DynamoDB::Table",
       );
 
-      expect(result.userPrefix).toContain("assignee setup");
+      expect(result.userPrefix).toContain("assignee dev setup");
       expect(result.userPrefix).toContain(rawMsg);
-      expect(result.shortMessage).toContain("assignee setup");
+      expect(result.shortMessage).toContain("assignee dev setup");
     });
 
     it("maps NOT_FOUND (on create, e.g. VPC dependency) to raw message + UNKNOWN code", () => {

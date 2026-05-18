@@ -231,7 +231,7 @@ export async function formatApplySingleSuccess(
   //
   // Non-blocking: if PutBucketPolicy fails (throttle, IAM gap), warn loudly
   // but do NOT roll back the bucket creation — the bucket exists and the user
-  // can re-run `assignee setup` to re-attach. The identity policy already
+  // can re-run `assignee dev setup` to re-attach. The identity policy already
   // allows destructive operations so the bucket is fully functional.
   // bug-s3-bucket-policy-attach-failure-observability: capture the
   // attach outcome so it can be persisted on the provision record below.
@@ -255,7 +255,7 @@ export async function formatApplySingleSuccess(
           chalk.yellow(
             `⚠ Compensating bucket policy could not be attached to ${state.resourceArn}: ${policyResult.reason ?? "unknown error"}\n` +
               `  The bucket was created successfully but per-bucket tag-scoped destructive access is NOT in effect.\n` +
-              `  Re-run \`assignee setup\` to retry the policy attachment.\n`,
+              `  Re-run \`assignee dev setup\` to retry the policy attachment.\n`,
           ),
         );
         log({
@@ -313,7 +313,7 @@ export async function formatApplySingleSuccess(
   // subnet resources.
   // bug-s3-bucket-policy-attach-failure-observability: thread the
   // S3 compensating-policy outcome (captured above) onto the
-  // provision record so `assignee list` can flag buckets where the
+  // provision record so `assignee admin list` can flag buckets where the
   // per-bucket tag boundary is not in effect.
   const recordExtras: Parameters<typeof writeProvisionRecord>[6] = {
     ...(networkOverlay?.publicIpAddress

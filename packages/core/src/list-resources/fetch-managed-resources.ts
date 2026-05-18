@@ -199,7 +199,7 @@ export async function fetchManagedResources(
       : parsed.region || region;
 
     // bug-s3-bucket-policy-attach-failure-observability — surface the
-    // S3 compensating-policy outcome on the row so `assignee list` can
+    // S3 compensating-policy outcome on the row so `assignee admin list` can
     // flag buckets where the per-bucket tag boundary is not in effect.
     // Only set the field when the provision record carries it; non-S3
     // resources, S3 buckets where the policy attached cleanly, and pre-
@@ -261,7 +261,7 @@ export async function fetchManagedResources(
         process.stderr.write(
           `⚠ Warning: Could not enumerate IAM roles (${
             err instanceof Error ? err.message : String(err)
-          }). Run 'assignee setup' to refresh operator permissions if this persists.\n`,
+          }). Run 'assignee dev setup' to refresh operator permissions if this persists.\n`,
         );
       }
     }

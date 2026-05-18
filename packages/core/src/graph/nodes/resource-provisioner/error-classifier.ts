@@ -91,7 +91,7 @@ const DDB_ATTR_DEFS_HINT =
  *      this hint.
  *
  *   2. The action is in CODE but the user's attached AWS policy is an
- *      OLDER version that predates it. `assignee setup` re-runs the
+ *      OLDER version that predates it. `assignee dev setup` re-runs the
  *      `ensurePolicy()` helper which calls `CreatePolicyVersion` to
  *      refresh the policy in-place — no user-or-role recreation needed.
  *      Example: `iam:CreateRole` (in code since Story 50-5 but absent
@@ -105,10 +105,10 @@ const NOT_AUTHORIZED_SUBSTRING = "is not authorized to perform";
 const NOT_AUTHORIZED_HINT =
   "AWS denied the action because the operator IAM policy lacks the permission. " +
   "Most often this means the operator user was provisioned by an older version of assignee; " +
-  "run `assignee setup` to refresh the operator policy via CreatePolicyVersion (no user recreation needed). " +
+  "run `assignee dev setup` to refresh the operator policy via CreatePolicyVersion (no user recreation needed). " +
   "If the error persists after re-running setup, the action is missing from the codebase — " +
   "file an issue with the AWS message below. " +
-  "Run `assignee audit-verify` to see required IAM actions for this resource type.";
+  "Run `assignee admin audit-verify` to see required IAM actions for this resource type.";
 
 /**
  * DF-A4/D6 (live dogfood 2026-05-11): PERMISSION_DENIED / AccessDeniedException
@@ -119,7 +119,7 @@ const NOT_AUTHORIZED_HINT =
  *
  * Fix: any raw AWS message that contains "AccessDeniedException", "Access Denied",
  * or "PERMISSION_DENIED" is enriched with an actionable hint that names
- * `assignee audit-verify` as the diagnostic tool.
+ * `assignee admin audit-verify` as the diagnostic tool.
  *
  * Note: "is not authorized to perform" messages are handled by
  * NOT_AUTHORIZED_SUBSTRING above (those come through multiple ProvisioningErrorKinds
@@ -137,8 +137,8 @@ const PERMISSION_DENIED_SUBSTRINGS = [
 const PERMISSION_DENIED_HINT =
   "CloudControl API returned a permission denied error. " +
   "Check your operator role's permissions for this resource type. " +
-  "Run `assignee audit-verify` to list the required IAM actions and identify what is missing. " +
-  "Then run `assignee setup` to refresh the operator policy via CreatePolicyVersion (no user recreation needed).";
+  "Run `assignee admin audit-verify` to list the required IAM actions and identify what is missing. " +
+  "Then run `assignee dev setup` to refresh the operator policy via CreatePolicyVersion (no user recreation needed).";
 
 /**
  * Shared base for ALREADY_EXISTS / THROTTLED / UNKNOWN (and any future
@@ -207,14 +207,14 @@ function enrichForShortMessage(raw: string): string {
  * if CCAPI classified the error as ACCESS_DENIED, it IS a permission issue.
  *
  * DF-A4/D6 fix: this ensures `ACCESS_DENIED` kind messages surface the
- * `assignee audit-verify` hint AND are classified with
+ * `assignee admin audit-verify` hint AND are classified with
  * PROVISIONING_ERROR_CODES.ACCESS_DENIED (not UNKNOWN).
  */
 function enrichAccessDeniedForUserPrefix(raw: string): string {
   const lower = raw.toLowerCase();
   // If it matches a more specific pattern (DDB attr-defs or not-authorized),
   // use that more specific enrichment first — those already include the
-  // `assignee setup` hint which is equally actionable.
+  // `assignee dev setup` hint which is equally actionable.
   if (lower.includes(DDB_ATTR_DEFS_MISMATCH_SUBSTRING)) {
     return `${DDB_ATTR_DEFS_HINT}\n\nAWS message: ${raw}`;
   }
@@ -292,7 +292,7 @@ const ERROR_DISPATCH: Record<
   // DF-A4/D6 fix: ACCESS_DENIED kind now maps to
   // PROVISIONING_ERROR_CODES.ACCESS_DENIED (was UNKNOWN) so downstream
   // hint-registry / result-formatter branches see a distinct error code.
-  // The enricher surfaces the `assignee audit-verify` hint + raw message.
+  // The enricher surfaces the `assignee admin audit-verify` hint + raw message.
   [ProvisioningErrorKind.ACCESS_DENIED]: {
     errorCode: PROVISIONING_ERROR_CODES.ACCESS_DENIED,
     userPrefix: enrichAccessDeniedForUserPrefix,

@@ -143,7 +143,7 @@ export function guardUnsupportedTypes(
     return {
       kind: "done",
       response: buildErrorResponse(
-        `${resolved.resourceType} requires SDK fallback deletion which is not yet supported in the MCP server. Use the CLI: assignee destroy ${originalIdentifier}`,
+        `${resolved.resourceType} requires SDK fallback deletion which is not yet supported in the MCP server. Use the CLI: assignee infra destroy ${originalIdentifier}`,
       ),
     };
   }
@@ -194,7 +194,7 @@ export async function runPreDestroyStep(
         kind: "done",
         response: buildErrorResponse(
           `Pre-destroy hook for ${resolved.resourceType} needs operator credentials: ${preHookErr.message}`,
-          "Set ASSIGNEE_OPERATOR_ACCESS_KEY_ID and ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY in the MCP server environment, or run 'assignee setup' to create the IAM users, then retry the destroy.",
+          "Set ASSIGNEE_OPERATOR_ACCESS_KEY_ID and ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY in the MCP server environment, or run 'assignee dev setup' to create the IAM users, then retry the destroy.",
         ),
       };
     }

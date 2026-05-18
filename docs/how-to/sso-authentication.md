@@ -11,10 +11,10 @@ SSO — pass the profile name instead.
 aws sso login --profile enterprise-sso
 
 # Run any Assignee command with the profile
-AWS_PROFILE=enterprise-sso assignee plan "Create an S3 bucket"
+AWS_PROFILE=enterprise-sso assignee infra plan "Create an S3 bucket"
 
 # Or use the --profile flag on init
-assignee init --profile enterprise-sso
+assignee dev init --profile enterprise-sso
 ```
 
 ## Supported credential sources
@@ -22,7 +22,7 @@ assignee init --profile enterprise-sso
 Assignee resolves operator credentials in this priority order:
 
 1. **`ASSIGNEE_OPERATOR_*` env vars** — highest priority, preferred for
-   least-privilege production use. Created by `assignee setup`.
+   least-privilege production use. Created by `assignee dev setup`.
 2. **`AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY`** — auto-promoted to
    the operator role with a warning. Session tokens via `AWS_SESSION_TOKEN`
    are also forwarded.
@@ -53,8 +53,8 @@ aws sso login --profile enterprise-sso
 After login, pass the profile to Assignee:
 
 ```bash
-AWS_PROFILE=enterprise-sso assignee plan "..."
-AWS_PROFILE=enterprise-sso assignee apply
+AWS_PROFILE=enterprise-sso assignee infra plan "..."
+AWS_PROFILE=enterprise-sso assignee infra apply
 ```
 
 Or set it once in your shell profile (`~/.zshrc` / `~/.bashrc`):
@@ -77,21 +77,21 @@ Re-run `aws sso login --profile <name>` and retry the command.
 
 ## Recommended production setup
 
-For production and CI, use `assignee setup` to create least-privilege
+For production and CI, use `assignee dev setup` to create least-privilege
 `ASSIGNEE_OPERATOR_*` IAM users. SSO profiles are ideal for developer
 machines and short-lived CI environments where temporary credentials are
 refreshed automatically.
 
 ```bash
 # For developers: SSO profile (session-limited)
-AWS_PROFILE=enterprise-sso assignee plan ...
+AWS_PROFILE=enterprise-sso assignee infra plan ...
 
 # For CI/production: dedicated IAM users (long-term, least-privilege)
 ASSIGNEE_OPERATOR_ACCESS_KEY_ID=AKIA...  \
 ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY=...  \
-assignee apply
+assignee infra apply
 ```
 
-> Note: `assignee setup` creates the `ASSIGNEE_OPERATOR_*`,
+> Note: `assignee dev setup` creates the `ASSIGNEE_OPERATOR_*`,
 > `ASSIGNEE_READER_*`, and `ASSIGNEE_AUDITOR_*` IAM users. This is the
 > most secure option for shared environments.

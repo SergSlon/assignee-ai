@@ -15,7 +15,7 @@
  *       CCAPI returns bare id; consumers reference by id only)
  *
  *   Because RGTA only returns taggable resources, an apply of any of
- *   these types leaves NO trail that `assignee list` can surface via
+ *   these types leaves NO trail that `assignee admin list` can surface via
  *   the tagging API, and `destroy <primaryIdentifier>` can't resolve
  *   them either — user-facing orphan state. This module is the
  *   classifier + lookup plumbing the list + destroy paths use to close
@@ -42,9 +42,9 @@ import { RESOURCE_TYPES } from "@/config/resource-types.js";
  * DC-1 (DF-OAC-LIST-DESTROY-MISMATCH): CLOUDFRONT_ORIGIN_ACCESS_CONTROL and
  * S3_BUCKET_POLICY added here. Both types have ARN formats on paper, but
  * CCAPI returns their bare primaryIdentifier (OAC Id / bucket name) rather
- * than a full ARN. RGTA does not enumerate either type, so `assignee list`
+ * than a full ARN. RGTA does not enumerate either type, so `assignee admin list`
  * surfaces them via the provision log (keyKind: "primaryIdentifier") and
- * `assignee destroy <bare-id>` must resolve them the same way.
+ * `assignee infra destroy <bare-id>` must resolve them the same way.
  */
 export const NON_TAGGABLE_RESOURCE_TYPES: ReadonlySet<string> = new Set<string>(
   [

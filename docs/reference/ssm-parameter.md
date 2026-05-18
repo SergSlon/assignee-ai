@@ -22,13 +22,13 @@ A dedicated plugin handles schema elicitation, default injection, and best-pract
 ### Typical intent examples
 
 ```bash
-assignee plan "Create an SSM parameter"
-assignee apply "Create an SSM parameter named my-ssm-parameter"
+assignee infra plan "Create an SSM parameter"
+assignee infra apply "Create an SSM parameter named my-ssm-parameter"
 ```
 
 ### Best-practice rules
 
-Best-practice rules for this type live under `packages/best-practices/ssm/` (per-service subdirectories). Run `assignee plan` to see which rules apply to your specific configuration.
+Best-practice rules for this type live under `packages/best-practices/ssm/` (per-service subdirectories). Run `assignee infra plan` to see which rules apply to your specific configuration.
 
 ### Pricing
 

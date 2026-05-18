@@ -3,7 +3,7 @@
  *
  * Runs early in the intent-parser stack to discover existing AWS resources
  * matching the user's intent. Matched resources land in graph-state as
- * `ExistingResource[]` (read-only — NEVER destroyed by `assignee destroy`).
+ * `ExistingResource[]` (read-only — NEVER destroyed by `assignee infra destroy`).
  *
  * Architecture (Winston ADR 2026-05-15, Option D):
  *   Backed by the existing direct-SDK `aws-resource-discovery` module via

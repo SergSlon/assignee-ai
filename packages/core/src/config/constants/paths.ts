@@ -11,7 +11,7 @@ export { ASSIGNEE_DIR };
 export const CHECKPOINT_DIR = ASSIGNEE_DIR;
 
 /**
- * Directory for baseline files written by `assignee drift --baseline <arn>`.
+ * Directory for baseline files written by `assignee infra drift --baseline <arn>`.
  * Lives under `.assignee/baselines/` so it shares project scoping with
  * checkpoints but never conflicts with the `checkpoint-*.json` file names
  * `resolveDesiredState()` scans.

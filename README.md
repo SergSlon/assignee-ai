@@ -26,9 +26,9 @@ pnpm build
 pnpm setup               # pnpm CLI's global-bin bootstrap (writes pnpm bin to $PATH). Reload shell after.
 pnpm link --global        # adds 'assignee' to PATH
 
-assignee setup       # creates operator / reader / auditor IAM users; writes .env (idempotent)
-assignee doctor --short   # sanity-check credentials + Bedrock region
-assignee plan "Create an S3 bucket named my-test-bucket"
+assignee dev setup       # creates operator / reader / auditor IAM users; writes .env (idempotent)
+assignee admin doctor --short   # sanity-check credentials + Bedrock region
+assignee infra plan "Create an S3 bucket named my-test-bucket"
 ```
 
 > **Fallback (without global link):** `node apps/cli/dist/index.js <command>` works identically. You can also alias it: `alias assignee="node $(pwd)/apps/cli/dist/index.js"`.
@@ -40,7 +40,7 @@ For the full bootstrap walkthrough see [docs/how-to/quickstart.md](docs/how-to/q
 ## First plan example
 
 ```console
-$ assignee plan "Create an S3 bucket named hero-demo-bucket"
+$ assignee infra plan "Create an S3 bucket named hero-demo-bucket"
 === Plan ===
 Resource Type:   AWS::S3::Bucket
 Region:          us-east-1
@@ -56,7 +56,7 @@ Findings:        5 high, 5 medium (4 fixable)
           → Fix: --set OwnershipControls=BucketOwnerEnforced
   [HIGH]  S3 bucket should enforce SSL-only requests
           → Manual: Add bucket policy to deny non-HTTPS requests
-  💡 4 findings can be auto-fixed. Run `assignee init` to enable.
+  💡 4 findings can be auto-fixed. Run `assignee dev init` to enable.
 
 Apply now? (AWS::S3::Bucket, est. $0.0230/GB-month) ▸
 ```
@@ -67,17 +67,17 @@ Apply now? (AWS::S3::Bucket, est. $0.0230/GB-month) ▸
 
 Full reference: [docs/commands.md](docs/commands.md).
 
-| Workflow  | Commands                              |
-| :-------- | :------------------------------------ |
-| Provision | `plan`, `apply`                       |
-| Manage    | `list`, `status`, `destroy`, `update` |
-| Detect    | `drift`, `reconcile`                  |
-| Optimise  | `optimize`                            |
-| Configure | `init`, `setup`, `doctor`             |
-| Audit     | `audit-verify`                        |
-| Restore   | `restore-provisions`                  |
-| Discover  | `describe`                            |
-| Shell     | `completions`, `version`              |
+| Workflow  | Commands (`assignee <group> <command>`)                     |
+| :-------- | :---------------------------------------------------------- |
+| Provision | `infra plan`, `infra apply`                                 |
+| Manage    | `admin list`, `admin status`, `infra destroy`, `dev update` |
+| Detect    | `infra drift`, `infra reconcile`                            |
+| Optimise  | `infra optimize`                                            |
+| Configure | `dev init`, `dev setup`, `admin doctor`                     |
+| Audit     | `admin audit-verify`                                        |
+| Restore   | `infra restore-provisions`                                  |
+| Discover  | `admin describe`                                            |
+| Shell     | `dev completions`, `dev version`                            |
 
 ---
 
@@ -95,13 +95,13 @@ Most common env vars:
 | `ASSIGNEE_COST_CEILING_USD`           | Hard monthly cost ceiling — blocks apply above limit |
 | `ASSIGNEE_VERBOSITY`                  | `verbose` to show JSON logs on stderr                |
 
-Run `assignee init` to create a `.assignee/config.yaml` with region, tags, and auto-fix preferences. Run `assignee init --global` for user-wide defaults.
+Run `assignee dev init` to create a `.assignee/config.yaml` with region, tags, and auto-fix preferences. Run `assignee dev init --global` for user-wide defaults.
 
 ---
 
 ## Supported AWS resource types
 
-Run `assignee plan --help` to discover all supported types and compound patterns in the running build. Full reference: [docs/resource-types.md](docs/resource-types.md).
+Run `assignee infra plan --help` to discover all supported types and compound patterns in the running build. Full reference: [docs/resource-types.md](docs/resource-types.md).
 
 ---
 

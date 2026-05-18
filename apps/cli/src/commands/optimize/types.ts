@@ -1,5 +1,5 @@
 /**
- * Shared types for the `assignee optimize` phases.
+ * Shared types for the `assignee infra optimize` phases.
  * Wave-6d F4: split from optimize.ts.
  */
 export interface OptimizeOpts {

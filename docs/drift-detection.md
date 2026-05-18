@@ -25,12 +25,12 @@ Each resource gets one of five statuses:
 | `BASELINE_MISSING` | No desired-state baseline found in provision logs        |
 | `ERROR`            | CloudControl call failed (permissions, throttling, etc.) |
 
-## `assignee drift` -- Table View
+## `assignee infra drift` -- Table View
 
 Scan all managed resources and display drift status in a table.
 
 ```bash
-assignee drift
+assignee infra drift
 ```
 
 Output:
@@ -51,21 +51,21 @@ Narrow the scan to a subset of resources:
 
 ```bash
 # Only S3 buckets
-assignee drift --resource AWS::S3::Bucket
+assignee infra drift --resource AWS::S3::Bucket
 
 # Only us-west-2
-assignee drift --region us-west-2
+assignee infra drift --region us-west-2
 
 # Only drifted resources
-assignee drift --status DRIFTED
+assignee infra drift --status DRIFTED
 
 # Exclude unadopted resources (CI mode)
-assignee drift --exclude BASELINE_MISSING
+assignee infra drift --exclude BASELINE_MISSING
 
 # Adopt a pre-existing resource into drift tracking. The ARN is a
 # positional argument and must come BEFORE the `--baseline` flag —
 # Commander parses `--baseline <ARN>` as a boolean flag with no argument.
-assignee drift arn:aws:s3:::adopted-bucket --baseline
+assignee infra drift arn:aws:s3:::adopted-bucket --baseline
 ```
 
 `--resource` and `--region` filter before the CloudControl calls (fewer API calls). `--status` and `--exclude` filter after (all resources are still checked).
@@ -74,10 +74,10 @@ assignee drift arn:aws:s3:::adopted-bucket --baseline
 
 ```bash
 # Print JSON report to stdout
-assignee drift --json
+assignee infra drift --json
 
 # Write JSON report to a file
-assignee drift --json --output-file drift-report.json
+assignee infra drift --json --output-file drift-report.json
 ```
 
 The JSON report includes a summary object with counts, check duration, and an array of per-resource results with full field-level detail.
@@ -88,20 +88,20 @@ By default, drift checks run 10 resources in parallel. Adjust with `--concurrenc
 
 ```bash
 # Faster checks for large inventories
-assignee drift --concurrency 30
+assignee infra drift --concurrency 30
 
 # Conservative for accounts with low API limits
-assignee drift --concurrency 3
+assignee infra drift --concurrency 3
 ```
 
 Maximum concurrency is 50. Throttled requests are automatically retried with exponential backoff (up to 3 retries).
 
-## `assignee drift <id>` -- Field-Level Detail
+## `assignee infra drift <id>` -- Field-Level Detail
 
 Inspect a single resource to see exactly which fields drifted, with color-coded output:
 
 ```bash
-assignee drift my-handler
+assignee infra drift my-handler
 ```
 
 Output:
@@ -123,10 +123,10 @@ Last provisioned: 2026-03-20T14:30:00Z
 Pass `--json` for machine-readable output:
 
 ```bash
-assignee drift my-handler --json
+assignee infra drift my-handler --json
 ```
 
-## `assignee reconcile` -- Fix Drift
+## `assignee infra reconcile` -- Fix Drift
 
 Reconcile walks through every drifted resource and presents three choices for each:
 
@@ -137,7 +137,7 @@ Reconcile walks through every drifted resource and presents three choices for ea
 | **Skip**      | Leave the resource as-is for now                                                |
 
 ```bash
-assignee reconcile
+assignee infra reconcile
 ```
 
 Interactive session:
@@ -161,7 +161,7 @@ After a reconcile action, you are asked to confirm before any changes are applie
 Preview what would happen without making any changes:
 
 ```bash
-assignee reconcile --dry-run
+assignee infra reconcile --dry-run
 ```
 
 Each drifted resource is listed with its field differences, but no prompts are shown and no changes are made.
@@ -171,7 +171,7 @@ Each drifted resource is listed with its field differences, but no prompts are s
 Reconcile all drifted resources without interactive prompts:
 
 ```bash
-assignee reconcile --auto-reconcile --yes
+assignee infra reconcile --auto-reconcile --yes
 ```
 
 `--auto-reconcile` skips the per-resource action menu (every drifted
@@ -182,7 +182,7 @@ Ctrl+C to abort.
 ### Filter by Resource Type
 
 ```bash
-assignee reconcile --resource AWS::Lambda::Function
+assignee infra reconcile --resource AWS::Lambda::Function
 ```
 
 ## CI Integration
@@ -226,7 +226,7 @@ jobs:
         env:
           ASSIGNEE_OPERATOR_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        run: assignee drift --json --output-file drift-report.json --concurrency 20
+        run: assignee infra drift --json --output-file drift-report.json --concurrency 20
 
       - name: Upload report
         if: always()
@@ -244,7 +244,7 @@ The step fails (exit code 1) if any drift is detected, which marks the workflow 
 #!/usr/bin/env bash
 set -euo pipefail
 
-assignee drift --json --output-file /tmp/drift-report.json --concurrency 20
+assignee infra drift --json --output-file /tmp/drift-report.json --concurrency 20
 
 if [ $? -eq 1 ]; then
   echo "Drift detected — see /tmp/drift-report.json"
@@ -254,7 +254,7 @@ fi
 
 ## All Options Reference
 
-### `assignee drift`
+### `assignee infra drift`
 
 | Flag                   | Description                                                                                            | Default |
 | ---------------------- | ------------------------------------------------------------------------------------------------------ | ------- |
@@ -270,7 +270,7 @@ fi
 | `--concurrency <n>`    | Max parallel drift checks (1-50)                                                                       | 10      |
 | `--detailed`           | Show all fields including matching ones                                                                | false   |
 
-### `assignee reconcile`
+### `assignee infra reconcile`
 
 | Flag                 | Description                                                     | Default |
 | -------------------- | --------------------------------------------------------------- | ------- |

@@ -22,13 +22,13 @@ A dedicated plugin handles schema elicitation, default injection, and best-pract
 ### Typical intent examples
 
 ```bash
-assignee plan "Create an EFS file system"
-assignee apply "Create an EFS file system named my-efs-filesystem"
+assignee infra plan "Create an EFS file system"
+assignee infra apply "Create an EFS file system named my-efs-filesystem"
 ```
 
 ### Best-practice rules
 
-Best-practice rules for this type live under `packages/best-practices/efs/` (per-service subdirectories). Run `assignee plan` to see which rules apply to your specific configuration.
+Best-practice rules for this type live under `packages/best-practices/efs/` (per-service subdirectories). Run `assignee infra plan` to see which rules apply to your specific configuration.
 
 ### Pricing
 

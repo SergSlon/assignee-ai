@@ -1,5 +1,5 @@
 /**
- * JSON Patch (RFC 6902) construction for `assignee reconcile`.
+ * JSON Patch (RFC 6902) construction for `assignee infra reconcile`.
  * Wave-6d F4: split out of reconcile.ts (SRP).
  */
 import {

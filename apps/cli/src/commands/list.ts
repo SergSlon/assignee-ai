@@ -1,12 +1,12 @@
 /**
- * `assignee list` command — lists all resources managed by assignee.ai.
+ * `assignee admin list` command — lists all resources managed by assignee.ai.
  *
  * Queries AWS Resource Groups Tagging API for resources tagged with
  * `managed-by=assignee-ai`. Supports `--json` for machine-readable output
  * and `--region` to filter by AWS region.
  *
  * This is a direct SDK command (no LangGraph graph), following the same
- * pattern as `assignee init`.
+ * pattern as `assignee dev init`.
  *
  * @see Story 18.4, FR-40
  */
@@ -102,17 +102,17 @@ export const listCommand = new Command(CommandName.LIST)
     "after",
     `
 Examples:
-  $ assignee list
+  $ assignee admin list
         Table of every assignee-managed resource in the default region
-  $ assignee list --region ${DEFAULT_AWS_REGION}
+  $ assignee admin list --region ${DEFAULT_AWS_REGION}
         Only resources in ${DEFAULT_AWS_REGION}
-  $ assignee list --resource-type S3
+  $ assignee admin list --resource-type S3
         Only S3 buckets (shorthand accepted; full CFN form also works)
-  $ assignee list --resource-type AWS::Lambda::Function
+  $ assignee admin list --resource-type AWS::Lambda::Function
         Only Lambda functions (full CFN form)
-  $ assignee list --total-cost
+  $ assignee admin list --total-cost
         Include a total-monthly-cost footer
-  $ assignee list --json | jq .
+  $ assignee admin list --json | jq .
         Machine-readable output for scripts
 
 list is read-only — it only reads local provision records + live tags.
@@ -185,14 +185,14 @@ No --yes flag is required.
               const message = err instanceof Error ? err.message : String(err);
               renderError(
                 `Failed to validate --resource-type "${opts.resourceType}".`,
-                "Check the value and try again — see `assignee list --help` for supported types.",
+                "Check the value and try again — see `assignee admin list --help` for supported types.",
                 { why: message },
               );
               if (opts.json) {
                 writeJsonErrorEnvelope(
                   "RESOURCE_TYPE_RESOLVER_ERROR",
                   `Failed to validate --resource-type "${opts.resourceType}".`,
-                  "Check the value and try again — see `assignee list --help` for supported types.",
+                  "Check the value and try again — see `assignee admin list --help` for supported types.",
                 );
               }
               // Story 94-R7 (D-02): same double-paint guard as above.

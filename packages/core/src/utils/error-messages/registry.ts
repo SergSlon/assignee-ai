@@ -198,7 +198,7 @@ export class ErrorMessageRegistry {
 
     // STS session-token check FIRST — beats the broad AWS-name +
     // ConfigurationError "credentials" branches so the user gets the
-    // actionable "re-run `assignee setup` to refresh credentials" hint
+    // actionable "re-run `assignee dev setup` to refresh credentials" hint
     // instead of "No AWS credentials detected".
     const stsMatch = matchStsAuthError(errorMessage, lookup);
     if (stsMatch) return stsMatch;

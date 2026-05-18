@@ -130,7 +130,7 @@ async function deleteBucketPolicyCompanion(
 
     ctx.warn("s3_bucket_policy_delete_timeout", {
       bucketName,
-      hint: `Run \`assignee destroy ${bucketName}\` with resource type AWS::S3::BucketPolicy to clean up manually.`,
+      hint: `Run \`assignee infra destroy ${bucketName}\` with resource type AWS::S3::BucketPolicy to clean up manually.`,
     });
   } catch (err) {
     ctx.warn("s3_bucket_policy_delete_error", {

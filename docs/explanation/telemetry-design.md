@@ -111,11 +111,11 @@ in config is treated as "off", not "ask later".
 init` today — the CLI does not ask, does not write `telemetry.enabled`,
 > and does not read `ASSIGNEE_TELEMETRY`.
 
-1. `assignee init` would ask once: _"Opt in to anonymous usage telemetry?"_
+1. `assignee dev init` would ask once: _"Opt in to anonymous usage telemetry?"_
    with a link to this document. Default answer is **no**.
 2. The answer would be written to `~/.assignee/config.yaml` under
    `telemetry.enabled: true | false`. Users could edit the file later, or
-   run `assignee init --reset-telemetry` to be asked again.
+   run `assignee dev init --reset-telemetry` to be asked again.
 3. `ASSIGNEE_TELEMETRY=0` in the environment would override the config
    value to `false`, no matter what the config says. `ASSIGNEE_TELEMETRY=1`
    would have no effect on its own — explicit opt-in must happen in config
@@ -197,7 +197,7 @@ Before the first usage-telemetry PR merges:
       field.
 - [ ] End-to-end test that sends a record with a blocked field (e.g.
       raw intent) and asserts the serialiser drops it.
-- [ ] `assignee init` UX reviewed against the Contributor Covenant.
+- [ ] `assignee dev init` UX reviewed against the Contributor Covenant.
 - [ ] `ASSIGNEE_TELEMETRY=0` takes precedence over `true` in config.
 - [ ] No telemetry call in any code path that runs before the opt-in check.
 - [ ] Retention window explicitly documented and enforced in the backing store.

@@ -177,8 +177,15 @@ function scanFileForTriples(
   const text = readFileSync(file, "utf8");
   const lines = text.split("\n");
   const out: EmittedTriple[] = [];
+  // Post-Story-108-A-07: noun-grouped CLI emits `assignee <group> <leaf>
+  // --<flag>` where `<group>` is one of `infra`/`admin`/`dev`. The
+  // optional `(?:infra|admin|dev)\s+` prefix is non-capturing so the
+  // existing capture-group indices (`m[1]` = leaf cmd, `m[3]` = flag)
+  // stay stable. Pre-migration call-sites that still emit the flat form
+  // (`assignee plan --json`) remain matched as well — the prefix is
+  // optional.
   const tripleRegex =
-    /\bassignee\s+([a-z][a-z-]*)((?:[^"`\n]){0,200}?)(--[A-Za-z][A-Za-z0-9-]*)/g;
+    /\bassignee\s+(?:(?:infra|admin|dev)\s+)?([a-z][a-z-]*)((?:[^"`\n]){0,200}?)(--[A-Za-z][A-Za-z0-9-]*)/g;
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i]!;
     tripleRegex.lastIndex = 0;

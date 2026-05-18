@@ -119,7 +119,7 @@ function appendRecovery(
   if (successful.length === 0) {
     lines.push(
       c.dim(
-        "  Nothing was provisioned. Fix the error reported above and re-run your `assignee apply` command.",
+        "  Nothing was provisioned. Fix the error reported above and re-run your `assignee infra apply` command.",
       ),
     );
     return;
@@ -144,7 +144,7 @@ function appendRecovery(
         ),
       );
     } else {
-      lines.push(`    assignee destroy ${r.resourceArn}`);
+      lines.push(`    assignee infra destroy ${r.resourceArn}`);
     }
   }
   lines.push("");
@@ -152,7 +152,7 @@ function appendRecovery(
     c.dim(`  Or retry from the failed step after addressing the root cause:`),
   );
   lines.push(
-    `    assignee apply --checkpoint .assignee/checkpoint-${runId}.json`,
+    `    assignee infra apply --checkpoint .assignee/checkpoint-${runId}.json`,
   );
 }
 

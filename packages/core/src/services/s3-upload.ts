@@ -76,7 +76,7 @@ const MIME_TYPES: Record<string, string> = {
   ".zip": "application/zip",
   ".map": ContentType.JSON,
   ".webmanifest": "application/manifest+json",
-  // ── `assignee update` follow-on: video / audio / markdown ─────────
+  // ── `assignee dev update` follow-on: video / audio / markdown ─────────
   // The `update` command refreshes existing static sites that today
   // routinely embed marketing video clips, podcasts, or doc previews.
   // Without these mappings S3 served `application/octet-stream` which
@@ -170,7 +170,7 @@ export async function uploadStaticSite(
     onProgress?: (progress: UploadProgress) => void;
     config?: ConfigPort;
     /**
-     * `assignee update` follow-on: when `true`, deletes remote objects
+     * `assignee dev update` follow-on: when `true`, deletes remote objects
      * whose key is NOT present in the local upload set. Default `false`
      * (additive-only is the safer default for first-time uploads).
      */

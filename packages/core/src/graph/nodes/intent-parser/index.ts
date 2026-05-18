@@ -677,7 +677,7 @@ Request: "${safeIntent}"`;
     //
     // A dedicated destroy-routing node is deferred to a follow-up story.
     // Until that exists, we terminate with UNSUPPORTED_RESOURCE and an
-    // actionable message pointing the user to `assignee destroy <arn>`.
+    // actionable message pointing the user to `assignee infra destroy <arn>`.
     if (output.kind === "destroy") {
       const typeLabel =
         output.resourceType !== "UNSUPPORTED"
@@ -698,8 +698,8 @@ Request: "${safeIntent}"`;
         classifierPath: "llm-primary" as const,
         errorMessage:
           `I detected you want to destroy a ${typeLabel}. ` +
-          `Use \`assignee destroy <arn>\` directly. ` +
-          `Run \`assignee list\` to see managed ARNs.`,
+          `Use \`assignee infra destroy <arn>\` directly. ` +
+          `Run \`assignee admin list\` to see managed ARNs.`,
       };
     }
 

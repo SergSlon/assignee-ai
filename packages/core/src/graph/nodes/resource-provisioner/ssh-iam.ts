@@ -1,7 +1,7 @@
 /**
  * EC2 SSH-bundle IAM instance-profile pre-provision.
  *
- * When the user types `assignee apply "Create a EC2 with SSH"`, the
+ * When the user types `assignee infra apply "Create a EC2 with SSH"`, the
  * SSH-intent path needs the instance to be SSM-capable so the user can
  * `aws ssm start-session` even when SSH is firewalled. This pre-hook
  * auto-creates an IAM role + instance profile carrying the AWS-managed

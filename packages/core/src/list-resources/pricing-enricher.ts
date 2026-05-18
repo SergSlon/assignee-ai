@@ -1,5 +1,5 @@
 /**
- * Pricing-MCP enricher for `assignee list`
+ * Pricing-MCP enricher for `assignee admin list`
  * (feature-pricing-mcp-list-enrichment).
  *
  * Resolves live rate-card cost estimates for resource rows whose
@@ -143,7 +143,7 @@ function unwrapPricingMcpText(response: unknown): string {
 
 /**
  * Formats a PricingBreakdown result into a human-readable cost label for
- * the `assignee list` table. Priority:
+ * the `assignee admin list` table. Priority:
  *  1. decomposerReportedFree → "$0/mo"
  *  2. fixedSubtotal >= 0 AND at least one fixed item resolved → "$X.XX/mo"
  *     (>= so a genuine $0.00/mo promotional rate is displayed, not hidden)
@@ -236,7 +236,7 @@ async function withPricingTool<T>(
 }
 
 /**
- * Factory that returns a `PricingEnricher` for the `assignee list` command.
+ * Factory that returns a `PricingEnricher` for the `assignee admin list` command.
  * The enricher:
  * 1. Bootstraps a short-lived Pricing MCP client.
  * 2. Groups input resources by (resourceType, region).
@@ -452,7 +452,7 @@ export function createListPricingEnricher(): PricingEnricher {
                     // because it appends `${unit}` itself. The previous
                     // template here re-appended `${item.priceUnit}`,
                     // producing the doubled suffix observed on
-                    // `assignee destroy <ddb-table-arn>`:
+                    // `assignee infra destroy <ddb-table-arn>`:
                     //   "Estimated savings: $0.0000001250/M read reqs/M read reqs saved"
                     // Push priceStr directly — the unit is already in there.
                     usageResults.push({

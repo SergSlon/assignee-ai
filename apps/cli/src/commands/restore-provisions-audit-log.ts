@@ -436,7 +436,7 @@ export async function restoreFromAuditLog(
       message:
         `Audit log HMAC chain verification FAILED at index ${verify.brokenAt} ` +
         `(reason: ${verify.reason}). Refusing to rebuild from a tampered log. ` +
-        `Run \`assignee audit-verify --log-file ${logFile}\` for full diagnostics.`,
+        `Run \`assignee admin audit-verify --log-file ${logFile}\` for full diagnostics.`,
       errorCode: "AUDIT_LOG_TAMPERED",
     };
   }

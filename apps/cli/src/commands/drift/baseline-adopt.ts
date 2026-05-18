@@ -20,7 +20,7 @@ export async function runBaselineAdopt(
 ): Promise<void> {
   if (!resourceId) {
     throw new AssigneeError(
-      "--baseline requires a resource ARN. Usage: assignee drift --baseline <arn>",
+      "--baseline requires a resource ARN. Usage: assignee infra drift --baseline <arn>",
       ErrorCode.USAGE_ERROR,
     );
   }
@@ -65,7 +65,7 @@ export async function runBaselineAdopt(
     resourceType,
     desiredState: liveState,
     adoptedAt: new Date().toISOString(),
-    source: "assignee drift --baseline",
+    source: "assignee infra drift --baseline",
   };
   await fs.writeFile(
     baselinePath,
@@ -77,6 +77,6 @@ export async function runBaselineAdopt(
       `  arn:       ${resourceId}\n` +
       `  baseline:  ${baselinePath}\n` +
       `  fields:    ${Object.keys(liveState).length}\n\n` +
-      `Future \`assignee drift\` runs will compare live state against this baseline.\n`,
+      `Future \`assignee infra drift\` runs will compare live state against this baseline.\n`,
   );
 }

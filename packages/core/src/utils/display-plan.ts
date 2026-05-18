@@ -379,7 +379,7 @@ export function formatAutoFixHint(state: RenderableState): string | null {
   if (autoFixCount === 0) return null;
 
   const isTTY = process.stdout.isTTY;
-  const msg = `${autoFixCount} finding${autoFixCount === 1 ? "" : "s"} can be auto-fixed. Run \`assignee init\` to enable.`;
+  const msg = `${autoFixCount} finding${autoFixCount === 1 ? "" : "s"} can be auto-fixed. Run \`assignee dev init\` to enable.`;
   return isTTY ? chalk.cyan(`  \u{1F4A1} ${msg}`) : `  * ${msg}`;
 }
 

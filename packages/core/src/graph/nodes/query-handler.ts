@@ -13,7 +13,7 @@
  * - Zero AWS writes.  This node NEVER calls CloudControl or any mutating API.
  * - Bypasses schema-fetch / wizard / plan-generator / preflight / HITL gate.
  * - On failure (fetcher throws, empty result for a specific type), sets a
- *   helpful `errorMessage` pointing the user to `assignee list` — never
+ *   helpful `errorMessage` pointing the user to `assignee admin list` — never
  *   the 38-type wall.
  *
  * Story: feature-query-intent-classifier
@@ -159,8 +159,8 @@ export function createQueryHandlerNode(
         executionStatus: ExecutionStatus.QUERY_INTENT,
         errorMessage:
           "Query routing is not available in this context. " +
-          "Use `assignee list` to see all managed resources, " +
-          "or `assignee describe <arn>` to inspect a specific resource.",
+          "Use `assignee admin list` to see all managed resources, " +
+          "or `assignee admin describe <arn>` to inspect a specific resource.",
         queryResult: {
           resources: [],
           naturalQuestion,
@@ -215,7 +215,7 @@ export function createQueryHandlerNode(
         errorMessage:
           `Could not fetch managed resources: ${errMsg}. ` +
           "Check that AWS credentials are configured. " +
-          "Run `assignee list` directly to verify connectivity.",
+          "Run `assignee admin list` directly to verify connectivity.",
       };
     }
   };

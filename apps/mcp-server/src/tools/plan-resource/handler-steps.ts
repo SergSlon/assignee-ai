@@ -122,7 +122,7 @@ export function checkExecutionStatus(
     const queryMsg = queryResult
       ? "Query resolved — see queryResult for matched resources."
       : ((finalState[StateField.ERROR_MESSAGE] as string) ??
-        "Query intent recognised; use `assignee list` for managed resources.");
+        "Query intent recognised; use `assignee admin list` for managed resources.");
     return doneStep(
       buildPlanErrorResponse({
         message: queryMsg,

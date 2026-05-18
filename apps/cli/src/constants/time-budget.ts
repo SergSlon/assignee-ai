@@ -62,7 +62,7 @@ export const COMMAND_TOTAL_MS = 60000;
  *
  * - SQS: AWS's queue-name-reuse rule holds a `QueueUrl` for 60s after
  *   delete and a fresh create races the release. Observed wall clock
- *   73-74s on every `assignee apply` of a standard queue (dogfood
+ *   73-74s on every `assignee infra apply` of a standard queue (dogfood
  *   slice A). 90s gives ~20% headroom over worst-case observation.
  * - CloudFront Distribution: AWS edge-deployment finalisation
  *   intrinsically takes 3-5 min in the typical case (and can take

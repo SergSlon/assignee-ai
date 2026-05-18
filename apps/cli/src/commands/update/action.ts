@@ -1,5 +1,5 @@
 /**
- * `assignee update` action — orchestrates resolve → confirm → upload →
+ * `assignee dev update` action — orchestrates resolve → confirm → upload →
  * invalidate → render.
  *
  * The action is split from the Commander wrapper (`update.ts`) so tests
@@ -81,7 +81,7 @@ function formatBytes(bytes: number): string {
 }
 
 /**
- * Drive the full `assignee update` flow. The Commander wrapper handles
+ * Drive the full `assignee dev update` flow. The Commander wrapper handles
  * argv parsing + JSON envelope serialisation; this function owns the
  * actual work + the text-mode rendering.
  */
@@ -143,7 +143,7 @@ export async function runUpdate(
   // command-design spec: zero matches → throw USAGE_ERROR.
   if (!args.noInvalidation && !resolved.distributionId) {
     throw new AssigneeError(
-      `No CloudFront distribution linked to s3://${resolved.bucketName} — pass --no-invalidation if intentional, otherwise run \`assignee plan\` to create a static-website compound.`,
+      `No CloudFront distribution linked to s3://${resolved.bucketName} — pass --no-invalidation if intentional, otherwise run \`assignee infra plan\` to create a static-website compound.`,
       ErrorCode.USAGE_ERROR,
     );
   }
@@ -431,7 +431,7 @@ export async function updateAction(
       const message = err instanceof Error ? err.message : String(err);
       const hint =
         err instanceof AssigneeError && err.code === ErrorCode.USAGE_ERROR
-          ? "Run `assignee update --help` for the supported flags."
+          ? "Run `assignee dev update --help` for the supported flags."
           : "Run with --verbose for full stack trace.";
       const detail: JsonErrorDetail | undefined = undefined;
       process.stdout.write(serializeErrorEnvelope(code, message, hint, detail));

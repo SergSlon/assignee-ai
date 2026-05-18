@@ -26,7 +26,7 @@ This type has no dedicated plugin; it is handled inline by the parent resource (
 
 ### Best-practice rules
 
-Best-practice rules for this type live under `packages/best-practices/ec2/` (per-service subdirectories). Run `assignee plan` to see which rules apply to your specific configuration.
+Best-practice rules for this type live under `packages/best-practices/ec2/` (per-service subdirectories). Run `assignee infra plan` to see which rules apply to your specific configuration.
 
 ### Pricing
 

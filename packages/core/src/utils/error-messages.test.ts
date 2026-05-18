@@ -732,7 +732,7 @@ describe("inline context tokens (Story 48.5)", () => {
   it("MISSING_CREDENTIALS: degrades cleanly with empty context", () => {
     const err = new ConfigurationError("No AWS credentials detected");
     const entry = defaultErrorMessageRegistry.resolve(err);
-    expect(entry.howToFix).toContain("Then run `assignee init` to verify.");
+    expect(entry.howToFix).toContain("Then run `assignee dev init` to verify.");
     assertClean(entry.howToFix);
   });
 

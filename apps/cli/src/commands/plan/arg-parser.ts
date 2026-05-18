@@ -1,5 +1,5 @@
 /**
- * Arg parsing + --source / --set validation for `assignee plan`.
+ * Arg parsing + --source / --set validation for `assignee infra plan`.
  * Wave-6d F4: split out of plan.ts.
  */
 import * as fs from "node:fs";
@@ -50,7 +50,7 @@ export function resolvePlanArgs(
   // /^[A-Za-z_][A-Za-z0-9_.]*$/ and `<value>` is any string (including
   // empty — `--set Tags=` is a legitimate "clear the field" gesture).
   //
-  // Before this guard:  `assignee plan --set size "Create an EC2"` was
+  // Before this guard:  `assignee infra plan --set size "Create an EC2"` was
   //   accepted, the `size` token was dropped, and the plan used the
   //   default instance type with no warning.
   // After this guard:   we throw AssigneeError with code USAGE_ERROR
@@ -120,11 +120,11 @@ export function resolvePlanArgs(
     // envelope. Message text preserved so the existing "Missing
     // intent" substring assertion remains valid.
     const err = new AssigneeError(
-      `Missing intent. Usage: assignee plan "${EXAMPLE_S3_INTENT}"`,
+      `Missing intent. Usage: assignee infra plan "${EXAMPLE_S3_INTENT}"`,
       "MISSING_INTENT",
     );
     (err as unknown as { hint: string }).hint =
-      `Quote your intent, e.g. \`assignee plan "${EXAMPLE_S3_INTENT}"\`.`;
+      `Quote your intent, e.g. \`assignee infra plan "${EXAMPLE_S3_INTENT}"\`.`;
     throw err;
   }
 

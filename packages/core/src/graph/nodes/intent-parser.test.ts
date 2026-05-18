@@ -790,7 +790,7 @@ describe("intentParserNode — kind classifier (feature-query-intent-classifier)
   it("kind=destroy redirects with UNSUPPORTED_RESOURCE + actionable message (BLOCKER 1 fix)", async () => {
     // BLOCKER 1: destroy intent must NOT reach the creation pipeline.
     // The guardrail terminates with UNSUPPORTED_RESOURCE + a redirect
-    // message pointing the user to `assignee destroy <arn>`.
+    // message pointing the user to `assignee infra destroy <arn>`.
     const mock = new MockLlmAdapter({
       resourceType: "AWS::S3::Bucket",
       kind: "destroy",
@@ -805,8 +805,8 @@ describe("intentParserNode — kind classifier (feature-query-intent-classifier)
     expect(result.executionStatus).toBe(ExecutionStatus.UNSUPPORTED_RESOURCE);
     expect(result.intentKind).toBe("destroy");
     // errorMessage must contain the redirect hint — NOT the 38-type wall
-    expect(result.errorMessage).toContain("assignee destroy");
-    expect(result.errorMessage).toContain("assignee list");
+    expect(result.errorMessage).toContain("assignee infra destroy");
+    expect(result.errorMessage).toContain("assignee admin list");
     // resourceType must NOT be set — destroy must not reach the creation pipeline
     expect(result.resourceType).toBeUndefined();
   });
@@ -825,7 +825,7 @@ describe("intentParserNode — kind classifier (feature-query-intent-classifier)
 
     expect(result.executionStatus).toBe(ExecutionStatus.UNSUPPORTED_RESOURCE);
     expect(result.intentKind).toBe("destroy");
-    expect(result.errorMessage).toContain("assignee destroy");
+    expect(result.errorMessage).toContain("assignee infra destroy");
     expect(result.resourceType).toBeUndefined();
   });
 

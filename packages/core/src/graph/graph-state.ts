@@ -467,7 +467,7 @@ export const graphAnnotation = Annotation.Root({
   /**
    * Story 108-B-04 — Which routing branch resolved this intent.
    * Populated by the intent-parser node; consumed by the local telemetry
-   * log writer and the `assignee doctor` intent-routing-health check.
+   * log writer and the `assignee admin doctor` intent-routing-health check.
    *
    * Optional and backwards-compatible: existing tests that do not supply
    * this field receive `undefined` (the default).

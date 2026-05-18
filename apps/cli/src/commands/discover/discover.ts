@@ -1,5 +1,5 @@
 /**
- * `assignee discover` command — interactive catalogue picker (Story 108-A-03).
+ * `assignee dev discover` command — interactive catalogue picker (Story 108-A-03).
  *
  * Provides first-run discoverability for the 38 supported resource types,
  * 13 compound patterns, and 18 CLI commands via a fuzzy-search picker in
@@ -11,7 +11,7 @@
  * TTY (interactive):
  *   `@clack/prompts` `autocomplete` provides a type-ahead search picker
  *   grouped by category. On selection, the command prints the selected
- *   item's description and a sample `assignee plan` invocation.
+ *   item's description and a sample `assignee infra plan` invocation.
  *
  * Non-TTY (pipe / CI):
  *   Writes a paged plain-text list to stdout with category headers
@@ -88,7 +88,7 @@ function stripAnsi(str: string): string {
  * Output format:
  *   ## Resource Types
  *   AWS::S3::Bucket  S3 object-storage bucket
- *     Example: assignee plan "Create a Bucket"
+ *     Example: assignee infra plan "Create a Bucket"
  *   ...
  *   ## Patterns
  *   ...
@@ -223,7 +223,7 @@ export const discoverCommand = new Command("discover")
 Output modes:
   TTY (default)    Interactive fuzzy picker — type to search, Enter to select.
   Pipe / non-TTY   Plain-text paged list with category headers; no ANSI codes.
-                   Example: assignee discover | grep s3
+                   Example: assignee dev discover | grep s3
   --json           Machine-readable JSON array for scripting/tooling.
                    Each item: { id, category, description, exampleIntent }
 
@@ -235,15 +235,15 @@ Flags:
                      commands        — CLI subcommands
 
 Examples:
-  $ assignee discover
+  $ assignee dev discover
         Interactive picker in a terminal
-  $ assignee discover | cat
+  $ assignee dev discover | cat
         Paged plain-text list (pipe-friendly)
-  $ assignee discover --json
+  $ assignee dev discover --json
         Full catalogue as JSON
-  $ assignee discover --category resource-types
+  $ assignee dev discover --category resource-types
         Resource types only (interactive if TTY, plain-text if not)
-  $ assignee discover --json | jq '[.[] | select(.category == "patterns")]'
+  $ assignee dev discover --json | jq '[.[] | select(.category == "patterns")]'
         Filter patterns in JSON mode via jq
 `,
   )

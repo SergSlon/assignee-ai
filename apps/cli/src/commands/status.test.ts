@@ -496,7 +496,7 @@ describe("status command --resource-type filter (Story 56-it1-01)", () => {
       expect(stderrOutput).toContain(
         'Failed to validate --resource-type "ec2"',
       );
-      expect(stderrOutput).toContain("`assignee status --help`");
+      expect(stderrOutput).toContain("`assignee admin status --help`");
       expect(stderrOutput).toContain("simulated upstream failure");
     } finally {
       vi.doUnmock("./resource-type-filter.js");

@@ -12,7 +12,7 @@ import { extractIdentifierFromArn } from "@assignee/core";
 /**
  * Checks whether a given user-provided `name` matches the identifier encoded
  * in `arn`. Supports multiple valid normalizations so users can destroy a
- * resource via the same string that appears in `assignee list`:
+ * resource via the same string that appears in `assignee admin list`:
  *
  * - Exact match against the extracted ARN identifier
  * - SSM parameters: accept both leading-slash ("/foo/bar") and bare ("foo/bar")
@@ -29,7 +29,7 @@ export function matchesName(arn: string, name: string): boolean {
   // identifiers canonically, but users routinely paste the bare form that
   // they originally supplied on create (e.g. `smoke-test-x` vs
   // `/smoke-test-x`). For these types only, also match the slash-stripped
-  // variant so `assignee destroy` accepts both forms. We do NOT fall back to
+  // variant so `assignee infra destroy` accepts both forms. We do NOT fall back to
   // a global slash-stripping match — that would make "/my-bucket" match an
   // unrelated S3 bucket named "my-bucket".
   const isSlashPrefixedType =

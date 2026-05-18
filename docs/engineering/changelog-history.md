@@ -391,7 +391,7 @@ After Epic 92 shipped 107 findings "closed", Epic 93's post-fix dogfood sweep fo
 - **e94.R3** — Security Group ingress routed from user intent. Three-layer fix: removed hardcoded port-443 default in `security-group.ts`; option-elicitor expert/non-TTY paths now seed from `state.elicitedOptions` first; `parseRules` passes CFN-shaped arrays through (was returning `undefined` → merge deleted parser output). Ports 22 / 3306 / 3389 now preserved end-to-end. Closes B-01 (BLOCKER REGRESSION).
 - **e94.R4** — BP-SG-005 re-tagged `awareness` → `not_equals` with `expected_value: "0.0.0.0/0:3389"` mirroring BP-SG-002's shape. Also fixed a latent bug in the `not_equals` CFN-array comparator — the evaluator only compared string fields, so BP-SG-002 (SSH) was also silently never firing. New `sgIngressOpensCidrPort()` helper detects `<cidr>:<port>` grammar and inspects ingress arrays. Closes B-02 (BLOCKER REGRESSION).
 - **e94.R5** — `plan --output json` error envelope discipline. Success path already had the envelope; error path leaked structured JSONL log lines + plaintext error blocks to stdout. Plan command's outer catch now preserves `AssigneeError.code`/`hint` or stamps `UNKNOWN_ERROR` for unknown errors. Stderr retains full log stream + `[ERROR]` block. Closes C-03 (HIGH REGRESSION).
-- **e94.R6** — `assignee init` non-TTY guard predicate. `process.stdout.isTTY === false` fails under pipe redirection where Node returns `undefined` — CI pipelines using `init` without `--yes` silently aborted with exit 0, no config written. Flipped to `!== true` predicate covering both stdout AND stdin. Closes D-01 (HIGH REGRESSION).
+- **e94.R6** — `assignee dev init` non-TTY guard predicate. `process.stdout.isTTY === false` fails under pipe redirection where Node returns `undefined` — CI pipelines using `init` without `--yes` silently aborted with exit 0, no config written. Flipped to `!== true` predicate covering both stdout AND stdin. Closes D-01 (HIGH REGRESSION).
 - **e94.R7** — `list --resource-type <invalid>` hint-grid dedup. 37-types grid printed twice on stderr (CONTEXT echo + Commander default handler). New `AssigneeErrorOptions.alreadyRendered` flag; top-level `parseAsync.catch` in `index.ts` skips fallback write. `renderError` strips redundant header prefix from CONTEXT. Closes D-02 + D-10.
 - **e94.R8** — S3 name extractor: unicode rejection + multi-word capture. Non-ASCII now emits `AssigneeError("S3 bucket names can only contain ASCII…")` BEFORE R1's validator. Multi-word (`named bad bucket name`) captures `bad` and attaches per-plan `NAME_REMAINDER_IGNORED` advisory. New `state.advisories` graph-state field + `Advisory` type. Boundary set excludes resource nouns so "my bucket name" style survives. IPv4-shape preserved through to R1. Closes A-05 + A-06.
 - **e94.R9** — wave-close CLI probe sweep (10/10 pass). Log at `_bmad-output/implementation-artifacts/epic-94-wave1-probe-log.md`.
@@ -461,7 +461,7 @@ Closes B-05, C-06, C-07, C-09, C-10, B-02, D-26 (pattern half). Introduced `nega
 
 #### Fixed — JSON envelope + stderr discipline (story e92.2.c)
 
-Closes A-02, A-21, B-04, B-14, D-29, D-30. Compound plan `--output json` now emits a SINGLE `{ok:true,plans:[…]}` envelope via a new stdout interceptor in `plan.ts` + `serializePlanEnvelope`/`parsePlanJsonStream` helpers in `display-plan.ts` — no more NDJSON that `jq -e .` rejects as invalid. On error under `--output json`, exactly ONE envelope `{ok:false,error:{code,message,hint}}` lands on stdout; the `[ERROR]`/`[CONTEXT]`/`[FIX]` block + 37-type registry stays on stderr. Soft plan-failure path (orchestrator returns `{success:false}` without throwing) also gets a `PLAN_FAILED` envelope. `list --json --resource-type <unknown>` now emits `INVALID_RESOURCE_TYPE` envelope on stdout; registry block on stderr. Structured logger was already stderr-only; invariant locked in with 7 new `process.stdout.write` spy tests across every log branch. NEW gated e2e `apps/cli/src/e2e/e2e-json-envelope.test.ts` (8 cases, `RUN_E2E=1`). Live probe: `assignee list --json --resource-type NOT-A-REAL 2>/dev/null | jq -e .` now exits 0 with parseable JSON.
+Closes A-02, A-21, B-04, B-14, D-29, D-30. Compound plan `--output json` now emits a SINGLE `{ok:true,plans:[…]}` envelope via a new stdout interceptor in `plan.ts` + `serializePlanEnvelope`/`parsePlanJsonStream` helpers in `display-plan.ts` — no more NDJSON that `jq -e .` rejects as invalid. On error under `--output json`, exactly ONE envelope `{ok:false,error:{code,message,hint}}` lands on stdout; the `[ERROR]`/`[CONTEXT]`/`[FIX]` block + 37-type registry stays on stderr. Soft plan-failure path (orchestrator returns `{success:false}` without throwing) also gets a `PLAN_FAILED` envelope. `list --json --resource-type <unknown>` now emits `INVALID_RESOURCE_TYPE` envelope on stdout; registry block on stderr. Structured logger was already stderr-only; invariant locked in with 7 new `process.stdout.write` spy tests across every log branch. NEW gated e2e `apps/cli/src/e2e/e2e-json-envelope.test.ts` (8 cases, `RUN_E2E=1`). Live probe: `assignee admin list --json --resource-type NOT-A-REAL 2>/dev/null | jq -e .` now exits 0 with parseable JSON.
 
 #### Fixed — plan-generator pre-apply validators (story e92.2.d)
 
@@ -473,7 +473,7 @@ Threaded `state.resourceType` through `sanitizeAgainstSchema` → `sanitizeDesir
 
 #### Fixed — Wave 1.b follow-up: arn-type-map events subtype split
 
-Moved `events` out of `SERVICE_TYPE_MAP` into `SERVICE_SUBTYPE_MAP` with 4 subtype keys (`rule`, `event-bus`, `connection`, `api-destination`) plus `""` fallback → `AWS::Events::Rule` for backwards compat. `assignee list` now shows `AWS::Events::EventBus` / `::Connection` / `::ApiDestination` correctly instead of misclassifying everything as `::Rule`. Fix flows transparently through `fetchManagedResources`, `drift/baseline-adopt`, `parse-arn`, and destroy's resource-resolver without any consumer changes. Partition-aware (AWS commercial + GovCloud + China). +22 tests.
+Moved `events` out of `SERVICE_TYPE_MAP` into `SERVICE_SUBTYPE_MAP` with 4 subtype keys (`rule`, `event-bus`, `connection`, `api-destination`) plus `""` fallback → `AWS::Events::Rule` for backwards compat. `assignee admin list` now shows `AWS::Events::EventBus` / `::Connection` / `::ApiDestination` correctly instead of misclassifying everything as `::Rule`. Fix flows transparently through `fetchManagedResources`, `drift/baseline-adopt`, `parse-arn`, and destroy's resource-resolver without any consumer changes. Partition-aware (AWS commercial + GovCloud + China). +22 tests.
 
 #### Fixed — Wave 1.d follow-up: checkpoint resume downstream wiring (Epic 89 fully closed)
 
@@ -499,7 +499,7 @@ Closes A-01, A-09, A-16, C-03, C-04, C-15. `desired-state-sanitizer.ts` gains fo
 
 #### Fixed — ARN-builder + destroy truth (story e92.1.b)
 
-Closes B-03, D-19, D-20, D-21, D-22, D-25. `resolve-arn.ts` gains local ARN synthesis for KMS (`key/<uuid>`) and EventBus (`event-bus/<name>`); SecurityGroup `sg-<id>` synthesis was already present and gets regression pins. `assignee destroy` for KMS gains `--pending-window-in-days <7..30>` (default 7); Secrets Manager gains `--recovery-window-in-days <7..30>` and `--force-delete-without-recovery`. UX lies replaced: destroys that schedule (not delete) now render `"Scheduled for deletion on <date>"` instead of `"Resource destroyed"`. EventBus destroy routes to `DeleteEventBus` by name via direct SDK call, bypassing the upstream `arn-type-map.ts` misclassification that maps every Events ARN to `AWS::Events::Rule`. 31 new tests (incl. 5 `RUN_E2E=1`-gated round-trip regressions: apply → capture ARN → destroy). SDK deps `@aws-sdk/client-kms`, `client-secrets-manager`, `client-eventbridge` added to `apps/cli/package.json` for the bypass. Follow-up flagged: `arn-type-map.ts` `SERVICE_TYPE_MAP["events"]` still misclassifies EventBus; `assignee list` shows the wrong type (tracked as `e92.1.b-followup`).
+Closes B-03, D-19, D-20, D-21, D-22, D-25. `resolve-arn.ts` gains local ARN synthesis for KMS (`key/<uuid>`) and EventBus (`event-bus/<name>`); SecurityGroup `sg-<id>` synthesis was already present and gets regression pins. `assignee infra destroy` for KMS gains `--pending-window-in-days <7..30>` (default 7); Secrets Manager gains `--recovery-window-in-days <7..30>` and `--force-delete-without-recovery`. UX lies replaced: destroys that schedule (not delete) now render `"Scheduled for deletion on <date>"` instead of `"Resource destroyed"`. EventBus destroy routes to `DeleteEventBus` by name via direct SDK call, bypassing the upstream `arn-type-map.ts` misclassification that maps every Events ARN to `AWS::Events::Rule`. 31 new tests (incl. 5 `RUN_E2E=1`-gated round-trip regressions: apply → capture ARN → destroy). SDK deps `@aws-sdk/client-kms`, `client-secrets-manager`, `client-eventbridge` added to `apps/cli/package.json` for the bypass. Follow-up flagged: `arn-type-map.ts` `SERVICE_TYPE_MAP["events"]` still misclassifies EventBus; `assignee admin list` shows the wrong type (tracked as `e92.1.b-followup`).
 
 #### Fixed — placeholder-ARN preflight expansion (story e92.1.c)
 
@@ -559,7 +559,7 @@ Future live-AWS failures: **instrument the production boundary before iterating*
 
 #### Fixed
 
-Two real production bugs surfaced by a live dogfood run of `assignee apply` deploying the project's own pitch deck (presentation/) via the static-website compound pattern. Both bugs made it to live AWS before anything caught them. The more interesting part — documented below — is _why_ the existing test + review regime missed them.
+Two real production bugs surfaced by a live dogfood run of `assignee infra apply` deploying the project's own pitch deck (presentation/) via the static-website compound pattern. Both bugs made it to live AWS before anything caught them. The more interesting part — documented below — is _why_ the existing test + review regime missed them.
 
 **Bug 1 — static-website BucketPolicy `Resource` double-ARN**
 
@@ -569,8 +569,8 @@ Two real production bugs surfaced by a live dogfood run of `assignee apply` depl
 
 **Bug 2 — compound-halt error message suggested a nonexistent flag**
 
-- `packages/core/src/utils/display-output/compound-failure.ts:154` suggested `assignee status ${runId} --resume` as the recovery command. `status` has no `--resume` flag — verified by reading every `.option(...)` in `apps/cli/src/commands/status.ts:40-56` (only `--json`, `--region`, `--resource-type`, `--bp-coverage`, `--gaps-only`, `--include-structural-gaps`). Running the suggested command returns `error: unknown option '--resume'`.
-- Fix: replaced with `assignee apply --checkpoint .assignee/checkpoint-${runId}.json` — the real resumption command (`apply.ts:51-54`'s `-c, --checkpoint` flag skips Phase 1 and enters Phase 2 directly, resuming from where the compound halted).
+- `packages/core/src/utils/display-output/compound-failure.ts:154` suggested `assignee admin status ${runId} --resume` as the recovery command. `status` has no `--resume` flag — verified by reading every `.option(...)` in `apps/cli/src/commands/status.ts:40-56` (only `--json`, `--region`, `--resource-type`, `--bp-coverage`, `--gaps-only`, `--include-structural-gaps`). Running the suggested command returns `error: unknown option '--resume'`.
+- Fix: replaced with `assignee infra apply --checkpoint .assignee/checkpoint-${runId}.json` — the real resumption command (`apply.ts:51-54`'s `-c, --checkpoint` flag skips Phase 1 and enters Phase 2 directly, resuming from where the compound halted).
 
 #### Why existing tests + reviewers missed both
 
@@ -583,7 +583,7 @@ Two real production bugs surfaced by a live dogfood run of `assignee apply` depl
 
 **Bug 2** — the existing test was _tautological_:
 
-- `packages/core/src/utils/display.test.ts:201` asserted `expect(output).toContain("assignee status run-abc-123 --resume")`. It verified the error-message string, not whether the suggested command would work. A test that says "the code emits what the code emits" is worthless for catching typos in suggestions.
+- `packages/core/src/utils/display.test.ts:201` asserted `expect(output).toContain("assignee admin status run-abc-123 --resume")`. It verified the error-message string, not whether the suggested command would work. A test that says "the code emits what the code emits" is worthless for catching typos in suggestions.
 - No cross-cutting scanner existed for `assignee <cmd> ... --<flag>` patterns in emitted strings vs. the `.option(...)` lists on the matching subcommands.
 
 **The common lesson**: both bugs are at the exact layer where unit tests stop and integration+live tests haven't started. Unit tests mock the CloudControl call so S3's `invalid resource` error never fires; e2e tests check "did it succeed?" but not "did the intermediate payload look right?". The dogfood run that caught them is precisely what was missing.
@@ -591,7 +591,7 @@ Two real production bugs surfaced by a live dogfood run of `assignee apply` depl
 #### Tests added (red-phase — fail before fix, pass after)
 
 - `packages/core/src/pattern-templates/patterns/static-website.test.ts` (NEW FILE — 4 tests) — pins patternId, asserts BucketPolicy `Resource` matches `/^arn:aws:s3:::[\w-]+\/\*$/` and explicitly rejects the double-ARN `/arn:.*:s3:::arn:/` shape that was the bug, asserts `aws:SourceArn` resolves to the distribution's full ARN, asserts the `Bucket` field resolves to the raw bucket ARN. Closes the "zero-coverage outlier" gap by giving static-website a dedicated per-pattern test file like every other compound.
-- `packages/core/src/utils/display.test.ts` (lines 200-213) — the tautological assertion replaced with a positive assertion for the correct `assignee apply --checkpoint ...` command PLUS a `not.toContain("--resume")` + `not.toMatch(/assignee\s+status\s+\S+\s+--\S+/)` regex guard that locks out the broken form.
+- `packages/core/src/utils/display.test.ts` (lines 200-213) — the tautological assertion replaced with a positive assertion for the correct `assignee infra apply --checkpoint ...` command PLUS a `not.toContain("--resume")` + `not.toMatch(/assignee\s+status\s+\S+\s+--\S+/)` regex guard that locks out the broken form.
 - `packages/core/src/utils/display.test.ts` (lines 215-325 — NEW validator test) — `every 'assignee <cmd> ... --<flag>' suggestion references a real flag`: regex-extracts every `(cmd, flag)` pair from rendered compound-failure output, cross-checks against a hardcoded `KNOWN_FLAGS` map (apply / status / destroy) with inline source anchors (e.g., `apps/cli/src/commands/apply.ts:38-64`). The map is intentionally hardcoded rather than imported from `apps/cli/...`, because core is upstream of apps/cli and reversing the dependency direction would break the layered build. When a future contributor adds a new flag-mention to a compound-failure string, this test fires a loud "update the KNOWN_FLAGS map" error — making regressions visible instead of silent.
 
 Test totals: **core 5507 → 5512** (+5). Other packages unchanged. Grand total 7888 → 7893 passing.
@@ -607,7 +607,7 @@ The dogfood run that surfaced these was the presentation-deploy for the project'
 - **`docs/explanation/ai-architecture.md`** — new long-form explanation doc describing what the AI layer actually does: the three LLM callsites (intent_parser / plan_generator / advice_generator), the five AWS MCP servers the pipeline consumes (Pricing, Documentation, IAM, Well-Architected-Security, Billing), the 185-rule deterministic Best Practices engine, the HITL `interruptBefore: [resource_provisioner]` gate, and the 5 MCP tools this repo exports in return. Commissioned by the user as a final-project writeup after GenAI coursework.
 - **Method — code-cited accuracy over narrative**: three parallel BMAD-style Explore subagents surveyed the pipeline / LLM adapter / MCP+BP layers under opus-4-7, each required to cite exact file:line. Doc integrates their findings verbatim. No claim is paraphrased from a comment; every number (13 nodes, 185 rules, 37 resource types, 5 MCP servers, 5 MCP tools, 2 sanitization passes, 3 credential roles) is grep-verifiable against HEAD.
 - **Honest disclosure — per-node LLM routing is designed but not wired**: the doc calls out explicitly that the env-var registry (`ASSIGNEE_LLM_PLAN_GENERATOR`, `ASSIGNEE_LLM_INTENT_PARSER`, etc.) was preserved in `packages/core/src/constants/env-vars.ts` for a future per-node-routing revival, but only `ASSIGNEE_LLM_DEFAULT` was consumed at HEAD. (**Update:** the four dead per-callsite slots were subsequently removed in R9b-02 — Epic 100 audit follow-up P038 — once it became clear no factory sites would land soon. The `llm:` config-file section in `docs/configuration.md` retains a "planned — not yet implemented" marker for the same reason.) Story 50-7 originally dropped the `RoutingLlmAdapter` branch when no in-repo YAML was using the `llm:` config-file section; today's single-adapter graph (`create-graph.ts:76-84`) is unchanged.
-- **A real captured run**: the doc closes with the actual token-usage summary (3 LLM calls, 3429 tokens total, per-callsite breakdown) from the same `assignee plan "Create an S3 bucket named hero-demo-bucket"` invocation that was captured verbatim in the README hero during Epic 84 (run-id `fa465600af5a`, 2026-04-20). Same single run feeds the README hero _and_ the AI architecture doc — one source of truth for "what does this actually look like?".
+- **A real captured run**: the doc closes with the actual token-usage summary (3 LLM calls, 3429 tokens total, per-callsite breakdown) from the same `assignee infra plan "Create an S3 bucket named hero-demo-bucket"` invocation that was captured verbatim in the README hero during Epic 84 (run-id `fa465600af5a`, 2026-04-20). Same single run feeds the README hero _and_ the AI architecture doc — one source of truth for "what does this actually look like?".
 - **`docs/index.md`** — added the new doc to the Explanation section at the top of the list so it's the first "how does this actually work?" pointer readers hit.
 
 #### Design notes the doc covers
@@ -628,7 +628,7 @@ Each architectural choice gets one paragraph of rationale: why LangGraph (checkp
 Replaced the Install block with a split-path layout:
 
 - **Path A (recommended, zero-friction):** `node apps/cli/dist/index.js doctor --short` — runs directly from the build output, no global install, works identically to `assignee <cmd>`.
-- **Path B (PATH-level install):** `pnpm setup` → reload shell → `pnpm link --global` → `assignee doctor --short`. Explicitly calls out that `pnpm setup` is needed on fresh machines and that it writes `.zshrc` / `.bashrc`.
+- **Path B (PATH-level install):** `pnpm setup` → reload shell → `pnpm link --global` → `assignee admin doctor --short`. Explicitly calls out that `pnpm setup` is needed on fresh machines and that it writes `.zshrc` / `.bashrc`.
 - Fixed the clone URL to `https://github.com/SergSlon/assignee-ai.git` and the directory to `assignee-ai`.
 - Added an **actual** `doctor --short` output block (captured from a real run: `Account: ************ / ARN: arn:aws:iam::************:user/assignee-operator / Region: us-east-1 / Role: operator / Config: ./.assignee/config.yaml (loaded)`), with account ID redacted per the Epic 85 rule. Previous README showed zero example output — users had no baseline for "what does success look like?".
 - Linked to `docs/aws-bootstrap.md` with the explicit prerequisite note "run bootstrap before `doctor`" so users know the IAM setup comes first.
@@ -817,7 +817,7 @@ Together with Epic 78's `.gitattributes`, this closes the full Windows xplat job
 
 #### Fixed
 
-- `docs/configuration.md`, `docs/troubleshooting.md`: replace references to the removed `assignee whoami` command with `assignee doctor --short` (Story 50-3 replacement). Four call-sites updated (configuration.md:22,26; troubleshooting.md:86,312).
+- `docs/configuration.md`, `docs/troubleshooting.md`: replace references to the removed `assignee whoami` command with `assignee admin doctor --short` (Story 50-3 replacement). Four call-sites updated (configuration.md:22,26; troubleshooting.md:86,312).
 - `docs/configuration.md`: drop `preferences.output_format` and `preferences.verbosity` from the live-keys sentence at line 22 and the "Verifying the resolution" example at line 26 — Story 50-7 removed both fields from `ConfigPreferences`; prose now matches the existing caveat at line 132.
 - `docs/configuration.md`, `docs/commands.md`: remove `assignee clean`/`assignee clean --baselines --confirm` call-sites. The `clean` command does not exist at HEAD; log pruning is driven by `autoPruneLogsIfDue` in `apps/cli/src/services/cleanup/orchestrator.ts` (1-hour throttle via `.last-prune` marker), and adopted baselines are dropped by deleting the JSON file under `.assignee/baselines/`.
 - `docs/configuration.md`: add a "planned — not yet implemented" note to the `llm` Section. Per-node LLM routing is ENV-var-only today (`ASSIGNEE_LLM_*`); the `.assignee/config.yaml` `llm:` block is not wired into the config schema. Precedence paragraph reworded to reflect env-var-only reality.
@@ -1056,7 +1056,7 @@ builder.ts` assembles the resumable-gate `continue` payload,
   the `program.command("version")` inline block into a dedicated
   command module exporting `versionCommand`, registered via
   `program.addCommand()` so the shell-completion generator
-  discovers it. `assignee completions bash|zsh|fish` now emit
+  discovers it. `assignee dev completions bash|zsh|fish` now emit
   `version` alongside the other 12 commands without a manual
   allow-list entry. (commit `fd6697a`)
 - **`pnpm lint:barrels` circ-check gate (closes L4-L4 LOW).**
@@ -1102,7 +1102,7 @@ hints.ts` import from one another. Keeps the Epic 56-it2
   (commit `2ab7931`)
 - **`README.md` read-a-plan-box numbering fix (closes L8-L2
   LOW).** Cosmetic list-numbering drift in the "How to read an
-  assignee plan" box corrected so every step increments. (commit
+  assignee infra plan" box corrected so every step increments. (commit
   `2ab7931`)
 - **`README.md` `Advanced overrides` env-var section (closes
   L8-002 MED + L8-L3/L4 LOW).** New subsection documents
@@ -1150,7 +1150,7 @@ hints.ts` import from one another. Keeps the Epic 56-it2
   clarifying-question turn for fully non-interactive CLI flows.
   (commit `e3bc140`)
 - **`version` subcommand now appears in generated shell completions
-  (closes L3-L2 LOW).** `assignee completions bash|zsh|fish` emit
+  (closes L3-L2 LOW).** `assignee dev completions bash|zsh|fish` emit
   `version` alongside the other 12 commands. (commit `e3bc140`)
 - **`renderClarifierExampleList` SSO helper (closes L3-L3 LOW).**
   Intent-parser clarifier examples now render through a single
@@ -1200,7 +1200,7 @@ hints.ts` import from one another. Keeps the Epic 56-it2
 
 #### Added
 
-- **`--resource-type <type>` on `assignee list` and `assignee status`
+- **`--resource-type <type>` on `assignee admin list` and `assignee admin status`
   (closes L3-001 HIGH — MCP↔CLI parity).** CLI now accepts the same
   `--resource-type` filter as the MCP `list_managed_resources` tool.
   Validated against `SUPPORTED_TYPES_ARRAY` via
@@ -1500,7 +1500,7 @@ compose.ts`; stripped static "23 types / 6 patterns" claims and
 
 - **MCP IAM role parity (Epic 52-2).** Consolidated the managed-
   resource fetch path so the MCP server now returns the same IAM
-  role inventory as the CLI's `assignee list`. `fetchManagedResources`
+  role inventory as the CLI's `assignee admin list`. `fetchManagedResources`
   was de-duplicated across the two packages and the long-standing
   operator-vs-reader role gap in the MCP surface is closed.
 
@@ -1514,7 +1514,7 @@ compose.ts`; stripped static "23 types / 6 patterns" claims and
 #### Security
 
 - **env-writer hardened + operator-creds warn-once (Wave E1).**
-  `assignee init` / `setup` now create the `.assignee/` parent
+  `assignee dev init` / `setup` now create the `.assignee/` parent
   directory with `0o700` permissions on first write (previously
   inherited the umask default, which could be world-readable on some
   shells). The operator-credentials warning is emitted at most once
@@ -1561,7 +1561,7 @@ compose.ts`; stripped static "23 types / 6 patterns" claims and
 
 - **Destroy stickiness (L10-H3).** `docs/explanation/run-ledger-design.md`
   now states the explicit OSS-launch gate: v0.1 uses the existing
-  per-resource `assignee destroy` flow; `destroy --run-id <uuid>` ships
+  per-resource `assignee infra destroy` flow; `destroy --run-id <uuid>` ships
   in v0.2. No code changes — documentation-only clarification.
 
 ### Epic 50 — whole-project external review + 10-lane remediation (2026-04-17)
@@ -2045,7 +2045,7 @@ reviewer also ACCEPT.
   New `docs/runbooks/README.md` index + entry in `docs/index.md`.
   All 281 citations resolve on disk per `pnpm citation-lint`.
 - **CLI-bug fix — SSH-bundle wizard now skips KeyName prompt for
-  auto-create intent.** Live operator reproduction: `assignee apply
+  auto-create intent.** Live operator reproduction: `assignee infra apply
 "Create a EC2 with SSH" --wizard` showed the hint "SSH bundle: key
   pair will be auto-created during provisioning" but then prompted
   for input anyway, defeating the auto-create. Root cause:
@@ -2119,7 +2119,7 @@ ACCEPT across 3/3 layers (Blind / Edge / QA) per story.
 - **P018 — Bedrock Guardrail missing-state surfacing
   (CONDITIONAL-mandatory-pre-close).** Bedrock invocations without a
   configured Guardrail now emit a one-time stderr warning at adapter
-  init, and `assignee doctor` flags the missing-Guardrail state as a
+  init, and `assignee admin doctor` flags the missing-Guardrail state as a
   HIGH-severity sub-check. New `BEDROCK_GUARDRAIL_DISABLE=1`
   environment variable suppresses both surfaces (informed-acceptance
   opt-out). The fix is scoped — auto-creating a Guardrail requires a
@@ -2169,7 +2169,7 @@ ACCEPT across 3/3 layers (Blind / Edge / QA) per story.
   `{ ok: true }` or `{ ok: false, brokenAt, reason }` (where reason ∈
   `payload-mismatch | hmac-mismatch | missing-prev`). Pre-W3 records
   bypass the verifier with a clear "pre-HMAC region" marker.
-- `assignee audit-verify` CLI command — runs the verifier against the
+- `assignee admin audit-verify` CLI command — runs the verifier against the
   local audit log; exit 0 on clean, non-zero with diagnostics on
   broken chain.
 - `packages/core/src/rbac/{policy-schema,policy-store,role-context}.ts`
@@ -2296,7 +2296,7 @@ implemented for <ID>"` and exits with the new
   `~/.assignee/memory/provisions.json` to
   `~/.assignee/backups/provisions-YYYY-MM-DD.json` with 7-day rotation,
   0o600, atomic-write, never moves source.
-- `assignee restore-provisions [--from <date>]` CLI command — restores
+- `assignee infra restore-provisions [--from <date>]` CLI command — restores
   the destroy-safety registry from the latest or specified-date backup;
   idempotent; safety-copies the current file before overwrite.
 - 13/14 graph nodes (HUMAN_APPROVAL excluded) now emit telemetry at
@@ -2439,7 +2439,7 @@ ec2-vpc}.ts` — first three SDK-direct adapters covering S3 buckets, IAM
   and forwarded to every AWS SDK client (CloudControl, Bedrock, STS, IAM,
   KMS, SecretsManager, EventBridge, ResourceGroupsTaggingAPI, EC2, Lambda).
   Required for ASIA-prefixed short-term credentials (SSO, assumed roles).
-- `--profile <name>` flag on `assignee init` for `~/.aws/config` SSO
+- `--profile <name>` flag on `assignee dev init` for `~/.aws/config` SSO
   profile resolution via the AWS SDK provider chain
   (`fromIni` → `fromSSO` → `fromNodeProviderChain`).
 - `packages/core/src/config/provider-chain.ts` — exports

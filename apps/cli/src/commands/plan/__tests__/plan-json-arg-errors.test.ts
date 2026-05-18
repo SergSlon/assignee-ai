@@ -41,7 +41,7 @@ describe("Epic 94 N3 — resolvePlanArgs error codes", () => {
     expect(err.message).toContain("Missing intent");
     // The example intent from constants must still be present so the
     // user sees a runnable quoted example.
-    expect(err.message).toMatch(/assignee plan "[^"]+"/);
+    expect(err.message).toMatch(/assignee infra plan "[^"]+"/);
     // Hint is load-bearing for the R5 envelope's `error.hint` field.
     expect(err.hint).toBeDefined();
     expect(err.hint!.length).toBeGreaterThan(0);

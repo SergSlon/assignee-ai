@@ -1,8 +1,8 @@
 /**
- * `assignee describe` command — re-render the apply-success line for a
+ * `assignee admin describe` command — re-render the apply-success line for a
  * previously-applied resource by run id or ARN.
  *
- * Single positional invocation form: `assignee describe <run-id-or-arn>`.
+ * Single positional invocation form: `assignee admin describe <run-id-or-arn>`.
  * The polymorphism (UUID-shaped runId vs. partition-aware ARN) is
  * resolved by `MemoryService.readProvisionRecord` — see the regex in
  * `packages/core/src/services/memory/service.ts:readProvisionRecord`.
@@ -58,7 +58,7 @@ function renderPublicIpDivergenceAnnotation(
 }
 
 /**
- * Construct a fresh `Command` instance for `assignee describe`.
+ * Construct a fresh `Command` instance for `assignee admin describe`.
  *
  * Tests MUST use this factory rather than the singleton `describeCommand`
  * exported below — Commander mutates a shared `_optionValues` object
@@ -72,7 +72,7 @@ export function buildDescribeCommand(): Command {
     .description(CommandDescription.DESCRIBE)
     .argument(
       "<run-id-or-arn>",
-      "Run id (UUID) or full resource ARN to describe. Use `assignee list --json` to discover both.",
+      "Run id (UUID) or full resource ARN to describe. Use `assignee admin list --json` to discover both.",
     )
     .option("-o, --output <format>", "Output format (json|text)", "text")
     .option("--json", "Shorthand for --output json")
@@ -80,11 +80,11 @@ export function buildDescribeCommand(): Command {
       "after",
       `
 Examples:
-  $ assignee describe 550e8400-e29b-41d4-a716-446655440000
+  $ assignee admin describe 550e8400-e29b-41d4-a716-446655440000
         Re-render the apply-success line by run id (live Public IP if EC2).
-  $ assignee describe arn:aws:ec2:us-east-1:123456789012:instance/i-0abc123def4567890
+  $ assignee admin describe arn:aws:ec2:us-east-1:123456789012:instance/i-0abc123def4567890
         Re-render by ARN (full ARN, partition-aware).
-  $ assignee describe <run-id> --json | jq .
+  $ assignee admin describe <run-id> --json | jq .
         Machine-readable envelope for scripts.
 
 describe is read-only — it never mutates provision records. No --yes
@@ -108,7 +108,7 @@ async function describeAction(
       const result = await describeResource(runIdOrArn);
 
       if (jsonMode) {
-        // Symmetric with `assignee list --json` — discriminated
+        // Symmetric with `assignee admin list --json` — discriminated
         // envelope on `.ok` so scripts can distinguish a successful
         // describe from a not-found / fetch-failed error response.
         // The provision record is included verbatim (all fields,
@@ -165,7 +165,7 @@ async function describeAction(
       if (err instanceof DescribeNotFoundError) {
         renderError(
           err.message,
-          "Run `assignee list` to see all managed resources, or `assignee list --json | jq` to find a specific run id or ARN.",
+          "Run `assignee admin list` to see all managed resources, or `assignee admin list --json | jq` to find a specific run id or ARN.",
           {
             why: "No matching record exists in ~/.assignee/memory/provisions.json.",
           },
@@ -176,7 +176,7 @@ async function describeAction(
               serializeErrorEnvelope(
                 err.code,
                 err.message,
-                "Run `assignee list` to see all managed resources.",
+                "Run `assignee admin list` to see all managed resources.",
               ),
             ),
           );

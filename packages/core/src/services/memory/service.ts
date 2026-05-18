@@ -162,7 +162,7 @@ export class MemoryService extends FileStore {
   /**
    * SSH-bundle Story iv — read-side filter that returns the single
    * provision record matching a `runId` (UUID-shaped) or a `resourceArn`
-   * (full ARN — `arn:aws…:`). Used by `assignee describe` to look up the
+   * (full ARN — `arn:aws…:`). Used by `assignee admin describe` to look up the
    * apply-time snapshot before re-rendering the apply-success line with
    * a fresh DescribeInstances overlay.
    *
@@ -282,7 +282,7 @@ export class MemoryService extends FileStore {
    *
    * Outer-lock symmetry was added by
    * bug-clearfailurehistory-appenddestroyedarn-outer-lock-symmetry so two
-   * terminals running `assignee apply` on the same workstation cannot
+   * terminals running `assignee infra apply` on the same workstation cannot
    * interleave a `failures.json` rewrite with a parallel `appendFailure`.
    */
   async clearFailuresForType(resourceType: string): Promise<void> {
@@ -379,7 +379,7 @@ export class MemoryService extends FileStore {
    *
    * Outer-lock symmetry was added by
    * bug-clearfailurehistory-appenddestroyedarn-outer-lock-symmetry so two
-   * terminals running `assignee destroy` on the same workstation cannot
+   * terminals running `assignee infra destroy` on the same workstation cannot
    * interleave a `destroyed-arns.json` read+rewrite (the file is a JSON
    * array we round-trip on every append).
    */

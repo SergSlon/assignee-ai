@@ -97,7 +97,7 @@ export async function verifyManagedPolicyArns(
           `AWS credentials expired or invalid while verifying ` +
           `ManagedPolicyArns (${errName || errCode || "auth failure"}: ${errMsg}). ` +
           `Preflight cannot validate the plan without working credentials. ` +
-          `Run \`assignee setup\` or refresh your AWS session (e.g. ` +
+          `Run \`assignee dev setup\` or refresh your AWS session (e.g. ` +
           `\`aws sso login\`, renew SAML assertion, or rotate the access key) ` +
           `and re-run the command.`
         );
@@ -128,7 +128,7 @@ export async function verifyManagedPolicyArns(
             `Strict mode is enabled via ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS=1 — ` +
             `unset that env var to fall back to WARN-only behaviour. ` +
             `If credentials or IAM permissions are the root cause, run ` +
-            `\`assignee setup\` or refresh your AWS session and re-run.`
+            `\`assignee dev setup\` or refresh your AWS session and re-run.`
           );
         }
         unverifiedArns.push({ arn, reason: `verification failed: ${errMsg}` });
@@ -156,7 +156,7 @@ export async function verifyManagedPolicyArns(
       return (
         `One or more ManagedPolicyArns do not exist in IAM:\n${lines}\n\n` +
         `These ARNs were likely hallucinated by the LLM. Either:\n` +
-        `  1. Remove them: \`assignee apply <intent> --set ManagedPolicyArns=\`\n` +
+        `  1. Remove them: \`assignee infra apply <intent> --set ManagedPolicyArns=\`\n` +
         `  2. Replace with a verified ARN: see iam-role.ts configHints for the verified list\n` +
         `  3. Specify the policies you want explicitly in your intent (e.g. ` +
         `"... attach the AmazonS3ReadOnlyAccess policy")`
@@ -169,7 +169,7 @@ export async function verifyManagedPolicyArns(
       return (
         `AWS credentials expired or invalid — unable to construct IAM client ` +
         `for ManagedPolicyArn verification (${errMsg}). ` +
-        `Run \`assignee setup\` or refresh your AWS session and re-run.`
+        `Run \`assignee dev setup\` or refresh your AWS session and re-run.`
       );
     }
     log({

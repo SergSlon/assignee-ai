@@ -22,13 +22,13 @@ A dedicated plugin handles schema elicitation, default injection, and best-pract
 ### Typical intent examples
 
 ```bash
-assignee plan "Create an S3 bucket"
-assignee apply "Create an S3 bucket named my-s3-bucket"
+assignee infra plan "Create an S3 bucket"
+assignee infra apply "Create an S3 bucket named my-s3-bucket"
 ```
 
 ### Best-practice rules
 
-Best-practice rules for this type live under `packages/best-practices/s3/` (per-service subdirectories). Run `assignee plan` to see which rules apply to your specific configuration.
+Best-practice rules for this type live under `packages/best-practices/s3/` (per-service subdirectories). Run `assignee infra plan` to see which rules apply to your specific configuration.
 
 ### Pricing
 

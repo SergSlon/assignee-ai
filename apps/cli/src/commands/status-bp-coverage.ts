@@ -234,7 +234,7 @@ export function renderBPCoverage(data: BPCoverageData): void {
 
 /**
  * Render ONLY the list of resource types that have zero BP rules.
- * CI-friendly output for `assignee status --bp-coverage --gaps-only`:
+ * CI-friendly output for `assignee admin status --bp-coverage --gaps-only`:
  * no table, no summary, no severity breakdown — just a short
  * list that a shell script can parse line-by-line, and a clear
  * "0 gaps" / "N gaps" header so a failing CI run points at the

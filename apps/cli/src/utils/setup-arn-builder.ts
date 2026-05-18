@@ -1,6 +1,6 @@
 /**
  * Setup-time ARN builders — partition-aware constructors for the IAM
- * and CloudWatch Logs ARNs that the `assignee setup` flow needs to
+ * and CloudWatch Logs ARNs that the `assignee dev setup` flow needs to
  * synthesize when configuring its own infrastructure (Bedrock logging
  * role/policy, operator user resource policies, etc.).
  *

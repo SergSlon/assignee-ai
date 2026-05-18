@@ -1,5 +1,5 @@
 /**
- * `assignee drift` command — checks managed resources for configuration drift.
+ * `assignee infra drift` command — checks managed resources for configuration drift.
  *
  * Wave-6d F4: decomposed into `drift/` sub-modules. This file is now a
  * thin Commander wrapper. Orchestration + rendering lives under `drift/`.
@@ -74,22 +74,22 @@ export const driftCommand = new Command("drift")
     "after",
     `
 Examples:
-  $ assignee drift
+  $ assignee infra drift
         Scan all managed resources for configuration drift
-  $ assignee drift --resource AWS::S3::Bucket
+  $ assignee infra drift --resource AWS::S3::Bucket
         Only check S3 buckets
-  $ assignee drift --exclude BASELINE_MISSING --json > drift.json
+  $ assignee infra drift --exclude BASELINE_MISSING --json > drift.json
         CI-friendly report without false positives for unadopted resources
-  $ assignee drift --json --output-file drift.json
+  $ assignee infra drift --json --output-file drift.json
         Write the JSON report to a file instead of stdout
-  $ assignee drift <arn> --baseline
+  $ assignee infra drift <arn> --baseline
         Adopt a resource's current state as its drift baseline
-  $ assignee drift <arn> --detailed
+  $ assignee infra drift <arn> --detailed
         Detailed diff for a single resource, including matching fields
 
 drift is read-only (it never mutates AWS state except when --baseline is
 used, which only writes a local snapshot). Use
-\`assignee reconcile --yes\` to auto-apply drift corrections.
+\`assignee infra reconcile --yes\` to auto-apply drift corrections.
 
 Use the global \`--no-color\` and \`--verbose\` flags (see Global Options)
 to disable ANSI colour or enable structured diagnostic logs.

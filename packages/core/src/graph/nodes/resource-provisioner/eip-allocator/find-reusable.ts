@@ -74,7 +74,7 @@ export async function findReusableEip(
           hint:
             "Operator role lacks ec2:DescribeAddresses. This is already in " +
             "iam-actions.ts for EC2_NAT_GATEWAY as of Wave 19 Bug #5 — run " +
-            "`assignee setup` to refresh AssigneeOperatorPolicy in AWS. " +
+            "`assignee dev setup` to refresh AssigneeOperatorPolicy in AWS. " +
             "Falling through to allocate a fresh EIP (leak-prone until " +
             "setup is re-run).",
         }),

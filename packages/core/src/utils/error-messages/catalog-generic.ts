@@ -37,6 +37,6 @@ export const GENERIC_ERROR_MESSAGES: Record<string, ErrorMessageEntry> = {
     what: "Apply requires confirmation but no interactive terminal is available.",
     why: "The apply command was run in a non-interactive environment (CI/CD pipeline) without the --yes flag.",
     howToFix:
-      'Add the --yes flag for non-interactive use: `assignee apply --yes "your intent"`',
+      'Add the --yes flag for non-interactive use: `assignee infra apply --yes "your intent"`',
   },
 };

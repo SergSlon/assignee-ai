@@ -1,5 +1,5 @@
 /**
- * Shared data layer for `assignee discover`.
+ * Shared data layer for `assignee dev discover`.
  *
  * Provides registry-derived catalogue items across three categories:
  *   - resource-types  : all entries from SUPPORTED_TYPES_ARRAY
@@ -23,7 +23,7 @@
  *
  *   - `plan/discovery.ts`  — renders a fixed-width text block for --help.
  *   - `discover-data.ts`   — returns plain objects for the pick/json/text
- *                            output modes of `assignee discover`.
+ *                            output modes of `assignee dev discover`.
  *
  * This decision is documented per Story 108-A-03 AC#5.
  */
@@ -81,7 +81,7 @@ export interface CatalogueItem {
   /** Human-readable description of the item. */
   description: string;
   /**
-   * Sample `assignee plan` (or other command) invocation for this item.
+   * Sample `assignee infra plan` (or other command) invocation for this item.
    * Non-null for types and patterns; for CLI commands it shows --help.
    */
   exampleIntent: string;
@@ -183,10 +183,13 @@ function buildPatternItems(): CatalogueItem[] {
   }));
 }
 
-const COMMAND_NOUN_GROUP: Record<
-  DiscoverCommandName,
-  "infra" | "admin" | "dev"
-> = {
+/**
+ * Maps each leaf command name to its noun-group parent.
+ * Must stay in sync with `CommandGroup` / `CommandPath` in
+ * `packages/core/src/constants/commands.ts`.
+ */
+const LEAF_TO_GROUP: Readonly<Record<DiscoverCommandName, string>> = {
+  // infra group
   plan: "infra",
   apply: "infra",
   destroy: "infra",
@@ -194,28 +197,32 @@ const COMMAND_NOUN_GROUP: Record<
   reconcile: "infra",
   optimize: "infra",
   "restore-provisions": "infra",
+  // admin group
   "audit-verify": "admin",
-  doctor: "admin",
-  status: "admin",
-  list: "admin",
   describe: "admin",
+  doctor: "admin",
+  list: "admin",
+  status: "admin",
+  // dev group
+  completions: "dev",
+  discover: "dev",
   init: "dev",
   setup: "dev",
   update: "dev",
-  completions: "dev",
-  discover: "dev",
   version: "dev",
 };
 
 function buildCommandItems(): CatalogueItem[] {
-  return DISCOVER_COMMAND_LIST.map((cmd) => ({
-    id: cmd,
-    category: "commands" as const,
-    description:
-      COMMAND_DESCRIPTIONS[cmd] ??
-      `assignee ${COMMAND_NOUN_GROUP[cmd]} ${cmd} command`,
-    exampleIntent: `assignee ${COMMAND_NOUN_GROUP[cmd]} ${cmd} --help`,
-  }));
+  return DISCOVER_COMMAND_LIST.map((cmd) => {
+    const group = LEAF_TO_GROUP[cmd];
+    return {
+      id: cmd,
+      category: "commands" as const,
+      description:
+        COMMAND_DESCRIPTIONS[cmd] ?? `assignee ${group} ${cmd} command`,
+      exampleIntent: `assignee ${group} ${cmd} --help`,
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------

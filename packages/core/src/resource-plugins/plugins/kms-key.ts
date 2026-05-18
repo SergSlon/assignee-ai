@@ -31,7 +31,7 @@ import { FieldLabel } from "../field-labels.js";
  *   - Origin=AWS_KMS (AWS-owned key material). External key
  *     material (EXTERNAL) and CloudHSM-backed (AWS_CLOUDHSM) are
  *     NOT wizard paths — they require an out-of-band import or a
- *     pre-existing cluster, which the assignee plan+apply flow
+ *     pre-existing cluster, which the assignee infra plan+apply flow
  *     cannot satisfy. Users who need those paths should provision
  *     the key out-of-band and paste the ARN as a Ref.
  *

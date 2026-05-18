@@ -3,7 +3,7 @@
  *
  * Reads `~/.assignee/telemetry-events.jsonl` (last MAX_EVENTS events),
  * computes the fraction of `unsupported` routing decisions, and renders
- * the result in `assignee doctor` output.
+ * the result in `assignee admin doctor` output.
  *
  * Behaviour:
  *   - File absent or telemetry not enabled → "Telemetry not enabled" (ok).

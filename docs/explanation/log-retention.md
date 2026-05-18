@@ -2,7 +2,7 @@
 
 This document explains _why_ Assignee enforces minimum log-retention floors,
 what the floors are, and what the design decisions behind them are.
-For operational instructions (how to configure, how to run `assignee doctor`)
+For operational instructions (how to configure, how to run `assignee admin doctor`)
 see the [how-to guides](../how-to/).
 
 ---
@@ -86,19 +86,19 @@ to the files after they are written. What Assignee _can_ do is:
 1. Guard its own write-path functions (`guardAuditLogTruncation`) so that any
    code path inside Assignee that would truncate or delete audit records
    first checks whether the records are within the retention floor.
-2. Surface violations in `assignee doctor` (the "Log retention" section) so
+2. Surface violations in `assignee admin doctor` (the "Log retention" section) so
    operators notice immediately when the on-disk state deviates from the
    policy — whether caused by Assignee itself, a system tool, or a manual
    deletion.
 
 The doctor check is a _diagnostic_, not an enforcer: it does not recreate
 deleted files or block the CLI from running. Its purpose is visibility:
-operators and security teams running `assignee doctor` should see clearly
+operators and security teams running `assignee admin doctor` should see clearly
 whether the retention policy is being honoured.
 
 ---
 
-## What `assignee doctor` checks
+## What `assignee admin doctor` checks
 
 The "Log retention" section runs four sub-checks:
 
@@ -114,7 +114,7 @@ The "Log retention" section runs four sub-checks:
 4. **Audit logs directory** — same check for `~/.assignee/audit/`. A warning
    here is a potential compliance violation and should be investigated.
 
-All four sub-checks are read-only. `assignee doctor` never deletes,
+All four sub-checks are read-only. `assignee admin doctor` never deletes,
 modifies, or recreates files.
 
 ---
@@ -125,7 +125,7 @@ The log-retention floor does not replace:
 
 - **OS-level rotation** (`logrotate`, systemd-journal, etc.) — these operate
   independently. If they are configured to delete files earlier than the
-  Assignee floor, `assignee doctor` will surface the discrepancy.
+  Assignee floor, `assignee admin doctor` will surface the discrepancy.
 - **Remote audit sink** (KMS-signed S3 Object Lock) — hypothetical future
   productisation feature, out of scope for this course-submission build.
   If a remote sink were enabled in the future, the local audit log would

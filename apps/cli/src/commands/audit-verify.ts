@@ -1,12 +1,12 @@
 /**
- * W3-01 (Epic 100 Round 5) — `assignee audit-verify` command.
+ * W3-01 (Epic 100 Round 5) — `assignee admin audit-verify` command.
  *
  * Walks the local audit-log HMAC chain and reports whether it is intact.
  * Exits 0 on a clean chain; exits non-zero with diagnostics on a broken
  * chain or when the log file does not exist.
  *
  * Usage:
- *   assignee audit-verify [--from <date>] [--to <date>] [--log-file <path>]
+ *   assignee admin audit-verify [--from <date>] [--to <date>] [--log-file <path>]
  *
  * Options:
  *   --from <date>     Skip entries whose timestamp is before this ISO date.
@@ -58,9 +58,9 @@ export const auditVerifyCommand = new Command("audit-verify")
     "after",
     `
 Examples:
-  $ assignee audit-verify
+  $ assignee admin audit-verify
         Verify the full audit log HMAC chain.
-  $ assignee audit-verify --log-file /path/to/audit.log
+  $ assignee admin audit-verify --log-file /path/to/audit.log
         Verify a specific audit log file.
 
 Note: --from / --to date filtering is planned for a future release.

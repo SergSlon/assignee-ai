@@ -1,7 +1,7 @@
 /**
  * Unconditional exclusion allowlist for bulk destroy.
  *
- * Every ARN matched by these patterns is EXCLUDED from `assignee destroy --all`
+ * Every ARN matched by these patterns is EXCLUDED from `assignee infra destroy --all`
  * regardless of what flags the caller passes. The list covers the assignee.ai
  * self-infrastructure resources whose deletion would lock the operator out of
  * running `assignee` commands at all:
@@ -50,7 +50,7 @@ const PROTECTED_USER_NAMES = [
 
 /**
  * Assignee-managed IAM role names. These exist when an operator has
- * run `assignee setup` with role-creation enabled.
+ * run `assignee dev setup` with role-creation enabled.
  */
 const PROTECTED_ROLE_NAMES = [
   "AssigneeOperator",
@@ -71,7 +71,7 @@ export interface ExclusionEntry {
 // ── Allowlist constant ─────────────────────────────────────────────────
 
 /**
- * Unconditional exclusion allowlist for `assignee destroy --all`.
+ * Unconditional exclusion allowlist for `assignee infra destroy --all`.
  *
  * Each entry's `arnPattern` is matched against the resource ARN via
  * `.test()`. Matching resources are excluded from the destroy plan and

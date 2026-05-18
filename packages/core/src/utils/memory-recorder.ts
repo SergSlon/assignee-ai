@@ -81,7 +81,7 @@ export interface ApplyResourceCreatedEvent {
  * (apply-single.ts, apply-compound.ts).
  *
  * SSH-bundle Story iv: `publicIpAddressAtApply` is captured one-shot at
- * apply time so `assignee describe` can show `(was <old-ip> at apply
+ * apply time so `assignee admin describe` can show `(was <old-ip> at apply
  * time)` when a stop/start cycle changes the EC2 public IP. Apply-time
  * is the only legal write site — describe never updates the field
  * (provision record stays a snapshot of what we provisioned).
@@ -94,7 +94,7 @@ export interface ProvisionRecordExtras {
    * apply-time `attachCompensatingBucketPolicy` SDK call for S3 buckets.
    * `true` on success, `false` on attachment failure, undefined for non-
    * S3 resources or when the operator ARN was unavailable (skipped
-   * altogether). Persisted on the provision record so `assignee list`
+   * altogether). Persisted on the provision record so `assignee admin list`
    * can flag buckets where the per-bucket tag-scoped destructive access
    * boundary is NOT in effect.
    */
@@ -102,16 +102,16 @@ export interface ProvisionRecordExtras {
   /**
    * bug-s3-bucket-policy-attach-failure-observability — captures the
    * `AttachResult.reason` from a failed `PutBucketPolicy` call so the
-   * `assignee list` warning can echo the same message the operator saw
+   * `assignee admin list` warning can echo the same message the operator saw
    * on stderr at apply time.
    */
   compensatingPolicyError?: string;
   /**
-   * `assignee update` follow-on: real DNS hostname (e.g.
+   * `assignee dev update` follow-on: real DNS hostname (e.g.
    * `d1eka2i9dtl8tu.cloudfront.net`) for CloudFront distributions in a
    * static-website compound. Apply-compound's result-formatter pulls
    * this from the resource's `metadata.cloudFrontDomainName` and persists
-   * it so subsequent `assignee update <bucket>` invocations can print
+   * it so subsequent `assignee dev update <bucket>` invocations can print
    * the live URL without an extra GetDistribution roundtrip.
    */
   cloudFrontDomainName?: string;
@@ -189,8 +189,8 @@ export async function writeProvisionRecord(
         extras.compensatingPolicyError.length > 0
           ? { compensatingPolicyError: extras.compensatingPolicyError }
           : {}),
-        // `assignee update` follow-on: persist CloudFront hostname for
-        // static-website compounds so the future `assignee update`
+        // `assignee dev update` follow-on: persist CloudFront hostname for
+        // static-website compounds so the future `assignee dev update`
         // resolver can print the live URL without a re-fetch.
         ...(extras?.cloudFrontDomainName &&
         extras.cloudFrontDomainName.length > 0
@@ -330,7 +330,7 @@ export async function writeFailureRecord(
  * so the cross-process race against `writeFailureRecord`
  * (failures.json append) can never interleave on a shared workstation. Single-
  * process safety was already provided by sequential awaits, but two terminals
- * running `assignee apply` against the same `~/.assignee/memory/` could
+ * running `assignee infra apply` against the same `~/.assignee/memory/` could
  * theoretically collide without the outer lock.
  */
 export async function clearFailureHistory(
@@ -363,7 +363,7 @@ export async function clearFailureHistory(
  *
  * bug-clearfailurehistory-appenddestroyedarn-outer-lock-symmetry: wrap the
  * underlying `appendDestroyedArn` write in `defaultFileAdvisoryLock.withLock`
- * so cross-process invocations (two terminals running `assignee destroy` on
+ * so cross-process invocations (two terminals running `assignee infra destroy` on
  * the same workstation) cannot interleave reads/writes on
  * `~/.assignee/memory/destroyed-arns.json`. Mirrors the symmetry of the
  * other 3 writers (`writeProvisionRecord`, `writeFailureRecord`,

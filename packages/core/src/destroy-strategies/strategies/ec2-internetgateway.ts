@@ -77,7 +77,7 @@ export const ec2InternetGatewayStrategy: DestroyStrategy = {
           detachedCount: detachOk,
           remainingCount: detachFail,
           errors: detachErrors,
-          note: "CloudControl delete will produce DependencyViolation if any residual attachment matters. Re-run 'assignee destroy' to retry remaining attachments.",
+          note: "CloudControl delete will produce DependencyViolation if any residual attachment matters. Re-run 'assignee infra destroy' to retry remaining attachments.",
         });
       }
     } catch (err) {

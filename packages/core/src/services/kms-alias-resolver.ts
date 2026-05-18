@@ -1,7 +1,7 @@
 /**
  * KMS alias-based default-CMK resolver — epic-104 Wave C.
  *
- * Goal: prevent CMK accumulation across `assignee apply` runs by
+ * Goal: prevent CMK accumulation across `assignee infra apply` runs by
  * lookup-or-creating a single account+region-scoped customer-managed
  * key addressable via the alias `alias/assignee-default-encryption`.
  *
@@ -192,7 +192,7 @@ async function emitCmkCreatedAudit(
     region,
     // Reviewer H1 (Wave C): zero hardcoded dollar amounts —
     // `restore-provisions --from-audit-log` writes this straight into
-    // provisions.json where `assignee describe`/`list` consume it. Use
+    // provisions.json where `assignee admin describe`/`list` consume it. Use
     // the canonical `CostEstimateLabel.NA` sentinel (mirrors
     // memory-recorder.ts:141). The follow-up consumer-wiring wave
     // routes through the kms-key pricing decomposer at the call site

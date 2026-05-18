@@ -174,7 +174,7 @@ Optional fields: `source_id`, `description`, `remediation`, `version`, `triggers
 Rules are organized by service directory. Check current coverage:
 
 ```bash
-assignee status --bp-coverage
+assignee admin status --bp-coverage
 ```
 
 This scans the rule directory at runtime and displays:
@@ -189,7 +189,7 @@ This scans the rule directory at runtime and displays:
 Example output:
 
 > [!NOTE]
-> Sample output — counts evolve. Run `assignee status --bp-coverage` for the live numbers; the dashboard reads [`packages/best-practices/manifest.json`](../packages/best-practices/manifest.json) at runtime, so any figure printed below should be treated as illustrative only.
+> Sample output — counts evolve. Run `assignee admin status --bp-coverage` for the live numbers; the dashboard reads [`packages/best-practices/manifest.json`](../packages/best-practices/manifest.json) at runtime, so any figure printed below should be treated as illustrative only.
 
 ```
 BP Coverage Dashboard
@@ -224,7 +224,7 @@ Patterns are intended to support exact ID matching, glob wildcards, and category
 
 ## Controlling Auto-Fix Behavior
 
-Three modes, configurable via `assignee init --global`, config file, or environment:
+Three modes, configurable via `assignee dev init --global`, config file, or environment:
 
 | Mode    | Behavior                              |
 | ------- | ------------------------------------- |

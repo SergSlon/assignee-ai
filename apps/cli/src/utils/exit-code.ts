@@ -10,7 +10,7 @@
  * Codes:
  *   0  — success (not produced here; reserved for normal exit)
  *   1  — generic error / unclassified
- *   2  — `assignee doctor` returned warnings only (set by doctor command)
+ *   2  — `assignee admin doctor` returned warnings only (set by doctor command)
  *   10 — policy / safety abort: typed-confirm mismatch, state guard,
  *        preflight rejection, IAM safety allowlist, BP block, drift
  *        threshold, env-gate refusal (`UserCancelledError`,

@@ -1,5 +1,5 @@
 /**
- * IAM credential propagation-wait helper for `assignee setup`.
+ * IAM credential propagation-wait helper for `assignee dev setup`.
  *
  * After `iam:CreateAccessKey` returns, the new keys may take 5-30 seconds
  * to propagate to AWS's IAM data plane. This helper polls `sts:GetCallerIdentity`
