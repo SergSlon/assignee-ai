@@ -87,6 +87,12 @@ jobs:
             experimental: false
           - os: macos-latest
             experimental: false
+          # Windows: experimental until the residual long-tail clears.
+          # Each round of fixes reveals 2-3 more per-test issues that
+          # vitest's first-failure stop hides. Tracked in
+          # `_backlog/cross-platform-windows-residual-failures.md`.
+          # Flip to `false` only when a full Windows run is green
+          # without further iteration.
           - os: windows-latest
             experimental: true
     name: ci (${{ matrix.os }} / node ${{ matrix.node }})

@@ -210,17 +210,53 @@ export async function appendAuditRecord(
       }
     } else {
       // 1. File fsync — flush the appended bytes.
+      // On Windows, the temp-directory filesystem (and some NTFS mount
+      // configurations) rejects fsync with EPERM even when the file is
+      // writable.  We catch that specific error and downgrade gracefully —
+      // the write itself already committed via appendFile (O_APPEND), so
+      // the only loss is the kernel-crash durability guarantee.  Real
+      // Windows users who hit EPERM in production get a one-time warning
+      // rather than a hard crash.
       const fileFd = await fs.open(logFile, "r");
       try {
         await fileFd.sync();
+      } catch (syncErr) {
+        const code =
+          syncErr instanceof Error &&
+          "code" in syncErr &&
+          typeof (syncErr as NodeJS.ErrnoException).code === "string"
+            ? (syncErr as NodeJS.ErrnoException).code
+            : undefined;
+        if (code === "EPERM") {
+          process.stderr.write(
+            `[audit] WARNING: fsync on audit log file returned EPERM ` +
+              `(filesystem does not support fsync — this is expected on Windows ` +
+              `temp directories). Durability guarantee is reduced to O_APPEND ` +
+              `write atomicity. Do NOT ignore this warning in production on POSIX.\n`,
+          );
+        } else {
+          throw syncErr;
+        }
       } finally {
         await fileFd.close();
       }
 
       // 2. Directory fsync — flush the updated directory entry (inode).
+      // Also protected by the EPERM downgrade (e.g., FAT32/exFAT volumes).
       const dirFd = await fs.open(dir, "r");
       try {
         await dirFd.sync();
+      } catch (syncErr) {
+        const code =
+          syncErr instanceof Error &&
+          "code" in syncErr &&
+          typeof (syncErr as NodeJS.ErrnoException).code === "string"
+            ? (syncErr as NodeJS.ErrnoException).code
+            : undefined;
+        if (code !== "EPERM") {
+          throw syncErr;
+        }
+        // EPERM on dir fsync — already warned on file fsync above; silent here.
       } finally {
         await dirFd.close();
       }

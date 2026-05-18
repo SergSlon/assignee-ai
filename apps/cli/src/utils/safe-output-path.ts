@@ -63,12 +63,20 @@ export function validateOutputPath(
 
   const resolved = nodePath.resolve(cwd, rawPath);
 
-  // The resolved path must start with the CWD prefix + separator.
-  // We normalise both sides to ensure no false positives from partial
-  // directory-name matches (e.g. `/tmp/foo` not matching `/tmp/foobar`).
-  const cwdWithSep = cwd.endsWith(nodePath.sep) ? cwd : cwd + nodePath.sep;
-
-  const isInsideCwd = resolved === cwd || resolved.startsWith(cwdWithSep);
+  // Portable inside-CWD check using path.relative() — avoids string-prefix
+  // comparison which is broken on Windows when CWD uses backslashes but the
+  // comparison string uses forward slashes (or drive-letter casing differs).
+  //
+  // path.relative(cwd, resolved) returns:
+  //   ""              → resolved IS the cwd
+  //   "foo/bar"       → resolved is inside cwd
+  //   "../sibling"    → resolved escapes cwd  (starts with "..")
+  //   "/abs/path"     → path.relative returns an absolute path on Windows
+  //                     when the resolved path is on a different drive; this
+  //                     is caught by the path.isAbsolute() guard below.
+  const rel = nodePath.relative(cwd, resolved);
+  const isInsideCwd =
+    rel === "" || (!rel.startsWith("..") && !nodePath.isAbsolute(rel));
 
   if (!isInsideCwd) {
     return {

@@ -10,13 +10,21 @@ describe("aws-credentials", () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
-    // Clear all assignee credential env vars before each test
+    // Clear all assignee credential env vars before each test.
+    // Include *_SESSION_TOKEN vars so that leaked state from other test files
+    // (e.g. packages/core/src/config/aws-credentials.test.ts sets "tinytoken")
+    // does not pollute this suite and trigger the length-validation warning
+    // in tryAssigneeCredentials. On Windows, env-var isolation between vitest
+    // workers is less strict and cross-file leakage is more likely.
     delete process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
     delete process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"];
+    delete process.env["ASSIGNEE_OPERATOR_SESSION_TOKEN"];
     delete process.env["ASSIGNEE_READER_ACCESS_KEY_ID"];
     delete process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"];
+    delete process.env["ASSIGNEE_READER_SESSION_TOKEN"];
     delete process.env["ASSIGNEE_AUDITOR_ACCESS_KEY_ID"];
     delete process.env["ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY"];
+    delete process.env["ASSIGNEE_AUDITOR_SESSION_TOKEN"];
   });
 
   afterEach(() => {
