@@ -1,6 +1,10 @@
 {
   "name": "assignee",
-  "private": true,
+  "private": false,
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "version": "0.1.0",
   "description": "Assignee.ai CLI — plan, estimate, and provision AWS infrastructure from natural language with HITL approval, best-practice auto-fix, and pre-apply cost preflight.",
   "type": "module",
@@ -27,9 +31,6 @@
   ],
   "engines": {
     "node": ">=20.11"
-  },
-  "publishConfig": {
-    "access": "public"
   },
   "repository": {
     "type": "git",

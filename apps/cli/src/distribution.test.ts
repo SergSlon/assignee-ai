@@ -16,8 +16,18 @@ describe("Distribution package configuration", () => {
     expect(pkg.name).toBe("assignee");
   });
 
-  it("is marked as private until approved for publishing", () => {
-    expect(pkg.private).toBe(true);
+  it("is publish-ready: private:false + publishConfig.access=public + provenance", () => {
+    // RR-1 of RELEASE_CHECKLIST.md flipped 2026-05-18 (PR closing RR-1).
+    // The previous guardrail ("private until approved for publishing") fired
+    // on every test run to signal "don't accidentally publish"; once the
+    // user explicitly authorized publish, the test inverted to assert the
+    // new publish-ready shape so a future accidental revert (private:true
+    // or missing publishConfig) fails loudly.
+    expect(pkg.private).toBe(false);
+    expect(pkg.publishConfig).toEqual({
+      access: "public",
+      provenance: true,
+    });
   });
 
   it("has bin field pointing to dist/index.js", () => {
