@@ -667,8 +667,10 @@ describe("appendAuditRecord — SEC-006 chmod re-enforcement", () => {
     expect(entry).toBeDefined();
     expect(entry.index).toBe(0);
 
-    // File mode is 0o600
-    expect(fsSync.statSync(logFile).mode & 0o777).toBe(0o600);
+    // File mode is 0o600 (POSIX only — NTFS chmod is a no-op)
+    if (process.platform !== "win32") {
+      expect(fsSync.statSync(logFile).mode & 0o777).toBe(0o600);
+    }
 
     await fs.rm(lockDir, { recursive: true });
   });
@@ -679,8 +681,10 @@ describe("appendAuditRecord — SEC-006 chmod re-enforcement", () => {
 
     await appendAuditRecord({ action: "sec006-fsync0-mode" }, logFile);
 
-    // Mode is 0o600 regardless of fsync gate
-    expect(fsSync.statSync(logFile).mode & 0o777).toBe(0o600);
+    // Mode is 0o600 regardless of fsync gate (POSIX only — NTFS chmod is a no-op)
+    if (process.platform !== "win32") {
+      expect(fsSync.statSync(logFile).mode & 0o777).toBe(0o600);
+    }
 
     await cleanupFile(logFile);
   });

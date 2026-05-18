@@ -22,10 +22,14 @@
 import { describe, it, expect } from "vitest";
 import { execFileSync } from "node:child_process";
 import { performance } from "node:perf_hooks";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const DIST_ENTRY = resolve(
-  new URL(".", import.meta.url).pathname,
+  // Use fileURLToPath, not new URL().pathname — on Windows .pathname returns
+  // "/D:/a/..." (leading slash) which resolve() then mangles. fileURLToPath
+  // returns the OS-canonical absolute path on both POSIX and Windows.
+  dirname(fileURLToPath(import.meta.url)),
   // From apps/cli/src/__tests__/ → ../../ → apps/cli/ → dist/index.js
   "../../dist/index.js",
 );

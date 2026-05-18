@@ -183,13 +183,24 @@ describe("restoreProvisions", () => {
     expect(result.message).toContain("No backup files found");
   });
 
-  it("restored file has 0o600 mode", async () => {
-    fs.writeFileSync(path.join(backupDir, makeBackupName(1)), "[]", "utf-8");
-    const result = await restoreProvisions({ memoryDir, backupDir });
-    expect(result.restored).toBe(true);
-    const stat = fs.statSync(path.join(memoryDir, "provisions.json"));
-    expect(stat.mode & 0o777).toBe(0o600);
-  });
+  it.skipIf(process.platform === "win32")(
+    "restored file has 0o600 mode",
+    async () => {
+      // POSIX permission bits don't exist on NTFS — on Windows `chmod(0o600)`
+      // is a no-op and `stat.mode & 0o777` returns 0o666 regardless of what
+      // the code requests. The security guarantee on Windows is carried by
+      // NTFS ACLs (which `fs.chmod` cannot set), so asserting POSIX mode on
+      // Windows is wrong. The underlying restoreProvisions() call still runs
+      // `chmod(0o600)` for POSIX callers; Windows-specific ACL enforcement is
+      // out of scope for this suite. Matches the pattern at
+      // `apps/cli/src/services/checkpoint.test.ts:628-646`.
+      fs.writeFileSync(path.join(backupDir, makeBackupName(1)), "[]", "utf-8");
+      const result = await restoreProvisions({ memoryDir, backupDir });
+      expect(result.restored).toBe(true);
+      const stat = fs.statSync(path.join(memoryDir, "provisions.json"));
+      expect(stat.mode & 0o777).toBe(0o600);
+    },
+  );
 
   it("creates a safety copy of the current file before overwriting", async () => {
     // Create an existing provisions.json (empty array is a valid ProvisionLogSchema).

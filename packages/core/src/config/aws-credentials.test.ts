@@ -21,7 +21,8 @@ import {
   tryAssigneeCredentials,
 } from "./aws-credentials.js";
 import { readFileSync } from "fs";
-import { join } from "path";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
 
 const ALL_VARS = [
   "ASSIGNEE_OPERATOR_ACCESS_KEY_ID",
@@ -392,7 +393,11 @@ describe("aws-credentials helpers", () => {
       // anti-pattern never comes back.
       const docPath = join(
         // Navigate from packages/core/src/config/ up 4 levels to repo root, then into docs/
-        new URL(".", import.meta.url).pathname,
+        // Use fileURLToPath, not .pathname — on Windows the .pathname returns
+        // "/D:/a/..." (leading slash) which path.join then mangles to
+        // "\\D:\\a\\..." (invalid UNC-style path). fileURLToPath returns the
+        // OS-canonical absolute path on both POSIX and Windows.
+        dirname(fileURLToPath(import.meta.url)),
         "../../../..",
         "docs/how-to/sso-authentication.md",
       );

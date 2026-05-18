@@ -6,8 +6,8 @@
 Assignee.ai incorporates the following open-source software packages.
 All packages are used under their respective licenses as listed below.
 
-Generated: 2026-05-18  
-Total packages: 532
+Generated: 2026-05-14  
+Total packages: 533
 
 ---
 
@@ -31,11 +31,11 @@ Total packages: 532
 
 ### Apache-2.0 (144 packages)
 
-- **@ai-sdk/amazon-bedrock** `4.0.106` — [https://ai-sdk.dev/docs](https://ai-sdk.dev/docs)
-- **@ai-sdk/anthropic** `3.0.78` — [https://ai-sdk.dev/docs](https://ai-sdk.dev/docs)
-- **@ai-sdk/gateway** `3.0.115` — [https://ai-sdk.dev/docs](https://ai-sdk.dev/docs)
-- **@ai-sdk/google** `3.0.74` — [https://ai-sdk.dev/docs](https://ai-sdk.dev/docs)
-- **@ai-sdk/openai** `3.0.64` — [https://ai-sdk.dev/docs](https://ai-sdk.dev/docs)
+- **@ai-sdk/amazon-bedrock** `4.0.103` — [https://ai-sdk.dev/docs](https://ai-sdk.dev/docs)
+- **@ai-sdk/anthropic** `3.0.76` — [https://ai-sdk.dev/docs](https://ai-sdk.dev/docs)
+- **@ai-sdk/gateway** `3.0.111` — [https://ai-sdk.dev/docs](https://ai-sdk.dev/docs)
+- **@ai-sdk/google** `3.0.70` — [https://ai-sdk.dev/docs](https://ai-sdk.dev/docs)
+- **@ai-sdk/openai** `3.0.63` — [https://ai-sdk.dev/docs](https://ai-sdk.dev/docs)
 - **@ai-sdk/provider** `3.0.10` — [https://ai-sdk.dev/docs](https://ai-sdk.dev/docs)
 - **@ai-sdk/provider-utils** `4.0.27` — [https://ai-sdk.dev/docs](https://ai-sdk.dev/docs)
 - **@ampproject/remapping** `2.3.0` — [https://github.com/ampproject/remapping#readme](https://github.com/ampproject/remapping#readme)
@@ -119,13 +119,13 @@ Total packages: 532
 - **@humanfs/node** `0.16.7` — [https://github.com/humanwhocodes/humanfs#readme](https://github.com/humanwhocodes/humanfs#readme)
 - **@humanwhocodes/module-importer** `1.0.1` — [https://github.com/humanwhocodes/module-importer#readme](https://github.com/humanwhocodes/module-importer#readme)
 - **@humanwhocodes/retry** `0.4.3` — [https://github.com/humanwhocodes/retry#readme](https://github.com/humanwhocodes/retry#readme)
-- **@opentelemetry/api** `1.9.1` — [https://github.com/open-telemetry/opentelemetry-js/tree/main/api](https://github.com/open-telemetry/opentelemetry-js/tree/main/api)
+- **@opentelemetry/api** `1.9.0` — [https://github.com/open-telemetry/opentelemetry-js/tree/main/api](https://github.com/open-telemetry/opentelemetry-js/tree/main/api)
 - **@smithy/chunked-blob-reader** `5.2.2` — [https://github.com/smithy-lang/smithy-typescript/tree/main/packages/chunked-blob-reader](https://github.com/smithy-lang/smithy-typescript/tree/main/packages/chunked-blob-reader)
 - **@smithy/chunked-blob-reader-native** `4.2.3` — [https://github.com/smithy-lang/smithy-typescript/tree/main/packages/chunked-blob-reader-native](https://github.com/smithy-lang/smithy-typescript/tree/main/packages/chunked-blob-reader-native)
 - **@smithy/config-resolver** `4.4.17` — [https://github.com/smithy-lang/smithy-typescript/tree/main/packages/config-resolver](https://github.com/smithy-lang/smithy-typescript/tree/main/packages/config-resolver)
-- **@smithy/core** `3.23.17, 3.24.3` — [https://github.com/smithy-lang/smithy-typescript/tree/main/packages/core](https://github.com/smithy-lang/smithy-typescript/tree/main/packages/core)
+- **@smithy/core** `3.23.17` — [https://github.com/smithy-lang/smithy-typescript/tree/main/packages/core](https://github.com/smithy-lang/smithy-typescript/tree/main/packages/core)
 - **@smithy/credential-provider-imds** `4.2.14` — [https://github.com/smithy-lang/smithy-typescript/tree/main/packages/credential-provider-imds](https://github.com/smithy-lang/smithy-typescript/tree/main/packages/credential-provider-imds)
-- **@smithy/eventstream-codec** `4.3.3` — [https://github.com/smithy-lang/smithy-typescript/tree/main/packages/eventstream-codec](https://github.com/smithy-lang/smithy-typescript/tree/main/packages/eventstream-codec)
+- **@smithy/eventstream-codec** `4.2.14` — [https://github.com/smithy-lang/smithy-typescript/tree/main/packages/eventstream-codec](https://github.com/smithy-lang/smithy-typescript/tree/main/packages/eventstream-codec)
 - **@smithy/eventstream-serde-browser** `4.2.14` — [https://github.com/smithy-lang/smithy-typescript/tree/main/packages/eventstream-serde-browser](https://github.com/smithy-lang/smithy-typescript/tree/main/packages/eventstream-serde-browser)
 - **@smithy/eventstream-serde-config-resolver** `4.3.14` — [https://github.com/smithy-lang/smithy-typescript/tree/main/packages/eventstream-serde-config-resolver](https://github.com/smithy-lang/smithy-typescript/tree/main/packages/eventstream-serde-config-resolver)
 - **@smithy/eventstream-serde-node** `4.2.14` — [https://github.com/smithy-lang/smithy-typescript/tree/main/packages/eventstream-serde-node](https://github.com/smithy-lang/smithy-typescript/tree/main/packages/eventstream-serde-node)
@@ -152,7 +152,7 @@ Total packages: 532
 - **@smithy/shared-ini-file-loader** `4.4.9` — [https://github.com/smithy-lang/smithy-typescript/tree/main/packages/shared-ini-file-loader](https://github.com/smithy-lang/smithy-typescript/tree/main/packages/shared-ini-file-loader)
 - **@smithy/signature-v4** `5.3.14` — [https://github.com/smithy-lang/smithy-typescript/tree/main/packages/signature-v4](https://github.com/smithy-lang/smithy-typescript/tree/main/packages/signature-v4)
 - **@smithy/smithy-client** `4.12.13` — [https://github.com/smithy-lang/smithy-typescript/tree/main/packages/smithy-client](https://github.com/smithy-lang/smithy-typescript/tree/main/packages/smithy-client)
-- **@smithy/types** `4.14.1, 4.14.2` — [https://github.com/smithy-lang/smithy-typescript/tree/main/packages/types](https://github.com/smithy-lang/smithy-typescript/tree/main/packages/types)
+- **@smithy/types** `4.14.1` — [https://github.com/smithy-lang/smithy-typescript/tree/main/packages/types](https://github.com/smithy-lang/smithy-typescript/tree/main/packages/types)
 - **@smithy/url-parser** `4.2.14` — [https://github.com/smithy-lang/smithy-typescript/tree/main/packages/url-parser](https://github.com/smithy-lang/smithy-typescript/tree/main/packages/url-parser)
 - **@smithy/util-base64** `4.3.2` — [https://github.com/smithy-lang/smithy-typescript/tree/main/packages/util-base64](https://github.com/smithy-lang/smithy-typescript/tree/main/packages/util-base64)
 - **@smithy/util-body-length-browser** `4.2.2` — [https://github.com/smithy-lang/smithy-typescript/tree/main/packages/util-body-length-browser](https://github.com/smithy-lang/smithy-typescript/tree/main/packages/util-body-length-browser)
@@ -167,11 +167,11 @@ Total packages: 532
 - **@smithy/util-retry** `4.3.8` — [https://github.com/smithy-lang/smithy-typescript/tree/master/packages/util-retry](https://github.com/smithy-lang/smithy-typescript/tree/master/packages/util-retry)
 - **@smithy/util-stream** `4.5.25` — [https://github.com/smithy-lang/smithy-typescript/tree/main/packages/util-stream](https://github.com/smithy-lang/smithy-typescript/tree/main/packages/util-stream)
 - **@smithy/util-uri-escape** `4.2.2` — [https://github.com/smithy-lang/smithy-typescript/tree/main/packages/util-uri-escape](https://github.com/smithy-lang/smithy-typescript/tree/main/packages/util-uri-escape)
-- **@smithy/util-utf8** `2.3.0, 4.2.2, 4.3.3` — [https://github.com/smithy-lang/smithy-typescript/tree/main/packages/util-utf8](https://github.com/smithy-lang/smithy-typescript/tree/main/packages/util-utf8)
+- **@smithy/util-utf8** `2.3.0, 4.2.2` — [https://github.com/smithy-lang/smithy-typescript/tree/main/packages/util-utf8](https://github.com/smithy-lang/smithy-typescript/tree/main/packages/util-utf8)
 - **@smithy/util-waiter** `4.3.0` — [https://github.com/smithy-lang/smithy-typescript/tree/main/packages/util-waiter](https://github.com/smithy-lang/smithy-typescript/tree/main/packages/util-waiter)
 - **@smithy/uuid** `1.1.2` — [https://github.com/smithy-lang/smithy-typescript/tree/main/packages/uuid](https://github.com/smithy-lang/smithy-typescript/tree/main/packages/uuid)
 - **@vercel/oidc** `3.2.0` — [https://vercel.com](https://vercel.com)
-- **ai** `6.0.183` — [https://ai-sdk.dev/docs](https://ai-sdk.dev/docs)
+- **ai** `6.0.176` — [https://ai-sdk.dev/docs](https://ai-sdk.dev/docs)
 - **eslint-visitor-keys** `3.4.3, 4.2.1` — [https://github.com/eslint/js/blob/main/packages/eslint-visitor-keys/README.md](https://github.com/eslint/js/blob/main/packages/eslint-visitor-keys/README.md)
 - **expect-type** `1.3.0` — [https://github.com/mmkal/expect-type#readme](https://github.com/mmkal/expect-type#readme)
 - **typescript** `5.9.2` — [https://www.typescriptlang.org/](https://www.typescriptlang.org/)
@@ -234,10 +234,10 @@ Total packages: 532
 - **test-exclude** `7.0.2` — [https://istanbul.js.org/](https://istanbul.js.org/)
 - **which** `2.0.2` — [https://github.com/isaacs/node-which#readme](https://github.com/isaacs/node-which#readme)
 - **wrappy** `1.0.2` — [https://github.com/npm/wrappy](https://github.com/npm/wrappy)
-- **yaml** `2.9.0` — [https://eemeli.org/yaml/](https://eemeli.org/yaml/)
+- **yaml** `2.8.3` — [https://eemeli.org/yaml/](https://eemeli.org/yaml/)
 - **zod-to-json-schema** `3.25.1` — [https://github.com/StefanTerdell/zod-to-json-schema#readme](https://github.com/StefanTerdell/zod-to-json-schema#readme)
 
-### MIT (334 packages)
+### MIT (335 packages)
 
 - **@babel/helper-string-parser** `7.27.1` — [https://babel.dev/docs/en/next/babel-helper-string-parser](https://babel.dev/docs/en/next/babel-helper-string-parser)
 - **@babel/helper-validator-identifier** `7.28.5` — [https://github.com/babel/babel#readme](https://github.com/babel/babel#readme)
@@ -258,7 +258,7 @@ Total packages: 532
 - **@jridgewell/resolve-uri** `3.1.2` — [https://github.com/jridgewell/resolve-uri#readme](https://github.com/jridgewell/resolve-uri#readme)
 - **@jridgewell/sourcemap-codec** `1.5.5` — [https://github.com/jridgewell/sourcemaps/tree/main/packages/sourcemap-codec](https://github.com/jridgewell/sourcemaps/tree/main/packages/sourcemap-codec)
 - **@jridgewell/trace-mapping** `0.3.31` — [https://github.com/jridgewell/sourcemaps/tree/main/packages/trace-mapping](https://github.com/jridgewell/sourcemaps/tree/main/packages/trace-mapping)
-- **@langchain/core** `1.1.46` — [https://github.com/langchain-ai/langchainjs/tree/main/langchain-core/](https://github.com/langchain-ai/langchainjs/tree/main/langchain-core/)
+- **@langchain/core** `1.1.45` — [https://github.com/langchain-ai/langchainjs/tree/main/langchain-core/](https://github.com/langchain-ai/langchainjs/tree/main/langchain-core/)
 - **@langchain/langgraph** `1.3.0` — [https://github.com/langchain-ai/langgraphjs#readme](https://github.com/langchain-ai/langgraphjs#readme)
 - **@langchain/langgraph-checkpoint** `1.0.2` — [https://github.com/langchain-ai/langgraphjs#readme](https://github.com/langchain-ai/langgraphjs#readme)
 - **@langchain/langgraph-sdk** `1.9.1` — [https://github.com/langchain-ai/langgraphjs#readme](https://github.com/langchain-ai/langgraphjs#readme)
@@ -275,7 +275,7 @@ Total packages: 532
 - **@pnpm/npm-conf** `3.0.2` — [https://github.com/pnpm/npm-conf#readme](https://github.com/pnpm/npm-conf#readme)
 - **@rollup/rollup-darwin-arm64** `4.59.0` — [https://rollupjs.org/](https://rollupjs.org/)
 - **@standard-schema/spec** `1.1.0` — [https://standardschema.dev](https://standardschema.dev)
-- **@turbo/darwin-arm64** `2.9.14` — [https://turborepo.dev](https://turborepo.dev)
+- **@turbo/darwin-arm64** `2.9.10` — [https://turborepo.dev](https://turborepo.dev)
 - **@types/chai** `5.2.3` — [https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/chai](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/chai)
 - **@types/deep-eql** `4.0.2` — [https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/deep-eql](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/deep-eql)
 - **@types/estree** `1.0.8` — [https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/estree](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/estree)
@@ -306,7 +306,7 @@ Total packages: 532
 - **ajv-formats** `3.0.1` — [https://github.com/ajv-validator/ajv-formats#readme](https://github.com/ajv-validator/ajv-formats#readme)
 - **ansi-escapes** `7.3.0` — [https://github.com/sindresorhus/ansi-escapes#readme](https://github.com/sindresorhus/ansi-escapes#readme)
 - **ansi-regex** `5.0.1, 6.2.2` — [https://github.com/chalk/ansi-regex#readme](https://github.com/chalk/ansi-regex#readme)
-- **ansi-styles** `4.3.0, 6.2.3` — [https://github.com/chalk/ansi-styles#readme](https://github.com/chalk/ansi-styles#readme)
+- **ansi-styles** `4.3.0, 5.2.0, 6.2.3` — [https://github.com/chalk/ansi-styles#readme](https://github.com/chalk/ansi-styles#readme)
 - **array-union** `2.1.0` — [https://github.com/sindresorhus/array-union#readme](https://github.com/sindresorhus/array-union#readme)
 - **assertion-error** `2.0.1` — [https://github.com/chaijs/assertion-error#readme](https://github.com/chaijs/assertion-error#readme)
 - **ast-v8-to-istanbul** `0.3.12` — [https://github.com/AriPerkkio/ast-v8-to-istanbul](https://github.com/AriPerkkio/ast-v8-to-istanbul)
@@ -325,7 +325,7 @@ Total packages: 532
 - **call-bind-apply-helpers** `1.0.2` — [https://github.com/ljharb/call-bind-apply-helpers#readme](https://github.com/ljharb/call-bind-apply-helpers#readme)
 - **call-bound** `1.0.4` — [https://github.com/ljharb/call-bound#readme](https://github.com/ljharb/call-bound#readme)
 - **callsites** `3.1.0` — [https://github.com/sindresorhus/callsites#readme](https://github.com/sindresorhus/callsites#readme)
-- **camelcase** `8.0.0` — [https://github.com/sindresorhus/camelcase#readme](https://github.com/sindresorhus/camelcase#readme)
+- **camelcase** `6.3.0, 8.0.0` — [https://github.com/sindresorhus/camelcase#readme](https://github.com/sindresorhus/camelcase#readme)
 - **chai** `5.3.3` — [http://chaijs.com](http://chaijs.com)
 - **chalk** `4.1.2, 5.6.2` — [https://github.com/chalk/chalk#readme](https://github.com/chalk/chalk#readme)
 - **check-error** `2.1.3` — [https://github.com/chaijs/check-error#readme](https://github.com/chaijs/check-error#readme)
@@ -346,6 +346,7 @@ Total packages: 532
 - **cors** `2.8.6` — [https://github.com/expressjs/cors#readme](https://github.com/expressjs/cors#readme)
 - **cross-spawn** `7.0.6` — [https://github.com/moxystudio/node-cross-spawn](https://github.com/moxystudio/node-cross-spawn)
 - **debug** `4.4.3` — [https://github.com/debug-js/debug#readme](https://github.com/debug-js/debug#readme)
+- **decamelize** `1.2.0` — [https://github.com/sindresorhus/decamelize#readme](https://github.com/sindresorhus/decamelize#readme)
 - **deep-eql** `5.0.2` — [https://github.com/chaijs/deep-eql#readme](https://github.com/chaijs/deep-eql#readme)
 - **deep-extend** `0.6.0` — [https://github.com/unclechu/node-deep-extend](https://github.com/unclechu/node-deep-extend)
 - **deep-is** `0.1.4` — [https://github.com/thlorenz/deep-is#readme](https://github.com/thlorenz/deep-is#readme)
@@ -551,7 +552,7 @@ Total packages: 532
 - **tsc-alias** `1.8.16` — [https://github.com/justkey007/tsc-alias.git](https://github.com/justkey007/tsc-alias.git)
 - **tsconfck** `3.1.6` — [https://github.com/dominikg/tsconfck/tree/main/packages/tsconfck#readme](https://github.com/dominikg/tsconfck/tree/main/packages/tsconfck#readme)
 - **tsx** `4.21.0` — [https://tsx.is](https://tsx.is)
-- **turbo** `2.8.17, 2.9.14` — [https://turborepo.dev](https://turborepo.dev)
+- **turbo** `2.8.17, 2.9.10` — [https://turborepo.dev](https://turborepo.dev)
 - **turbo-darwin-arm64** `2.8.17` — [https://turborepo.dev](https://turborepo.dev)
 - **type-check** `0.4.0` — [https://github.com/gkz/type-check](https://github.com/gkz/type-check)
 - **type-is** `2.0.1` — [https://github.com/jshttp/type-is#readme](https://github.com/jshttp/type-is#readme)

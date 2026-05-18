@@ -179,26 +179,34 @@ describe("resolveAuditKey — file-mode warning deduplication (PR-019)", () => {
     _resetAuditKeyCache();
   });
 
-  it("SEC-026: emits file-mode warning on every cache-miss when mode is wrong", () => {
-    // SEC-026: `_keyModeWarned` is reset on every cache-miss so that an
-    // attacker who widens the key-file permissions AFTER first read sees
-    // fresh warnings on each subsequent append (when the TTL window elapses).
-    // For non-default keyFile paths the cache is NEVER populated, so the
-    // warning fires on every call — this is the correct new behaviour.
-    fs.writeFileSync(keyFile, "a".repeat(64), { mode: 0o644 });
-    _resetAuditKeyCache();
+  it(
+    "SEC-026: emits file-mode warning on every cache-miss when mode is wrong",
+    // Windows: NTFS chmod is a no-op. resolveAuditKey explicitly suppresses
+    // the file-mode warning on win32 (line: `if (!_keyModeWarned && platform !== "win32")`).
+    // The observable behaviour on Windows is correct (no false alarms); the
+    // warning is only meaningful on POSIX where chmod enforcement applies.
+    { skip: process.platform === "win32" },
+    () => {
+      // SEC-026: `_keyModeWarned` is reset on every cache-miss so that an
+      // attacker who widens the key-file permissions AFTER first read sees
+      // fresh warnings on each subsequent append (when the TTL window elapses).
+      // For non-default keyFile paths the cache is NEVER populated, so the
+      // warning fires on every call — this is the correct new behaviour.
+      fs.writeFileSync(keyFile, "a".repeat(64), { mode: 0o644 });
+      _resetAuditKeyCache();
 
-    // Call resolveAuditKey three times — each call is a cache-miss for a
-    // non-default keyFile path, so the warning fires 3 times.
-    resolveAuditKey(keyFile);
-    resolveAuditKey(keyFile);
-    resolveAuditKey(keyFile);
+      // Call resolveAuditKey three times — each call is a cache-miss for a
+      // non-default keyFile path, so the warning fires 3 times.
+      resolveAuditKey(keyFile);
+      resolveAuditKey(keyFile);
+      resolveAuditKey(keyFile);
 
-    const warnings = stderrChunks.filter((c) =>
-      c.includes("WARNING: audit key file"),
-    );
-    expect(warnings).toHaveLength(3);
-  });
+      const warnings = stderrChunks.filter((c) =>
+        c.includes("WARNING: audit key file"),
+      );
+      expect(warnings).toHaveLength(3);
+    },
+  );
 
   it("does NOT emit file-mode warning when file mode is 0o600", () => {
     fs.writeFileSync(keyFile, "b".repeat(64), { mode: 0o600 });

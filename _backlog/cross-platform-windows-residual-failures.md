@@ -93,6 +93,74 @@ failures that didn't surface because turbo's `--continue` wasn't used.
 Use `pnpm -r test:coverage --continue` to enumerate the full failure
 surface in one run.
 
+## 2026-05-18 iteration update — long-tail pattern confirmed
+
+The post-#114 cross-platform sweep iterated three rounds through this
+backlog. Each round of fixes revealed a new layer of residuals:
+
+**Round 1** (PR #118 / commit `99bcdec6`): 4 categories above + the
+`experimental: false` flip applied.
+
+**Round 2** (commit `caaf4804`, in response to Quinn BOUNCE):
+
+- `safe-output-path.test.ts` ALSO had hardcoded POSIX `resolvedPath`
+  literals (not just the `ok` value) — 7 assertions made dynamic
+  via `path.resolve(CWD, raw)`.
+- Missed 5th category: `restore-provisions.test.ts:201` 0o600 mode
+  added `it.skipIf(process.platform === "win32")`.
+- Narrowed EACCES catch in audit-log to EPERM-only re-throw.
+
+**Round 3** (commit `c60a33c6`, coordinator fix after fresh
+cross-platform dispatch revealed more):
+
+- `new URL(".", import.meta.url).pathname` produces `/D:/a/...`
+  (leading slash + drive letter) on Windows; `path.join`/`path.resolve`
+  then mangles to `\D:\a\...` (invalid). Fixed via
+  `dirname(fileURLToPath(import.meta.url))` in 2 sites:
+  `packages/core/src/config/aws-credentials.test.ts` (W2-02 doc check)
+  - `apps/cli/src/__tests__/startup-percentile.test.ts`.
+- 2 more unguarded 0o600 mode assertions in
+  `packages/core/src/audit/audit-log.test.ts:671, 683` (Windows skip
+  added).
+
+**After round 3 — STILL failing on Windows (run 26049484178)**:
+
+- `packages/core/src/audit/audit-log.test.ts:596, 611` — 2 more 0o644
+  mode assertions (different from the 0o600 case; likely "key file"
+  or "dir fsync" tests).
+- `packages/core/src/utils/memory-recorder.test.ts:318` — performance
+  threshold `expected 2616/3392 to be less than 2000`. Windows runners
+  exhibit different memory-allocation characteristics; this is a
+  runtime-environment difference, not a code bug. Need either a
+  Windows-aware threshold or skip-on-win32.
+
+**Decision**: revert the `experimental: false` flip applied in round 1.
+The long-tail nature of these residuals (each fix reveals 2-3 more)
+means the only safe close-out path is to enumerate ALL Windows
+failures up front via `pnpm -r test:coverage --continue` in a real
+Windows runner (or WSL with Windows-mode vitest), bundle them into
+ONE story, and land them as one wave with a single final
+cross-platform verification.
+
+The path-resolution + EPERM + URL.pathname + assorted 0o600 skips
+landed across rounds 1-3 are GENUINE platform-portability improvements
+and remain in place. They don't need to be reverted — they're net
+positive even with `experimental: true`. Only the matrix flip is
+reverted.
+
+## Remaining post-round-3 categories (carry to next sweep)
+
+1. `audit-log.test.ts:596, 611` — 0o644 mode tests (probably key
+   file + dir fsync; pattern same as 0o600).
+2. `memory-recorder.test.ts:318` — Windows perf-threshold flake.
+   Likely Windows-aware threshold (1.5x) or `skipIf`.
+3. (Unknown) — vitest stopped at audit-log; `@assignee/mcp-server`
+   and possibly other `@assignee/core` test files may have more.
+
+The acceptance criterion stays: cross-platform Windows green +
+`experimental: true` → `experimental: false`. Don't flip the matrix
+without all OSes green in a single dispatch.
+
 ## Acceptance criteria
 
 1. Cross-platform workflow (`ci-cross-platform.yml`) returns SUCCESS
