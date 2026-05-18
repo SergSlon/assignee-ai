@@ -515,8 +515,8 @@ describe("SSH-bundle cascade — provisioner → memory → apply-success → de
     expect(typeof leafMkdirArg).toBe("string");
     // Parent: ends in `/.assignee` (no `/keys` segment).
     expect(String(parentMkdirArg)).toMatch(/\.assignee$/);
-    // Leaf: ends in `/.assignee/keys`.
-    expect(String(leafMkdirArg)).toMatch(/\.assignee\/keys$/);
+    // Leaf: ends in `/.assignee/keys` (POSIX) or `\.assignee\keys` (Windows).
+    expect(String(leafMkdirArg)).toMatch(/[\\/]\.assignee[\\/]keys$/);
     // Both calls must request mode 0o700.
     expect(mockMkdirSync.mock.calls[0]?.[1]).toMatchObject({
       recursive: true,
