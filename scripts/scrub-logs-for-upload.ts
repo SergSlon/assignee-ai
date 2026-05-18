@@ -19,7 +19,7 @@
 
 import { readFileSync, writeFileSync, readdirSync, existsSync } from "fs";
 import { join, extname, dirname } from "path";
-import { fileURLToPath } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 
 const __dirname =
   typeof import.meta.dirname !== "undefined"
@@ -92,7 +92,9 @@ async function tryLoadWorkerBRedactor(): Promise<
   for (const candidate of candidates) {
     if (existsSync(candidate)) {
       try {
-        const mod = await import(candidate);
+        // Windows: ESM dynamic import() requires `file://` URL form for absolute
+        // paths (raw `D:\...` rejected). `pathToFileURL` is a no-op on POSIX.
+        const mod = await import(pathToFileURL(candidate).href);
         if (typeof mod.redactLogContent === "function") {
           console.log(
             `Using Worker B otel-allowlist redactor from: ${candidate}`,

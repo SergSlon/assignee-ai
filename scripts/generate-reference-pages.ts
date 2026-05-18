@@ -73,17 +73,20 @@ async function loadRegistry(): Promise<{
       REPO_ROOT,
       "packages/core/src/config/help-hints.ts",
     );
+    // Windows: ESM dynamic import() requires `file://` URL form for absolute
+    // paths (raw `D:\...` rejected with "Only URLs with a scheme in: file,
+    // data, and node are supported"). `pathToFileURL` is a no-op on POSIX.
     if (fs.existsSync(tsSrcPath)) {
       // tsx/ts-node context: dynamic import resolves .ts
-      mod = await import(tsSrcPath);
+      mod = await import(url.pathToFileURL(tsSrcPath).href);
     } else if (fs.existsSync(srcPath)) {
-      mod = await import(srcPath);
+      mod = await import(url.pathToFileURL(srcPath).href);
     } else {
-      mod = await import(distPath);
+      mod = await import(url.pathToFileURL(distPath).href);
     }
   } catch {
     // Fallback: try the built dist
-    mod = await import(distPath);
+    mod = await import(url.pathToFileURL(distPath).href);
   }
 
   if (!mod.getSupportedResourceTypes || !mod.getCompoundPatterns) {
