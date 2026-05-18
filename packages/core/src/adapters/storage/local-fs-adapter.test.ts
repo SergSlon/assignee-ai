@@ -172,12 +172,14 @@ describe("LocalFsStorageAdapter — validateKey (path-traversal hardening)", () 
 
 describe("LocalFsStorageAdapter — file mode (0600 / 0700)", () => {
   it("creates files with mode 0600", async () => {
+    if (process.platform === "win32") return; // NTFS chmod is a no-op
     await adapter.writeText("k", "v");
     const stat = await fs.stat(join(workspace, "k"));
     expect(stat.mode & 0o777).toBe(0o600);
   });
 
   it("creates directories with mode 0700", async () => {
+    if (process.platform === "win32") return; // NTFS chmod is a no-op
     await adapter.writeText("nested/file", "v");
     const stat = await fs.stat(join(workspace, "nested"));
     expect(stat.mode & 0o777).toBe(0o700);
@@ -250,6 +252,7 @@ describe("LocalFsStorageAdapter — tryAcquire", () => {
   });
 
   it("creates files with mode 0600", async () => {
+    if (process.platform === "win32") return; // NTFS chmod is a no-op
     await adapter.tryAcquire("locked", new TextEncoder().encode("x"));
     const stat = await fs.stat(join(workspace, "locked"));
     expect(stat.mode & 0o777).toBe(0o600);
@@ -260,6 +263,7 @@ describe("LocalFsStorageAdapter — tryAcquire", () => {
       "nested/dir/locked",
       new TextEncoder().encode("x"),
     );
+    if (process.platform === "win32") return; // NTFS chmod is a no-op
     const stat = await fs.stat(join(workspace, "nested"));
     expect(stat.mode & 0o777).toBe(0o700);
   });

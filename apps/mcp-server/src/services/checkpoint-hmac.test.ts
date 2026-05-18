@@ -84,7 +84,9 @@ describe("checkpoint-hmac", () => {
   describe("canonicalizeCheckpointPath", () => {
     it("resolves relative paths to absolute", () => {
       const result = canonicalizeCheckpointPath("./tmp/checkpoint.json");
-      expect(result.startsWith("/")).toBe(true);
+      // POSIX absolute paths begin with "/", Windows with a drive letter
+      // (e.g. "D:\..."). Use path.isAbsolute so the assertion is portable.
+      expect(path.isAbsolute(result)).toBe(true);
     });
 
     it("normalises '..' segments", () => {
