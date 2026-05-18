@@ -47,7 +47,7 @@
 
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, "..", "..", "..");
@@ -59,9 +59,15 @@ const REPO_ROOT = resolve(SCRIPT_DIR, "..", "..", "..");
  */
 async function loadRuntimeCounts() {
   const coreDist = join(REPO_ROOT, "packages", "core", "dist", "index.js");
+  // Windows: ESM dynamic import() requires `file://` URL form for absolute
+  // paths; raw `D:\...` paths are rejected with "Only URLs with a scheme
+  // in: file, data, and node are supported". `pathToFileURL` is a no-op
+  // on POSIX (returns a `file://` URL for the same absolute path) so the
+  // conversion is safe on every OS.
+  const coreDistUrl = pathToFileURL(coreDist).href;
   let mod;
   try {
-    mod = await import(coreDist);
+    mod = await import(coreDistUrl);
   } catch (err) {
     throw new Error(
       `doc-lint: cannot import @assignee/core dist from ${coreDist}. ` +

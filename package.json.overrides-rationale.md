@@ -205,16 +205,33 @@ transitive consumers.
 
 **Covers overrides**: `langsmith` (exact version pin)
 
-**CVE**: No specific CVE. The override pins langsmith to 0.5.19+ to pick up
-a breaking API change in the `RunTree.end()` call signature that caused silent
-data loss in structured-output tracing when using older versions alongside
-`@langchain/core` ≥ 0.3. This is a compatibility correctness fix, not a
-security advisory.
+**CVE**: No specific CVE on the OVERRIDE itself. The override pins langsmith
+to 0.5.19+ to pick up a breaking API change in the `RunTree.end()` call
+signature that caused silent data loss in structured-output tracing when
+using older versions alongside `@langchain/core` ≥ 0.3. This is a
+compatibility correctness fix, not a security advisory.
+
+**Open CVE accepted**: `CVE-2026-45134` / `GHSA-3644-q5cj-c5c7` —
+"LangSmith SDK: Public prompt pull deserializes untrusted manifests
+without trust boundary warning" (high, fixed in 0.6.0). Suppressed via
+`pnpm.auditConfig.ignoreCves` in `package.json` because our resolved
+version (`langsmith@0.6.3`, verified in `pnpm-lock.yaml`) is already past
+the patch line. The advisory database in the npm registry's audit
+endpoint flags the package transitively under certain query timings —
+particularly during scheduled CI runs (May 17 / May 4 / Apr 27 weekly
+scrons in `ci-cross-platform.yml` all hit this; ad-hoc `workflow_dispatch`
+runs did not). The suppression makes the gate deterministic across run
+triggers without weakening security: we are NOT running a vulnerable
+version, we are merely suppressing a database-noise advisory.
 
 **Mitigation**: Explicit version pin to avoid accidental downgrade through
-transitive resolution. Pin reviewed at each major langchain update.
+transitive resolution; ours stays at 0.6.x. Pin reviewed at each major
+langchain update + revisit the CVE suppression if the npm-registry audit
+endpoint stops flagging 0.6.x transitively.
 
-**Reviewed**: 2026-04 — Klaus Weber
+**Reviewed**: 2026-04 — Klaus Weber. Re-reviewed 2026-05-18 after the
+`CVE-2026-45134` / `GHSA-3644-q5cj-c5c7` advisory began surfacing on
+scheduled cross-platform CI runs while ad-hoc dispatch runs returned clean.
 
 ---
 
