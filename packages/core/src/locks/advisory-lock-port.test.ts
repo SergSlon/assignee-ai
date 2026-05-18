@@ -71,6 +71,7 @@ describe("FileAdvisoryLockAdapter — acquire/release", () => {
   });
 
   it("lock file has 0o600 mode", async () => {
+    if (process.platform === "win32") return; // NTFS chmod is a no-op
     const adapter = new FileAdvisoryLockAdapter();
     const name = lockName();
     await adapter.acquire(name);

@@ -93,6 +93,13 @@ describe("resolveAuditKey", () => {
   });
 
   it("key file is written with mode 0o600 (owner read+write only)", () => {
+    // Skip on Windows: chmod semantics are not supported (Node maps modes
+    // loosely; stat.mode ends up as 0o666). Production code still calls
+    // chmod 0o600 — it's a no-op on Windows but harmless. Convention
+    // matches `price-cache.test.ts` and other 0o600 mode tests in the
+    // project.
+    if (process.platform === "win32") return;
+
     resolveAuditKey(keyFile);
     const stat = fs.statSync(keyFile);
     expect(stat.mode & 0o777).toBe(0o600);

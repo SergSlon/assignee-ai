@@ -96,6 +96,7 @@ describe("saveCheckpoint", () => {
   });
 
   it("writes the file with 0o600 permissions (owner rw only)", async () => {
+    if (process.platform === "win32") return; // NTFS chmod is a no-op
     const cp = makeCheckpoint();
     const ref = await saveCheckpoint(cp, tmpDir);
     const stat = await fs.stat(ref);

@@ -576,8 +576,11 @@ describe("appendAuditRecord — SEC-006 chmod re-enforcement", () => {
     await appendAuditRecord({ action: "sec006-mode-first" }, logFile);
 
     const stat = fsSync.statSync(logFile);
-    // Mask to permission bits only (lower 9 bits)
-    expect(stat.mode & 0o777).toBe(0o600);
+    // Mask to permission bits only (lower 9 bits). Skip on Windows: NTFS
+    // chmod is a no-op; production code still calls chmod 0o600 — harmless.
+    if (process.platform !== "win32") {
+      expect(stat.mode & 0o777).toBe(0o600);
+    }
 
     await cleanupFile(logFile);
   });

@@ -48,6 +48,7 @@ function makeCheckpoint(
 
 describe("FileDurableCheckpointerAdapter — file invariants", () => {
   it("writes checkpoint file with 0o600 mode", async () => {
+    if (process.platform === "win32") return; // NTFS chmod is a no-op
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "assignee-perm-"));
     const adapter = new FileDurableCheckpointerAdapter(dir);
     const cp = makeCheckpoint();
