@@ -340,7 +340,21 @@ jobs:
         # `pnpm deploy` resolves workspace:* deps to real versions, strips
         # devDeps, and materialises a standalone node_modules tree. The
         # resulting apps/cli/deploy/ directory is what Homebrew unpacks.
-        run: pnpm deploy --prod --filter=assignee apps/cli/deploy
+        #
+        # `--legacy`: pnpm v10 deprecated the default deploy flow and now
+        # requires `inject-workspace-packages=true` in pnpm-workspace.yaml
+        # unless --legacy is passed. We keep the pre-v10 behaviour (no
+        # injected workspace packages) because the workspace consumers
+        # don't expect injected copies — only `deploy` needs the
+        # standalone node_modules tree. See pnpm release notes for v10:
+        # https://pnpm.io/blog/2025/01/14/v10
+        #
+        # TODO: revisit on next pnpm-major bump. The `--legacy` flag is
+        # slated for removal in v11+ (tracked in pnpm PR #11582). When
+        # bumping `packageManager` to pnpm@11.x, set
+        # `inject-workspace-packages=true` in pnpm-workspace.yaml and
+        # remove this flag.
+        run: pnpm deploy --legacy --prod --filter=assignee apps/cli/deploy
 
       - name: Stage deploy contents for tarball
         run: |
@@ -399,8 +413,12 @@ jobs:
         id: release_notes
         run: |
           set -euo pipefail
-          # Get previous tag to compute the range
-          PREV_TAG=$(git tag --sort=-v:refname | grep -v "^${{ inputs.tag }}$" | head -1)
+          # Get previous tag to compute the range. `grep -v` exits 1 when no
+          # lines match (e.g. v0.1.0 is the only tag in the repo), and pipefail
+          # would propagate that as a script failure. Append `|| true` so the
+          # empty-prev-tag case is handled gracefully — the script generates
+          # full-history notes when no prior tag exists.
+          PREV_TAG=$(git tag --sort=-v:refname | grep -v "^${{ inputs.tag }}$" | head -1 || true)
           FROM_ARG=""
           if [ -n "$PREV_TAG" ]; then
             FROM_ARG="--from ${PREV_TAG}"
@@ -615,14 +633,22 @@ jobs:
 
       - name: Validate SBOM format
         # W7-06: Validate the generated SBOM against the SPDX 2.3 schema.
-        # Uses the spdx-tools-java CLI (installed via npm wrapper) to ensure
-        # the SBOM is spec-compliant before attaching it to the release.
+        # Uses the canonical Python `spdx-tools` package from PyPI
+        # (https://pypi.org/project/spdx-tools/) which provides the
+        # `pyspdxtools` CLI parser/validator. The previous npm `spdx-tools`
+        # install 404s — that package name is not published on npmjs.com.
+        # `pyspdxtools -i <file>` parses + validates against SPDX 2.3;
+        # any schema violation exits non-zero.
         run: |
           set -euo pipefail
-          # Install spdx-tools-java npm wrapper
-          npm install -g spdx-tools
-          # Validate — exits non-zero on schema violation
-          spdx-tools validate assignee-${{ inputs.tag }}-sbom.spdx.json
+          python -m pip install --user spdx-tools
+          # Invoke via `python -m` instead of the bare `pyspdxtools` binary
+          # so the validator works even if `~/.local/bin` is not on $PATH
+          # in the GH Actions shell (ubuntu-24.04's /etc/environment does
+          # not always export the per-user pip-bin directory; Quinn flagged
+          # this as a HIGH pre-commit risk).
+          python -m spdx_tools.spdx.clitools.pyspdxtools \
+            -i assignee-${{ inputs.tag }}-sbom.spdx.json
           echo "SBOM validation passed."
 
       - name: Scan SBOM for vulnerabilities (Grype)
