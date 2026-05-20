@@ -585,36 +585,51 @@ describe("appendAuditRecord — SEC-006 chmod re-enforcement", () => {
     await cleanupFile(logFile);
   });
 
-  it("re-enforces 0o600 on a second append even if the file was widened between writes (fsync disabled)", async () => {
-    process.env["ASSIGNEE_AUDIT_FSYNC"] = "0";
-    const logFile = tempLogFile();
+  // Skipped on Windows: the test scenario (chmod 0o644 → re-enforce 0o600 on
+  // second append) is unobservable on NTFS because chmodSync is a no-op there
+  // — both the sanity-check assertion and the re-enforcement assertion would
+  // see the default mode (0o666), not the chmod target. The production code
+  // still issues the chmod call on Windows (harmless no-op); the behaviour
+  // being verified is only meaningful on POSIX. Same skip pattern as the
+  // `{ skip: process.platform === "win32" }` test at line 173.
+  it(
+    "re-enforces 0o600 on a second append even if the file was widened between writes (fsync disabled)",
+    { skip: process.platform === "win32" },
+    async () => {
+      process.env["ASSIGNEE_AUDIT_FSYNC"] = "0";
+      const logFile = tempLogFile();
 
-    await appendAuditRecord({ action: "sec006-first" }, logFile);
+      await appendAuditRecord({ action: "sec006-first" }, logFile);
 
-    // Simulate operator accident: widen the log to 0o644
-    fsSync.chmodSync(logFile, 0o644);
-    expect(fsSync.statSync(logFile).mode & 0o777).toBe(0o644); // sanity-check
+      // Simulate operator accident: widen the log to 0o644
+      fsSync.chmodSync(logFile, 0o644);
+      expect(fsSync.statSync(logFile).mode & 0o777).toBe(0o644); // sanity-check
 
-    // Second append must restore 0o600
-    await appendAuditRecord({ action: "sec006-second" }, logFile);
-    expect(fsSync.statSync(logFile).mode & 0o777).toBe(0o600);
+      // Second append must restore 0o600
+      await appendAuditRecord({ action: "sec006-second" }, logFile);
+      expect(fsSync.statSync(logFile).mode & 0o777).toBe(0o600);
 
-    await cleanupFile(logFile);
-  });
+      await cleanupFile(logFile);
+    },
+  );
 
-  it("re-enforces 0o600 on a second append even if file was widened (fsync enabled)", async () => {
-    delete process.env["ASSIGNEE_AUDIT_FSYNC"];
-    const logFile = tempLogFile();
+  it(
+    "re-enforces 0o600 on a second append even if file was widened (fsync enabled)",
+    { skip: process.platform === "win32" },
+    async () => {
+      delete process.env["ASSIGNEE_AUDIT_FSYNC"];
+      const logFile = tempLogFile();
 
-    await appendAuditRecord({ action: "sec006-fsync-first" }, logFile);
-    fsSync.chmodSync(logFile, 0o644);
-    expect(fsSync.statSync(logFile).mode & 0o777).toBe(0o644);
+      await appendAuditRecord({ action: "sec006-fsync-first" }, logFile);
+      fsSync.chmodSync(logFile, 0o644);
+      expect(fsSync.statSync(logFile).mode & 0o777).toBe(0o644);
 
-    await appendAuditRecord({ action: "sec006-fsync-second" }, logFile);
-    expect(fsSync.statSync(logFile).mode & 0o777).toBe(0o600);
+      await appendAuditRecord({ action: "sec006-fsync-second" }, logFile);
+      expect(fsSync.statSync(logFile).mode & 0o777).toBe(0o600);
 
-    await cleanupFile(logFile);
-  });
+      await cleanupFile(logFile);
+    },
+  );
 
   it("chmod failure (EPERM) does not throw — append returns successfully and emits structured stderr warning", async () => {
     // We test the fail-open behavior by placing the log file in a read-only

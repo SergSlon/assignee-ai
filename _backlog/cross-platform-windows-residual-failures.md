@@ -161,6 +161,122 @@ The acceptance criterion stays: cross-platform Windows green +
 `experimental: true` → `experimental: false`. Don't flip the matrix
 without all OSes green in a single dispatch.
 
+## 2026-05-20 single-sweep enumeration (run 26153847384)
+
+**Source**: `ci-cross-platform.yml` run 26153847384, Windows job
+76927964651, commit `d9089a53` (post-#133 merge — first run with
+`turbo test:coverage --continue` so vitest enumerates every package
+instead of stopping at the first failing file).
+**Other OSes**: ubuntu-latest + macos-latest BOTH PASS on this run.
+Windows is the sole failing OS (and remains `experimental: true`,
+so workflow conclusion is still SUCCESS).
+
+### Headline numbers
+
+- Test files: **1 failed | 390 passed | 1 skipped (392 total)**
+- Tests: **2 failed | 9866 passed | 11 skipped (9879 total)**
+- Failure rate: **0.02%** of executed tests
+- Unhandled errors: 1 (`Timeout calling "onTaskUpdate"` —
+  vitest worker RPC timeout, side-effect of the same failing file's
+  retry loop, not an independent failure)
+
+### Per-package breakdown
+
+| Package                    | Test files |                               Tests | Result   |
+| -------------------------- | ---------: | ----------------------------------: | -------- |
+| `@assignee/best-practices` |         23 |                           23 passed | PASS     |
+| `@assignee/mcp-server`     |         41 |                           41 passed | PASS     |
+| `apps/cli`                 |        154 |           2027 passed / 150 skipped | PASS     |
+| `@assignee/core`           |        392 | 9866 passed / 2 failed / 11 skipped | **FAIL** |
+
+All failures are confined to **one test file** in **one package**:
+`packages/core/src/audit/audit-log.test.ts`.
+
+### Categorized failures
+
+#### Category A — file-mode (chmod re-enforcement on Windows): 2 tests
+
+Both failures are in the same `describe` block (`appendAuditRecord —
+SEC-006 chmod re-enforcement`):
+
+- `packages/core/src/audit/audit-log.test.ts:596` —
+  `re-enforces 0o600 on a second append even if the file was widened between writes (fsync disabled)`
+  `AssertionError: expected 438 to be 420 // Object.is equality`
+  (438 = 0o666 = NTFS-default "rw-rw-rw-"; 420 = 0o644 = requested
+  POSIX mode).
+- `packages/core/src/audit/audit-log.test.ts:611` —
+  `re-enforces 0o600 on a second append even if file was widened (fsync enabled)`
+  Identical assertion shape: `expected 438 to be 420`.
+
+**Diagnosis**: identical to the round-3 carry-over already flagged
+in the backlog ("Remaining post-round-3 categories" item 1). The
+SANITY-CHECK line `expect(fsSync.statSync(logFile).mode & 0o777).toBe(0o644)`
+that follows `fsSync.chmodSync(logFile, 0o644)` doesn't survive on
+NTFS — Windows' `chmod` only toggles the read-only bit, never the
+group/other bits, so `stat.mode & 0o777` stays at the NTFS default
+(0o666 = 438). The actual SEC-006 re-enforcement logic (the
+production code in `appendAuditRecord` that re-chmods to 0o600
+before the second write) is irrelevant on Windows for the same
+reason: there's nothing to enforce. Fix is `it.skipIf(process.platform === "win32")`
+on both `it()` blocks (lines 588 and 605), mirroring the same skip
+already applied to the rest of the SEC-006 suite (e.g. line 581's
+`if (process.platform !== "win32")` guard inside the earlier
+0o600-first-write test).
+
+### Compared to round-3 backlog
+
+**RESOLVED on Windows (previously-failing, now passing)**:
+
+- `apps/cli/src/utils/safe-output-path.test.ts` — all 4+ acceptance
+  tests now pass. Round-3's `path.relative()` portability fix landed.
+- `packages/core/src/audit/audit-log.test.ts` — 15 fsync EPERM
+  tests now pass (EPERM-narrowed catch + 0o600 skips from rounds
+  1-3 covered them).
+- `packages/core/src/audit/hmac-chain.test.ts` — the 1 residual
+  failure listed in round-1 is gone (75 tests pass / 6 skipped).
+- `apps/cli/src/config/aws-credentials.test.ts` — token-length
+  validation test passes; round-3's
+  `dirname(fileURLToPath(import.meta.url))` fix covered the
+  `new URL(".", import.meta.url).pathname` Windows drive-letter
+  mangling.
+- `apps/cli/src/__tests__/startup-percentile.test.ts` — same
+  fileURLToPath fix, now passing.
+- `packages/core/src/utils/memory-recorder.test.ts:318` — the
+  perf-threshold flake from "After round 3" is **no longer
+  reproducing** on this run. Either (a) the test was tightened /
+  Windows-aware-thresholded in a recent commit, (b) the runner
+  happened to fall under threshold this time, or (c) it's been
+  superseded by a different perf test. Worth a quick `git log -p`
+  on that file to confirm which before declaring resolved.
+- `packages/core/src/restore-provisions.test.ts:201` — round-2's
+  0o600 skip held; still passing.
+
+**ALREADY-DOCUMENTED (still failing, exactly as backlog predicted)**:
+
+- Category A (audit-log.ts:596 / :611 — 0o644 mode sanity-check) —
+  matches "Remaining post-round-3 categories" item 1 verbatim.
+
+**NEW categories**: none. The `--continue` sweep enumerated the
+entire Windows surface and found only the two file-mode failures
+that round-3 already predicted. The long-tail-of-fixes pattern
+described in the round-3 retro has terminated; this is the final
+layer.
+
+### Diagnosis summary
+
+The remaining surface is **one file, one category, two `it()` blocks,
+one fix** (add `it.skipIf(process.platform === "win32")` to lines
+588 and 605 of `audit-log.test.ts`). All other Windows residuals
+documented across rounds 1-3 of the 2026-05-17/05-18 sweep are now
+resolved.
+
+After this single fix:
+
+- Re-run `ci-cross-platform.yml` on Windows to confirm green.
+- Flip `experimental: true` → `experimental: false` for
+  `windows-latest` in `.github/workflows/ci-cross-platform.yml:91`.
+- Acceptance criteria (below) become satisfiable in one PR.
+
 ## Acceptance criteria
 
 1. Cross-platform workflow (`ci-cross-platform.yml`) returns SUCCESS
