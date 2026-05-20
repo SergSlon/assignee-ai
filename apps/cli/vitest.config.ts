@@ -16,6 +16,14 @@ export default defineConfig({
     // quarantined or fixed. Never weaken assertions instead (feedback_never_weaken_tests).
     // See docs/explanation/flake-policy.md for the full SLO and quarantine process.
     retry: 1,
+    // Explicitly pin `forks` pool on Windows to attempt fixing the
+    // vitest RPC `onTaskUpdate` heartbeat timeout at teardown (see runs
+    // 26155431035, 26156180682, 26183888000, 26188347821). POSIX cells
+    // keep vitest's default pool (also `forks` in 3.x; `threads` breaks
+    // tests that call `process.chdir()` because worker_threads disallow
+    // it). The spread-pattern only inserts the key on Windows so POSIX
+    // behaviour is unchanged.
+    ...(process.platform === "win32" && { pool: "forks" as const }),
     // Story 48.8 originally set `maxConcurrency: 1` here to work around a
     // coverage-v8 ENOENT race on `coverage/.tmp/coverage-*.json` at
     // vitest@3.1.x + @vitest/coverage-v8. Removed 2026-04-18 (Wave K2) after
