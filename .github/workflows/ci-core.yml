@@ -168,17 +168,34 @@ jobs:
         # Script validates schema, ID uniqueness, dedup, and conflict checks.
         run: npx tsx scripts/validate-bp-rules.ts
 
-      - name: Run tests with coverage
+      - name: Run tests with coverage (POSIX cells)
         # `--continue`: keep scheduling downstream packages' test:coverage
         # tasks even if an earlier package fails. Without this, turbo stops
         # at the first failing package and any failures in later packages
-        # stay hidden. Particularly important for the Windows long-tail
-        # sweep documented in `_backlog/cross-platform-windows-residual-failures.md`:
-        # vitest reports all failures within a file/package, but turbo
-        # masks failures in packages it never reaches. The workflow's exit
-        # code is still non-zero on any package failure (turbo exits with
-        # the aggregate failure status), so this does not weaken CI.
+        # stay hidden. The workflow's exit code is still non-zero on any
+        # package failure (turbo exits with the aggregate failure status),
+        # so this does not weaken CI.
+        #
+        # Coverage is gated on POSIX cells because Windows + v8 coverage
+        # instrumentation triggers a deterministic `[vitest-worker]:
+        # Timeout calling "onTaskUpdate"` failure on `@assignee/core`: the
+        # COLLECT phase takes ~15 minutes under instrumented workers on
+        # NTFS, exceeding vitest's internal RPC heartbeat. All tests still
+        # pass (9866/9866) — only the IPC layer dies. The canonical coverage
+        # cell is ubuntu-latest + node 22 (see `inputs.publish-coverage`
+        # below); Windows coverage is unused, so dropping it costs nothing
+        # and unblocks the Windows-green check needed for `experimental: false`.
+        if: inputs.os != 'windows-latest'
         run: npx turbo test:coverage --continue
+
+      - name: Run tests without coverage (Windows cell)
+        # Windows runs `test` instead of `test:coverage` to bypass the v8
+        # coverage instrumentation that triggers vitest's RPC `onTaskUpdate`
+        # timeout (see "Run tests with coverage (POSIX cells)" comment).
+        # `--continue` still applies so every package's failure surface is
+        # enumerated in one run.
+        if: inputs.os == 'windows-latest'
+        run: npx turbo test --continue
 
       # ── Coverage aggregation only runs on the canonical cell.
       # Running it on every matrix cell wastes CI minutes and produces
