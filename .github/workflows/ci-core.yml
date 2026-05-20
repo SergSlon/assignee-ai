@@ -169,7 +169,16 @@ jobs:
         run: npx tsx scripts/validate-bp-rules.ts
 
       - name: Run tests with coverage
-        run: npx turbo test:coverage
+        # `--continue`: keep scheduling downstream packages' test:coverage
+        # tasks even if an earlier package fails. Without this, turbo stops
+        # at the first failing package and any failures in later packages
+        # stay hidden. Particularly important for the Windows long-tail
+        # sweep documented in `_backlog/cross-platform-windows-residual-failures.md`:
+        # vitest reports all failures within a file/package, but turbo
+        # masks failures in packages it never reaches. The workflow's exit
+        # code is still non-zero on any package failure (turbo exits with
+        # the aggregate failure status), so this does not weaken CI.
+        run: npx turbo test:coverage --continue
 
       # ── Coverage aggregation only runs on the canonical cell.
       # Running it on every matrix cell wastes CI minutes and produces
