@@ -68,9 +68,9 @@
     "lint": "eslint src --max-warnings 0"
   },
   "dependencies": {
-    "@ai-sdk/amazon-bedrock": "^4.0.106",
+    "@ai-sdk/amazon-bedrock": "^4.0.107",
     "@ai-sdk/anthropic": "^3.0.78",
-    "@ai-sdk/google": "^3.0.74",
+    "@ai-sdk/google": "^3.0.75",
     "@ai-sdk/openai": "^3.0.64",
     "@assignee/best-practices": "workspace:*",
     "@assignee/core": "workspace:*",
