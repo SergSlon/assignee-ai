@@ -4,7 +4,7 @@
 # intent files and `assignee apply` when those PRs are merged to main.
 #
 # Prerequisites:
-#   1. Install assignee.ai: npm install -g assignee
+#   1. Install assignee.ai: npm install -g @assignee/cli
 #      (Requires v0.2+ published tarball — assignee.ai is private pre-publish;
 #      this example activates once `release.yml.disabled` runs and the package
 #      lands on npm. Until then, build from source and use `pnpm link --global`.)

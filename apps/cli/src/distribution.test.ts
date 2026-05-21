@@ -12,8 +12,8 @@ describe("Distribution package configuration", () => {
     readFileSync(resolve(cliRoot, "package.json"), "utf-8"),
   );
 
-  it("has npm package name 'assignee'", () => {
-    expect(pkg.name).toBe("assignee");
+  it("has npm package name '@assignee/cli'", () => {
+    expect(pkg.name).toBe("@assignee/cli");
   });
 
   it("is publish-ready: private:false + publishConfig.access=public + provenance", () => {
