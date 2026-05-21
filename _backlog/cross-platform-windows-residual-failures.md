@@ -306,3 +306,80 @@ discovery pattern next time, the very first cross-platform sweep
 should run `pnpm -r test:coverage --continue` (or equivalent) locally
 in a Windows VM / WSL to enumerate ALL failures up front, then bundle
 them into a single fix wave.
+
+## 2026-05-21 final closeout — Windows experimental:true permanent
+
+After PRs #133-#137 landed (turbo --continue, audit-log skipIf,
+drop coverage on Windows, memory-recorder skipIf, forks pool pin),
+4 verification dispatches of `ci-cross-platform.yml` on
+`windows-latest` produced the same outcome:
+
+- **Test signal**: 9866 tests PASS across all 4 packages
+  (391 test files passed, 1 skipped, 0 failed).
+- **CI exit code**: non-zero — the vitest worker→main RPC
+  `onTaskUpdate` heartbeat times out at teardown after all tests
+  have completed. Reproduced on runs 26155431035, 26156180682,
+  26183888000, 26188347821, 26190478476.
+
+### Diagnosis (final)
+
+The IPC heartbeat timeout is **intrinsic** to vitest 3.2.4 +
+Windows GitHub Actions runners — not a test bug. Evidence:
+
+- The error fires AFTER all 9866 user assertions resolve green.
+- Switching `pool: forks` on Windows was structurally a no-op
+  (vitest 3.x default IS `forks`; verified in 3.2.4 source).
+  POSIX (macOS/Ubuntu) keeps the default; only the Windows
+  spread-key inserts the explicit pin.
+- Coverage instrumentation aggravates it but does NOT cause it:
+  PR #135 dropped coverage on Windows; the timeout still fires.
+- The heartbeat is hardcoded inside vitest at 60 s and is not
+  exposed via config.
+
+The two viable upstream fixes are out of scope for v0.1.x:
+
+1. **`vmForks` or `singleFork` pool** on Windows — slower wall
+   time but eliminates per-worker IPC entirely.
+2. **Upgrade vitest** to a version that lifts or relaxes the
+   60 s `onTaskUpdate` ceiling (track upstream issue).
+
+### Decision
+
+**`experimental: true` for `windows-latest` stays permanent**
+(`.github/workflows/ci-cross-platform.yml:91`). The matrix cell
+continues to run on every push; its red/green is informational
+only and does not block merges. User authorisation quote
+(2026-05-21):
+
+> "Accept Windows experimental:true permanently. Document the
+> finding in the backlog. CI keeps the experimental flag. All
+> 9866 tests verified PASS on Windows — that signal is
+> preserved; only the IPC-teardown false positive is tolerated.
+> Phase A backlog + Phase B test fixes + Phase C-prep PRs all
+> stand as net-positive cross-platform improvements. Stops
+> the spend."
+
+### Re-open trigger
+
+Lift the experimental flag once **either** condition is met:
+
+- Vitest releases a version where Windows CI runs to clean
+  exit on this repo (verified by a clean `ci-cross-platform.yml`
+  run with no `onTaskUpdate` timeout).
+- A focused investigation lands `vmForks` or `singleFork` for
+  Windows with acceptable wall-clock cost (< 2× the current
+  Windows lane).
+
+### Net delivered in the 2026-05-20/21 sweep (PRs #133-#137)
+
+- Full Windows failure enumeration capability
+  (`turbo --continue`) — useful beyond this incident.
+- 3 genuine Windows-specific test bugs fixed (NTFS chmod
+  no-op × 2 + memory-recorder perf flake).
+- Windows lane no longer hangs on coverage v8 instrumentation
+  (split test/coverage steps).
+- All 4 vitest configs documented why POSIX should NOT
+  switch to `threads` (`process.chdir()` regression risk).
+
+Acceptance criteria (1) and (2) above are
+**closed-as-deferred**; criteria (3) and (4) are satisfied.
