@@ -39,17 +39,17 @@ Assertion: `expect(pkg.name).toBe("@assignee/cli")` — aligned with package.jso
 
 ### 5. Out-of-scope items verified NOT touched
 
-| Item | Status |
-|------|--------|
-| `bin: { assignee: ... }` | Not touched ✓ |
-| `commander .name("assignee")` in index.ts | Not touched ✓ |
-| `program.name("assignee")` in generate-completions.ts | Not touched ✓ |
-| `~/.config/assignee` paths in config loaders | Not touched ✓ |
-| `~/.cache/assignee` paths | Not touched ✓ |
-| Tag values `{ Value: "assignee" }` in test fixtures | Not touched ✓ |
-| `keywords: ["assignee", ...]` arrays | Not touched ✓ |
-| Homebrew `brew install assignee` references | Not touched ✓ |
-| Root workspace `"name": "assignee-ai"` | Correct, not touched ✓ |
+| Item                                                  | Status                 |
+| ----------------------------------------------------- | ---------------------- |
+| `bin: { assignee: ... }`                              | Not touched ✓          |
+| `commander .name("assignee")` in index.ts             | Not touched ✓          |
+| `program.name("assignee")` in generate-completions.ts | Not touched ✓          |
+| `~/.config/assignee` paths in config loaders          | Not touched ✓          |
+| `~/.cache/assignee` paths                             | Not touched ✓          |
+| Tag values `{ Value: "assignee" }` in test fixtures   | Not touched ✓          |
+| `keywords: ["assignee", ...]` arrays                  | Not touched ✓          |
+| Homebrew `brew install assignee` references           | Not touched ✓          |
+| Root workspace `"name": "assignee-ai"`                | Correct, not touched ✓ |
 
 ### 6. Verification gates passed (from coordinator run)
 
@@ -62,6 +62,7 @@ Assertion: `expect(pkg.name).toBe("@assignee/cli")` — aligned with package.jso
 ## Blind hunter pass (missed update scan)
 
 Searched for remaining `npm install -g assignee` (bare, non-scoped) across all non-dist, non-node_modules files:
+
 - README.md — no bare npm-install reference found ✓
 - docs/how-to/quickstart.md — no bare npm-install reference found ✓
 - docs/tutorials/getting-started.md — no bare npm-install reference found ✓

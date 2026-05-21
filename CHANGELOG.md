@@ -18,6 +18,7 @@ review methodology notes, see
 ## [Unreleased]
 
 ### Changed
+
 - **BREAKING**: CLI package renamed from `assignee` to `@assignee/cli` on
   npm. The bare `assignee` name on the npm registry has been squatted
   since 2017-11-25 (slot reserved by npm policy). The CLI binary stays
