@@ -1,5 +1,5 @@
 {
-  "name": "assignee",
+  "name": "@assignee/cli",
   "private": false,
   "publishConfig": {
     "access": "public",
@@ -58,7 +58,7 @@
     "postbuild": "chmod +x dist/index.js && npx tsx scripts/generate-completions.ts",
     "dev": "tsc --watch",
     "generate-completions": "npx tsx scripts/generate-completions.ts",
-    "prepublishOnly": "cd ../.. && npx turbo build --filter=assignee",
+    "prepublishOnly": "cd ../.. && npx turbo build --filter=@assignee/cli",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "RUN_E2E=1 vitest run --pool=forks --poolOptions.forks.singleFork=true 'src/e2e/e2e-plan-*.test.ts'",

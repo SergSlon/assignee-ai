@@ -6,9 +6,9 @@ branding:
   color: 'blue'
 
 # ──────────────────────────────────────────────────────────────────────────────
-# NOTE: This action installs the `assignee` CLI via `npm install -g assignee`
+# NOTE: This action installs the `assignee` CLI via `npm install -g @assignee/cli`
 # inside the underlying composite actions (`.github/actions/plan/`,
-# `.github/actions/apply/`). Those installs will fail until `assignee` is
+# `.github/actions/apply/`). Those installs will fail until `@assignee/cli` is
 # published to npm — which stays gated behind a manual workflow_dispatch +
 # confirm=YES_PUBLISH trigger while packages remain `"private": true`. Once
 # published, `uses: SergSlon/assignee-ai@v1` from a consumer repo will work

@@ -61,7 +61,7 @@ runs:
     # `.github/workflows/release.yml.disabled` for the publish gate.
     - name: Install assignee CLI
       shell: bash
-      run: npm install -g assignee
+      run: npm install -g @assignee/cli
 
     # ── Read intent ─────────────────────────────────────────────────────────
     - name: Read intent

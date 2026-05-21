@@ -15,6 +15,20 @@ review methodology notes, see
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **BREAKING**: CLI package renamed from `assignee` to `@assignee/cli` on
+  npm. The bare `assignee` name on the npm registry has been squatted
+  since 2017-11-25 (slot reserved by npm policy). The CLI binary stays
+  `assignee` — install with `npm install -g @assignee/cli` and continue
+  typing `assignee plan` / `assignee apply` etc. Config paths
+  (`~/.config/assignee`) and Homebrew (`brew install assignee`) are
+  unchanged.
+
+---
+
 ## [v1.0.0-rc.1] — 2026-05-17 (EPIC 108 CLOSE — pre-release readiness completion)
 
 Epic 108 closes the pre-release readiness gap analysis. This is a **release candidate**;
