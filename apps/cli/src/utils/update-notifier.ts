@@ -2,15 +2,17 @@
  * Self-update UX wrapper around the `update-notifier` npm package.
  *
  * When Assignee ships on the public npm registry, users who installed
- * globally (`npm i -g assignee`) should see a non-intrusive banner when
- * a newer version is available. We use the canonical `update-notifier`
- * package (Yeoman / Sindre Sorhus) that every major CLI tool relies on.
+ * globally (`npm i -g @assignee/cli`) should see a non-intrusive
+ * banner when a newer version is available. We use the canonical
+ * `update-notifier` package (Yeoman / Sindre Sorhus) that every
+ * major CLI tool relies on.
  *
  * Design constraints:
  *
- * - **No-op pre-publish.** While `apps/cli/package.json` stays
- *   `"private": true`, the npm registry returns 404 for lookups; the
- *   underlying library silently returns and no banner renders.
+ * - **No-op pre-publish.** Until `@assignee/cli` has a published
+ *   version on the npm registry, the registry returns 404 for
+ *   lookups; the underlying library silently returns and no banner
+ *   renders.
  * - **Silenced in non-interactive contexts.** CI logs, piped stdout,
  *   and machine-readable output (`--json` / `-o json`) must stay
  *   pristine for downstream parsers.

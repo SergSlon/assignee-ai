@@ -1,5 +1,12 @@
 # Backlog: RR-5 Security Threat Model — Full Content
 
+> **STATUS: CLOSED 2026-05-18.** RR-5 was completed during Epic 108-A
+> closure; `docs/explanation/security-threat-model.md` is now the
+> v1.0-rc.1 baseline (10 sections covering all six scope items plus
+> review cadence). RELEASE_CHECKLIST.md row RR-5 is `[x]`. This
+> backlog file is retained as audit-trail history; do not re-open
+> unless the threat model needs a v2.0 refresh.
+
 **Source**: Epic 108-A RELEASE_CHECKLIST.md RR-5
 **Effort**: M
 **Blocking for**: `pnpm publish` (v1.0 release)
