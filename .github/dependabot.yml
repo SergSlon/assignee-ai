@@ -37,14 +37,28 @@ updates:
       prefix: "chore(deps)"
       include: "scope"
     groups:
+      # Groups exclude major bumps via `update-types: ["minor", "patch"]`.
+      # Majors come through as individual PRs so breaking-change notes
+      # can be reviewed one library at a time. Verified necessary on
+      # 2026-05-21: PR #122 grouped ESLint 9→10 + vitest 3→4 + safe
+      # minors together; the ESLint-10 major broke
+      # `@typescript-eslint/utils@8.50.0` (uses `FlatESLint`, which
+      # moved in ESLint v10) so the grouped PR was unmergeable because
+      # the breaking majors and the safe minors were entangled.
       aws-sdk:
         patterns:
           - "@aws-sdk/*"
           - "aws-sdk"
+        update-types:
+          - "minor"
+          - "patch"
       ai-sdk:
         patterns:
           - "@ai-sdk/*"
           - "@langchain/*"
+        update-types:
+          - "minor"
+          - "patch"
       dev-deps:
         patterns:
           - "@types/*"
@@ -56,6 +70,9 @@ updates:
           - "@typescript-eslint/*"
           - "prettier"
           - "tsx"
+        update-types:
+          - "minor"
+          - "patch"
 
   # ------------------------------------------------------------------
   # github-actions — keeps SHA-pinned action references current.
