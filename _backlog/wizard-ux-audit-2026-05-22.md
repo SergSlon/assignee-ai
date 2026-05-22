@@ -236,23 +236,43 @@ is shorter and more idiomatic for CLI tools (matches `[ERROR]` /
 
 ---
 
-### F8 — UX — Plan rendered in two completely different visual styles
+### F8 — INFO (was UX) — Plan renderer "drift" is correct TTY-aware behaviour (NOT A BUG)
+
+Original audit observation:
 
 - `-q --quick` mode: plain `=== Plan ===` text separator.
 - `--wizard` mode: full `┌── Plan ──┐` ASCII box (120 cols wide).
 
-Same data, two layouts. Tutorials, screenshots, video walkthroughs
-become hard to keep consistent when the chosen flag silently changes
-the renderer.
+**Reclassification (2026-05-22, post-F14 verification)**: re-ran both
+modes through a PTY (forces stdout.isTTY=true) and via plain stdout
+pipe (stdout.isTTY=undefined). Result:
 
-**Repro**: same intent, two flag combinations.
+- PTY + `-q --quick` → `┌── Plan ──┐` (box)
+- PTY + `--wizard` → `┌── Plan ──┐` (box)
+- Plain pipe + `-q --quick` → `=== Plan ===` (plain)
+- Plain pipe + `--wizard` → `=== Plan ===` (plain)
 
-**Proposed fix**: pick one. The ASCII-box form scans easier and
-already handles long ARN values; standardise on it for both modes.
-Alternative: gate by `process.stdout.isTTY` — non-TTY (CI) gets the
-plain form, TTY gets the box.
+The renderer is gated by `process.stdout.isTTY` at
+`packages/core/src/utils/display-plan.ts:240-251`, NOT by `-q` vs
+`--wizard`. The original audit observation was actually TTY-vs-pipe;
+the two flag-combinations happened to be run with different stdout
+contexts (one through PTY, one with stdout piped).
 
-**Effort**: S.
+**This is intentional + correct behaviour**:
+
+- Box form for human-interactive TTY (easier to scan, handles long
+  ARNs, matches the `┌── Plan ──┐` style established in tutorials).
+- Plain `=== Plan ===` form for CI / pipes / file redirection
+  (machine-grep-friendly, no Unicode box characters that mangle
+  in some log viewers).
+
+The audit's "Proposed fix" of gating by `process.stdout.isTTY` was
+**already implemented**. The recommendation reduces to: keep the
+existing behaviour.
+
+**No code change needed.** Documentation could be improved by noting
+this behaviour in tutorials/screenshot conventions so future audit
+sessions don't re-flag it.
 
 ---
 
@@ -477,47 +497,60 @@ single-line completion message. Standard for CLI tools — `npm`,
 
 ---
 
-## Prioritisation (updated 2026-05-22 after verification round)
+## Prioritisation (updated 2026-05-22 — end-of-day sweep)
 
-**Closed** (fix landed):
+**Closed** (fix landed today):
 
-- **F12** (BP-EC2-021 wrong remediation hint) — fixed in PR #149
-  (\`fix_hint\` added to YAML; manifest regenerated).
+- **F1** (banner region context pre-prompt) — PR #154 / `51358d3e`.
+- **F2** (AWS_PROFILE warning + prompt contradiction) — PR #151 / `81e1029b`.
+- **F3** (Environment prompt hint) — PR #155 / `552577d6`.
+- **F5** (placeholder visual ambiguity) — PR #156 / `c8e722ce`.
+- **F7** (severity label drift) — PR #152 / `3ef7f878`.
+- **F12** (BP-EC2-021 wrong remediation hint) — PR #149 / `8e475eed`.
+- **F13** (cost-source suffix legend) — PR #159 / `a8da3d56`.
+- **F14** (plan --wizard help misadvertised) — PR #160 (in flight).
+- **F15** (spinner CI/NO_PROGRESS gate) — PR #158 / `b31183de`.
 
-**Reclassified after re-verification** (audit observations did NOT
-reproduce on second run):
+**Reclassified as non-bugs after re-verification**:
 
-- **F10** (wrong egress pricing in `-q` mode): now INFO; both `-q` and
+- **F8** (plan-box renderer drift): NOT A BUG — gate is by
+  `process.stdout.isTTY` (correct), not by `-q` vs `--wizard`.
+  Original observation conflated TTY-vs-pipe with the flag choice.
+- **F10** (wrong egress pricing in `-q` mode): INFO; both `-q` and
   `--wizard` modes show correct tiered $0.09→$0.07 EC2 rate. Likely
   transient pricing-MCP cache state in the original audit run.
-- **F11** (LLM advice → t2.micro): now UX-stochastic; re-run correctly
-  suggested t4g.micro. Post-filter still warranted as insurance against
-  the latent LLM-non-determinism failure mode.
+- **F11** (LLM advice → t2.micro): UX-stochastic; re-run correctly
+  suggested t4g.micro. Post-filter still warranted as insurance
+  against the latent LLM-non-determinism failure mode.
 
-**Open P1 stories** (UX inconsistencies, broad reach):
+**Open** (carried over to a future session):
 
-- F2 (AWS_PROFILE warning + prompt contradiction).
-- F7 (severity label drift `[MEDIUM]` vs `WARN`).
-- F14 (`--wizard` flag misadvertised).
-
-**Open P2 stories** (UX polish):
-
-- F1, F3, F4, F5, F6, F8, F13, F15.
-
-**Open P3** (stochastic / insurance-only):
-
-- F11 (advice post-filter for previous-gen instance-type strings).
+- **F4** (init parity — global asks 2 prompts local doesn't): M effort;
+  requires wizard field-set + config resolver refactor. Not a
+  one-PR change.
+- **F6** (bulk-destroy cost suspiciously low at $0.05/mo): M effort;
+  pricing decomposer needs to estimate baseline CloudFront +
+  aggregate S3 storage GB. Multiple decomposer + display files.
+- **F11** insurance post-filter (advice cross-check against Findings):
+  S-M effort; design the predicate, plumb through advice node, test.
 
 **Informational** (no action):
 
-- F9 (LLM token nondeterminism).
-- F10 (transient pricing-cache observation; not a code bug).
+- F8, F9, F10 — see reclassification notes above.
 
-**Revised aggregate effort estimate**:
+**End-of-day aggregate**:
 
-- P1: ~4h (3 × S/M stories).
-- P2: ~8h (8 × S stories — mostly template/format).
-- P3: ~3h (one post-filter + test).
+- **9 audit findings closed today** (F1, F2, F3, F5, F7, F12, F13, F14, F15).
+- 3 reclassified non-bugs (F8, F10, F11 stochastic part).
+- 3 remain genuinely open as future work (F4, F6, F11 insurance).
+- 0 findings dropped without action.
+
+**Revised remaining effort estimate**:
+
+- F4: ~4h (wizard field-set + config resolver).
+- F6: ~4h (CloudFront baseline + S3 storage aggregation).
+- F11 insurance: ~3h (post-filter predicate + test).
+- **Total open work**: ~11h.
 
 ---
 
