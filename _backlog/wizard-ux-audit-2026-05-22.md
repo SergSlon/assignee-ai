@@ -274,20 +274,36 @@ for canned intents.
 
 ---
 
-### F10 — BUG — Wrong egress pricing tier shown in `-q --quick` mode
+### F10 — INFO (was BUG) — Wrong egress pricing tier shown in `-q --quick` mode (NON-REPRODUCING)
 
-- `-q --quick` output: `Data transfer out  $0.0230/GB`
+- Original audit observation (`-q --quick`): `Data transfer out  $0.0230/GB`
 - `--wizard` output: `Data transfer out  $0.090/GB up to 10 TB,
 $0.085/GB next 40 TB, $0.070/GB next 100 TB, … (tiered)`
 
-The first form ($0.023/GB) is **wrong for EC2** — that's S3's flat
-data-transfer rate. EC2 internet egress is the tiered $0.09 → $0.07
-that the second form shows.
+**Reclassification (2026-05-22, post-PR #149 verification)**: re-ran
+both modes on the same commit (post-build). **Both modes now show the
+correct tiered `$0.090/GB up to 10 TB, ...` output.** The original
+observation appears to have been a transient pricing-MCP cache-state
+artefact, not a code bug — both `-q` and `--wizard` flow through the
+same EC2 decomposer (`packages/core/src/pricing/decomposers/ec2.ts:120`)
+which uses the identical `DATA_TRANSFER`-service filter as
+`packages/core/src/pricing/decomposers/s3.ts:110`. Same filter, same
+returned record, same tier-ladder rendering.
 
-The decomposer or display helper is collapsing the EC2 tiered
-structure down to S3's flat rate when in `-q` mode. **Real bug —
-affects user trust in plan costs and could cause significant
-underestimation for high-traffic EC2 workloads.**
+The earlier S3-flat-rate display was likely caused by:
+
+1. Pricing MCP returning a partial/cached response with only one tier.
+2. A transient race in concurrent decomposer queries.
+3. OR a misread of the captured terminal output.
+
+**Suggested follow-up** (not load-bearing): add a regression test that
+runs the EC2 pricing decomposer twice in succession against a known
+fixture and asserts both calls return tiered output (catches whichever
+caching layer was inconsistent). File as P3 — not actionable today
+without the original transient state captured.
+
+The audit's claim that `-q` mode was collapsing tiered structure
+to S3's rate has been retracted; both modes render identically.
 
 **Repro**:
 
@@ -309,9 +325,9 @@ not $0.023/GB).
 
 ---
 
-### F11 — BUG — Advice CONTRADICTS Findings in the same plan output
+### F11 — UX (was BUG) — Advice CONTRADICTS Findings in the same plan output (STOCHASTIC)
 
-Advice block:
+Advice block (in the original audit run):
 
 ```
 • Consider using a smaller instance type if the workload allows,
@@ -326,14 +342,23 @@ WARN   EC2 instance should use current generation instance type
        security features, and will eventually be deprecated...
 ```
 
-**t2.\* is previous-gen.** The LLM-generated Advice is recommending
-the very thing the structured BP rules in the same output tell you
-to avoid.
+**t2.\* is previous-gen.** The LLM-generated Advice was recommending
+the very thing the structured BP rules in the same output told the
+user to avoid.
 
-Root cause: Advice is LLM-generated (free-text suggestions), Findings
-are deterministic rule output. No cross-check pipeline runs the
-Advice past the BP-rule predicates. The LLM is free to suggest
-whatever it likes.
+**Reclassification (2026-05-22, post-PR #149 verification)**: re-ran
+the same intent. Advice on the re-run correctly recommends
+**t4g.micro** (current-gen ARM) — the contradiction did not
+reproduce. **Stochastic — LLM output non-determinism.** The
+contradiction is a latent failure mode (LLM occasionally suggests
+t2.micro / m1.\* / c1.\* / old-gen), not a guaranteed bug per plan.
+
+Root cause is still real: Advice is LLM-generated (free-text), Findings
+are deterministic rule output, and there is no cross-check pipeline
+between them. **The fix is still warranted as insurance — a post-filter
+that rejects Advice strings matching previous-gen instance-type
+patterns (`^t2\.`, `^t1\.`, `^m1\.`, `^c1\.`, `^c3\.`, `^m3\.`, etc.)
+when an `ec2-current-generation` Finding is also emitted.**
 
 **Repro**: any `infra plan` call against an EC2 intent will surface
 this contradiction frequently (LLM is biased toward t2.micro because
@@ -452,33 +477,47 @@ single-line completion message. Standard for CLI tools — `npm`,
 
 ---
 
-## Prioritisation
+## Prioritisation (updated 2026-05-22 after verification round)
 
-**File as P0 stories** (bugs affecting user trust):
+**Closed** (fix landed):
 
-- F10 (wrong egress pricing in `-q` mode).
-- F11 (advice contradicts findings).
-- F12 (wrong remediation hint for snapshot-backup rule).
+- **F12** (BP-EC2-021 wrong remediation hint) — fixed in PR #149
+  (\`fix_hint\` added to YAML; manifest regenerated).
 
-**File as P1 stories** (UX inconsistencies, broad reach):
+**Reclassified after re-verification** (audit observations did NOT
+reproduce on second run):
+
+- **F10** (wrong egress pricing in `-q` mode): now INFO; both `-q` and
+  `--wizard` modes show correct tiered $0.09→$0.07 EC2 rate. Likely
+  transient pricing-MCP cache state in the original audit run.
+- **F11** (LLM advice → t2.micro): now UX-stochastic; re-run correctly
+  suggested t4g.micro. Post-filter still warranted as insurance against
+  the latent LLM-non-determinism failure mode.
+
+**Open P1 stories** (UX inconsistencies, broad reach):
 
 - F2 (AWS_PROFILE warning + prompt contradiction).
 - F7 (severity label drift `[MEDIUM]` vs `WARN`).
 - F14 (`--wizard` flag misadvertised).
 
-**File as P2 stories** (UX polish):
+**Open P2 stories** (UX polish):
 
-- F1, F3, F4, F5, F8, F13, F15.
+- F1, F3, F4, F5, F6, F8, F13, F15.
+
+**Open P3** (stochastic / insurance-only):
+
+- F11 (advice post-filter for previous-gen instance-type strings).
 
 **Informational** (no action):
 
 - F9 (LLM token nondeterminism).
+- F10 (transient pricing-cache observation; not a code bug).
 
-**Aggregate effort estimate**:
+**Revised aggregate effort estimate**:
 
-- P0: ~6h (3 × S/M stories).
 - P1: ~4h (3 × S/M stories).
-- P2: ~8h (7 × S stories — mostly template/template-format).
+- P2: ~8h (8 × S stories — mostly template/format).
+- P3: ~3h (one post-filter + test).
 
 ---
 
