@@ -244,12 +244,20 @@ jobs:
   # --------------------------------------------------------------------------
   # Publish to npm — gated on ASSIGNEE_RELEASE_PUBLISH=1 AND
   # confirm=YES_PUBLISH. Uses `pnpm -r publish` so `workspace:*` specs are
-  # rewritten to real versions. npm provenance is attached via the OIDC
-  # identity that setup-node exposes through the registry-url + node-version
-  # step; this job does not need a separate id-token: write block.
+  # rewritten to real versions. npm provenance attestation is attached via
+  # the OIDC `id-token: write` permission declared at the job level below;
+  # `pnpm publish --provenance` reads the token from the GH Actions OIDC
+  # provider and uses it for the sigstore attestation.
+  #
+  # Earlier comment claimed "this job does not need a separate id-token:
+  # write block" — that was WRONG. Without the job-level permissions block,
+  # `--provenance` silently emits no attestation (verified post-v0.1.0:
+  # `https://registry.npmjs.org/-/npm/v1/attestations/<pkg>@<ver>`
+  # returned 0 bundles). The block below is the actual fix.
   #
   # DRY-RUN default: this step is SKIPPED unless ASSIGNEE_RELEASE_PUBLISH=1
-  # is set. The acquirer flips this env var post-go-decision.
+  # is set AND confirm=YES_PUBLISH. The acquirer flips this env var
+  # post-go-decision.
   # --------------------------------------------------------------------------
   publish-npm:
     needs: publish-dry-run
@@ -260,6 +268,12 @@ jobs:
     env:
       ASSIGNEE_RELEASE_PUBLISH: ${{ vars.ASSIGNEE_RELEASE_PUBLISH }}
     runs-on: ubuntu-latest
+    permissions:
+      # Required for `pnpm publish --provenance` to obtain an OIDC token
+      # from GitHub Actions and pass it through to npm + sigstore. Without
+      # this, --provenance is a silent no-op.
+      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
