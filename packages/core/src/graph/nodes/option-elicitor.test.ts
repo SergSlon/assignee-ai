@@ -1452,16 +1452,38 @@ describe("optionElicitorNode — parallel pricing + discovery fan-out (Story 9.1
       mockSpinner as unknown as ReturnType<typeof spinner>,
     );
 
-    vi.mocked(text).mockResolvedValueOnce("my-resource");
-    vi.mocked(select).mockResolvedValueOnce("false");
-    vi.mocked(select).mockResolvedValueOnce("sm");
-    vi.mocked(confirm).mockResolvedValueOnce(false);
+    // F15 fix (2026-05-22): parallel spinner is gated by
+    // `shouldShowSpinner()` from display-output/spinner.ts, which
+    // returns false in non-TTY / CI / NO_PROGRESS contexts. Tests
+    // run with stdout.isTTY undefined by default and may set CI=1.
+    // To exercise the spinner contract this test asserts, stub both
+    // for the duration of the test, restoring in `finally`.
+    const origIsTTY = process.stdout.isTTY;
+    const origCI = process.env["CI"];
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: true,
+      configurable: true,
+    });
+    delete process.env["CI"];
 
-    await optionElicitorNode(makeState());
+    try {
+      vi.mocked(text).mockResolvedValueOnce("my-resource");
+      vi.mocked(select).mockResolvedValueOnce("false");
+      vi.mocked(select).mockResolvedValueOnce("sm");
+      vi.mocked(confirm).mockResolvedValueOnce(false);
 
-    // Spinner should show "Preparing your wizard…" and stop with "Ready"
-    expect(mockSpinner.start).toHaveBeenCalledWith("Preparing your wizard…");
-    expect(mockSpinner.stop).toHaveBeenCalledWith("Ready");
+      await optionElicitorNode(makeState());
+
+      // Spinner should show "Preparing your wizard…" and stop with "Ready"
+      expect(mockSpinner.start).toHaveBeenCalledWith("Preparing your wizard…");
+      expect(mockSpinner.stop).toHaveBeenCalledWith("Ready");
+    } finally {
+      Object.defineProperty(process.stdout, "isTTY", {
+        value: origIsTTY,
+        configurable: true,
+      });
+      if (origCI !== undefined) process.env["CI"] = origCI;
+    }
   });
 });
 
