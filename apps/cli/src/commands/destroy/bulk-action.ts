@@ -200,12 +200,43 @@ function sortByDestroyOrder(resources: ManagedResource[]): ManagedResource[] {
  * resources in the plan. Rows with "N/A" or non-numeric values count
  * as $0 (no Pricing MCP enrichment yet — separate story).
  */
+/**
+ * F6 fix (2026-05-23): detect per-unit "rate" cost strings (e.g.
+ * `$0.0230/GB-month`, `$0.0004/request`) and exclude them from the
+ * sum — they're variable, not fixed monthly amounts. Previously
+ * `$0.0230/GB-month` was treated as `$0.023/mo` after the
+ * `[^0-9.]` strip, producing absurdly-low totals (the audit
+ * captured `$0.05/month` for 2×S3 buckets whose actual storage
+ * could be GBs to TBs).
+ *
+ * After this fix, per-unit rates are skipped and a one-line
+ * footnote tells the user that the sum is a LOWER BOUND.
+ *
+ * @see _backlog/wizard-ux-audit-2026-05-22.md F6
+ */
+const PER_UNIT_RATE_PATTERNS = [
+  /\/GB(-month|-mo)?\b/i, // $X/GB-month, $X/GB
+  /\/req(uests?)?\b/i, // $X/request, $X/req
+  /\/(1000|1k)\s*reqs?\b/i, // $X/1000 requests
+  /\/(call|invocation|exec)s?\b/i,
+];
+
+function isPerUnitRate(cost: string): boolean {
+  return PER_UNIT_RATE_PATTERNS.some((re) => re.test(cost));
+}
+
 function sumEstimatedCosts(resources: ManagedResource[]): string {
   let total = 0;
   let hasAny = false;
+  let hasExcludedVariable = false;
   for (const r of resources) {
     const cost = r.estimatedMonthlyCost;
     if (!cost || cost === "N/A") continue;
+    if (isPerUnitRate(cost)) {
+      // F6: skip variable per-unit rates; they're a rate, not a total.
+      hasExcludedVariable = true;
+      continue;
+    }
     // Strip leading "$" and parse numeric part
     const numeric = parseFloat(cost.replace(/^\$/, "").replace(/[^0-9.]/g, ""));
     if (!Number.isNaN(numeric)) {
@@ -213,8 +244,17 @@ function sumEstimatedCosts(resources: ManagedResource[]): string {
       hasAny = true;
     }
   }
-  if (!hasAny) return "N/A";
-  return `$${total.toFixed(2)}/month`;
+  if (!hasAny && !hasExcludedVariable) return "N/A";
+  // F6: when at least one resource had a variable rate excluded, label
+  // the sum as a lower bound so users know it's not the full picture.
+  const prefix = hasExcludedVariable ? "≥ " : "";
+  const suffix = hasExcludedVariable
+    ? " (variable per-unit rates excluded — actual cost depends on usage)"
+    : "";
+  if (!hasAny) {
+    return `≥ $0.00/month${suffix}`;
+  }
+  return `${prefix}$${total.toFixed(2)}/month${suffix}`;
 }
 
 // ── Typed account-ID confirmation ─────────────────────────────────────

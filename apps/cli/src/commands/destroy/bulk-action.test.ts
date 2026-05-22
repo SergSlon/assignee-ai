@@ -213,6 +213,66 @@ describe("runBulkDestroyAction", () => {
       expect(out).toContain("$3.00");
     });
 
+    // F6 fix (2026-05-23): per-unit rate costs (e.g. "$0.0230/GB-month")
+    // are no longer treated as flat monthly amounts. Previously the
+    // parser stripped non-numeric chars and summed `0.0230 + 0.0230 ≈
+    // $0.05/month` for 2×S3 buckets whose actual storage could be GBs
+    // to TBs. After the fix, per-unit rates are excluded from the sum
+    // and the result is labelled "≥ $X/month (variable per-unit rates
+    // excluded ...)".
+    it("F6: per-unit rate costs ('$0.0230/GB-month') excluded from sum + 'variable rates excluded' footnote", async () => {
+      // Two S3 buckets whose cost is reported as a per-GB rate (no
+      // storage measurement). Previously summed to ~$0.05; now should
+      // produce "≥ $0.00" + the footnote.
+      const S3_BUCKET_RATE_ONLY = {
+        ...S3_BUCKET,
+        arn: "arn:aws:s3:::rate-bucket-1",
+        primaryIdentifier: "rate-bucket-1",
+        estimatedMonthlyCost: "$0.0230/GB-month",
+      };
+      const S3_BUCKET_RATE_ONLY_2 = {
+        ...S3_BUCKET,
+        arn: "arn:aws:s3:::rate-bucket-2",
+        primaryIdentifier: "rate-bucket-2",
+        estimatedMonthlyCost: "$0.0230/GB-month",
+      };
+      mockFetchManagedResources.mockResolvedValue([
+        S3_BUCKET_RATE_ONLY,
+        S3_BUCKET_RATE_ONLY_2,
+      ]);
+      const runBulkDestroyAction = await getSubject();
+
+      await runBulkDestroyAction({});
+
+      const out = stdoutCapture.output();
+      // Must NOT contain the buggy "$0.05/month" sum or any sum that
+      // treats the rate as if it were a total.
+      expect(out).not.toMatch(/\$0\.04\/month|\$0\.05\/month/);
+      // Should label the sum as a lower bound with the variable-rate
+      // footnote.
+      expect(out).toContain("≥ ");
+      expect(out).toContain("variable per-unit rates excluded");
+    });
+
+    it("F6: mixed fixed + per-unit costs sum only the fixed amounts, label as lower bound", async () => {
+      const FIXED_LAMBDA = { ...LAMBDA_FN }; // $0.50/month
+      const RATE_S3 = {
+        ...S3_BUCKET,
+        arn: "arn:aws:s3:::mixed-rate-bucket",
+        primaryIdentifier: "mixed-rate-bucket",
+        estimatedMonthlyCost: "$0.0230/GB-month",
+      };
+      mockFetchManagedResources.mockResolvedValue([FIXED_LAMBDA, RATE_S3]);
+      const runBulkDestroyAction = await getSubject();
+
+      await runBulkDestroyAction({});
+
+      const out = stdoutCapture.output();
+      // Fixed part = $0.50; rate excluded. Total should be "≥ $0.50".
+      expect(out).toContain("≥ $0.50/month");
+      expect(out).toContain("variable per-unit rates excluded");
+    });
+
     it("shows exclusion list when some resources are excluded", async () => {
       mockFetchManagedResources.mockResolvedValue([S3_BUCKET, EXCLUDED_POLICY]);
       const runBulkDestroyAction = await getSubject();
