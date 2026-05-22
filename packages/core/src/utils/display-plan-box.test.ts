@@ -719,7 +719,7 @@ describe("renderPlanBox — with BP findings", () => {
     restore();
 
     const output = chunks.join("");
-    expect(output).toContain("[CRITICAL]");
+    expect(output).toContain("[CRIT]");
     expect(output).toContain("1 critical");
   });
 

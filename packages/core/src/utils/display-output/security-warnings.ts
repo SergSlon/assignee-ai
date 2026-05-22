@@ -7,6 +7,16 @@
  */
 import type { SecurityFinding } from "../../types/fix-finding.js";
 
+// F7 fix (2026-05-22): use the same severity-label vocabulary as
+// `display-findings.ts` so users see consistent words across modes.
+// CRITICAL \u2192 CRIT, MEDIUM \u2192 WARN; HIGH and INFO unchanged.
+const SEVERITY_LABEL: Record<string, string> = {
+  CRITICAL: "CRIT",
+  HIGH: "HIGH",
+  MEDIUM: "WARN",
+  INFO: "INFO",
+};
+
 export function renderSecurityWarnings(
   resourceArn: string,
   findings: SecurityFinding[],
@@ -17,7 +27,8 @@ export function renderSecurityWarnings(
   for (const finding of findings) {
     const icon =
       finding.severity === "CRITICAL" ? "\uD83D\uDD34" : "\uD83D\uDFE1";
-    process.stdout.write(`  ${icon} [${finding.severity}] ${finding.title}\n`);
+    const label = SEVERITY_LABEL[finding.severity] ?? finding.severity;
+    process.stdout.write(`  ${icon} [${label}] ${finding.title}\n`);
     if (finding.recommendation) {
       process.stdout.write(`     \u2192 ${finding.recommendation}\n`);
     }

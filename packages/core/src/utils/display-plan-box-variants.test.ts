@@ -137,7 +137,7 @@ describe("renderPlanBox with unified findings — non-TTY", () => {
     expect(output).toContain("1 blocking");
     expect(output).toContain("1 medium");
     expect(output).toContain("[BLOCK] S3 public access");
-    expect(output).toContain("[MEDIUM] S3 lifecycle");
+    expect(output).toContain("[WARN] S3 lifecycle");
     // No ANSI escape codes in non-TTY mode
     expect(output).not.toMatch(/\x1b\[[0-9;]*m/);
   });
@@ -376,8 +376,8 @@ describe("renderPlanBox with BP findings — non-TTY", () => {
     const output = chunks.join("");
     expect(output).toContain("1 critical");
     expect(output).toContain("1 medium");
-    expect(output).toContain("[CRITICAL] Enable S3 Default Encryption");
-    expect(output).toContain("[MEDIUM] Enable S3 Bucket Versioning");
+    expect(output).toContain("[CRIT] Enable S3 Default Encryption");
+    expect(output).toContain("[WARN] Enable S3 Bucket Versioning");
     // Remediation hints shown
     expect(output).toContain("Configure ServerSideEncryptionConfiguration");
     // No ANSI escape codes in non-TTY mode

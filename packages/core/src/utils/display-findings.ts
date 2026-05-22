@@ -128,14 +128,19 @@ export function formatFindings(findings: BPFinding[] | undefined): string {
       const skipped = f.userSkipped ? " (skipped)" : "";
       const suffix = `${userChoice}${skipped}`;
 
+      // F7 fix (2026-05-22): use the SAME label vocabulary as the TTY
+      // branch above so users see consistent severity words across modes.
+      // Brackets stay (machine-parseable for CI log scanners); only the
+      // word inside changes: CRITICAL → CRIT, MEDIUM → WARN, matching the
+      // TTY output labels.
       let severityLine: string;
       if (f.blocking) severityLine = `  [BLOCK] ${f.title}${suffix}`;
       else if (f.severity === Severity.CRITICAL)
-        severityLine = `  [CRITICAL] ${f.title}${suffix}`;
+        severityLine = `  [CRIT] ${f.title}${suffix}`;
       else if (f.severity === Severity.HIGH)
         severityLine = `  [HIGH] ${f.title}${suffix}`;
       else if (f.severity === Severity.MEDIUM)
-        severityLine = `  [MEDIUM] ${f.title}${suffix}`;
+        severityLine = `  [WARN] ${f.title}${suffix}`;
       else severityLine = `  [INFO] ${f.title}${suffix}`;
 
       // Story 43.1: Consequence/risk line (non-TTY, truncated at word boundary)

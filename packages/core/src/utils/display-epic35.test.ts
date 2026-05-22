@@ -127,7 +127,7 @@ describe("Epic 35 — Actionable Findings test matrix", () => {
           s3LifecycleFinding,
           s3VersioningInfoFinding,
         ]);
-        expect(result).toContain("[MEDIUM] Configure S3 Lifecycle Rules");
+        expect(result).toContain("[WARN] Configure S3 Lifecycle Rules");
         expect(result).toContain("[INFO] Enable Versioning for Backup");
         // Hints use -> prefix in non-TTY
         const lines = result.split("\n");
