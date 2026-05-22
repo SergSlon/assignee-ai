@@ -315,3 +315,28 @@ but the override eliminates the vulnerability class across the dependency tree.
 **Reviewed**: 2026-05-08 — coordinator (Wave C Phase 1 PR #24 CI surfaced the
 advisory; mitigation matches the existing hono / postcss / minimatch override
 pattern).
+
+---
+
+## qs
+
+**Covers overrides**: `qs@>=6.11.1 <=6.15.1`
+
+**CVE**: GHSA-q8mj-m7cp-5q26 (DoS in `qs.stringify` — crashes with TypeError
+on null/undefined entries in comma-format arrays when `encodeValuesOnly` is
+set). Vulnerable range `>=6.11.1 <=6.15.1`; patched `>=6.15.2`.
+
+**Mitigation**: Pin to ^6.15.2 in the affected range. `qs` is pulled
+transitively through `apps/cli > @langchain/mcp-adapters >
+@modelcontextprotocol/sdk > express > qs`. The CLI does not invoke
+`qs.stringify` directly with attacker-controlled comma-format arrays at
+runtime (MCP request bodies are JSON-encoded, not URL-encoded; the qs
+codepath only fires inside Express's request parsing of any HTTP server
+the MCP SDK happens to spin up — Assignee does not expose such servers
+in normal operation). But the override eliminates the vulnerability
+class across the dependency tree and unblocks CI's
+`pnpm audit --audit-level=moderate --prod` gate.
+
+**Reviewed**: 2026-05-22 — coordinator (PR #152 CI surfaced the advisory
+in run 26304509420; mitigation matches the existing fast-uri / postcss
+override pattern).
