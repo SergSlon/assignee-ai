@@ -28,7 +28,7 @@ complete -c assignee -n "__fish_seen_subcommand_from infra; and __fish_seen_subc
 complete -c assignee -n "__fish_seen_subcommand_from infra; and __fish_seen_subcommand_from plan" -l yes -s y -d 'Accepted for CI wrapper compatibility; plan is read-only and does not mutate.'
 complete -c assignee -n "__fish_seen_subcommand_from infra; and __fish_seen_subcommand_from plan" -l cost-detail -d 'Show per-resource cost breakdown below the cost summary block.'
 complete -c assignee -n "__fish_seen_subcommand_from infra; and __fish_seen_subcommand_from plan" -l quick -s q -d 'Skip wizard prompts that have defaults — only ask for required fields without a default. Shows a summary gate before generating the plan.'
-complete -c assignee -n "__fish_seen_subcommand_from infra; and __fish_seen_subcommand_from plan" -l wizard -d 'Run the interactive configuration wizard.'
+complete -c assignee -n "__fish_seen_subcommand_from infra; and __fish_seen_subcommand_from plan" -l wizard -d 'Alias for --quick — plan is read-only, so the wizard only prompts when the LLM can\'t resolve a required field.'
 complete -c assignee -n "__fish_seen_subcommand_from infra; and __fish_seen_subcommand_from plan" -l target-account -r -d 'Target AWS account ID (12 digits). Validates format; cross-account assume-role is not yet supported.'
 
 # Options for 'infra apply'
