@@ -40,7 +40,7 @@ describe("renderSecurityWarnings", () => {
 
     const allOutput = writeSpy.mock.calls.map((c) => c[0]).join("");
     expect(allOutput).toContain("Security findings for arn:aws:s3:::my-bucket");
-    expect(allOutput).toContain("[CRITICAL] S3 bucket has public read access");
+    expect(allOutput).toContain("[CRIT] S3 bucket has public read access");
     expect(allOutput).toContain("Block public access");
   });
 
@@ -65,7 +65,7 @@ describe("renderSecurityWarnings", () => {
     ]);
 
     const allOutput = writeSpy.mock.calls.map((c) => c[0]).join("");
-    expect(allOutput).toContain("[CRITICAL] Public access enabled");
+    expect(allOutput).toContain("[CRIT] Public access enabled");
     expect(allOutput).toContain("[HIGH] No encryption");
     expect(allOutput).toContain("Disable public access");
     expect(allOutput).toContain("Enable SSE-S3");
@@ -204,9 +204,9 @@ describe("formatFindings — non-TTY", () => {
     expect(result).toContain("1 high");
     expect(result).toContain("1 medium");
     expect(result).toContain("1 info");
-    expect(result).toContain("[CRITICAL]");
+    expect(result).toContain("[CRIT]");
     expect(result).toContain("[HIGH]");
-    expect(result).toContain("[MEDIUM]");
+    expect(result).toContain("[WARN]");
     expect(result).toContain("[INFO]");
   });
 
