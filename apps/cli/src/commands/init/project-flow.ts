@@ -15,6 +15,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as clack from "@clack/prompts";
 import { stringify as yamlStringify } from "yaml";
+import { loadUserConfig, type AssigneeConfig } from "@assignee/core";
 import {
   detectCredentials,
   detectRegion,
@@ -65,12 +66,73 @@ function reportCredentialState(credentialResult: {
   }
 }
 
+/**
+ * F4 fix (2026-05-23): surface inherited global-config values
+ * (defaults.tags + defaults.naming.prefix) to the user during project
+ * init so they aren't surprised by tags/prefix appearing on their
+ * resources without ever having entered them locally.
+ *
+ * The resolver at `packages/core/src/config/resolve-global-config.ts:
+ * 105-118` already shallow-merges global + project tags per-key, so
+ * the inheritance ALREADY works at runtime. The audit's "silently
+ * overridden" claim was wrong on the merge side — but the
+ * discoverability gap was real. This helper closes it.
+ *
+ * Emits one `clack.log.info` block per non-empty global default:
+ *
+ *   • `tags`         → "Inherited from global config: tag <k>=<v>, …"
+ *   • `naming.prefix`→ "Inherited from global config: prefix=<P>"
+ *
+ * Silent when no global config exists (loader returns undefined).
+ */
+async function reportInheritedGlobalDefaults(): Promise<void> {
+  try {
+    const userConfig = await loadUserConfig();
+    if (!userConfig) return;
+    // UserConfig is `UserResourceConfig & {...}` — the per-resource-type
+    // map uses an index signature, but the AssigneeConfig top-level
+    // keys (`defaults`, `preferences`, `budget`, `org_policy`) ARE
+    // present at runtime (the file is parsed against the same YAML
+    // schema). Cast to AssigneeConfig so TypeScript lets us access
+    // `defaults.tags` / `defaults.naming.prefix` directly without
+    // bracket gymnastics.
+    const ac = userConfig as unknown as AssigneeConfig;
+    const lines: string[] = [];
+    const tags = ac.defaults?.tags;
+    if (tags && Object.keys(tags).length > 0) {
+      const pairs = Object.entries(tags)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(", ");
+      lines.push(`tags: ${pairs}`);
+    }
+    const prefix = ac.defaults?.naming?.prefix;
+    if (prefix) {
+      lines.push(`naming prefix: ${prefix}`);
+    }
+    if (lines.length > 0) {
+      clack.log.info(
+        `Inherited from global config (~/.config/assignee/config.yaml). ` +
+          `Will apply at apply-time via the config resolver:\n  ${lines.join("\n  ")}`,
+      );
+    }
+  } catch {
+    // Loader is best-effort: malformed user config should NEVER block
+    // project init. Silent fallback matches existing loadUserConfig
+    // contract ("never throws").
+  }
+}
+
 /** Run the project-level init flow. */
 export async function runProjectInit(
   overrides: NonInteractiveOverrides = {},
 ): Promise<void> {
   const credentialResult = await detectCredentials();
   reportCredentialState(credentialResult);
+
+  // F4 (2026-05-23): surface inherited global config so users
+  // understand why tags/prefix may appear on resources without ever
+  // being entered in the project wizard.
+  await reportInheritedGlobalDefaults();
 
   const regionResult = await detectRegion();
 
