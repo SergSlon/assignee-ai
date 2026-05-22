@@ -70,6 +70,8 @@ export async function promptProjectConfig(
   } else {
     const profile = await clack.text({
       message: "AWS Profile",
+      placeholder:
+        "Documentation only — not the auth source (creds come from env or ~/.aws/credentials).",
       initialValue: defaults.profile ?? DEFAULT_PROFILE,
     });
 

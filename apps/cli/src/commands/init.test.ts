@@ -330,8 +330,12 @@ describe("assignee dev init command", () => {
       //   1. "No AWS credentials detected"
       //   2. The `assignee dev setup` next-step
       //   3. The AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY fallback
-      //   4. The AWS_PROFILE-alone-unsupported note
+      //   4. The AWS_PROFILE-needs-credentials-file note
       //   5. The "Assignee roles available: none" line
+      // F2 fix (2026-05-22): the AWS_PROFILE clause changed from the
+      // misleading "AWS_PROFILE alone is not currently supported" to an
+      // accurate description of what the env var actually requires
+      // (matching ~/.aws/credentials profile with key + secret).
       const warnCalls = vi
         .mocked(clack.log.warn)
         .mock.calls.map((c) => String(c[0]));
@@ -344,7 +348,9 @@ describe("assignee dev init command", () => {
       expect(warnText).toContain("AWS_ACCESS_KEY_ID");
       expect(warnText).toContain("AWS_SECRET_ACCESS_KEY");
       expect(warnText).toContain("AWS_PROFILE");
-      expect(warnText).toContain("not currently supported");
+      // F2 fix: assert the new accurate wording — env var needs a
+      // matching credentials-file profile to actually authenticate.
+      expect(warnText).toContain("matching profile in `~/.aws/credentials`");
       expect(warnText).toContain(
         "Assignee roles available: none (operator, reader, auditor all unset)",
       );

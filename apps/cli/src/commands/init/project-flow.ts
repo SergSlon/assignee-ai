@@ -56,8 +56,10 @@ function reportCredentialState(credentialResult: {
       "No AWS credentials detected. The project config will still be created.\n" +
         "Next steps: run `assignee dev setup` to create least-privilege IAM users (recommended), " +
         "OR export `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` before running `assignee infra plan`.\n" +
-        "Note: `AWS_PROFILE` alone is not currently supported — use explicit env vars or run " +
-        "`assignee dev setup` to create role-specific credentials.\n" +
+        "Note on `AWS_PROFILE`: setting the env var alone isn't enough — it needs a " +
+        "matching profile in `~/.aws/credentials` with `aws_access_key_id` + " +
+        "`aws_secret_access_key`. The next prompt records a profile name in your " +
+        "project config for documentation; it doesn't authenticate API calls.\n" +
         rolesLine,
     );
   }
