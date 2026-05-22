@@ -65,7 +65,7 @@
     "@aws-sdk/client-resource-groups-tagging-api": "^3.1051.0",
     "@aws-sdk/client-sts": "^3.1051.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "zod": "^3.25.76"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@assignee/eslint-config": "workspace:*",
