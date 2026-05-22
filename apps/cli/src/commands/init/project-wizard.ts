@@ -87,8 +87,16 @@ export async function promptProjectConfig(
   if (skipPrompts) {
     environmentValue = DEFAULT_ENVIRONMENT;
   } else {
+    // F3 fix (2026-05-22): every other init prompt has a hint or
+    // placeholder. The Environment prompt was bare — users couldn't
+    // tell whether this was a runtime mode, a region tier, or a
+    // resource tag. It's the last: the value is stamped on every
+    // resource as the `environment` tag at apply time
+    // (see project-wizard.ts:137,146 — `tags.environment` is set
+    // from this answer in BOTH the top-level `tags` block and the
+    // `defaults.tags` block used by future apply runs).
     const environment = await clack.select({
-      message: "Environment",
+      message: "Environment (tag value applied to every resource you create)",
       options: [...ENVIRONMENT_OPTIONS],
     });
 
