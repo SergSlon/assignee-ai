@@ -28,7 +28,10 @@ import {
 } from "../../pricing/advisory-prices.js";
 import { stripPromptBoundaryTags } from "../../llm/prompt-sanitize.js";
 import { redactSensitiveFields } from "../../checkpoint/redaction.js";
-import { filterSelfReferentialAdvice } from "./advice/advice-filters.js";
+import {
+  filterSelfReferentialAdvice,
+  filterAdviceContradictingFindings,
+} from "./advice/advice-filters.js";
 
 /**
  * Factory for the advice_generator LangGraph node.
@@ -170,7 +173,18 @@ export function createAdviceGeneratorNode({
     // (lines that instruct the planner to do what is already in the plan).
     // Conservative: only removes lines whose proposed value matches an
     // existing plan value. Genuine future-work advice is always preserved.
-    const filteredHints = filterSelfReferentialAdvice(hints, ds);
+    const dedupedHints = filterSelfReferentialAdvice(hints, ds);
+
+    // F11 insurance (2026-05-23): drop advice lines that contradict
+    // structured BP findings emitted in the same plan. Specifically
+    // suppresses advice recommending previous-gen EC2 types (t2.*,
+    // m4.*, etc.) when BP-EC2-015 ("current generation instance
+    // type") has fired. See _backlog/wizard-ux-audit-2026-05-22.md F11.
+    const findings = state.bpFindings ?? [];
+    const filteredHints = filterAdviceContradictingFindings(
+      dedupedHints,
+      findings,
+    );
     const finalHints = filteredHints.slice(0, MAX_ADVICE_HINTS);
 
     log({
@@ -183,6 +197,8 @@ export function createAdviceGeneratorNode({
         resourceType: state.resourceType,
         hintCount: finalHints.length,
         ruleBasedCount: hints.length,
+        // dedupe + contradiction filter combined into one count for
+        // easier sprint-status reporting.
         filteredCount: hints.length - filteredHints.length,
       },
     });

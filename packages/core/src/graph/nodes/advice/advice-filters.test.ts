@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { filterSelfReferentialAdvice } from "./advice-filters.js";
+import {
+  filterSelfReferentialAdvice,
+  filterAdviceContradictingFindings,
+} from "./advice-filters.js";
 
 /**
  * Tests for SX-6 — filterSelfReferentialAdvice
@@ -241,6 +244,170 @@ describe("filterSelfReferentialAdvice", () => {
       ];
       // Should still suppress — key matching is case-insensitive
       expect(filterSelfReferentialAdvice(lines, plan)).toEqual([]);
+    });
+  });
+});
+
+/**
+ * F11 insurance — filterAdviceContradictingFindings
+ *
+ * Suppresses LLM-generated advice that contradicts emitted BP findings.
+ * Today the only finding wired is BP-EC2-015 ("current generation
+ * instance type"). Filter drops any advice line that names a
+ * previous-gen EC2 instance type (t1.*, t2.*, m1-4.*, c1/c3/c4.*,
+ * r3.*, r4.*, i2.*) when that finding fires.
+ *
+ * @see _backlog/wizard-ux-audit-2026-05-22.md F11
+ */
+describe("filterAdviceContradictingFindings", () => {
+  // ──────────────────────────────────────────────────────────────────
+  // Variation A — BP-EC2-015 fired + t2.micro recommended → FILTERED
+  // ──────────────────────────────────────────────────────────────────
+  describe("BP-EC2-015 fired (previous-gen contradiction)", () => {
+    it("drops 'Consider t2.micro' when BP-EC2-015 fires (by practiceId)", () => {
+      const findings = [
+        {
+          practiceId: "BP-EC2-015",
+          title: "EC2 instance should use current generation instance type",
+        },
+      ];
+      const lines = [
+        "💰 Consider using t2.micro for cost savings.",
+        "🔒 IMDSv2 enforced — instance metadata is protected.",
+      ];
+      const result = filterAdviceContradictingFindings(lines, findings);
+      expect(result).toEqual([
+        "🔒 IMDSv2 enforced — instance metadata is protected.",
+      ]);
+    });
+
+    it("drops 'Switch to m4.large' when BP-EC2-015 fires", () => {
+      const findings = [
+        {
+          practiceId: "BP-EC2-015",
+          title: "EC2 instance should use current generation instance type",
+        },
+      ];
+      const lines = ["Consider downsizing to m4.large for cost efficiency."];
+      expect(filterAdviceContradictingFindings(lines, findings)).toEqual([]);
+    });
+
+    it("matches by title when practiceId is something else", () => {
+      const findings = [
+        {
+          practiceId: "ARBITRARY-ID",
+          title: "EC2 instance should use current generation instance type",
+        },
+      ];
+      const lines = ["Consider c3.xlarge for compute workloads."];
+      expect(filterAdviceContradictingFindings(lines, findings)).toEqual([]);
+    });
+
+    it("filters multiple previous-gen prefixes in one sweep", () => {
+      const findings = [
+        {
+          practiceId: "BP-EC2-015",
+          title: "EC2 instance should use current generation instance type",
+        },
+      ];
+      const lines = [
+        "Try t1.micro for free-tier",
+        "Or r3.large for memory-bound",
+        "Or i2.xlarge for storage-bound",
+        "Consider t4g.micro instead", // CURRENT gen → KEPT
+      ];
+      const result = filterAdviceContradictingFindings(lines, findings);
+      expect(result).toEqual(["Consider t4g.micro instead"]);
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  // Variation B — BP-EC2-015 NOT fired → previous-gen advice KEPT
+  // ──────────────────────────────────────────────────────────────────
+  describe("BP-EC2-015 NOT fired (no contradiction)", () => {
+    it("preserves 't2.micro' advice when current-gen finding absent", () => {
+      const findings = [
+        {
+          practiceId: "BP-EC2-001",
+          title: "EC2 EBS volumes should be encrypted",
+        },
+      ];
+      const lines = ["💰 Consider using t2.micro for cost savings."];
+      expect(filterAdviceContradictingFindings(lines, findings)).toEqual(lines);
+    });
+
+    it("preserves all advice with an empty findings array", () => {
+      const lines = [
+        "Consider t2.micro",
+        "Try m4.large",
+        "Or t3.micro (current-gen)",
+      ];
+      expect(filterAdviceContradictingFindings(lines, [])).toEqual(lines);
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  // Variation C — Current-gen instance types ALWAYS kept
+  // ──────────────────────────────────────────────────────────────────
+  describe("Current-gen instance types preserved", () => {
+    it("keeps t3.* / t4g.* / m5.* / m6i.* / c5.* / c6i.* / r5.* / r6i.*", () => {
+      const findings = [
+        {
+          practiceId: "BP-EC2-015",
+          title: "EC2 instance should use current generation instance type",
+        },
+      ];
+      const lines = [
+        "Consider t3.micro (current-gen burstable)",
+        "Try t4g.nano (Graviton, cheapest)",
+        "m5.large for general purpose",
+        "m6i.xlarge for newer Intel",
+        "c5.large for compute",
+        "c6i.xlarge for newer compute",
+        "r5.large for memory",
+        "r6i.xlarge for newer memory",
+      ];
+      expect(filterAdviceContradictingFindings(lines, findings)).toEqual(lines);
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  // Variation D — Edge cases
+  // ──────────────────────────────────────────────────────────────────
+  describe("Edge cases", () => {
+    it("returns empty array when adviceLines is empty", () => {
+      const findings = [
+        {
+          practiceId: "BP-EC2-015",
+          title: "EC2 instance should use current generation instance type",
+        },
+      ];
+      expect(filterAdviceContradictingFindings([], findings)).toEqual([]);
+    });
+
+    it("does NOT match prose 'previous generation' without an instance-type token", () => {
+      const findings = [
+        {
+          practiceId: "BP-EC2-015",
+          title: "EC2 instance should use current generation instance type",
+        },
+      ];
+      const lines = [
+        "Avoid previous-generation instances for performance reasons.",
+      ];
+      // Conservative: no explicit token → keep
+      expect(filterAdviceContradictingFindings(lines, findings)).toEqual(lines);
+    });
+
+    it("case-insensitive instance-type matching (T2.MICRO)", () => {
+      const findings = [
+        {
+          practiceId: "BP-EC2-015",
+          title: "EC2 instance should use current generation instance type",
+        },
+      ];
+      const lines = ["Consider T2.MICRO for cost savings."];
+      expect(filterAdviceContradictingFindings(lines, findings)).toEqual([]);
     });
   });
 });

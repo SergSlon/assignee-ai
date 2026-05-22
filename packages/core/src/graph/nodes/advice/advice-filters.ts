@@ -169,3 +169,93 @@ export function filterSelfReferentialAdvice(
 ): string[] {
   return adviceLines.filter((line) => !isSelfReferential(line, plan));
 }
+
+/**
+ * F11 insurance (2026-05-23) — filter LLM-generated advice that
+ * contradicts emitted BP findings.
+ *
+ * Class of failure mode: the LLM advice block is free-text and is NOT
+ * fact-checked against the structured BP rule output. A PTY-driven
+ * audit captured the LLM recommending `t2.micro` in the Advice block
+ * while BP-EC2-015 ("EC2 instance should use current generation
+ * instance type") emitted in the same plan output. Two contradictory
+ * signals in one render.
+ *
+ * Concrete patterns suppressed (one per emitted finding ID):
+ *
+ *   BP-EC2-015 fired                  → drop any advice line that
+ *     ("current generation")             names a previous-gen EC2 type
+ *                                        (t1/t2, m1/m2/m3/m4, c1/c3/c4,
+ *                                         r3/r4, i2)
+ *
+ * The filter is CONSERVATIVE:
+ *
+ *   - Only fires when the finding is actually present in the
+ *     emitted set for this plan.
+ *   - Only matches explicit instance-type tokens (full prefix +
+ *     dot, e.g. `t2.`); does NOT match prose like "consider an
+ *     older generation".
+ *   - When in doubt, the advice line is KEPT (no false-positive
+ *     filtering of legitimate guidance).
+ *
+ * This is "insurance" rather than load-bearing — the LLM doesn't
+ * always emit contradictory advice, and the audit's re-run showed
+ * t4g.micro (correct current-gen ARM) instead of t2.micro. But the
+ * latent failure mode is real and one rendered contradiction shakes
+ * user trust in the whole output.
+ *
+ * @see _backlog/wizard-ux-audit-2026-05-22.md F11
+ *
+ * @param adviceLines  Raw advice strings from LLM + rule-based advisors.
+ * @param findings     The set of BPFindings emitted for the plan.
+ * @returns            Filtered lines with contradicting entries removed.
+ */
+interface MinimalFinding {
+  practiceId: string;
+  title: string;
+}
+
+const PREVIOUS_GEN_INSTANCE_PREFIXES = [
+  // Burstable: t1, t2 (current is t3, t4g)
+  "t1.",
+  "t2.",
+  // General purpose: m1, m2, m3, m4 (current is m5, m6i, m7i, m8g)
+  "m1.",
+  "m2.",
+  "m3.",
+  "m4.",
+  // Compute optimised: c1, c3, c4 (current is c5, c6i, c7i, c8g)
+  "c1.",
+  "c3.",
+  "c4.",
+  // Memory optimised: r3, r4 (current is r5, r6i, r7i, r8g)
+  "r3.",
+  "r4.",
+  // Storage optimised: i2 (current is i3, i4i)
+  "i2.",
+];
+
+/** Predicate matching the BP-EC2-015 finding by id or title fragment. */
+function isCurrentGenFinding(f: MinimalFinding): boolean {
+  if (f.practiceId === "BP-EC2-015") return true;
+  return f.title.toLowerCase().includes("current generation instance type");
+}
+
+/** Predicate matching an advice line that names a previous-gen type. */
+function namesPreviousGenInstance(line: string): boolean {
+  const lower = line.toLowerCase();
+  return PREVIOUS_GEN_INSTANCE_PREFIXES.some((prefix) =>
+    lower.includes(prefix),
+  );
+}
+
+export function filterAdviceContradictingFindings(
+  adviceLines: string[],
+  findings: MinimalFinding[],
+): string[] {
+  const currentGenFiringAgainst = findings.some(isCurrentGenFinding);
+  if (!currentGenFiringAgainst) {
+    return adviceLines; // no relevant finding → no filtering needed
+  }
+  return adviceLines.filter((line) => !namesPreviousGenInstance(line));
+}
