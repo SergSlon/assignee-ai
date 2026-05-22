@@ -66,7 +66,7 @@ export async function promptGlobalConfig(
     while (true) {
       const entry = await clack.text({
         message: "Add a tag (key=value), or press Enter to finish",
-        placeholder: "environment=dev",
+        placeholder: "e.g. environment=dev",
       });
 
       if (clack.isCancel(entry)) {
@@ -108,7 +108,7 @@ export async function promptGlobalConfig(
   if (!skipPrompts) {
     const prefix = await clack.text({
       message: "Resource naming prefix (optional, press Enter to skip)",
-      placeholder: "mycompany-",
+      placeholder: "e.g. mycompany-",
     });
 
     if (clack.isCancel(prefix)) {
