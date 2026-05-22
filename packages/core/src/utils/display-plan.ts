@@ -321,6 +321,20 @@ export function formatPricingBreakdown(breakdown: PricingBreakdown): string {
     : `  Prices fetched at ${breakdown.fetchedAt}`;
   lines.push(fetchedNote);
 
+  // F13 fix (2026-05-22): the per-resource cost lines carry source
+  // suffixes (e.g. `$7.59/mo (live)`, `$0.64/mo (cached)`,
+  // `$0.50/mo (estimated)`) via `formatLabelWithSource()` in
+  // `pricing/types.ts`. The user has no way of knowing what `(live)`
+  // vs `(cached)` vs `(estimated)` means without reading the source.
+  // Append a one-line legend immediately after "Prices fetched" so
+  // the meaning is in front of the operator at plan-display time.
+  // Single dim line; doesn't bloat the box (the existing layout
+  // already includes the fetched-at line for the same purpose).
+  const legend =
+    "  Suffix legend: (live)=fresh MCP, (cached)=replayed, (estimated)=fallback";
+  const legendNote = isTTY ? chalk.dim(legend) : legend;
+  lines.push(legendNote);
+
   // Only emit the warning when there are items that are GENUINELY unavailable
   // (MCP failure, timeout, region not supported). Tiered items that rendered
   // successfully via the tier-ladder path do NOT trigger this warning.
