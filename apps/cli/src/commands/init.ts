@@ -214,13 +214,24 @@ to preferences.auto_fix and control how \`assignee infra plan\` reacts to best
       );
     }
 
-    const introCtx = await resolveIntroContext();
-    clack.intro(
-      (isGlobal
-        ? "Assignee.ai — Global User Config Setup"
-        : "Assignee.ai — Project Initialization") +
-        `  [${formatIntroContext(introCtx)}]`,
-    );
+    // F1 fix (2026-05-22): suppress `[region=…]` context in the
+    // banner when the wizard is about to ask for region/profile
+    // interactively. Showing pre-filled context BEFORE asking is
+    // a credible source of "wizard already knows, why ask?" UX
+    // confusion. Non-interactive modes (`--yes` / `--region` /
+    // pre-stamped `--global`) keep the context line because the
+    // values are locked-in and the operator wants visible
+    // confirmation of WHICH account they're touching.
+    const skipPrompts = options.yes === true || options.region !== undefined;
+    const banner = isGlobal
+      ? "Assignee.ai — Global User Config Setup"
+      : "Assignee.ai — Project Initialization";
+    if (skipPrompts) {
+      const introCtx = await resolveIntroContext();
+      clack.intro(`${banner}  [${formatIntroContext(introCtx)}]`);
+    } else {
+      clack.intro(banner);
+    }
 
     const overrides = {
       yes: options.yes === true,
