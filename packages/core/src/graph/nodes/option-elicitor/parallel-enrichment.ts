@@ -13,6 +13,7 @@
  */
 
 import * as clack from "@clack/prompts";
+import { shouldShowSpinner } from "@/utils/display-output/spinner.js";
 import {
   RESOURCE_TYPES,
   CfnKey,
@@ -53,10 +54,20 @@ export async function runParallelEnrichment(params: {
   llmClient: LlmPort | undefined;
 }): Promise<EnrichmentResult> {
   const { plugin, state, tools, llmClient } = params;
-  const parallelSpinner = clack.spinner();
+  // F15 fix (2026-05-22): drive this spinner through the same gate as
+  // the centralised `startSpinner` helper so it stays quiet in CI logs
+  // and non-TTY contexts. When the gate is off, emit a single status
+  // line (matching the `${label}...` fallback in spinner.ts) and skip
+  // the spinner's per-frame ANSI writes that flood replay/CI logs.
+  const useSpinner = shouldShowSpinner();
+  const parallelSpinner = useSpinner ? clack.spinner() : undefined;
   const discoveryMessage = getDiscoverySpinnerMessage(plugin.commonFields);
   const spinnerMessage = discoveryMessage ?? "Preparing your wizard\u2026";
-  parallelSpinner.start(spinnerMessage);
+  if (parallelSpinner) {
+    parallelSpinner.start(spinnerMessage);
+  } else {
+    process.stdout.write(`${spinnerMessage}...\n`);
+  }
 
   let workloadProfile: WorkloadProfile = WP.UNKNOWN;
 
@@ -130,7 +141,11 @@ export async function runParallelEnrichment(params: {
     },
   });
 
-  parallelSpinner.stop("Ready");
+  if (parallelSpinner) {
+    parallelSpinner.stop("Ready");
+  } else {
+    process.stdout.write("Ready.\n");
+  }
 
   return { dynamicFields, workloadProfile };
 }
