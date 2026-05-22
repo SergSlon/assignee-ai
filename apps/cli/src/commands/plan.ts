@@ -214,23 +214,16 @@ export const planCommand = new Command(CommandName.PLAN)
   )
   .option(
     "--wizard",
-    // Epic 98 e98.W5.N5 (Epic 97 D-14): pre-fix this help text said
-    // "Alias for --quick" which contradicted `apply --wizard`'s
-    // "Run interactive configuration wizard..." phrasing. Users who
-    // read `plan --help` and assume the same semantics apply to
-    // `apply` would be surprised. Harmonised to match apply.ts so
-    // both surfaces describe the same concept — an opt-in
-    // interactive configuration flow. plan's internal alias from
-    // --wizard → --quick is preserved (see the normalisation at
-    // line ~230) because plan is read-only and has no "full wizard"
-    // mode beyond the required-field prompts.
-    // W7-S0 (M-β-02): unified description — all three surfaces (plan/apply/init)
-    // share the same opening clause. Per-command scope (plan is read-only, no
-    // provisioning) is implicit from the command context and documented in the
-    // Examples block below, NOT in the flag description. Internally plan still
-    // aliases --wizard → --quick (see line ~279); only the user-facing string
-    // changed.
-    "Run the interactive configuration wizard.",
+    // F14 fix (2026-05-22): the unified "Run the interactive
+    // configuration wizard." string was misleading for `plan` —
+    // a PTY-driven audit (see _backlog/wizard-ux-audit-2026-05-22.md
+    // F14) found that the LLM resolves every field via tool calls
+    // before any wizard prompts fire, so `infra plan --wizard`
+    // typically shows zero prompts. The flag is aliased internally
+    // to --quick (see normalisation at line ~279) because plan is
+    // read-only and has no "full wizard" mode beyond required-field
+    // prompts. Make the help text reflect what users actually see.
+    "Alias for --quick — plan is read-only, so the wizard only prompts when the LLM can't resolve a required field.",
   )
   // W3-04 (Epic 100 Round 5): multi-account surface flag. Parse + validate
   // only. Cross-account STS assume-role wiring defers to Epic 101.

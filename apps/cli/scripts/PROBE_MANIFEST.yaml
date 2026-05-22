@@ -2633,17 +2633,32 @@ probes:
   - story: e98.W5.N5
     name: w5-n5-wizard-harmony-and-drift-yes-drop
     description: |
-      e98.W5.N5 cli-portion (Epic 97 D-14 + D-15).
+      e98.W5.N5 cli-portion (Epic 97 D-14 + D-15) + F14 audit revision.
 
-      - **D-14 (MED)**: `plan --help` vs `apply --help` disagreed on
-        `--wizard` semantics. plan said "Alias for --quick"; apply
-        said "Run interactive configuration wizard...". Users who
-        read `plan --help` and assumed the same semantics on `apply`
-        would be surprised. Fix: harmonised plan.ts's `--wizard`
-        help text so both surfaces describe the same concept
-        ("interactive configuration wizard"). Internal alias from
-        --wizard → --quick preserved — plan is read-only, so there's
-        no "full wizard" mode beyond required-field prompts.
+      - **D-14 (MED) → F14 revision 2026-05-22**: The original
+        Epic 97 D-14 harmonised plan/apply --wizard descriptions to
+        share the phrase "interactive configuration wizard". A
+        PTY-driven UX audit (see
+        _backlog/wizard-ux-audit-2026-05-22.md F14) later found that
+        the unified phrasing was MISLEADING for plan: plan's
+        --wizard is internally aliased to --quick (plan is read-
+        only), and the LLM resolves every field via tool calls
+        before any wizard prompts fire — users typing
+        `infra plan --wizard` saw zero prompts and reasonably
+        concluded the flag was broken. F14 fix splits the contract:
+
+          * plan: "Alias for --quick — plan is read-only, so the
+            wizard only prompts when the LLM can't resolve a
+            required field." (NEW — names alias-to-quick semantics)
+          * apply: "Run the interactive configuration wizard."
+            (UNCHANGED — apply actually triggers full prompts)
+          * init: "Run the interactive configuration wizard."
+            (UNCHANGED — init actually triggers full prompts)
+
+        Probe variations updated to assert the per-command split.
+        Internal alias from --wizard → --quick on plan still
+        preserved.
+
       - **D-15 (LOW)**: `drift --help` self-contradicted on `--yes`.
         The flag was registered "for CI wrapper compatibility" but
         the help footer said "No --yes flag is needed". Fix: dropped
@@ -2653,19 +2668,16 @@ probes:
       graph-worker's W5.N5 portion (ec2-eip.ts plugin +
       skeletal-plan-detector.ts + supported-types-block.ts "Elastic
       IP" row, committed as fc47b4c) is covered by their own probe
-      entry (to be added in a follow-up; it was dropped by the
-      coordinator's stale-snapshot commit flow, per the documented
-      feedback_parallel_worker_commit_rhythm class of bug). Per
-      Option B coordination, separate probes for cleaner commit
-      isolation.
+      entry. Per Option B coordination, separate probes for cleaner
+      commit isolation.
     must_fail_pre_fix: false
     variations:
-      - cmd: 'infra plan --help mentions "interactive configuration wizard"'
-        assertions: "D-14 closure — plan's --wizard help text harmonised. Pre-fix said `Alias for --quick`."
+      - cmd: 'infra plan --help describes --wizard as "Alias for --quick" (F14)'
+        assertions: "F14 closure — plan's --wizard help text names the alias-to-quick semantics explicitly (read-only context)."
       - cmd: 'infra apply --help mentions "interactive configuration wizard"'
-        assertions: "apply's --wizard anchor — pin the phrasing so plan drift is caught going forward"
-      - cmd: 'infra plan --help NEGATIVE: no longer says `Alias for --quick`'
-        assertions: "Regression guard — the pre-N5 wording must not come back under a refactor"
+        assertions: "apply's --wizard anchor — apply DOES trigger full prompts so the unified phrase is correct here."
+      - cmd: 'infra plan --help mentions "read-only" (F14)'
+        assertions: "F14 reinforcement — plan's --wizard description must name why prompts may be absent (the LLM resolves fields)."
       - cmd: 'infra drift --help: `-y, --yes` flag DROPPED'
         assertions: "D-15 closure — the contradictory CI-compat flag removed; auto-apply belongs on reconcile"
       - cmd: 'infra drift --help footer no longer says `No --yes flag is needed`'
@@ -2678,26 +2690,28 @@ probes:
       apply_help="$($PROBE_CLI_BIN infra apply --help 2>&1)"
       drift_help="$($PROBE_CLI_BIN infra drift --help 2>&1)"
 
-      # Variation 1: plan --wizard help mentions "interactive
-      # configuration wizard" (D-14 harmonisation).
-      if ! printf '%s' "$plan_help" | grep -qi -- 'interactive configuration wizard'; then
-        echo "[PROBE-FAIL] plan --help missing 'interactive configuration wizard' (D-14 harmony broken)" >&2
+      # Variation 1 (F14): plan --wizard help describes the
+      # alias-to-quick semantics ("Alias for --quick").
+      if ! printf '%s' "$plan_help" | grep -qi -- 'alias for --quick'; then
+        echo "[PROBE-FAIL] plan --help missing 'Alias for --quick' (F14 contract broken)" >&2
         printf '%s' "$plan_help" | grep -- '--wizard' >&2 || true
         exit 1
       fi
 
-      # Variation 2: apply --wizard help mentions the same — anchor
-      # for the cross-command comparison.
+      # Variation 2: apply --wizard help still mentions the
+      # unified "interactive configuration wizard" phrase — apply
+      # DOES trigger full prompts so the phrase is accurate there.
       if ! printf '%s' "$apply_help" | grep -qi -- 'interactive configuration wizard'; then
         echo "[PROBE-FAIL] apply --help missing 'interactive configuration wizard' anchor" >&2
         printf '%s' "$apply_help" | grep -- '--wizard' >&2 || true
         exit 1
       fi
 
-      # Variation 3: NEGATIVE regression guard — plan --help must NOT
-      # describe --wizard as "Alias for --quick" (pre-N5 wording).
-      if printf '%s' "$plan_help" | grep -q -- 'Alias for --quick'; then
-        echo "[PROBE-FAIL] plan --help still says 'Alias for --quick' (D-14 harmony regressed)" >&2
+      # Variation 3 (F14): plan --wizard help mentions "read-only"
+      # so users understand WHY they may see no prompts.
+      if ! printf '%s' "$plan_help" | grep -qi -- 'read-only'; then
+        echo "[PROBE-FAIL] plan --help missing 'read-only' in --wizard description (F14)" >&2
+        printf '%s' "$plan_help" | grep -- '--wizard' >&2 || true
         exit 1
       fi
 

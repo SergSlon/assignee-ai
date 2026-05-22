@@ -214,20 +214,29 @@ describe("planCommand — flag parsing", () => {
 });
 
 // ── Epic 92 Wave 3.b.1 — flag alias registration (D-13) ───────────────────
-// W7-S0 (M-β-02): canonical unified description: "Run the interactive
-// configuration wizard." — identical opening clause across plan/apply/init.
-const WIZARD_CANONICAL_DESCRIPTION =
-  "Run the interactive configuration wizard.";
+// F14 fix (2026-05-22): plan's `--wizard` is internally aliased to
+// `--quick` (see plan.ts normalisation line ~279). The Epic 92 W7-S0
+// unified "Run the interactive configuration wizard." description was
+// misleading because plan IS read-only — the LLM resolves every field
+// via tool calls before any wizard prompts fire, so users typing
+// `infra plan --wizard` saw zero prompts and reasonably concluded the
+// flag was broken. The new description explicitly names plan's
+// alias-to-quick semantics; apply and init keep their unified
+// description because their `--wizard` actually triggers full
+// interactive prompts. See _backlog/wizard-ux-audit-2026-05-22.md F14.
+const WIZARD_PLAN_DESCRIPTION =
+  "Alias for --quick — plan is read-only, so the wizard only prompts when the LLM can't resolve a required field.";
 
 describe("planCommand — flag aliases (Epic 92 D-13)", () => {
-  it("registers --wizard as a boolean option (W7-S0: unified description across plan/apply/init)", async () => {
+  it("registers --wizard as a boolean option (F14: alias-to-quick semantics)", async () => {
     const { planCommand } = await import("./plan.js");
     const wizard = planCommand.options.find((o) => o.long === "--wizard");
     expect(wizard?.long).toBe("--wizard");
-    // W7-S0 (M-β-02): description must match the canonical phrase shared
-    // by apply.ts and init.ts. Acceptance criterion 1: must NOT contain
-    // "plan-only" or "no provisioning" (those are implicit in plan context).
-    expect(wizard?.description).toBe(WIZARD_CANONICAL_DESCRIPTION);
+    // F14 fix: description names the alias-to-quick semantics explicitly.
+    expect(wizard?.description).toBe(WIZARD_PLAN_DESCRIPTION);
+    // Acceptance criteria from the original W7-S0 ticket still hold:
+    // description must NOT contain "plan-only" or "no provisioning"
+    // (those are implicit in plan context).
     expect(wizard?.description).not.toMatch(/plan-only/i);
     expect(wizard?.description).not.toMatch(/no provisioning/i);
     // It MUST be a boolean flag (no argument), so the help renders as
@@ -1372,27 +1381,44 @@ describe("planCommand — --target-account NOT_IMPLEMENTED message (W4-S5)", () 
   });
 });
 
-// ── W7-S0 (M-β-02) — cross-command --wizard description parity ───────────────
-// Acceptance criterion 4: all three commands share the same opening clause.
-// This test imports plan, apply, and init and asserts --wizard description
-// is identical across all three surfaces.
-describe("--wizard description parity across plan / apply / init (W7-S0)", () => {
-  it("plan --wizard description matches the canonical unified phrase", async () => {
+// ── W7-S0 → F14 — --wizard description per-command (split 2026-05-22) ────────
+// F14 fix (2026-05-22): the original W7-S0 contract was "all three commands
+// share the same opening clause". A PTY-driven audit (see
+// _backlog/wizard-ux-audit-2026-05-22.md F14) found the unified phrase
+// "Run the interactive configuration wizard." was misleading for `plan`:
+// plan's --wizard is internally aliased to --quick (plan is read-only),
+// and the LLM resolves every field via tool calls before any wizard
+// prompts fire — users typing `infra plan --wizard` saw zero prompts and
+// reasonably concluded the flag was broken.
+//
+// New contract: apply and init keep the unified phrase (their --wizard
+// actually triggers interactive prompts). plan's --wizard description
+// explicitly names the alias-to-quick semantics. Tests below verify the
+// SPLIT, not parity.
+const WIZARD_INTERACTIVE_DESCRIPTION =
+  "Run the interactive configuration wizard.";
+
+describe("--wizard description per-command semantics (F14)", () => {
+  it("plan --wizard description names the alias-to-quick semantics", async () => {
     const { planCommand } = await import("./plan.js");
     const wizard = planCommand.options.find((o) => o.long === "--wizard");
-    expect(wizard?.description).toBe(WIZARD_CANONICAL_DESCRIPTION);
+    // F14 fix: plan's description must say "Alias for --quick" so users
+    // know they should expect required-field prompts only, not a full
+    // wizard walk-through.
+    expect(wizard?.description).toMatch(/alias for --quick/i);
+    expect(wizard?.description).toMatch(/read-only/i);
   });
 
-  it("apply --wizard description matches the canonical unified phrase", async () => {
+  it("apply --wizard description matches the unified interactive phrase", async () => {
     const { applyCommand } = await import("./apply.js");
     const wizard = applyCommand.options.find((o) => o.long === "--wizard");
-    expect(wizard?.description).toBe(WIZARD_CANONICAL_DESCRIPTION);
+    expect(wizard?.description).toBe(WIZARD_INTERACTIVE_DESCRIPTION);
   });
 
-  it("init --wizard description matches the canonical unified phrase", async () => {
+  it("init --wizard description matches the unified interactive phrase", async () => {
     const { initCommand } = await import("./init.js");
     const wizard = initCommand.options.find((o) => o.long === "--wizard");
-    expect(wizard?.description).toBe(WIZARD_CANONICAL_DESCRIPTION);
+    expect(wizard?.description).toBe(WIZARD_INTERACTIVE_DESCRIPTION);
   });
 
   it("plan --wizard description does NOT contain 'plan-only' or 'no provisioning'", async () => {
@@ -1408,14 +1434,10 @@ describe("--wizard description parity across plan / apply / init (W7-S0)", () =>
     expect(wizard?.description).not.toMatch(/default behaviour/i);
   });
 
-  it("plan --wizard → --quick internal alias is preserved (behaviour unchanged)", async () => {
+  it("plan --wizard internal alias to --quick is preserved (behaviour unchanged)", async () => {
     // The action handler still sets opts.quick = true when opts.wizard === true.
     // This confirms the internal alias at plan.ts line ~279 is intact.
     const { planCommand } = await import("./plan.js");
-    // Verify --wizard option is registered and flags does not expose
-    // internal implementation detail (no "quick" in the description).
-    const wizard = planCommand.options.find((o) => o.long === "--wizard");
-    expect(wizard?.description).not.toMatch(/quick/i);
     // --quick is separately registered as the canonical flag.
     const quick = planCommand.options.find((o) => o.long === "--quick");
     expect(quick?.long).toBe("--quick");
