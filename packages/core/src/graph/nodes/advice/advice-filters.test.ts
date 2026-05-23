@@ -409,5 +409,297 @@ describe("filterAdviceContradictingFindings", () => {
       const lines = ["Consider T2.MICRO for cost savings."];
       expect(filterAdviceContradictingFindings(lines, findings)).toEqual([]);
     });
+
+    it("KEEPS doc-URL fragments containing prefix.<word> (Quinn HIGH-1)", () => {
+      // Word-boundary regex: `/c3.html` and `/m4.png` ONLY match when
+      // the segment after the dot is a valid instance size (nano,
+      // micro, small, medium, large, xlarge, Nxlarge). URL extensions
+      // / doc-section refs don't satisfy the size suffix → no match.
+      const findings = [
+        {
+          practiceId: "BP-EC2-015",
+          title: "EC2 instance should use current generation instance type",
+        },
+      ];
+      const lines = [
+        "See https://docs.aws.amazon.com/ec2/latest/c3.html for the deprecation notice.",
+        "Refer to section m4.png of the migration runbook.",
+        "Topic: t2.json (sample data fixture).",
+      ];
+      expect(filterAdviceContradictingFindings(lines, findings)).toEqual(lines);
+    });
+
+    it("matches all Nxlarge size variants (c3.2xlarge, m4.16xlarge, r3.8xlarge)", () => {
+      const findings = [
+        {
+          practiceId: "BP-EC2-015",
+          title: "EC2 instance should use current generation instance type",
+        },
+      ];
+      const lines = [
+        "Consider c3.2xlarge for the compute workload.",
+        "Switch to m4.16xlarge for the analytics tier.",
+        "Use r3.8xlarge for the in-memory cache.",
+      ];
+      expect(filterAdviceContradictingFindings(lines, findings)).toEqual([]);
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  // Variation E — BP-EC2-002 (EBS encryption) cross-check
+  // ──────────────────────────────────────────────────────────────────
+  describe("BP-EC2-002 fired (EBS-must-be-encrypted contradiction)", () => {
+    const ebsFinding = {
+      practiceId: "BP-EC2-002",
+      title: "EC2 EBS volumes should be encrypted",
+    };
+
+    it("drops 'Encrypted: false' snippet when BP-EC2-002 fires", () => {
+      const lines = [
+        "💰 Use Encrypted: false on root volume to save cost.",
+        "🛠 Tag the instance for cost-center routing.",
+      ];
+      expect(filterAdviceContradictingFindings(lines, [ebsFinding])).toEqual([
+        "🛠 Tag the instance for cost-center routing.",
+      ]);
+    });
+
+    it("drops 'Encrypted=false' (no-space variant)", () => {
+      const lines = ["Set Encrypted=false to skip KMS cost overhead."];
+      expect(filterAdviceContradictingFindings(lines, [ebsFinding])).toEqual(
+        [],
+      );
+    });
+
+    it('drops JSON-style "Encrypted": false', () => {
+      const lines = [`Set "Encrypted": false in BlockDeviceMappings.`];
+      expect(filterAdviceContradictingFindings(lines, [ebsFinding])).toEqual(
+        [],
+      );
+    });
+
+    it("drops 'unencrypted EBS' / 'unencrypted volume' / 'unencrypted disk' prose", () => {
+      const lines = [
+        "Switch to unencrypted EBS volumes for performance.",
+        "Use an unencrypted volume to avoid KMS charges.",
+        "An unencrypted disk halves the IOPS cost.",
+        "Provision unencrypted block storage for ephemeral data.",
+      ];
+      expect(filterAdviceContradictingFindings(lines, [ebsFinding])).toEqual(
+        [],
+      );
+    });
+
+    it("drops 'disable EBS encryption' / 'skip encryption' / 'turn off encryption'", () => {
+      const lines = [
+        "Disable EBS encryption to reduce KMS API calls.",
+        "Skip encryption on dev environments.",
+        "Turn off encryption for ephemeral scratch disks.",
+        "Remove encryption to simplify cross-account snapshot sharing.",
+      ];
+      expect(filterAdviceContradictingFindings(lines, [ebsFinding])).toEqual(
+        [],
+      );
+    });
+
+    it("matches by title fragment ('EBS' + 'encrypt') when practiceId differs", () => {
+      const findings = [
+        {
+          practiceId: "CUSTOM-EBS-1",
+          title: "All EBS volumes must be encrypted at rest",
+        },
+      ];
+      const lines = ["Switch to unencrypted EBS for speed."];
+      expect(filterAdviceContradictingFindings(lines, findings)).toEqual([]);
+    });
+
+    it("KEEPS legitimate encryption advice when BP-EC2-002 fires", () => {
+      // Pro-encryption / topic-mention guidance must NOT be filtered.
+      const lines = [
+        "Enable EBS encryption at the account level for defense in depth.",
+        "Consider AWS KMS customer-managed keys for tighter control.",
+        "Encryption is enforced — no action needed.",
+      ];
+      expect(filterAdviceContradictingFindings(lines, [ebsFinding])).toEqual(
+        lines,
+      );
+    });
+
+    it("KEEPS 'unencrypted EBS' advice when BP-EC2-002 does NOT fire", () => {
+      const findings = [
+        { practiceId: "BP-EC2-015", title: "current generation" },
+      ];
+      const lines = ["Switch to unencrypted EBS volumes for performance."];
+      // No EBS-encryption finding present → filter doesn't engage on
+      // EBS lines (though the current-gen filter would still drop
+      // previous-gen tokens if any appeared).
+      expect(filterAdviceContradictingFindings(lines, findings)).toEqual(lines);
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  // Variation F — BP-S3-001/002/003/004 (public-access) cross-check
+  // ──────────────────────────────────────────────────────────────────
+  describe("BP-S3-001..004 fired (S3 public-access contradiction)", () => {
+    const acls = {
+      practiceId: "BP-S3-001",
+      title: "S3 bucket should block public ACLs",
+    };
+    const policies = {
+      practiceId: "BP-S3-002",
+      title: "S3 bucket should block public bucket policies",
+    };
+    const ignore = {
+      practiceId: "BP-S3-003",
+      title: "S3 bucket should ignore public ACLs",
+    };
+    const restrict = {
+      practiceId: "BP-S3-004",
+      title: "S3 bucket should restrict public bucket access",
+    };
+
+    it("drops 'public-read' canned ACL recommendation when BP-S3-001 fires", () => {
+      const lines = [
+        "For static website hosting, set the ACL to public-read.",
+        "Apply the bucket policy you already have.",
+      ];
+      expect(filterAdviceContradictingFindings(lines, [acls])).toEqual([
+        "Apply the bucket policy you already have.",
+      ]);
+    });
+
+    it("drops 'public-read-write' canned ACL recommendation", () => {
+      const lines = ["Grant public-read-write to allow uploads from anywhere."];
+      expect(filterAdviceContradictingFindings(lines, [acls])).toEqual([]);
+    });
+
+    it("drops literal 'BlockPublicAcls: false' / '= false' settings", () => {
+      const lines = [
+        "Set BlockPublicAcls: false to allow read-only public access.",
+        "Use BlockPublicPolicy = false for CloudFront origin compatibility.",
+        "Set IgnorePublicAcls: false on the bucket.",
+        "Configure RestrictPublicBuckets: false to permit website hosting.",
+      ];
+      expect(filterAdviceContradictingFindings(lines, [acls])).toEqual([]);
+    });
+
+    it('drops JSON-style "BlockPublicAcls": false', () => {
+      const lines = [
+        `Patch PublicAccessBlockConfiguration with "BlockPublicAcls": false.`,
+      ];
+      expect(filterAdviceContradictingFindings(lines, [acls])).toEqual([]);
+    });
+
+    it("drops CamelCase canned ACL values (PublicRead, PublicReadWrite) (Quinn HIGH-2)", () => {
+      // SDK-style references — `BucketCannedACL.PublicRead` etc. The
+      // LLM frequently emits these when paraphrasing Java/JS SDK code.
+      const lines = [
+        "Use the PublicRead canned ACL for static-site hosting.",
+        "Set the bucket ACL to PublicReadWrite to enable uploads.",
+        "Apply BucketCannedACL.PublicRead to the bucket.",
+      ];
+      expect(filterAdviceContradictingFindings(lines, [acls])).toEqual([]);
+    });
+
+    it("fires for any of the four S3 public-access finding IDs", () => {
+      const lines = ["Use the public-read canned ACL."];
+      expect(filterAdviceContradictingFindings(lines, [policies])).toEqual([]);
+      expect(filterAdviceContradictingFindings(lines, [ignore])).toEqual([]);
+      expect(filterAdviceContradictingFindings(lines, [restrict])).toEqual([]);
+    });
+
+    it("matches by title fragment when practiceId is unrecognised", () => {
+      const findings = [
+        {
+          practiceId: "CUSTOM-S3-1",
+          title: "S3 bucket should not allow public access",
+        },
+      ];
+      const lines = ["Apply the public-read canned ACL."];
+      expect(filterAdviceContradictingFindings(lines, findings)).toEqual([]);
+    });
+
+    it("KEEPS legitimate public-access advice when BP-S3-001 fires", () => {
+      // Pro-blocking / topic-mention guidance must NOT be filtered.
+      // Specifically covers the "deny / block / disallow / prevent /
+      // restrict public-read" lookbehind branch.
+      const lines = [
+        "Block public access at the account level for defense in depth.",
+        "Deny public-read by enabling all four PublicAccessBlock controls.",
+        "Disallow public-read access on every new bucket.",
+        "Prevent public-read by enforcing organisation SCPs.",
+        "Restrict public-read on bucket-level policies.",
+        "Public access is already blocked — no action needed.",
+        "Review which IAM principals have s3:PutObject on this bucket.",
+      ];
+      expect(filterAdviceContradictingFindings(lines, [acls])).toEqual(lines);
+    });
+
+    it("KEEPS 'public-read' advice when no S3 public-access finding fires", () => {
+      const findings = [
+        { practiceId: "BP-EC2-015", title: "current generation" },
+      ];
+      const lines = ["For static website hosting, use the public-read ACL."];
+      expect(filterAdviceContradictingFindings(lines, findings)).toEqual(lines);
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  // Multi-finding orchestration
+  // ──────────────────────────────────────────────────────────────────
+  describe("multiple findings firing together", () => {
+    it("drops EC2 + EBS + S3 contradicting lines in one sweep", () => {
+      const findings = [
+        { practiceId: "BP-EC2-015", title: "current generation" },
+        { practiceId: "BP-EC2-002", title: "EBS volumes should be encrypted" },
+        {
+          practiceId: "BP-S3-001",
+          title: "S3 bucket should block public ACLs",
+        },
+      ];
+      const lines = [
+        "Consider t2.micro for cost savings.", // EC2-015 drops
+        "Use unencrypted EBS volumes for raw IOPS.", // EC2-002 drops
+        "Set the bucket ACL to public-read for static hosting.", // S3-001 drops
+        "Enable VPC flow logs.", // unrelated → kept
+      ];
+      expect(filterAdviceContradictingFindings(lines, findings)).toEqual([
+        "Enable VPC flow logs.",
+      ]);
+    });
+
+    it("preserves all lines when all relevant findings are absent", () => {
+      const findings = [
+        {
+          practiceId: "BP-IAM-001",
+          title: "IAM policies should use conditions",
+        },
+      ];
+      const lines = [
+        "Consider t2.micro.",
+        "Use unencrypted EBS volumes.",
+        "Set ACL to public-read.",
+      ];
+      // None of these findings engage the cross-check filter — all kept.
+      expect(filterAdviceContradictingFindings(lines, findings)).toEqual(lines);
+    });
+
+    it("drops a single line that matches multiple predicates (Quinn MED-2)", () => {
+      // One advice line names both a previous-gen instance type AND
+      // recommends Encrypted: false. Both predicates fire; the line
+      // is filtered exactly once (Array.filter short-circuits via the
+      // OR chain — first matching predicate kicks it out).
+      const findings = [
+        { practiceId: "BP-EC2-015", title: "current generation" },
+        { practiceId: "BP-EC2-002", title: "EBS volumes should be encrypted" },
+      ];
+      const lines = [
+        "Use a t2.micro instance with Encrypted: false to save cost.",
+        "Keep this advice.",
+      ];
+      expect(filterAdviceContradictingFindings(lines, findings)).toEqual([
+        "Keep this advice.",
+      ]);
+    });
   });
 });

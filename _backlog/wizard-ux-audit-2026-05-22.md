@@ -394,6 +394,32 @@ prompt the LLM with the Findings set as anti-patterns to avoid.
 
 **Effort**: M (touches advice node + a post-filter test).
 
+**Generalisation update (2026-05-23)**: the original insurance
+filter wired only the BP-EC2-015 ↔ previous-gen pair. The follow-up
+extended `filterAdviceContradictingFindings`
+(`packages/core/src/graph/nodes/advice/advice-filters.ts:337`) with
+two additional predicate pairs:
+
+- **BP-EC2-002 (EBS encryption)** ↔ drops advice containing
+  `Encrypted: false` / `unencrypted EBS|volume|disk|block storage`
+  / `disable|skip|turn off encryption`. Topic-mention guidance
+  ("Enable EBS encryption at the account level") is preserved.
+- **BP-S3-001 / 002 / 003 / 004 (PublicAccessBlock family)** ↔
+  drops advice containing the `public-read` / `public-read-write`
+  canned ACL tokens or any literal `BlockPublicAcls|BlockPublicPolicy
+|IgnorePublicAcls|RestrictPublicBuckets: false` setting. A negative
+  lookbehind exempts "deny / block / disallow / prevent / restrict
+  public-read" — those are pro-block recommendations and stay.
+
+The filter still falls back to KEEPING the line when in doubt; every
+new finding family follows the same `is<Family>Finding` +
+`names<AntiFix>` predicate-pair contract so the next addition is a
+copy-paste exercise. 48 tests in
+`packages/core/src/graph/nodes/advice/advice-filters.test.ts` lock
+the behaviour (multi-finding orchestration, case-insensitivity,
+title-fragment fallback, and explicit "false positive must NOT
+fire" cases for each family).
+
 ---
 
 ### F12 — BUG — BP rule remediation hint mismatches the finding
