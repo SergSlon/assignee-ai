@@ -30,12 +30,13 @@ OIDC: not configured. Set ASSIGNEE_OIDC_ADAPTER to enable.
 ┌  Assignee.ai — Global User Config Setup
 │
 ◆  Default AWS region
-│  us-east-1
+│  us-east-1█
 └
 ========== /SCREEN 1 (action: ENTER) ==========
 
 ========== SCREEN 2 ==========
 ◇  Default AWS region
+│  us-east-1
 │
 ◆  Add a tag (key=value), or press Enter to finish
 │  e.g. environment=dev

@@ -728,6 +728,18 @@ F20 lands. Once fixed, refresh
 `apps/cli/__fixtures__/wizard-snapshots/dev-init-global-wizard.snapshot.txt`
 with `pnpm wizard-audit --update`.
 
+**FIXED (2026-05-23, same session as filing)**: one-line swap from
+`placeholder:` to `initialValue:` at
+`apps/cli/src/commands/init/global-wizard.ts:51-54`. The regression
+suite's golden was refreshed via `pnpm wizard-audit --update`:
+
+- SCREEN 1 now shows `│  us-east-1█` (field pre-filled with the
+  cursor at end — user sees the actual default value, not greyed-out
+  hint text).
+- SCREEN 2 now shows `│  us-east-1` echo confirming the value, just
+  like the project wizard does today (the deeper fix the audit
+  surfaced via Quinn HIGH-5).
+
 ---
 
 ### F18 — NOT A BUG — drift progress bar appears flooded in PTY capture

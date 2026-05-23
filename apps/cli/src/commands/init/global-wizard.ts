@@ -48,9 +48,16 @@ export async function promptGlobalConfig(
     // region should pass --region explicitly.
     regionValue = DEFAULT_AWS_REGION;
   } else {
+    // F20 (2026-05-23): use initialValue, NOT placeholder. A
+    // placeholder is hint text that contributes nothing on ENTER —
+    // the user sees `us-east-1` greyed out, accepts the default
+    // they think they're seeing, and the wizard records the empty
+    // string instead. initialValue pre-fills the field so ENTER
+    // accepts `us-east-1` as the user expects (mirroring
+    // project-wizard.ts:54-57).
     const region = await clack.text({
       message: "Default AWS region",
-      placeholder: DEFAULT_AWS_REGION,
+      initialValue: DEFAULT_AWS_REGION,
     });
 
     if (clack.isCancel(region)) {
