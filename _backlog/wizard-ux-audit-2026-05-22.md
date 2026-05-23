@@ -563,21 +563,49 @@ python3 apps/cli/scripts/pty-driver.py \
 reproduces the audit's screen-by-screen capture without external
 dependencies (Python 3.8+ stdlib only).
 
-## Suggested next step (not done today)
+## Regression suite (landed 2026-05-23)
 
-Convert the manual driver into a regression suite:
+The "convert the manual driver into a regression suite" follow-up
+is **done**:
 
-1. Capture golden screen-snapshots for each wizard flow into
-   `apps/cli/__fixtures__/wizard-snapshots/`.
-2. Add a `pnpm wizard-audit` npm script that runs the driver +
-   diffs captured screens vs goldens (exits non-zero on drift).
-3. Wire into CI as an opt-in informational job (not blocking —
-   wizard prompts have subtle non-determinism around
-   timing-dependent spinner frames that would false-positive a
-   blocking gate).
+1. Golden screen-snapshots live under
+   `apps/cli/__fixtures__/wizard-snapshots/`:
+   - `dev-init-wizard.snapshot.txt` (project init, 4 prompts)
+   - `dev-init-global-wizard.snapshot.txt` (global init, 4 prompts)
+2. `pnpm wizard-audit` (defined at the repo root) runs the PTY
+   driver against every case and diffs the sanitised capture
+   against the corresponding golden — exit 1 on drift. `pnpm
+wizard-audit --update` refreshes the goldens after intentional
+   wizard changes.
+3. `.github/workflows/wizard-audit.yml` runs the harness on every
+   PR that touches the wizard surface (init commands, wizard
+   helpers, snapshot fixtures, harness scripts). The job is
+   `continue-on-error: true` — drift surfaces as a step-summary
+   comment + an uploaded `wizard-audit-diff` artifact, never as
+   a merge block.
 
-**Effort to add regression suite**: M (~4h — fixture infra +
-diff harness + CI wiring).
+**Excluded by design** from the regression suite:
+
+- `infra plan --wizard` (Bedrock cost ~$0.013/run) — kept as a
+  local-only diagnostic via the raw PTY driver.
+- Anything that requires live AWS credentials (`admin list/status`,
+  `infra drift`, `infra destroy`) — those commands surface
+  credential-error screens in CI which would be noise. Re-run the
+  raw PTY driver locally when auditing those flows.
+
+Reproduce locally:
+
+```sh
+pnpm --filter @assignee/cli build
+pnpm wizard-audit
+```
+
+Refresh after intentional UX changes:
+
+```sh
+pnpm wizard-audit --update
+git add apps/cli/__fixtures__/wizard-snapshots/*.snapshot.txt
+```
 
 ---
 
@@ -629,6 +657,52 @@ show just the bare identifier (`E1LFLMY7GUQSRU`,
 `--json` mode for machine consumption.
 
 **Effort**: S (1 file in the drift table renderer).
+
+### F20 — BUG — global wizard "Default AWS region" placeholder is not a default
+
+Discovered during the 2026-05-23 regression-suite landing. The
+project wizard uses `clack.text({ initialValue: DEFAULT_AWS_REGION })`
+at `apps/cli/src/commands/init/project-wizard.ts:54-57`, so ENTER
+on the AWS Region prompt accepts `us-east-1` and the echo reads
+`│  us-east-1`. The global wizard uses `clack.text({ placeholder:
+DEFAULT_AWS_REGION })` at
+`apps/cli/src/commands/init/global-wizard.ts:51-54` — ENTER yields
+the empty string, code line 60
+(`regionValue = (region as string) || undefined`) coerces it to
+`undefined`, and the written config has no region. The user's
+intent ("accept the default I see") silently drops.
+
+Reproduction (captured by the new regression suite):
+
+```
+SCREEN 1 (Default AWS region prompt shows placeholder us-east-1)
+SCREEN 2:
+  ◇  Default AWS region
+  │                     ← no region echoed; clack saw "" not us-east-1
+```
+
+vs project wizard screen 2 which reads `│  us-east-1`.
+
+This is the same family of "placeholder ≠ default" confusion the
+audit originally caught as F5. F5 fixed the visual ambiguity
+(placeholder rendered dim); F20 is the deeper semantic bug —
+placeholder text has no value, only the `initialValue` field does.
+
+**Proposed fix**: align the global wizard with the project wizard.
+Replace `placeholder: DEFAULT_AWS_REGION` with
+`initialValue: DEFAULT_AWS_REGION` at `global-wizard.ts:51-54`.
+Tag-loop / naming-prefix prompts that use placeholders for
+"optional" hint text are correct as-is — those are NOT defaults.
+
+**Effort**: S (one prompt-options swap + snapshot refresh).
+
+**Filed**: deferred to the next audit-fix sweep so the regression
+suite's golden continues to pin the current (buggy) behaviour until
+F20 lands. Once fixed, refresh
+`apps/cli/__fixtures__/wizard-snapshots/dev-init-global-wizard.snapshot.txt`
+with `pnpm wizard-audit --update`.
+
+---
 
 ### F18 — NOT A BUG — drift progress bar appears flooded in PTY capture
 

@@ -1,0 +1,72 @@
+
+========== SCREEN 1 ==========
+
+✦ Welcome to Assignee.ai v<VERSION>
+  AI-Native Cloud Operator — natural language → AWS infrastructure
+
+  [NONE] No AWS credentials detected
+
+  Get started in 2 minutes:
+
+  1. Set AWS credentials (easiest):
+       bash/zsh:
+       export AWS_ACCESS_KEY_ID=<your-key>
+       export AWS_SECRET_ACCESS_KEY=<your-secret>
+       PowerShell:
+       $Env:AWS_ACCESS_KEY_ID='<your-key>'
+       $Env:AWS_SECRET_ACCESS_KEY='<your-secret>'
+
+  2. Or create least-privilege IAM users (recommended):
+       assignee dev setup
+
+  3. Try your first plan:
+       assignee infra plan "Create an S3 bucket for my static site"
+
+  More: https://github.com/SergSlon/assignee-ai
+
+  Discover what assignee can build:
+    assignee infra plan --help    # list supported resource types + compound patterns
+OIDC: not configured. Set ASSIGNEE_OIDC_ADAPTER to enable.
+┌  Assignee.ai — Global User Config Setup
+│
+◆  Default AWS region
+│  us-east-1
+└
+========== /SCREEN 1 (action: ENTER) ==========
+
+========== SCREEN 2 ==========
+◇  Default AWS region
+│
+◆  Add a tag (key=value), or press Enter to finish
+│  e.g. environment=dev
+└
+========== /SCREEN 2 (action: ENTER) ==========
+
+========== SCREEN 3 ==========
+◇  Add a tag (key=value), or press Enter to finish
+│
+◆  Resource naming prefix (optional, press Enter to skip)
+│  e.g. mycompany-
+└
+========== /SCREEN 3 (action: ENTER) ==========
+
+========== SCREEN 4 ==========
+◇  Resource naming prefix (optional, press Enter to skip)
+│
+◆  Auto-fix best practice violations
+│  ● ask — prompt before each fix (default)
+│  ○ apply — fix automatically
+│  ○ skip — never auto-fix
+└
+========== /SCREEN 4 (action: ENTER) ==========
+
+========== FINAL ==========
+◇  Auto-fix best practice violations
+│  ask — prompt before each fix (default)
+│
+└  Global config written to <TMP_HOME>/.config/assignee/config.yaml. Your defaults will apply to all projects.
+
+
+========== /FINAL ==========
+
+[driver] exit code: 0

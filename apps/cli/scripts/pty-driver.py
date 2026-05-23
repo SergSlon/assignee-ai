@@ -36,7 +36,7 @@ Python 3.8+. No external deps. Should work on macOS + Linux. Windows
 PTY semantics differ; not supported.
 
 @see _backlog/wizard-ux-audit-2026-05-22.md — the original audit
-@see _backlog/wizard-ux-audit-2026-05-22.md#driver-retained-for-re-runs
+@see apps/cli/scripts/wizard-audit.mjs — golden-snapshot regression harness
 """
 import os
 import pty
