@@ -384,6 +384,26 @@ describe("assignee list command", () => {
       // In practice the list service never emits negative costs, so
       // tightening the regex is future work, not a blocker.
     });
+
+    // F16 follow-up (2026-05-23): per-unit rates flow through the
+    // shared `isPerUnitRate` detector from
+    // `apps/cli/src/utils/per-unit-rate.ts` — same source of truth
+    // bulk-destroy (F6) and admin status (F19) use. parseMonthlyCost
+    // returns null for per-unit rates so the caller can count them
+    // as "variable per-unit excluded" alongside genuinely unparseable
+    // strings.
+    it("returns null for per-unit rates (shared detector parity)", () => {
+      // /GB-month, /GB-mo, /GB suffixes (S3 / EBS / EFS storage rates)
+      expect(parseMonthlyCost("$0.0230/GB-month")).toBeNull();
+      expect(parseMonthlyCost("$0.0230/GB-mo")).toBeNull();
+      expect(parseMonthlyCost("$0.10/GB")).toBeNull();
+      // /request, /requests, /req (API / CloudFront per-request)
+      expect(parseMonthlyCost("$0.0000004/request")).toBeNull();
+      expect(parseMonthlyCost("$0.40/1000 requests")).toBeNull();
+      // /invocation, /call, /exec (Lambda / Step Functions)
+      expect(parseMonthlyCost("$0.0000002/invocation")).toBeNull();
+      expect(parseMonthlyCost("$0.00001667/exec")).toBeNull();
+    });
   });
 });
 

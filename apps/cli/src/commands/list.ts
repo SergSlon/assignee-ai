@@ -35,6 +35,7 @@ import {
 } from "./resource-type-filter.js";
 import { installJsonStderrFilter } from "./json-stderr-filter.js";
 import { resolveJsonMode, redactAccountIdIfDemoMode } from "./output-format.js";
+import { isPerUnitRate } from "../utils/per-unit-rate.js";
 
 /**
  * Epic 92 Wave 2.c (D-30): emit a single JSON error envelope to stdout
@@ -54,20 +55,30 @@ function writeJsonErrorEnvelope(
 
 /**
  * Parse an `estimatedMonthlyCost` string into a numeric USD monthly
- * amount. Handles the four shapes the list service emits:
+ * amount. Handles the five shapes the list service emits:
  *
- *   - "$X.XX/mo"                  — take the number as-is
- *   - "$X.XXXX/hr"                — multiply by 730 (AWS billing convention)
- *   - "Free" / "N/A" / "Pay per use" / "Unavailable" — return 0 (skip in sum)
- *   - anything else               — return null so the caller can flag
- *                                   "some rows could not be summed"
+ *   - "$X.XX/mo"                                       → take the number as-is
+ *   - "$X.XXXX/hr"                                     → multiply by 730 (AWS billing convention)
+ *   - "Free" / "N/A" / "Pay per use" / "Unavailable"   → return 0 (skip in sum)
+ *   - per-unit rates ("$X.XX/GB-month", "$X.XX/req")   → return null (caller flags as "variable per-unit excluded")
+ *   - anything else (genuinely unparseable)            → return null (same caller branch)
+ *
+ * Per-unit detection is delegated to `apps/cli/src/utils/per-unit-rate.ts`
+ * so list.ts shares the same per-unit-rate definition as bulk-destroy
+ * (F6) and admin status (F19). Adding a new rate suffix to the shared
+ * module auto-extends list.ts's coverage — no drift risk.
  *
  * Exported for unit testing.
+ *
+ * @see _backlog/wizard-ux-audit-2026-05-22.md (F6, F16, F19)
  */
 export function parseMonthlyCost(raw: string): number | null {
   if (!raw) return 0;
   const trimmed = raw.trim();
   if (/^(free|n\/a|pay per use|unavailable)/i.test(trimmed)) return 0;
+  // Per-unit rates are not flat monthly totals — caller's "variable
+  // per-unit or non-numeric cost excluded" message covers them.
+  if (isPerUnitRate(trimmed)) return null;
   const monthlyMatch = trimmed.match(/\$([0-9]+(?:\.[0-9]+)?)(?:\/mo)?$/);
   if (monthlyMatch) {
     const value = Number(monthlyMatch[1]);
