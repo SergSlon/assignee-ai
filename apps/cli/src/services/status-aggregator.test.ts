@@ -78,6 +78,24 @@ describe("parseCost", () => {
   it("returns 0 for unparseable string", () => {
     expect(parseCost("free")).toBe(0);
   });
+
+  // F19 (2026-05-23): per-unit rates return null (NOT 0) so callers
+  // can distinguish "variable, exclude from sum" from "zero".
+  it("F19: returns null for per-GB rate '$0.0230/GB-month'", () => {
+    expect(parseCost("$0.0230/GB-month")).toBeNull();
+  });
+
+  it("F19: returns null for per-request rate '$0.0004/request'", () => {
+    expect(parseCost("$0.0004/request")).toBeNull();
+  });
+
+  it("F19: returns null for per-1000-reqs rate '$0.40/1000 requests'", () => {
+    expect(parseCost("$0.40/1000 requests")).toBeNull();
+  });
+
+  it("F19: returns null for per-invocation rate '$0.0000002/invocation'", () => {
+    expect(parseCost("$0.0000002/invocation")).toBeNull();
+  });
 });
 
 // ── formatCost ──────────────────────────────────────────────────────────────
@@ -97,6 +115,20 @@ describe("formatCost", () => {
 
   it("returns 'N/A' for negative values", () => {
     expect(formatCost(-5)).toBe("N/A");
+  });
+
+  // F19 (2026-05-23): lowerBound flag prefixes "≥ " to signal that
+  // at least one row was excluded from the sum (per-unit rate).
+  it("F19: lowerBound=true prefixes '≥ ' even when cost > 0", () => {
+    expect(formatCost(7.59, true)).toBe("≥ $7.59/month");
+  });
+
+  it("F19: lowerBound=true renders '≥ $0.00/month' when only per-unit rates were seen", () => {
+    expect(formatCost(0, true)).toBe("≥ $0.00/month");
+  });
+
+  it("F19: lowerBound=false (default) keeps the original 'N/A' shape for zero cost", () => {
+    expect(formatCost(0, false)).toBe("N/A");
   });
 });
 
