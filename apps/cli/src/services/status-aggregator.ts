@@ -33,11 +33,39 @@ export interface StatusData {
 }
 
 /**
+ * F19 fix (2026-05-23, consistent with F6 + F16): detect per-unit
+ * rate strings like `$0.0230/GB-month` so parseCost can flag them
+ * as "variable, can't be summed as a fixed monthly amount" rather
+ * than parsing the rate as if it were a flat total.
+ *
+ * Without this, two S3 buckets at `$0.0230/GB-month` would be summed
+ * as `~$0.05/month` regardless of actual storage volume — the same
+ * bug F6 fixed in bulk-destroy and F16 fixed in admin list.
+ *
+ * @see _backlog/wizard-ux-audit-2026-05-22.md (F6, F16, F19)
+ */
+const PER_UNIT_RATE_PATTERNS = [
+  /\/GB(-month|-mo)?\b/i,
+  /\/req(uest)?s?\b/i,
+  /\/(1000|1k)\s*req(uest)?s?\b/i,
+  /\/(call|invocation|exec)s?\b/i,
+];
+
+function isPerUnitRate(costStr: string): boolean {
+  return PER_UNIT_RATE_PATTERNS.some((re) => re.test(costStr));
+}
+
+/**
  * Parses a cost string like "$1.23/month", "$1.23", or "N/A" into a number.
  * Returns 0 for unparseable strings.
+ *
+ * F19: returns `null` for per-unit rate strings (e.g. `$0.0230/GB-month`)
+ * so the caller can distinguish "variable, exclude from sum" from
+ * "zero / unparseable".
  */
-export function parseCost(costStr: string): number {
+export function parseCost(costStr: string): number | null {
   if (!costStr || costStr === CostEstimateLabel.NA) return 0;
+  if (isPerUnitRate(costStr)) return null;
   const match = costStr.match(/\$?([\d.]+)/);
   if (!match?.[1]) return 0;
   const value = parseFloat(match[1]);
@@ -47,10 +75,16 @@ export function parseCost(costStr: string): number {
 /**
  * Formats a numeric cost as "$X.XX/month".
  * Returns "N/A" for zero or negative values.
+ *
+ * F19: when `lowerBound` is true (any row was excluded for being a
+ * per-unit rate), prefix the rendered value with "≥ " to signal
+ * the displayed total is a floor, not the actual cost. Matches the
+ * F6 (bulk-destroy) and F16 (admin list) wording for consistency.
  */
-export function formatCost(cost: number): string {
-  if (cost <= 0) return CostEstimateLabel.NA;
-  return `$${cost.toFixed(2)}/month`;
+export function formatCost(cost: number, lowerBound = false): string {
+  if (cost <= 0 && !lowerBound) return CostEstimateLabel.NA;
+  const prefix = lowerBound ? "≥ " : "";
+  return `${prefix}$${cost.toFixed(2)}/month`;
 }
 
 /**
@@ -112,42 +146,65 @@ export async function buildStatusData(
     memoryService,
   );
 
-  const byTypeMap = new Map<string, { count: number; cost: number }>();
-  const byRegionMap = new Map<string, { count: number; cost: number }>();
+  // F19: track which buckets had at least one per-unit-rate row
+  // (parseCost returned null) so the displayed totals can carry
+  // the "≥" lower-bound prefix.
+  const byTypeMap = new Map<
+    string,
+    { count: number; cost: number; lowerBound: boolean }
+  >();
+  const byRegionMap = new Map<
+    string,
+    { count: number; cost: number; lowerBound: boolean }
+  >();
   let totalCost = 0;
+  let totalLowerBound = false;
 
   for (const r of enrichedResources) {
-    const cost = parseCost(r.estimatedMonthlyCost);
+    const parsed = parseCost(r.estimatedMonthlyCost);
+    const cost = parsed ?? 0;
+    const isVariable = parsed === null;
+    if (isVariable) totalLowerBound = true;
     totalCost += cost;
 
     // Group by type
-    const typeEntry = byTypeMap.get(r.resourceType) ?? { count: 0, cost: 0 };
+    const typeEntry = byTypeMap.get(r.resourceType) ?? {
+      count: 0,
+      cost: 0,
+      lowerBound: false,
+    };
     typeEntry.count += 1;
     typeEntry.cost += cost;
+    typeEntry.lowerBound = typeEntry.lowerBound || isVariable;
     byTypeMap.set(r.resourceType, typeEntry);
 
     // Group by region
-    const regionEntry = byRegionMap.get(r.region) ?? { count: 0, cost: 0 };
+    const regionEntry = byRegionMap.get(r.region) ?? {
+      count: 0,
+      cost: 0,
+      lowerBound: false,
+    };
     regionEntry.count += 1;
     regionEntry.cost += cost;
+    regionEntry.lowerBound = regionEntry.lowerBound || isVariable;
     byRegionMap.set(r.region, regionEntry);
   }
 
   return {
     totalResources: enrichedResources.length,
-    totalEstimatedMonthlyCost: formatCost(totalCost),
+    totalEstimatedMonthlyCost: formatCost(totalCost, totalLowerBound),
     byType: [...byTypeMap.entries()]
       .map(([type, d]) => ({
         type,
         count: d.count,
-        estimatedMonthlyCost: formatCost(d.cost),
+        estimatedMonthlyCost: formatCost(d.cost, d.lowerBound),
       }))
       .sort((a, b) => b.count - a.count),
     byRegion: [...byRegionMap.entries()]
       .map(([region, d]) => ({
         region,
         count: d.count,
-        estimatedMonthlyCost: formatCost(d.cost),
+        estimatedMonthlyCost: formatCost(d.cost, d.lowerBound),
       }))
       .sort((a, b) => b.count - a.count),
     lastUpdated: new Date().toISOString(),
