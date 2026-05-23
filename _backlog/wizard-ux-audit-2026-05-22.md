@@ -587,3 +587,73 @@ Convert the manual driver into a regression suite:
 
 **Effort to add regression suite**: M (~4h — fixture infra +
 diff harness + CI wiring).
+
+---
+
+## Post-merge sweep findings (2026-05-23)
+
+After the driver was checked in (PR #165), a quick PTY sweep across
+commands NOT covered by the original audit surfaced more:
+
+### F16 — UX — admin list `--total-cost` wording (FIXED in PR #167)
+
+`admin list --total-cost` had its own sum implementation with
+different wording from F6's bulk-destroy fix:
+
+```
+Estimated total: $0.00/mo (2 resources with non-numeric cost not included)
+```
+
+vs the post-F6 bulk-destroy output:
+
+```
+Estimated total: ≥ $0.00/month (variable per-unit rates excluded — actual cost depends on usage)
+```
+
+Two issues: (a) no `≥` lower-bound prefix; (b) "non-numeric cost"
+is wrong — per-unit rates ARE numeric. Fixed by aligning the
+wording in `apps/cli/src/commands/list.ts:267` to match F6's
+pattern.
+
+### F17 — UX — `infra drift` table wraps long ARNs onto multiple visual rows (OPEN)
+
+`infra drift` renders a boxed table at 120 cols, but resource ARNs
+like
+`arn:aws:cloudfront::<account-id>:distribution/EOJCMTXF21NEL` are
+too long for the column width. Result:
+
+```
+│   AWS::S3::Bucket                arn:aws:s3:::provisions-lock-test-1778172557 us-east-1       BASELINE_MISSING       │
+│   0                                                                                                                  │
+```
+
+The trailing `0` (drifted count for this row) is on its own line,
+broken away from its row. Reading the table mentally is much
+harder.
+
+**Proposed fix**: drop the `arn:aws:<service>:::` (or `arn:aws:
+<service>:<account>:`) prefix from the ID column for display —
+show just the bare identifier (`E1LFLMY7GUQSRU`,
+`assignee-website-bucket-1f4ef494`). The ARN can still appear in
+`--json` mode for machine consumption.
+
+**Effort**: S (1 file in the drift table renderer).
+
+### F18 — NOT A BUG — drift progress bar appears flooded in PTY capture
+
+PTY-driven sweep showed:
+
+```
+Checking resources... [██░░░░░░░░░░░░░░░░░░] 1/13 ...
+Checking resources... [███░░░░░░░░░░░░░░░░░] 2/13 ...
+... 13 lines total
+```
+
+Investigated: `apps/cli/src/views/drift-progress.ts:26` uses `\r`
+(carriage return) to redraw the bar in place. Real terminals
+render this as a single updating line. The "flood" only appears
+in PTY-driver capture because my driver's `strip_ansi` removes
+CR characters. Real users see a clean single-line progress bar.
+
+**No code change needed.** Driver could be improved to handle
+in-place redraws but that's out of scope for the CLI itself.
