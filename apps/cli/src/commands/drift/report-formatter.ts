@@ -29,6 +29,31 @@ export function statusLabel(status: string, noColor = false): string {
 }
 
 /**
+ * F17 fix (2026-05-23): extract a compact display ID from a full ARN
+ * so the drift table doesn't wrap on long ARNs at 120 cols. Strips
+ * the leading `arn:aws:<service>:<region>:<account>:` prefix and
+ * returns the resource-specific identifier portion. Non-ARN IDs
+ * (bare names, CloudFront IDs) are returned unchanged.
+ *
+ * Examples:
+ *   arn:aws:s3:::my-bucket                                   → my-bucket
+ *   arn:aws:cloudfront::123:distribution/E1LFLMY7GUQSRU      → distribution/E1LFLMY7GUQSRU
+ *   arn:aws:kms:us-east-1:123:key/abc-def                    → key/abc-def
+ *   E3EYXPSYURQIM9 (already bare)                            → E3EYXPSYURQIM9
+ *   my-bucket-name (bare)                                    → my-bucket-name
+ *
+ * --json output bypasses this renderer entirely so machine-readable
+ * consumers still receive the full ARN.
+ *
+ * @see _backlog/wizard-ux-audit-2026-05-22.md F17
+ */
+const ARN_PREFIX_RE = /^arn:aws[\w-]*:[^:]*:[^:]*:[^:]*:/;
+
+function compactResourceId(id: string): string {
+  return id.replace(ARN_PREFIX_RE, "");
+}
+
+/**
  * Render a drift results table.
  */
 export function renderDriftTable(
@@ -42,7 +67,8 @@ export function renderDriftTable(
     const divider = chalk.dim("─".repeat(header.length));
     const rows = results.map((r) => {
       const region = regionMap.get(r.resourceId) ?? "";
-      return `${r.resourceType.padEnd(30)} ${r.resourceId.padEnd(40)} ${region.padEnd(15)} ${statusLabel(r.status).padEnd(20 + 10)} ${r.driftedFields.length}`;
+      const id = compactResourceId(r.resourceId);
+      return `${r.resourceType.padEnd(30)} ${id.padEnd(40)} ${region.padEnd(15)} ${statusLabel(r.status).padEnd(20 + 10)} ${r.driftedFields.length}`;
     });
     const content = [header, divider, ...rows].join("\n");
     process.stdout.write(
@@ -59,7 +85,8 @@ export function renderDriftTable(
     process.stdout.write("─".repeat(header.length) + "\n");
     for (const r of results) {
       const region = regionMap.get(r.resourceId) ?? "";
-      const line = `${r.resourceType.padEnd(30)} ${r.resourceId.padEnd(40)} ${region.padEnd(15)} ${statusLabel(r.status, true).padEnd(20)} ${r.driftedFields.length}`;
+      const id = compactResourceId(r.resourceId);
+      const line = `${r.resourceType.padEnd(30)} ${id.padEnd(40)} ${region.padEnd(15)} ${statusLabel(r.status, true).padEnd(20)} ${r.driftedFields.length}`;
       process.stdout.write(line + "\n");
     }
   }
