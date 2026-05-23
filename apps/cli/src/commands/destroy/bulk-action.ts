@@ -75,6 +75,7 @@ async function destroyOneFallback(
 import { tryAssigneeCredentials } from "../../config/aws-credentials.js";
 import { AWS_REGION } from "../../config/constants.js";
 import { startSpinner, stopSpinner } from "../../utils/display.js";
+import { isPerUnitRate } from "../../utils/per-unit-rate.js";
 import { ErrorCode } from "../../constants/errors.js";
 
 // ── Destroy order (dependency-respecting) ─────────────────────────────
@@ -212,19 +213,12 @@ function sortByDestroyOrder(resources: ManagedResource[]): ManagedResource[] {
  * After this fix, per-unit rates are skipped and a one-line
  * footnote tells the user that the sum is a LOWER BOUND.
  *
- * @see _backlog/wizard-ux-audit-2026-05-22.md F6
+ * The per-unit-rate detection lives in `../../utils/per-unit-rate.ts`
+ * and is shared with admin list (F16) and admin status (F19) to
+ * keep the three commands' wording aligned.
+ *
+ * @see _backlog/wizard-ux-audit-2026-05-22.md (F6, F16, F19)
  */
-const PER_UNIT_RATE_PATTERNS = [
-  /\/GB(-month|-mo)?\b/i, // $X/GB-month, $X/GB
-  /\/req(uests?)?\b/i, // $X/request, $X/req
-  /\/(1000|1k)\s*reqs?\b/i, // $X/1000 requests
-  /\/(call|invocation|exec)s?\b/i,
-];
-
-function isPerUnitRate(cost: string): boolean {
-  return PER_UNIT_RATE_PATTERNS.some((re) => re.test(cost));
-}
-
 function sumEstimatedCosts(resources: ManagedResource[]): string {
   let total = 0;
   let hasAny = false;

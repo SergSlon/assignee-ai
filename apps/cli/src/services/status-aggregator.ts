@@ -11,6 +11,7 @@
 import type { ManagedResource } from "./list-resources.js";
 import { defaultMemoryService, type MemoryService } from "./memory.js";
 import { CostEstimateLabel } from "@assignee/core";
+import { isPerUnitRate } from "../utils/per-unit-rate.js";
 
 export interface StatusByType {
   type: string;
@@ -30,29 +31,6 @@ export interface StatusData {
   byType: StatusByType[];
   byRegion: StatusByRegion[];
   lastUpdated: string;
-}
-
-/**
- * F19 fix (2026-05-23, consistent with F6 + F16): detect per-unit
- * rate strings like `$0.0230/GB-month` so parseCost can flag them
- * as "variable, can't be summed as a fixed monthly amount" rather
- * than parsing the rate as if it were a flat total.
- *
- * Without this, two S3 buckets at `$0.0230/GB-month` would be summed
- * as `~$0.05/month` regardless of actual storage volume — the same
- * bug F6 fixed in bulk-destroy and F16 fixed in admin list.
- *
- * @see _backlog/wizard-ux-audit-2026-05-22.md (F6, F16, F19)
- */
-const PER_UNIT_RATE_PATTERNS = [
-  /\/GB(-month|-mo)?\b/i,
-  /\/req(uest)?s?\b/i,
-  /\/(1000|1k)\s*req(uest)?s?\b/i,
-  /\/(call|invocation|exec)s?\b/i,
-];
-
-function isPerUnitRate(costStr: string): boolean {
-  return PER_UNIT_RATE_PATTERNS.some((re) => re.test(costStr));
 }
 
 /**
