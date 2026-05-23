@@ -134,7 +134,7 @@
   "devDependencies": {
     "@assignee/eslint-config": "workspace:*",
     "@assignee/tsconfig": "workspace:*",
-    "@types/node": "^25.5.0",
+    "@types/node": "^25.9.1",
     "eslint": "^9.39.1",
     "tsc-alias": "^1.8.17",
     "typescript": "^5.9.2",
