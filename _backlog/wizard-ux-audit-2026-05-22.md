@@ -499,60 +499,51 @@ single-line completion message. Standard for CLI tools — `npm`,
 
 ---
 
-## Prioritisation (updated 2026-05-22 — end-of-day sweep)
+## Prioritisation (updated 2026-05-23 — final close-out)
 
-**Closed** (fix landed today):
+**Closed** (fix landed across 2026-05-22 + 2026-05-23):
 
 - **F1** (banner region context pre-prompt) — PR #154 / `51358d3e`.
 - **F2** (AWS_PROFILE warning + prompt contradiction) — PR #151 / `81e1029b`.
 - **F3** (Environment prompt hint) — PR #155 / `552577d6`.
+- **F4** (init parity — inherit disclosure) — PR #163 / `2415cf06`.
 - **F5** (placeholder visual ambiguity) — PR #156 / `c8e722ce`.
+- **F6** (bulk-destroy cost too low for per-unit rates) — PR #164 / `de62abf3`.
 - **F7** (severity label drift) — PR #152 / `3ef7f878`.
+- **F11 insurance** (advice/findings cross-check filter) — PR #162 / `8755d487`.
 - **F12** (BP-EC2-021 wrong remediation hint) — PR #149 / `8e475eed`.
 - **F13** (cost-source suffix legend) — PR #159 / `a8da3d56`.
-- **F14** (plan --wizard help misadvertised) — PR #160 (in flight).
+- **F14** (plan --wizard help misadvertised) — PR #160 / `a730f831`.
 - **F15** (spinner CI/NO_PROGRESS gate) — PR #158 / `b31183de`.
+- **F16** (admin list --total-cost wording) — PR #167 / `b2d1bf8b`.
+- **F17** (drift table ARN column wrap) — PR #169 / `90e7b517`.
+- **F19** (admin status per-unit rate sum) — PR #170 / `c4a83924`.
+
+Also: shared per-unit-rate detector lifted out of bulk-destroy +
+status-aggregator into `apps/cli/src/utils/per-unit-rate.ts` to
+prevent future drift between the F6 / F16 / F19 callers.
+PR #172 / `4138eaf5`.
 
 **Reclassified as non-bugs after re-verification**:
 
-- **F8** (plan-box renderer drift): NOT A BUG — gate is by
-  `process.stdout.isTTY` (correct), not by `-q` vs `--wizard`.
-  Original observation conflated TTY-vs-pipe with the flag choice.
-- **F10** (wrong egress pricing in `-q` mode): INFO; both `-q` and
-  `--wizard` modes show correct tiered $0.09→$0.07 EC2 rate. Likely
-  transient pricing-MCP cache state in the original audit run.
-- **F11** (LLM advice → t2.micro): UX-stochastic; re-run correctly
-  suggested t4g.micro. Post-filter still warranted as insurance
-  against the latent LLM-non-determinism failure mode.
-
-**Open** (carried over to a future session):
-
-- **F4** (init parity — global asks 2 prompts local doesn't): M effort;
-  requires wizard field-set + config resolver refactor. Not a
-  one-PR change.
-- **F6** (bulk-destroy cost suspiciously low at $0.05/mo): M effort;
-  pricing decomposer needs to estimate baseline CloudFront +
-  aggregate S3 storage GB. Multiple decomposer + display files.
-- **F11** insurance post-filter (advice cross-check against Findings):
-  S-M effort; design the predicate, plumb through advice node, test.
-
-**Informational** (no action):
-
-- F8, F9, F10 — see reclassification notes above.
+- **F8** (plan-box renderer drift): NOT A BUG — gate is
+  `process.stdout.isTTY` (correct), not flag choice.
+- **F10** (wrong egress pricing in `-q` mode): non-reproducible.
+- **F11** stochastic part (LLM advice → t2.micro): non-deterministic.
+- **F18** (drift progress bar flood): PTY-driver artifact only.
 
 **End-of-day aggregate**:
 
-- **9 audit findings closed today** (F1, F2, F3, F5, F7, F12, F13, F14, F15).
-- 3 reclassified non-bugs (F8, F10, F11 stochastic part).
-- 3 remain genuinely open as future work (F4, F6, F11 insurance).
+- **15 audit findings fixed and merged** (F1, F2, F3, F4, F5, F6, F7,
+  F11 insurance, F12, F13, F14, F15, F16, F17, F19).
+- 4 reclassified as non-bugs / stochastic (F8, F10, F11 stochastic,
+  F18).
+- 0 findings remain open.
 - 0 findings dropped without action.
 
-**Revised remaining effort estimate**:
-
-- F4: ~4h (wizard field-set + config resolver).
-- F6: ~4h (CloudFront baseline + S3 storage aggregation).
-- F11 insurance: ~3h (post-filter predicate + test).
-- **Total open work**: ~11h.
+**Audit is closed.** Future regressions: re-run the PTY driver at
+`apps/cli/scripts/pty-driver.py` against any wizard or cost-summing
+command + diff against this doc.
 
 ---
 
