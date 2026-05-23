@@ -254,6 +254,20 @@ No --yes flag is required.
             // Sum parseable monthly rates. Unparseable entries are tracked
             // separately so we can warn the operator when the total is
             // incomplete instead of silently under-reporting.
+            //
+            // F16 fix (2026-05-23, post-F6): parseMonthlyCost returns
+            // `null` for two distinct classes:
+            //   (a) per-unit rates like "$0.0230/GB-month" (variable, no
+            //       fixed monthly total without measuring storage).
+            //   (b) genuinely non-numeric strings like "Unknown" or
+            //       arbitrary unparseable text.
+            // The old wording "non-numeric cost not included" was misleading
+            // for class (a) — rates ARE numeric, just per-unit. The new
+            // wording covers both classes ("variable or non-numeric"). A
+            // `≥` lower-bound prefix is added when at least one row was
+            // excluded so the user knows the sum is a floor, not the
+            // actual total. Matches the F6 fix in apps/cli/src/commands/
+            // destroy/bulk-action.ts (sumEstimatedCosts).
             let total = 0;
             let unparseable = 0;
             for (const r of resources) {
@@ -264,10 +278,11 @@ No --yes flag is required.
                 total += parsed;
               }
             }
-            const totalLine = `Estimated total: $${total.toFixed(2)}/mo`;
+            const prefix = unparseable > 0 ? "≥ " : "";
+            const totalLine = `Estimated total: ${prefix}$${total.toFixed(2)}/mo`;
             const warn =
               unparseable > 0
-                ? ` (${unparseable} resource${unparseable === 1 ? "" : "s"} with non-numeric cost not included)`
+                ? ` (${unparseable} resource${unparseable === 1 ? "" : "s"} with variable per-unit or non-numeric cost excluded — actual total may be higher)`
                 : "";
             process.stdout.write(`\n${totalLine}${warn}\n`);
           }
