@@ -16,11 +16,13 @@ that captured each prompt exactly as a terminal user sees it.
 **Total Bedrock cost**: ~$0.026 (two `infra plan` calls). **No AWS
 resources mutated.**
 
-**Driver**: `/tmp/assignee_pty_driver.py` (Python `pty` module, raw mode,
-ANSI-stripped capture per idle period). Reproducible via:
+**Driver**: `apps/cli/scripts/pty-driver.py` (Python `pty` module,
+raw mode, ANSI-stripped capture per idle period). Checked into the
+repo 2026-05-23 (post-audit) so future re-runs don't depend on
+`/tmp` ephemera. Reproducible via:
 
 ```sh
-python3 /tmp/assignee_pty_driver.py node apps/cli/dist/index.js <args>
+python3 apps/cli/scripts/pty-driver.py node apps/cli/dist/index.js <args>
 ```
 
 ---
@@ -554,15 +556,34 @@ single-line completion message. Standard for CLI tools — `npm`,
 
 ---
 
-## Driver retained for re-runs
+## Driver checked into the repo (2026-05-23)
 
-`/tmp/assignee_pty_driver.py` (this session) drives any assignee
-command through a real PTY, captures every screen verbatim, and is
-the canonical repro for all 15 findings. Suggested next move: copy
-it into `apps/cli/scripts/pty-driver.mjs` (or rewrite in Node so it
-ships with the repo) and wire it into a `pnpm wizard-audit` CI job
-that diff-checks captured-screen output against golden snapshots.
-That converts ad-hoc audits into a regression suite.
+The PTY driver originally created at `/tmp/assignee_pty_driver.py`
+during this audit was promoted to `apps/cli/scripts/pty-driver.py`
+on 2026-05-23 — it now ships with the repo and survives future
+sessions. Any contributor running:
 
-**Effort to land driver as a script**: M (port to Node, integrate
-with existing test infra).
+```sh
+pnpm build  # ensure dist/index.js is fresh
+python3 apps/cli/scripts/pty-driver.py \
+  node apps/cli/dist/index.js dev init --wizard
+```
+
+reproduces the audit's screen-by-screen capture without external
+dependencies (Python 3.8+ stdlib only).
+
+## Suggested next step (not done today)
+
+Convert the manual driver into a regression suite:
+
+1. Capture golden screen-snapshots for each wizard flow into
+   `apps/cli/__fixtures__/wizard-snapshots/`.
+2. Add a `pnpm wizard-audit` npm script that runs the driver +
+   diffs captured screens vs goldens (exits non-zero on drift).
+3. Wire into CI as an opt-in informational job (not blocking —
+   wizard prompts have subtle non-determinism around
+   timing-dependent spinner frames that would false-positive a
+   blocking gate).
+
+**Effort to add regression suite**: M (~4h — fixture infra +
+diff harness + CI wiring).
