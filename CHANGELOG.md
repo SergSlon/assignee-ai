@@ -17,7 +17,69 @@ review methodology notes, see
 
 ## [Unreleased]
 
+### Added
+
+- **Wizard UX regression suite** (`3c5380a2`) — `pnpm wizard-audit`
+  drives the checked-in PTY harness against `dev init --wizard` and
+  `dev init --global --wizard`, diffs each captured screen against
+  a golden snapshot under
+  `apps/cli/__fixtures__/wizard-snapshots/`. New
+  `.github/workflows/wizard-audit.yml` runs the diff informationally
+  on every PR touching the wizard surface. Closes the
+  2026-05-22 wizard-UX audit's "Suggested next step".
+
+- **F11 insurance filter extended to EBS encryption + S3
+  PublicAccessBlock** (`58e97c88`) — the LLM-vs-finding cross-check
+  filter (`filterAdviceContradictingFindings`) now drops advice
+  recommending `Encrypted: false` when BP-EC2-002 fires, or the
+  `public-read` canned ACL / `BlockPublic*: false` settings when
+  any BP-S3-001..004 PublicAccessBlock rule fires. 52 tests in
+  `advice-filters.test.ts` lock the predicate-pair contract.
+
+- **F6 S3 storage estimation closure** (`8dd1f3c5`) —
+  `assignee admin list --total-cost`, `assignee admin status`,
+  `assignee infra destroy --all`, and `assignee optimize` now
+  display real `$X.XX/mo` totals for S3 buckets instead of the
+  per-GB-month rate hint. New CloudWatch-backed storage enricher
+  at `packages/core/src/services/storage-enricher.ts` queries
+  `BucketSizeBytes` (StandardStorage dimension) and multiplies by
+  the per-GB-month rate from Pricing MCP. Operator IAM policy
+  gains a `CloudWatchStorageMetricsRead` statement granting
+  `cloudwatch:GetMetricStatistics` scoped to
+  `cloudwatch:namespace=AWS/S3`. CLI/MCP parity preserved via the
+  shared `@assignee/core` re-export. Operators must
+  `assignee dev setup --refresh` for the new IAM grant to
+  propagate before the F6 promotion fires on existing accounts.
+  CloudFront baseline + multi-storage-class (IA / Glacier /
+  Intelligent-Tiering) are explicitly out of scope for this
+  iteration — documented in the audit doc's "Out of scope"
+  subsection.
+
+### Fixed
+
+- **F20 — global wizard region prompt uses `initialValue`**
+  (`5c3ed987`) — one-line swap from `placeholder:` to
+  `initialValue:` at `init/global-wizard.ts:51-54`. ENTER now
+  accepts `us-east-1` instead of silently writing an empty
+  region to the config. Same family as F5 (placeholder visual
+  ambiguity); F5 fixed the rendering, F20 fixes the semantic.
+  Discovered by Quinn during the wizard-audit review and caught
+  in the regression suite's own golden refresh round-trip.
+
 ### Changed
+
+- **`admin list` parser shares per-unit-rate detection with
+  `bulk-destroy` + `admin status`** (`368c701f`) — `parseMonthlyCost`
+  in `apps/cli/src/commands/list.ts` now calls `isPerUnitRate`
+  from the shared `apps/cli/src/utils/per-unit-rate.ts` module
+  (same source of truth as the F6 / F16 / F19 fix trio).
+  Behaviour byte-identical for every real cost-string shape; a
+  7-assertion test locks the new path.
+
+- **`wizard-audit` workflow drops the redundant `setup-python`
+  step** (`31451eea`) — ubuntu-latest ships python3.12
+  preinstalled. Drop saves ~15s per CI run and removes the only
+  use of `actions/setup-python@9b62e2c4...` in the repo.
 
 - **BREAKING**: CLI package renamed from `assignee` to `@assignee/cli` on
   npm. The bare `assignee` name on the npm registry has been squatted
