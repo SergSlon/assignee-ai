@@ -29,6 +29,7 @@ import { fetchManagedIamRoles } from "./iam-role-inventory.js";
 import {
   createListPricingEnricher,
   createListCreatedDateEnricher,
+  createCloudWatchStorageEnricher,
 } from "@assignee/core";
 
 // Re-export for consumers that import from this module.
@@ -45,10 +46,24 @@ export type { ManagedResource } from "@assignee/core";
  * `list` / `status` commands can forward the same filter the MCP tool
  * exposes. Story 56-it1-01.
  */
+export interface FetchOptions {
+  /**
+   * When `true`, wires the CloudWatch-backed storage enricher so S3
+   * buckets get real `$X.XX/mo` totals (multiplying per-GB-month rate
+   * by actual BucketSizeBytes). Default `false` — `admin list` without
+   * `--total-cost` doesn't sum so it has no reason to pay the per-bucket
+   * CloudWatch round-trip. F6 (Quinn H2 follow-up). Pass `true` from
+   * commands that DO sum / display per-resource totals
+   * (`admin list --total-cost`, `admin status`, `infra destroy --all`).
+   */
+  withStorageEstimate?: boolean;
+}
+
 export async function fetchManagedResources(
   region?: string,
   resourceType?: string,
   mcpTools?: StructuredTool[],
+  options?: FetchOptions,
 ): Promise<ManagedResource[]> {
   const resolvedRegion = region ?? AWS_REGION;
   const opCreds = tryAssigneeCredentials("operator");
@@ -110,7 +125,18 @@ export async function fetchManagedResources(
         }
       : {}),
     // Pricing-MCP enrichment: resolves rate-card costs for N/A rows.
-    enrichWithPricing: createListPricingEnricher(),
+    // F6 (2026-05-24): when operator creds are available AND the caller
+    // opted into storage estimation, hand a CloudWatch-backed storage
+    // enricher so per-GB-month rates for S3 buckets get multiplied by
+    // actual stored GB and surface as real $/mo totals instead of just
+    // rate hints. Gating on `withStorageEstimate` keeps the per-bucket
+    // CloudWatch round-trip off the hot path for callers that don't
+    // sum costs (e.g. `admin list` without `--total-cost`).
+    enrichWithPricing: createListPricingEnricher(
+      sdkCredentials && options?.withStorageEstimate
+        ? createCloudWatchStorageEnricher(sdkCredentials, resolvedRegion)
+        : undefined,
+    ),
     // Created-date enrichment: resolves creation timestamps for N/A rows.
     ...(sdkCredentials
       ? {

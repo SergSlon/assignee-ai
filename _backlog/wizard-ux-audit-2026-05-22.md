@@ -208,6 +208,49 @@ flag the lower bound.
 
 **Effort**: M (touches multiple decomposers + display).
 
+**Partial closure (2026-05-24) — S3 done, CloudFront still open.**
+
+S3 path closed via `createCloudWatchStorageEnricher`
+(`packages/core/src/services/storage-enricher.ts`). Calls CloudWatch
+`GetMetricStatistics` on `AWS/S3` namespace's `BucketSizeBytes` metric
+(StandardStorage dimension) for every S3 bucket in scope, multiplies
+the result by the per-GB-month rate from Pricing MCP, and promotes
+the per-resource cost from a usage-based rate hint to a real
+`$X.XX/mo` total. Wired into both CLI (`apps/cli/src/services/
+list-resources.ts`) and MCP server (`apps/mcp-server/src/services/
+list-resources.ts`) for parity.
+
+IAM grant added: operator policy now includes
+`cloudwatch:GetMetricStatistics` scoped via the
+`cloudwatch:namespace=AWS/S3` condition
+(`packages/core/src/config/iam-policies/operator.ts`
+`CloudWatchStorageMetricsRead` statement). Operators MUST re-attach
+the regenerated managed policy via `assignee dev setup --refresh`
+or equivalent before the F6 promotion fires.
+
+Performance: the storage enricher only wires when the calling
+command is summing costs — `admin list --total-cost`, `admin status`,
+`infra destroy --all`, and `optimize`. Plain `admin list` (no
+`--total-cost`) skips the per-bucket CloudWatch round-trip
+(Quinn H2 follow-up gate via `FetchOptions.withStorageEstimate`).
+
+Out of scope for this iteration:
+
+- **CloudFront baseline** — distributions still surface as rate
+  hints. Real fix needs a CloudFront-specific enricher that adds
+  a baseline request count (no native AWS metric — would need to
+  query CloudFront `GetDistributionConfig` for PriceClass and emit
+  a minimum cost). File a separate item if the CloudFront line
+  becomes a visible UX irritant; the operator policy already has
+  `cloudwatch:GetMetricStatistics` scoped to `AWS/S3` only, so a
+  CloudFront extension also needs the policy to include
+  `AWS/CloudFront` in the namespace allowlist.
+- **Multi-storage-class buckets** — only `StandardStorage` is
+  queried today. IA / Glacier / Intelligent-Tiering buckets fall
+  back to the rate-hint display (Quinn H1 follow-up). Easy to
+  extend with parallel calls per class once we have a real account
+  with a non-Standard bucket to dogfood against.
+
 ---
 
 ### F7 — UX — Severity label drift: `[MEDIUM]` vs `WARN` for the same data

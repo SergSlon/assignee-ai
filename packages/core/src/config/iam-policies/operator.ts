@@ -201,6 +201,35 @@ export function operatorPolicy(
         Resource: "*",
       },
       {
+        // F6 (2026-05-24): `admin list --total-cost` / `infra destroy
+        // --all` use CloudWatch's `BucketSizeBytes` metric to convert
+        // per-GB-month S3 storage rates into real `$X.XX/mo` totals
+        // instead of the rate-hint fallback. `GetMetricStatistics`
+        // does NOT support resource-level scoping (it scopes by metric
+        // namespace via Condition keys), so the Resource is `*` and
+        // the Condition restricts to `AWS/S3` — operator credential
+        // leak can't pivot to read arbitrary application metrics
+        // (custom namespaces, AWS/EC2, AWS/Lambda…) that might
+        // disclose sensitive operational signal.
+        //
+        // Without this statement the storage-enricher's CloudWatch
+        // calls return AccessDenied, the silent-swallow path leaves
+        // the storage map empty, and the F6 promotion never fires
+        // (display reverts to the pre-fix rate hint).
+        //
+        // @see _backlog/wizard-ux-audit-2026-05-22.md F6
+        // @see apps/cli/src/services/storage-enricher.ts (consumer)
+        Sid: "CloudWatchStorageMetricsRead",
+        Effect: IamEffect.ALLOW,
+        Action: ["cloudwatch:GetMetricStatistics"],
+        Resource: "*",
+        Condition: {
+          StringEquals: {
+            "cloudwatch:namespace": "AWS/S3",
+          },
+        },
+      },
+      {
         // SEC-009 (full-audit-2026-04-29): tag:GetResources is a READ
         // operation — aws:RequestTag does not apply to reads (it
         // evaluates the tags being SET in the request, which is absent

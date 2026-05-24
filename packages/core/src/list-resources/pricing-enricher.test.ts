@@ -555,3 +555,255 @@ describe("createListPricingEnricher — usage-based unit suffix not doubled (DF-
     expect(label).not.toContain("/M write reqs/M write reqs");
   });
 });
+
+// ──────────────────────────────────────────────────────────────────
+// F6 (2026-05-24) — StorageEnricher promotes per-GB-month rate hints
+// to per-resource $/mo totals when actual storage GB is known.
+// ──────────────────────────────────────────────────────────────────
+
+/** S3 storage rate Pricing-MCP response fixture. Returns the canonical
+ *  $0.0230/GB-month rate for the Standard storage class. The `attributes`
+ *  bag is left empty so `itemMatchesFilters` can't reject on the
+ *  region-prefixed `usagetype` value real AWS responses contain
+ *  ("USE1-TimedStorage-ByteHrs") — that is a pricing-enricher-specific
+ *  test concern, not an F6 concern. */
+const S3_STORAGE_PRICING_RESPONSE = JSON.stringify({
+  status: "success",
+  service_name: "AmazonS3",
+  data: [
+    {
+      product: {
+        productFamily: "Storage",
+        attributes: {},
+      },
+      terms: {
+        OnDemand: {
+          "term-1": {
+            priceDimensions: {
+              "pd-1": {
+                rateCode: "pd-1",
+                beginRange: "0",
+                endRange: "Inf",
+                unit: "GB-Mo",
+                pricePerUnit: { USD: "0.0230000000" },
+                description: "Standard storage, first 50 TB / month",
+              },
+            },
+          },
+        },
+      },
+    },
+  ],
+});
+
+describe("createListPricingEnricher — F6 storage promotion", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockInitConnections.mockResolvedValue(undefined);
+    mockClose.mockResolvedValue(undefined);
+    mockGetTools.mockResolvedValue([
+      { name: "get_pricing", invoke: mockToolInvoke },
+    ]);
+    vi.mocked(getMcpServerConfigs).mockReturnValue({
+      "aws-pricing-mcp-server": {
+        command: "uvx",
+        args: [
+          "--with",
+          "botocore[crt]",
+          "awslabs.aws-pricing-mcp-server@1.0.27",
+        ],
+        env: {
+          AWS_ACCESS_KEY_ID: "AKIAIOSFODNN7EXAMPLE",
+          AWS_SECRET_ACCESS_KEY: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+          AWS_DEFAULT_REGION: "us-east-1",
+          FASTMCP_LOG_LEVEL: "ERROR",
+        },
+      },
+    });
+  });
+
+  it("promotes per-GB-month rate to $/mo when storageGB is known (50 GB → $1.15/mo)", async () => {
+    const arn = "arn:aws:s3:::my-test-bucket-50gb";
+    mockToolInvoke.mockResolvedValue(wrapMcpText(S3_STORAGE_PRICING_RESPONSE));
+
+    // StorageEnricher reports 50 GB for this bucket.
+    const storageEnricher = vi.fn(
+      async () => new Map([[arn, { storageGB: 50 }]]),
+    );
+
+    const enricher = createListPricingEnricher(storageEnricher);
+    const result = await enricher([makeResource(arn, "AWS::S3::Bucket")]);
+
+    // 50 GB × $0.023/GB-month = $1.15/mo
+    expect(result.get(arn)).toBe("$1.15/mo");
+    expect(storageEnricher).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to rate-hint when storageEnricher returns no entry for the ARN", async () => {
+    const arn = "arn:aws:s3:::my-test-bucket-no-data";
+    mockToolInvoke.mockResolvedValue(wrapMcpText(S3_STORAGE_PRICING_RESPONSE));
+
+    // StorageEnricher returns empty map (e.g. freshly-created bucket
+    // has no BucketSizeBytes datapoint yet).
+    const storageEnricher = vi.fn(async () => new Map());
+
+    const enricher = createListPricingEnricher(storageEnricher);
+    const result = await enricher([makeResource(arn, "AWS::S3::Bucket")]);
+
+    // No GB known → label is the rate-hint string from extractFirstTierPrice.
+    const label = result.get(arn);
+    expect(label).toBeDefined();
+    expect(label).toContain("/GB-mo");
+  });
+
+  it("falls back to rate-hint when storageEnricher is not supplied", async () => {
+    const arn = "arn:aws:s3:::my-test-bucket-no-enricher";
+    mockToolInvoke.mockResolvedValue(wrapMcpText(S3_STORAGE_PRICING_RESPONSE));
+
+    // No storageEnricher passed → behaviour identical to pre-F6.
+    const enricher = createListPricingEnricher();
+    const result = await enricher([makeResource(arn, "AWS::S3::Bucket")]);
+
+    const label = result.get(arn);
+    expect(label).toBeDefined();
+    expect(label).toContain("/GB-mo");
+  });
+
+  it("survives storageEnricher throwing — falls back gracefully", async () => {
+    const arn = "arn:aws:s3:::my-test-bucket-enricher-throws";
+    mockToolInvoke.mockResolvedValue(wrapMcpText(S3_STORAGE_PRICING_RESPONSE));
+
+    const storageEnricher = vi.fn(async () => {
+      throw new Error("CloudWatch IAM denied");
+    });
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+
+    try {
+      const enricher = createListPricingEnricher(storageEnricher);
+      const result = await enricher([makeResource(arn, "AWS::S3::Bucket")]);
+
+      // Same fallback as missing enricher.
+      const label = result.get(arn);
+      expect(label).toBeDefined();
+      expect(label).toContain("/GB-mo");
+
+      // One stderr warning for the thrown enricher.
+      expect(stderrSpy).toHaveBeenCalled();
+      const warningCall = stderrSpy.mock.calls.find((c) =>
+        String(c[0]).includes("storage-enricher threw"),
+      );
+      expect(warningCall).toBeDefined();
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
+  it("mixes: one bucket with GB → $/mo, one without → rate hint (same tuple)", async () => {
+    const arnWithData = "arn:aws:s3:::bucket-with-data-100gb";
+    const arnNoData = "arn:aws:s3:::bucket-no-data";
+
+    mockToolInvoke.mockResolvedValue(wrapMcpText(S3_STORAGE_PRICING_RESPONSE));
+
+    const storageEnricher = vi.fn(
+      async () => new Map([[arnWithData, { storageGB: 100 }]]),
+    );
+
+    const enricher = createListPricingEnricher(storageEnricher);
+    const result = await enricher([
+      makeResource(arnWithData, "AWS::S3::Bucket"),
+      makeResource(arnNoData, "AWS::S3::Bucket"),
+    ]);
+
+    // Per-tuple MCP call happens ONCE (same rate for both buckets) but
+    // per-resource label differs based on whether storageGB is known.
+    expect(mockToolInvoke).toHaveBeenCalledTimes(1);
+    // 100 GB × $0.023 = $2.30/mo
+    expect(result.get(arnWithData)).toBe("$2.30/mo");
+    // No GB data → rate hint
+    expect(result.get(arnNoData)).toContain("/GB-mo");
+  });
+
+  it("rounds the per-bucket total to two decimals (12.345 GB → $0.28/mo)", async () => {
+    const arn = "arn:aws:s3:::bucket-fractional";
+    mockToolInvoke.mockResolvedValue(wrapMcpText(S3_STORAGE_PRICING_RESPONSE));
+
+    const storageEnricher = vi.fn(
+      async () => new Map([[arn, { storageGB: 12.345 }]]),
+    );
+
+    const enricher = createListPricingEnricher(storageEnricher);
+    const result = await enricher([makeResource(arn, "AWS::S3::Bucket")]);
+
+    // 12.345 × 0.023 = 0.283935 → $0.28/mo
+    expect(result.get(arn)).toBe("$0.28/mo");
+  });
+
+  it("skips storageEnricher entirely when there are no priceable resources (Quinn M2)", async () => {
+    const storageEnricher = vi.fn(async () => new Map());
+
+    const enricher = createListPricingEnricher(storageEnricher);
+    const result = await enricher([]);
+
+    expect(result.size).toBe(0);
+    // No priceable resources → no point paying the per-bucket CloudWatch
+    // round-trip. Earlier (pre-Quinn-M2) the enricher was called with
+    // an empty array — this test locks the optimised behaviour.
+    expect(storageEnricher).not.toHaveBeenCalled();
+  });
+
+  it("calls storageEnricher with the priceable subset, not the raw input", async () => {
+    const arn = "arn:aws:s3:::priceable-bucket";
+    const noDecomposerArn =
+      "arn:aws:elasticache:us-east-1:112233445566:cluster/no-decomposer";
+    mockToolInvoke.mockResolvedValue(wrapMcpText(S3_STORAGE_PRICING_RESPONSE));
+    const storageEnricher = vi.fn(
+      async () => new Map([[arn, { storageGB: 25 }]]),
+    );
+
+    const enricher = createListPricingEnricher(storageEnricher);
+    await enricher([
+      makeResource(arn, "AWS::S3::Bucket"),
+      makeResource(noDecomposerArn, "AWS::ElastiCache::CacheCluster"),
+    ]);
+
+    expect(storageEnricher).toHaveBeenCalledTimes(1);
+    // Only the priceable S3 bucket flows in — the no-decomposer
+    // ElastiCache cluster is filtered out before the call. vi.fn()
+    // without a signature types `.mock.calls` as `[][]`, so cast the
+    // calls list to the real shape before indexing.
+    const calls = storageEnricher.mock.calls as unknown as Array<
+      [ManagedResource[]]
+    >;
+    const handed = calls[0]?.[0];
+    expect(handed).toBeDefined();
+    expect(handed).toHaveLength(1);
+    expect(handed?.[0]?.arn).toBe(arn);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────
+// H3 (Quinn) — decomposer-ordering regression test. The F6 promotion
+// path implicitly depends on the S3 decomposer emitting the
+// per-GB-month STORAGE line as its FIRST usage-based line item. If a
+// future refactor reorders the lines (e.g. PUT requests before
+// storage) the promotion goes silent — no test was previously
+// catching that ordering invariant. Freeze it here.
+// ──────────────────────────────────────────────────────────────────
+
+describe("S3 decomposer first-usage-based-item ordering (F6 invariant)", () => {
+  it("emits the per-GB-month STORAGE line as the first usage-based item", async () => {
+    const { defaultDecomposerRegistry } =
+      await import("../pricing/barrels/decomposers.js");
+    const { PricingKind } = await import("../pricing/filter-constants.js");
+    const { PriceUnit } = await import("../pricing/price-units.js");
+    const items = defaultDecomposerRegistry.decompose("AWS::S3::Bucket", {});
+    const usage = items.filter((i) => i.kind === PricingKind.USAGE_BASED);
+    expect(usage.length).toBeGreaterThan(0);
+    // F6 (pricing-enricher.ts) only fetches usageBasedItems[0]. If this
+    // assertion ever fails, F6 promotion broke silently and the storage
+    // cost will revert to a rate-hint display in production.
+    expect(usage[0]!.priceUnit).toBe(PriceUnit.PER_GB_MONTH);
+  });
+});

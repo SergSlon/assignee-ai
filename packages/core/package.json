@@ -104,6 +104,7 @@
     "@assignee/best-practices": "workspace:*",
     "@aws-sdk/client-cloudcontrol": "^3.1051.0",
     "@aws-sdk/client-cloudformation": "^3.1051.0",
+    "@aws-sdk/client-cloudwatch": "^3.1051.0",
     "@aws-sdk/client-ec2": "^3.1051.0",
     "@aws-sdk/client-ecs": "^3.1051.0",
     "@aws-sdk/client-efs": "^3.1051.0",

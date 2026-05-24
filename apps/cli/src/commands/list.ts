@@ -224,6 +224,11 @@ No --yes flag is required.
           const resources = await fetchManagedResources(
             opts.region,
             resolvedResourceType,
+            undefined,
+            // F6 Quinn H2: only pay the per-bucket CloudWatch round-trip
+            // when --total-cost is set (otherwise we don't sum, so the
+            // per-resource $/mo total is unused — rate hints suffice).
+            { withStorageEstimate: opts.totalCost ?? false },
           );
 
           // Story 94-N2 (A-04): `list --json` success path emits a

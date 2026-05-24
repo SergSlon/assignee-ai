@@ -31,6 +31,7 @@ import {
   requireAssigneeCredentials,
   createListCreatedDateEnricher,
   createListPricingEnricher,
+  createCloudWatchStorageEnricher,
   type ManagedIamRole,
   type ManagedResource,
   type RgtaMapping,
@@ -218,7 +219,15 @@ export async function fetchManagedResources(
       ...(resourceType ? { resourceTypeFilter: resourceType } : {}),
       // Pricing-MCP enrichment: resolves rate-card costs for N/A rows.
       // Parity with CLI enrichWithPricing (feature-pricing-mcp-list-enrichment AC#5).
-      enrichWithPricing: createListPricingEnricher(),
+      // F6 (2026-05-24): mirror the CLI's CloudWatch-backed storage
+      // enricher so MCP `list_managed_resources` returns real $/mo
+      // totals for S3 buckets, not just per-GB-month rate hints.
+      // Parity with apps/cli/src/services/list-resources.ts.
+      enrichWithPricing: createListPricingEnricher(
+        sdkCredentials
+          ? createCloudWatchStorageEnricher(sdkCredentials, resolvedRegion)
+          : undefined,
+      ),
       // Created-date enrichment: resolves creation timestamps for N/A rows.
       ...(sdkCredentials
         ? {

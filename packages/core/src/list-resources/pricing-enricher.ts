@@ -30,9 +30,14 @@ import { ToolName } from "../constants/tools.js";
 import { PricingTerm } from "../constants/pricing-api.js";
 import { PricingKind } from "../pricing/filter-constants.js";
 import { HOURS_PER_MONTH } from "../config/constants/limits.js";
-import type { PricingEnricher } from "./fetch-managed-resources.js";
+import type {
+  PricingEnricher,
+  StorageEnricher,
+  ResourceUsage,
+} from "./fetch-managed-resources.js";
 import type { ManagedResource } from "./types.js";
 import type { AwsPricingResponse } from "../pricing/types.js";
+import { PriceUnit } from "../pricing/price-units.js";
 
 /** Timeout per Pricing MCP call in milliseconds. */
 const PRICING_MCP_TIMEOUT_MS = 15_000;
@@ -239,22 +244,57 @@ async function withPricingTool<T>(
  * Factory that returns a `PricingEnricher` for the `assignee admin list` command.
  * The enricher:
  * 1. Bootstraps a short-lived Pricing MCP client.
- * 2. Groups input resources by (resourceType, region).
- * 3. For each unique tuple, calls `decompose()` on the registry + issues ONE
+ * 2. Optionally calls the supplied `storageEnricher` to collect actual
+ *    storage GB / usage volumes for in-scope resources (S3 today). When
+ *    present, per-GB-month usage-based line items are multiplied by the
+ *    actual GB volume and promoted to fixed-cost lines (closes F6).
+ * 3. Groups input resources by (resourceType, region).
+ * 4. For each unique tuple, calls `decompose()` on the registry + issues ONE
  *    Pricing MCP call per line item (via existing `queryLineItemPrices` shape).
- * 4. Formats results into a summary cost label string.
- * 5. Closes the MCP client after the full batch.
+ * 5. Formats results into a summary cost label string.
+ * 6. Closes the MCP client after the full batch.
+ *
+ * @param storageEnricher  Optional usage-lookup callback. When omitted the
+ *   enricher behaves exactly as it did before F6 — per-GB-month rates surface
+ *   as their displayPrice hint string (e.g. `"$0.0230/GB-month"`). When
+ *   supplied and returning a non-empty storageGB for an S3 bucket ARN, the
+ *   storage line item is treated as a fixed cost = `rate × storageGB` and
+ *   contributes to a numeric `$X.XX/mo` total.
  */
-export function createListPricingEnricher(): PricingEnricher {
+export function createListPricingEnricher(
+  storageEnricher?: StorageEnricher,
+): PricingEnricher {
   return async (resources: ManagedResource[]): Promise<Map<string, string>> => {
     const result = new Map<string, string>();
 
-    // Filter to resources with a registered decomposer
+    // Filter to resources with a registered decomposer FIRST so we
+    // don't pay the storage-enricher cost (per-bucket CloudWatch call)
+    // for empty / non-priceable inputs. Quinn M2.
     const priceable = resources.filter(
       (r) => r.arn && defaultDecomposerRegistry.has(r.resourceType),
     );
 
     if (priceable.length === 0) return result;
+
+    // Storage / usage lookup is per-resource (not per-tuple) — fetch
+    // once up-front so the per-tuple loop below can reach into it
+    // without re-querying. Failures inside the enricher are swallowed
+    // there (per its contract); an empty map just disables the F6
+    // promotion path and falls back to the rate-hint display.
+    let usageByArn: Map<string, ResourceUsage> = new Map();
+    if (storageEnricher) {
+      try {
+        usageByArn = await storageEnricher(priceable);
+      } catch (err) {
+        // Defensive — `StorageEnricher` contract says never-throws but
+        // we don't want a misbehaving implementation to kill pricing.
+        process.stderr.write(
+          `⚠ Warning: storage-enricher threw, falling back to rate-only display: ${
+            err instanceof Error ? err.message : String(err)
+          }\n`,
+        );
+      }
+    }
 
     // Group by (resourceType, region) for caching / deduplication
     type TupleKey = `${string}::${string}`;
@@ -314,7 +354,15 @@ export function createListPricingEnricher(): PricingEnricher {
               monthlyCost: number | null;
               displayPrice: string;
             }> = [];
-            const usageResults: Array<{ displayPrice: string }> = [];
+            // F6: usageResults now carries the parsed per-unit rate alongside
+            // the displayPrice string so per-resource storage cost can be
+            // computed in the assignment loop below when a StorageEnricher
+            // supplies actual GB.
+            const usageResults: Array<{
+              displayPrice: string;
+              ratePerUnit?: number;
+              priceUnit?: string;
+            }> = [];
 
             // Resolve fixed items — F#2: track whether any item in this tuple failed
             let tupleHadAnyFailure = false;
@@ -455,8 +503,20 @@ export function createListPricingEnricher(): PricingEnricher {
                     // `assignee infra destroy <ddb-table-arn>`:
                     //   "Estimated savings: $0.0000001250/M read reqs/M read reqs saved"
                     // Push priceStr directly — the unit is already in there.
+                    // F6: also parse the numeric rate so per-resource cost
+                    // can be computed when StorageEnricher supplies actual
+                    // GB volume. priceStr has shape "$X.XXXX/<unit>"; strip
+                    // the prefix `$` and trailing `/<unit>` then parseFloat.
+                    const numericPart = priceStr
+                      .replace(/^\$/, "")
+                      .replace(/\/.*$/, "");
+                    const parsedRate = parseFloat(numericPart);
                     usageResults.push({
                       displayPrice: priceStr,
+                      ...(Number.isFinite(parsedRate)
+                        ? { ratePerUnit: parsedRate }
+                        : {}),
+                      priceUnit: item.priceUnit,
                     });
                   }
                 }
@@ -465,17 +525,49 @@ export function createListPricingEnricher(): PricingEnricher {
               }
             }
 
-            const label = formatCostLabel({
-              fixedSubtotal,
-              fixedItems: fixedResults,
-              usageBasedItems: usageResults,
-              decomposerReportedFree: false,
-              anyFixedResolved,
-            });
+            // F6: per-resource label assignment. The tuple-shared rate is
+            // captured in fixedSubtotal + usageResults; per-resource usage
+            // (storage GB) lets us promote a per-GB-month rate-hint into a
+            // numeric $/mo total. Resources without usage data fall through
+            // to the original tuple-shared label.
+            const storageRate = usageResults.find(
+              (u) =>
+                u.ratePerUnit !== undefined &&
+                (u.priceUnit === PriceUnit.PER_GB_MONTH ||
+                  u.priceUnit === "/GB-month"),
+            );
 
-            if (label !== undefined) {
-              for (const r of group) {
-                if (r.arn) result.set(r.arn, label);
+            for (const r of group) {
+              if (!r.arn) continue;
+
+              const usage = usageByArn.get(r.arn);
+              const storageGB = usage?.storageGB;
+
+              // F6 promotion path: known GB + per-GB-month rate captured →
+              // compute a real $/mo storage line item that contributes to
+              // fixedSubtotal, flip anyFixedResolved so formatCostLabel
+              // emits the "$X.XX/mo" branch instead of the rate-hint
+              // fallback.
+              let perResourceFixedSubtotal = fixedSubtotal;
+              let perResourceAnyFixed = anyFixedResolved;
+              if (
+                storageRate?.ratePerUnit !== undefined &&
+                storageGB !== undefined
+              ) {
+                perResourceFixedSubtotal += storageRate.ratePerUnit * storageGB;
+                perResourceAnyFixed = true;
+              }
+
+              const label = formatCostLabel({
+                fixedSubtotal: perResourceFixedSubtotal,
+                fixedItems: fixedResults,
+                usageBasedItems: usageResults,
+                decomposerReportedFree: false,
+                anyFixedResolved: perResourceAnyFixed,
+              });
+
+              if (label !== undefined) {
+                result.set(r.arn, label);
               }
             }
           } catch (err) {

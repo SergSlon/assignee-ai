@@ -550,7 +550,16 @@ export async function runBulkDestroyAction(
   }
   let allResources: ManagedResource[];
   try {
-    allResources = await fetchManagedResources(AWS_REGION);
+    // F6 Quinn H2: bulk-destroy always renders the per-resource cost
+    // breakdown + sums the total; storage estimation is on the hot path.
+    allResources = await fetchManagedResources(
+      AWS_REGION,
+      undefined,
+      undefined,
+      {
+        withStorageEstimate: true,
+      },
+    );
   } finally {
     if (!jsonMode) {
       stopSpinner();

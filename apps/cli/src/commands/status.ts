@@ -305,6 +305,10 @@ async function runStatusBody(opts: {
     const resources = await fetchManagedResources(
       opts.region,
       resolvedResourceType,
+      undefined,
+      // F6 Quinn H2: admin status always sums + groups by status,
+      // so storage estimation is on the hot path.
+      { withStorageEstimate: true },
     );
 
     if (resources.length === 0) {

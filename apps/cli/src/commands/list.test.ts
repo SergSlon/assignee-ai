@@ -145,7 +145,12 @@ describe("assignee list command", () => {
 
     await runListCommand(["--region", "eu-west-1"]);
 
-    expect(fetchManagedResources).toHaveBeenCalledWith("eu-west-1", undefined);
+    expect(fetchManagedResources).toHaveBeenCalledWith(
+      "eu-west-1",
+      undefined,
+      undefined,
+      { withStorageEstimate: false },
+    );
   });
 
   // Story 56-it1-01: --resource-type filter parity with MCP
@@ -162,6 +167,8 @@ describe("assignee list command", () => {
     expect(fetchManagedResources).toHaveBeenCalledWith(
       undefined,
       "AWS::S3::Bucket",
+      undefined,
+      { withStorageEstimate: false },
     );
     expect(renderResourceTable).toHaveBeenCalledWith([MOCK_RESOURCES[0]]);
   });
@@ -176,6 +183,8 @@ describe("assignee list command", () => {
     expect(fetchManagedResources).toHaveBeenCalledWith(
       undefined,
       "AWS::Lambda::Function",
+      undefined,
+      { withStorageEstimate: false },
     );
     expect(renderResourceTable).toHaveBeenCalledWith([MOCK_RESOURCES[1]]);
   });
@@ -243,7 +252,12 @@ describe("assignee list command", () => {
 
     await runListCommand();
 
-    expect(fetchManagedResources).toHaveBeenCalledWith(undefined, undefined);
+    expect(fetchManagedResources).toHaveBeenCalledWith(
+      undefined,
+      undefined,
+      undefined,
+      { withStorageEstimate: false },
+    );
     expect(renderResourceTable).toHaveBeenCalledWith(MOCK_RESOURCES);
   });
 

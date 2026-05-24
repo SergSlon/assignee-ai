@@ -401,6 +401,8 @@ describe("status command --resource-type filter (Story 56-it1-01)", () => {
     expect(fetchManagedResources).toHaveBeenCalledWith(
       undefined,
       "AWS::S3::Bucket",
+      undefined,
+      { withStorageEstimate: true },
     );
   });
 
@@ -453,7 +455,12 @@ describe("status command --resource-type filter (Story 56-it1-01)", () => {
       // process.exit throws
     }
 
-    expect(fetchManagedResources).toHaveBeenCalledWith(undefined, undefined);
+    expect(fetchManagedResources).toHaveBeenCalledWith(
+      undefined,
+      undefined,
+      undefined,
+      { withStorageEstimate: true },
+    );
   });
 
   // Story 56-it2-04 P1-02: a non-INVALID_RESOURCE_TYPE_CODE throw from

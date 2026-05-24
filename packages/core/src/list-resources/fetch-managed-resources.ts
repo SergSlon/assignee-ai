@@ -85,6 +85,39 @@ export type CreatedDateEnricher = (
   resources: ManagedResource[],
 ) => Promise<Map<string, string>>;
 
+/**
+ * Usage metrics fetched from AWS to convert rate-card hints (e.g.
+ * `$0.0230/GB-month`) into resolved monthly totals (e.g. `$1.15/mo`).
+ *
+ * Closes F6 from the wizard UX audit — the bulk-destroy / admin-list
+ * "≥ $0.00/month" lower-bound display.
+ *
+ * Today only `storageGB` is wired (S3 buckets via CloudWatch
+ * `BucketSizeBytes`). Future: `requestsPerMonth` for CloudFront /
+ * Lambda baseline, `dataTransferGB` for egress, etc.
+ *
+ * @see _backlog/wizard-ux-audit-2026-05-22.md F6
+ */
+export interface ResourceUsage {
+  /** Actual S3 storage in GB. Omit when CloudWatch returned no datapoint. */
+  storageGB?: number;
+}
+
+/**
+ * Storage / usage enrichment callback — looks up actual usage volume
+ * (S3 bucket size, etc.) so the pricing-enricher can multiply per-unit
+ * rates into $/mo totals instead of displaying the rate hint alone.
+ *
+ * Per-resource failure → no entry in the returned map. Caller falls
+ * back to the rate-hint display (same behaviour as before this enricher
+ * existed). Never throws.
+ *
+ * Story: feature-pricing-decomposer-storage-estimation (F6 closure)
+ */
+export type StorageEnricher = (
+  resources: ManagedResource[],
+) => Promise<Map<string, ResourceUsage>>;
+
 /** Options controlling which enrichers fire and how timestamps resolve. */
 export interface FetchManagedResourcesOptions {
   /** AWS region to stamp on resources when parseArn can't derive one. */

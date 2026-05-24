@@ -1305,6 +1305,11 @@ describe("runBulkDestroyAction", () => {
       await runBulkDestroyAction({});
 
       const callArgs = mockFetchManagedResources.mock.calls[0] ?? [];
+      // Whitelisted option keys for the trailing `FetchOptions` arg
+      // (introduced by F6 Quinn H2 to gate the CloudWatch storage
+      // enricher on cost-displaying callers). New entries must be
+      // added here when the FetchOptions surface grows.
+      const allowedOptionKeys = new Set(["withStorageEstimate"]);
       for (const arg of callArgs) {
         if (Array.isArray(arg)) {
           for (const item of arg) {
@@ -1315,7 +1320,16 @@ describe("runBulkDestroyAction", () => {
             }
           }
         } else if (arg !== undefined) {
-          expect(typeof arg).toBe("string");
+          if (typeof arg === "object" && arg !== null) {
+            // FetchOptions bag — assert every key is whitelisted so
+            // an accidental plumb of graph-state shape (which has
+            // kind/id/label) still trips the audit.
+            for (const key of Object.keys(arg)) {
+              expect(allowedOptionKeys.has(key)).toBe(true);
+            }
+          } else {
+            expect(typeof arg).toBe("string");
+          }
         }
       }
     });

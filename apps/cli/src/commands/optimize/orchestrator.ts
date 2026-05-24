@@ -34,7 +34,16 @@ export async function runOptimize(
   const asJson = opts.json === true;
 
   const region = opts.region ?? AWS_REGION;
-  const allResources = await fetchManagedResources(region);
+  // F6 Quinn H2: optimize uses per-resource $/mo totals to decide
+  // candidates; storage estimation is on the hot path.
+  const allResources = await fetchManagedResources(
+    region,
+    undefined,
+    undefined,
+    {
+      withStorageEstimate: true,
+    },
+  );
 
   // Optional single-resource filter. Matches on the full ARN or on the
   // trailing name segment for operator convenience.
