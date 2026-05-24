@@ -96,7 +96,18 @@ export type CreatedDateEnricher = (
  * `BucketSizeBytes`). Future: `requestsPerMonth` for CloudFront /
  * Lambda baseline, `dataTransferGB` for egress, etc.
  *
+ * **Field contract** (Quinn F6 M3 follow-up): every field is OPTIONAL
+ * — "missing" means "no usage data for this dimension, fall back to
+ * the rate-hint display". This is the conservative-keep posture: an
+ * empty `ResourceUsage` (or no map entry at all) NEVER changes the
+ * display vs the pre-F6 behaviour; it can only PROMOTE a rate hint to
+ * a $/mo total when the dimension is present. Adding a new field
+ * follows the same rule — never introduce a required field, always
+ * additive, and the consumer in `pricing-enricher.ts` must explicitly
+ * opt into using each field.
+ *
  * @see _backlog/wizard-ux-audit-2026-05-22.md F6
+ * @see packages/core/src/list-resources/pricing-enricher.ts (consumer)
  */
 export interface ResourceUsage {
   /** Actual S3 storage in GB. Omit when CloudWatch returned no datapoint. */

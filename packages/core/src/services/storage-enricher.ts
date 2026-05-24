@@ -37,7 +37,21 @@ import type {
   StorageEnricher,
 } from "../list-resources/fetch-managed-resources.js";
 
-/** Default parallel CloudWatch calls — balances wall-clock vs throttling. */
+/**
+ * Default parallel CloudWatch calls — balances wall-clock vs throttling.
+ *
+ * CloudWatch's `GetMetricStatistics` quota is 50 TPS per account by
+ * default (per the SDK docs, raisable via support ticket). 10 leaves
+ * comfortable headroom for the operator's existing background queries
+ * (alarms, dashboards, other tools' polling) without coordinating
+ * burst-bucket usage. For a 100-bucket account → ~10 batches × ~50ms
+ * RTT = ~5s wall-clock + $0.001 CloudWatch cost.
+ *
+ * Bumping past 25 risks throttling (`Throttling` exception) on a busy
+ * account; CloudWatch responds with no retry-after header so the
+ * enricher would silently lose datapoints for the throttled buckets.
+ * Quinn L6 follow-up.
+ */
 const DEFAULT_CONCURRENCY = 10;
 
 /** CFN resource type for S3 buckets. Match by exact string. */
