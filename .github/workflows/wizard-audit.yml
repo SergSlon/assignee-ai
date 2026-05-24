@@ -60,9 +60,13 @@ jobs:
           node-version: "22"
           cache: "pnpm"
 
-      - uses: actions/setup-python@9b62e2c4c6c0ee92cf6ada7d50e8b0c3a87fe9bf # v6.0.2
-        with:
-          python-version: "3.12"
+      # No setup-python step needed: ubuntu-latest ships with
+      # python3.12 preinstalled (verified Quinn MED-12, 2026-05-23).
+      # pty-driver.py only uses stdlib modules (pty, select, termios,
+      # fcntl), so any Python 3.8+ works. If we add a macos-latest
+      # matrix entry later we'll need setup-python back — macOS runners
+      # come with Python 3.9 by default which would technically still
+      # work, but pinning is safer for CI determinism on that runner.
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
