@@ -31,4 +31,35 @@ export function runDocLint(input: {
    * docs; tests pass `[]` to scope the walker to in-memory fixtures.
    */
   crossDocTargets?: readonly string[];
+  /**
+   * When true, skip the flat-path CLI invocation check. Used by tests
+   * that feed isolated in-memory fixtures that don't need the full scan.
+   */
+  skipFlatPathCheck?: boolean;
 }): Promise<string[]>;
+
+/**
+ * Regex matching a bare flat-path CLI invocation lacking a noun-group prefix.
+ * Exported for direct use in unit tests.
+ */
+export const FLAT_PATH_PATTERN: RegExp;
+
+/**
+ * Check a single file for flat-path CLI invocations (Story 108-A-07 drift guard).
+ *
+ * @param absPath - absolute path to the file to scan
+ * @param repoRoot - repo root, used for trimming relative paths in error messages
+ * @returns array of error strings (empty when no violations found)
+ */
+export function checkFileForFlatPaths(
+  absPath: string,
+  repoRoot: string,
+): Promise<string[]>;
+
+/**
+ * Run the flat-path scan across all user-facing surfaces.
+ *
+ * @param repoRoot - absolute path to repo root
+ * @returns array of error strings (empty when no violations found)
+ */
+export function runFlatPathCheck(repoRoot: string): Promise<string[]>;

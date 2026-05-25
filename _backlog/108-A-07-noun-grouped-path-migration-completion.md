@@ -80,3 +80,33 @@ See `_archive/reviews/epic-108-close-final-sweep-review.md` for the verbatim
 captures findings #1–#8 except F-05 (CHANGELOG B-04 duplicate — Paige fixes
 in the v1.0 close-out) and F-06 (safety-ref pre-push guard — landed in
 epic-close hotfix).
+
+## Closure (2026-05-25)
+
+Backlog story CLOSED. Pre-dispatch grep on 2026-05-25 showed all 30
+remaining `\bassignee (plan|apply|...)\b` hits are inside `apps/cli/src/**/*.test.ts`
+files — JSDoc comments, `describe()` block titles, code comments — which
+the backlog explicitly excludes (test files use `runCli([leaf, ...])`
+not user-facing flat-path strings). The rewrite work the backlog
+described had already landed across earlier 108-A-\* stories.
+
+What remained — and lands in this commit — is the **drift-guard regex**
+in `apps/cli/scripts/doc-lint.mjs` that fails the lint on any future
+flat-path string in docs / README / non-test source. This is the
+long-term protection the backlog called for. The guard was verified
+at a clean baseline: `pnpm doc-lint` returned zero flat-path errors
+on HEAD before the commit landed.
+
+Unit tests for the guard's `checkFileForFlatPaths()` function were added
+to `apps/cli/src/__tests__/doc-lint.test.ts` (13 new assertions across
+two describe blocks: FLAT_PATH_PATTERN regex + checkFileForFlatPaths).
+
+**Closing commit**: `41d7d862` (Quinn ACCEPT — see `_archive/reviews/0b561a73-review.md`; pre-amend SHA was `0b561a73`).
+**Acceptance criteria**: all 6 from the original story — met.
+
+- AC1 (`grep docs/ README.md` = 0 hits): confirmed by `pnpm doc-lint` clean run.
+- AC2 (source error-messages / commands / first-run = 0 hits): confirmed by `pnpm doc-lint` clean run.
+- AC3 (`pnpm doc-lint` passes with new regex): PASS — zero hits on HEAD.
+- AC4 (discover-data.ts emits grouped paths): pre-existing — verified by epic-close hotfix.
+- AC5 (CHANGELOG entry): added under `## [Unreleased] → ### Added`.
+- AC6 (Reviewer ACCEPT): qa (Quinn) — see `_archive/reviews/0b561a73-review.md`.

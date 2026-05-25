@@ -19,6 +19,18 @@ review methodology notes, see
 
 ### Added
 
+- **Drift-guard for noun-grouped CLI paths (Story 108-A-07 closure)** —
+  `apps/cli/scripts/doc-lint.mjs` now fails on any `assignee <flat-leaf>`
+  string (e.g. `assignee plan`, `assignee apply`) found in `docs/`,
+  `README.md`, or non-test source (`apps/cli/src/commands/**`,
+  `apps/cli/src/utils/first-run.ts`, `packages/core/src/config/help-hints.ts`,
+  `packages/core/src/utils/`). Test files (`*.test.ts`, `e2e/**`) are
+  excluded because they pass leaf names directly to `runCli([...])`.
+  Closes `_backlog/108-A-07-noun-grouped-path-migration-completion.md`
+  long-term-protection requirement; the bulk rewrite work had already
+  landed across earlier 108-A-\* stories — pre-dispatch grep on
+  2026-05-25 showed zero non-test hits from the baseline codebase.
+
 - **F6 multi-storage-class S3 baseline closure (F6 fully closed)** —
   `assignee admin list --total-cost` / `assignee infra destroy --all`
   now compute `$X.XX/mo` totals for lifecycle-tiered S3 buckets that

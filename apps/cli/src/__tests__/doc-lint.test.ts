@@ -20,6 +20,8 @@ import {
   countReadmePatternRows,
   extractIntegrationArchitectureCounts,
   runDocLint,
+  checkFileForFlatPaths,
+  FLAT_PATH_PATTERN,
 } from "../../scripts/doc-lint.mjs";
 
 // ── Realistic runtime-count fixtures ────────────────────────────────
@@ -265,5 +267,163 @@ describe("doc-lint — runDocLint (end-to-end drift detection)", () => {
       crossDocTargets: [],
     });
     expect(errors).toHaveLength(3);
+  });
+});
+
+// ── Flat-path drift guard (Story 108-A-07) ──────────────────────────────────
+// The FLAT_PATH_PATTERN regex and checkFileForFlatPaths() are tested in
+// isolation here so regressions to the guard itself are caught without
+// running the full doc-lint suite against the live repo tree.
+
+describe("doc-lint — flat-path drift guard (Story 108-A-07)", () => {
+  async function writeTmpFile(name: string, content: string): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), "flat-path-guard-"));
+    const path = join(dir, name);
+    await writeFile(path, content, "utf8");
+    return path;
+  }
+
+  // ── FLAT_PATH_PATTERN regex ────────────────────────────────────────────────
+
+  describe("FLAT_PATH_PATTERN regex", () => {
+    it("matches every guarded flat-leaf command", () => {
+      const leaves = [
+        "plan",
+        "apply",
+        "destroy",
+        "drift",
+        "reconcile",
+        "optimize",
+        "restore-provisions",
+        "status",
+        "list",
+        "doctor",
+        "describe",
+        "audit-verify",
+        "init",
+        "setup",
+        "update",
+        "completions",
+        "discover",
+        "version",
+      ];
+      for (const leaf of leaves) {
+        FLAT_PATH_PATTERN.lastIndex = 0;
+        const m = FLAT_PATH_PATTERN.exec(`assignee ${leaf}`);
+        expect(m, `expected regex to match "assignee ${leaf}"`).not.toBeNull();
+      }
+    });
+
+    it("does NOT match noun-grouped invocations at the regex level", () => {
+      // `assignee infra plan` does NOT match because the regex requires
+      // `assignee <leaf>` with no noun group between them — `infra` is
+      // not in the leaf list and creates a non-matching gap.
+      // The full filtering is also validated via checkFileForFlatPaths below.
+      const nouned = [
+        "assignee infra plan",
+        "assignee infra apply",
+        "assignee admin status",
+        "assignee admin list",
+        "assignee dev init",
+        "assignee dev setup",
+      ];
+      for (const cmd of nouned) {
+        FLAT_PATH_PATTERN.lastIndex = 0;
+        const m = FLAT_PATH_PATTERN.exec(cmd);
+        expect(m, `regex should NOT match noun-grouped "${cmd}"`).toBeNull();
+      }
+    });
+
+    it("does NOT match unrelated words that start with guarded leaf names", () => {
+      // "planner", "applied", "destroy-stack" — should not match because the
+      // pattern uses word-boundary \b on both sides.
+      const nonMatches = [
+        "planner",
+        "applied",
+        "destroyer",
+        "statuses",
+        "listing",
+      ];
+      for (const word of nonMatches) {
+        FLAT_PATH_PATTERN.lastIndex = 0;
+        const m = FLAT_PATH_PATTERN.exec(`assignee ${word}`);
+        expect(m, `regex should NOT match "assignee ${word}"`).toBeNull();
+      }
+    });
+  });
+
+  // ── checkFileForFlatPaths ──────────────────────────────────────────────────
+
+  describe("checkFileForFlatPaths", () => {
+    it("flags a markdown file containing `assignee plan`", async () => {
+      const p = await writeTmpFile(
+        "quickstart.md",
+        "Run `assignee plan` to preview your infrastructure.\n",
+      );
+      const errors = await checkFileForFlatPaths(p, tmpdir());
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toMatch(/flat-path CLI invocation.*assignee plan/);
+      expect(errors[0]).toMatch(/108-A-07 drift-guard/);
+    });
+
+    it("does NOT flag a markdown file containing `assignee infra plan`", async () => {
+      const p = await writeTmpFile(
+        "quickstart.md",
+        "Run `assignee infra plan` to preview your infrastructure.\n",
+      );
+      const errors = await checkFileForFlatPaths(p, tmpdir());
+      expect(errors).toEqual([]);
+    });
+
+    it("does NOT flag a markdown file containing `assignee admin status`", async () => {
+      const p = await writeTmpFile(
+        "guide.md",
+        "Check `assignee admin status` for resource health.\n",
+      );
+      const errors = await checkFileForFlatPaths(p, tmpdir());
+      expect(errors).toEqual([]);
+    });
+
+    it("does NOT flag a markdown file containing `assignee dev init`", async () => {
+      const p = await writeTmpFile(
+        "guide.md",
+        "Bootstrap with `assignee dev init`.\n",
+      );
+      const errors = await checkFileForFlatPaths(p, tmpdir());
+      expect(errors).toEqual([]);
+    });
+
+    it("flags multiple flat-path hits across lines", async () => {
+      const p = await writeTmpFile(
+        "guide.md",
+        [
+          "Step 1: `assignee plan`",
+          "Step 2: `assignee apply`",
+          "Step 3: `assignee destroy`",
+        ].join("\n"),
+      );
+      const errors = await checkFileForFlatPaths(p, tmpdir());
+      expect(errors).toHaveLength(3);
+    });
+
+    it("skips *.test.ts files (legitimate runCli([leaf, ...]) usage)", async () => {
+      const p = await writeTmpFile(
+        "commands.test.ts",
+        "it('assignee plan works', () => runCli(['plan']));\n",
+      );
+      const errors = await checkFileForFlatPaths(p, tmpdir());
+      expect(errors).toEqual([]);
+    });
+
+    it("includes line number in error message", async () => {
+      const p = await writeTmpFile(
+        "howto.md",
+        "line one\nRun `assignee apply` now.\nline three\n",
+      );
+      const errors = await checkFileForFlatPaths(p, tmpdir());
+      expect(errors).toHaveLength(1);
+      // Line 2 contains the flat-path hit.
+      expect(errors[0]).toMatch(/:2:/);
+    });
   });
 });
