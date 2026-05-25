@@ -886,3 +886,672 @@ describe("S3 decomposer first-usage-based-item ordering (F6 invariant)", () => {
     expect(usage[0]!.priceUnit).toBe(PriceUnit.PER_GB_MONTH);
   });
 });
+
+// ──────────────────────────────────────────────────────────────────
+// F6 follow-up (2026-05-25) — CloudFront baseline cost. Promotes
+// per-distribution usage (Requests + BytesDownloaded from CloudWatch)
+// into a real `$X.XX/mo` total by multiplying the per-request rate
+// and computing the tiered data-transfer cost.
+// ──────────────────────────────────────────────────────────────────
+
+/**
+ * Production-shape CloudFront data-transfer tiered rate fixture.
+ * Mirrors the AWS Pricing API response for `AmazonCloudFront` filtered
+ * to `productFamily=Data Transfer` in the North America rate band:
+ *
+ *   Tier 1: 0–10 TB   → $0.085/GB
+ *   Tier 2: 10–50 TB  → $0.080/GB
+ *   Tier 3: 50–150 TB → $0.060/GB
+ *
+ * Values rounded to canonical published rates so the test math is
+ * self-checkable from the rate ladder above.
+ */
+const CLOUDFRONT_DATA_TRANSFER_TIERED_RESPONSE = JSON.stringify({
+  status: "success",
+  service_name: "AmazonCloudFront",
+  data: [
+    {
+      product: {
+        productFamily: "Data Transfer",
+        attributes: {
+          transferType: "CloudFront Outbound",
+          fromLocation: "North America",
+        },
+      },
+      terms: {
+        OnDemand: {
+          "term-1": {
+            priceDimensions: {
+              "pd-1": {
+                rateCode: "pd-1",
+                beginRange: "0",
+                endRange: "10240",
+                unit: "GB",
+                pricePerUnit: { USD: "0.0850000000" },
+                description:
+                  "$0.085 per GB - first 10 TB / month data transfer out - North America",
+              },
+              "pd-2": {
+                rateCode: "pd-2",
+                beginRange: "10240",
+                endRange: "51200",
+                unit: "GB",
+                pricePerUnit: { USD: "0.0800000000" },
+                description:
+                  "$0.080 per GB - next 40 TB / month data transfer out - North America",
+              },
+              "pd-3": {
+                rateCode: "pd-3",
+                beginRange: "51200",
+                endRange: "153600",
+                unit: "GB",
+                pricePerUnit: { USD: "0.0600000000" },
+                description:
+                  "$0.060 per GB - next 100 TB / month data transfer out - North America",
+              },
+            },
+          },
+        },
+      },
+    },
+  ],
+});
+
+/**
+ * CloudFront per-request rate fixture. The pricing-enricher uses the
+ * raw rate (per-1-request) directly — fixture matches `priceUnit:
+ * "/req"` set in the CloudFront decomposer after F6-ITEM-2 amendment.
+ */
+const CLOUDFRONT_REQUESTS_RESPONSE = JSON.stringify({
+  status: "success",
+  service_name: "AmazonCloudFront",
+  data: [
+    {
+      product: {
+        productFamily: "API Request",
+        attributes: {
+          group: "CloudFront-Requests-Tier1",
+        },
+      },
+      terms: {
+        OnDemand: {
+          "term-1": {
+            priceDimensions: {
+              "pd-1": {
+                rateCode: "pd-1",
+                beginRange: "0",
+                endRange: "Inf",
+                unit: "Requests",
+                pricePerUnit: { USD: "0.0000010000" },
+                description: "$0.01 per 10,000 HTTPS Requests",
+              },
+            },
+          },
+        },
+      },
+    },
+  ],
+});
+
+/**
+ * Production-shape multi-edge-region CloudFront data-transfer fixture
+ * (F6-ITEM-2 Quinn HIGH-1). Mirrors the AWS Pricing API behaviour of
+ * returning ONE entry per `fromLocation` (NA / JP / SG), each with its
+ * own tier ladder at different rates:
+ *
+ *   North America (item 0):  tier 1 $0.085/GB, tier 2 $0.080
+ *   Japan         (item 1):  tier 1 $0.114/GB, tier 2 $0.105
+ *   Singapore     (item 2):  tier 1 $0.120/GB, tier 2 $0.108
+ *
+ * The non-NA entries appear FIRST in the array so that any selection
+ * logic that "trusts the first entry" would pick a wrong rate. The
+ * decomposer's `fromLocation=North America` filter must drive
+ * `itemMatchesFilters` to reject the JP + SG entries and leave only
+ * the NA tier ladder — so the F6 promotion stays deterministic at
+ * $0.085/GB tier 1 regardless of fixture entry order.
+ */
+const CLOUDFRONT_DATA_TRANSFER_MULTI_EDGE_REGION_RESPONSE = JSON.stringify({
+  status: "success",
+  service_name: "AmazonCloudFront",
+  data: [
+    {
+      product: {
+        productFamily: "Data Transfer",
+        attributes: {
+          transferType: "CloudFront Outbound",
+          fromLocation: "Japan",
+        },
+      },
+      terms: {
+        OnDemand: {
+          "term-jp": {
+            priceDimensions: {
+              "pd-jp-1": {
+                rateCode: "pd-jp-1",
+                beginRange: "0",
+                endRange: "10240",
+                unit: "GB",
+                pricePerUnit: { USD: "0.1140000000" },
+                description: "$0.114 per GB - first 10 TB / month - Japan",
+              },
+              "pd-jp-2": {
+                rateCode: "pd-jp-2",
+                beginRange: "10240",
+                endRange: "51200",
+                unit: "GB",
+                pricePerUnit: { USD: "0.1050000000" },
+                description: "$0.105 per GB - next 40 TB / month - Japan",
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      product: {
+        productFamily: "Data Transfer",
+        attributes: {
+          transferType: "CloudFront Outbound",
+          fromLocation: "Singapore",
+        },
+      },
+      terms: {
+        OnDemand: {
+          "term-sg": {
+            priceDimensions: {
+              "pd-sg-1": {
+                rateCode: "pd-sg-1",
+                beginRange: "0",
+                endRange: "10240",
+                unit: "GB",
+                pricePerUnit: { USD: "0.1200000000" },
+                description: "$0.120 per GB - first 10 TB / month - Singapore",
+              },
+              "pd-sg-2": {
+                rateCode: "pd-sg-2",
+                beginRange: "10240",
+                endRange: "51200",
+                unit: "GB",
+                pricePerUnit: { USD: "0.1080000000" },
+                description: "$0.108 per GB - next 40 TB / month - Singapore",
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      product: {
+        productFamily: "Data Transfer",
+        attributes: {
+          transferType: "CloudFront Outbound",
+          fromLocation: "North America",
+        },
+      },
+      terms: {
+        OnDemand: {
+          "term-na": {
+            priceDimensions: {
+              "pd-na-1": {
+                rateCode: "pd-na-1",
+                beginRange: "0",
+                endRange: "10240",
+                unit: "GB",
+                pricePerUnit: { USD: "0.0850000000" },
+                description:
+                  "$0.085 per GB - first 10 TB / month - North America",
+              },
+              "pd-na-2": {
+                rateCode: "pd-na-2",
+                beginRange: "10240",
+                endRange: "51200",
+                unit: "GB",
+                pricePerUnit: { USD: "0.0800000000" },
+                description:
+                  "$0.080 per GB - next 40 TB / month - North America",
+              },
+            },
+          },
+        },
+      },
+    },
+  ],
+});
+
+describe("createListPricingEnricher — F6 CloudFront promotion", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockInitConnections.mockResolvedValue(undefined);
+    mockClose.mockResolvedValue(undefined);
+    mockGetTools.mockResolvedValue([
+      { name: "get_pricing", invoke: mockToolInvoke },
+    ]);
+    vi.mocked(getMcpServerConfigs).mockReturnValue({
+      "aws-pricing-mcp-server": {
+        command: "uvx",
+        args: [
+          "--with",
+          "botocore[crt]",
+          "awslabs.aws-pricing-mcp-server@1.0.27",
+        ],
+        env: {
+          AWS_ACCESS_KEY_ID: "AKIAIOSFODNN7EXAMPLE",
+          AWS_SECRET_ACCESS_KEY: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+          AWS_DEFAULT_REGION: "us-east-1",
+          FASTMCP_LOG_LEVEL: "ERROR",
+        },
+      },
+    });
+  });
+
+  /**
+   * Route MCP responses by the line-item's filter — data-transfer
+   * (`productFamily=Data Transfer`) returns the tiered ladder;
+   * requests (`productFamily=API Request`) returns the flat rate.
+   * Mirrors how the real Pricing MCP routes by `service_code`+filters.
+   */
+  function routeByFilter() {
+    return ({
+      filters,
+    }: {
+      filters: Array<{ Field: string; Value: string }>;
+    }) => {
+      const fam = filters.find((f) => f.Field === "productFamily")?.Value;
+      if (fam === "Data Transfer") {
+        return Promise.resolve(
+          wrapMcpText(CLOUDFRONT_DATA_TRANSFER_TIERED_RESPONSE),
+        );
+      }
+      if (fam === "API Request") {
+        return Promise.resolve(wrapMcpText(CLOUDFRONT_REQUESTS_RESPONSE));
+      }
+      return Promise.resolve(null);
+    };
+  }
+
+  it("promotes a measurable distribution to $/mo: 1000 GB + 1M reqs → $86.00/mo", async () => {
+    // Happy path. Rate ladder + math:
+    //   Data transfer: 1000 GB stays in tier 1 (0–10 TB / $0.085/GB) →
+    //                  1000 × $0.085 = $85.00
+    //   Requests:      1,000,000 reqs × ($0.01 / 10,000) = $1.00
+    //   Total:         $86.00/mo
+    const arn = "arn:aws:cloudfront::112233445566:distribution/EHAPPY12345";
+    mockToolInvoke.mockImplementation(routeByFilter());
+
+    const usageEnricher = vi.fn(
+      async () =>
+        new Map([
+          [
+            arn,
+            {
+              cloudfrontRequestsPerMonth: 1_000_000,
+              cloudfrontBytesPerMonth: 1_000, // 1000 GB
+            },
+          ],
+        ]),
+    );
+
+    const enricher = createListPricingEnricher(usageEnricher);
+    const result = await enricher([
+      makeResource(arn, "AWS::CloudFront::Distribution", "global"),
+    ]);
+
+    expect(result.get(arn)).toBe("$86.00/mo");
+    expect(usageEnricher).toHaveBeenCalledTimes(1);
+  });
+
+  it("crosses tier boundaries correctly: 15 TB + 0 reqs → $1280.00/mo", async () => {
+    // 15 TB (15360 GB) spans tier 1 + tier 2 (no tier-3 contribution):
+    //   Tier 1 (0–10 TB):     10240 GB × $0.085 = $870.40
+    //   Tier 2 (10–50 TB):    5120 GB × $0.080 = $409.60
+    //   Total data transfer:  $1,280.00
+    // Reqs side is excluded (set requests=1 to satisfy the > 0 guard,
+    // 1 req × $0.000001 ≈ $0.00 — doesn't perturb the assertion).
+    const arn = "arn:aws:cloudfront::112233445566:distribution/ECROSS12345";
+    mockToolInvoke.mockImplementation(routeByFilter());
+
+    const usageEnricher = vi.fn(
+      async () =>
+        new Map([
+          [
+            arn,
+            {
+              cloudfrontRequestsPerMonth: 1,
+              cloudfrontBytesPerMonth: 15_360, // 15 TB
+            },
+          ],
+        ]),
+    );
+
+    const enricher = createListPricingEnricher(usageEnricher);
+    const result = await enricher([
+      makeResource(arn, "AWS::CloudFront::Distribution", "global"),
+    ]);
+
+    // $1280.00 (data transfer) + ~$0.00 (1 request) ≈ $1280.00/mo
+    expect(result.get(arn)).toBe("$1280.00/mo");
+  });
+
+  it("falls back to rate-hint when usage map reports zero traffic (idle distribution)", async () => {
+    // CloudWatch returns 0/0 → we treat as "no usable multiplier" and
+    // display the tier-ladder text rather than a misleading $0.00/mo.
+    const arn = "arn:aws:cloudfront::112233445566:distribution/EIDLE12345";
+    mockToolInvoke.mockImplementation(routeByFilter());
+
+    const usageEnricher = vi.fn(
+      async () =>
+        new Map([
+          [
+            arn,
+            {
+              cloudfrontRequestsPerMonth: 0,
+              cloudfrontBytesPerMonth: 0,
+            },
+          ],
+        ]),
+    );
+
+    const enricher = createListPricingEnricher(usageEnricher);
+    const result = await enricher([
+      makeResource(arn, "AWS::CloudFront::Distribution", "global"),
+    ]);
+
+    const label = result.get(arn);
+    expect(label).toBeDefined();
+    // Must NOT be the misleading $0.00/mo total.
+    expect(label).not.toBe("$0.00/mo");
+    // Must be the rate-hint (contains a $-prefixed rate from the
+    // tier-ladder text — e.g. "$0.085/GB").
+    expect(label).toMatch(/\$0\.0/);
+  });
+
+  it("falls back to rate-hint when usage data is absent (no enricher hit for ARN)", async () => {
+    const arn = "arn:aws:cloudfront::112233445566:distribution/EUNKNOWN";
+    mockToolInvoke.mockImplementation(routeByFilter());
+
+    // Enricher returns empty map (e.g. CloudWatch IAM denied silently).
+    const usageEnricher = vi.fn(async () => new Map());
+
+    const enricher = createListPricingEnricher(usageEnricher);
+    const result = await enricher([
+      makeResource(arn, "AWS::CloudFront::Distribution", "global"),
+    ]);
+
+    const label = result.get(arn);
+    expect(label).toBeDefined();
+    expect(label).not.toBe("$0.00/mo");
+    expect(label).toMatch(/\$0\.0/);
+  });
+
+  it("multi-distribution: each gets its own $/mo from its own usage", async () => {
+    const arn1 = "arn:aws:cloudfront::112233445566:distribution/EDIST001";
+    const arn2 = "arn:aws:cloudfront::112233445566:distribution/EDIST002";
+    const arn3 = "arn:aws:cloudfront::112233445566:distribution/EDIST003";
+    mockToolInvoke.mockImplementation(routeByFilter());
+
+    // Three distributions, three traffic profiles, three answers:
+    //   D1: 100 GB + 10,000 reqs → 100×0.085 + 10000×0.000001 = $8.51
+    //   D2: 500 GB + 100,000 reqs → 500×0.085 + 100000×0.000001 = $42.60
+    //   D3: 2000 GB + 5,000,000 reqs → 2000×0.085 + 5e6×0.000001 = $175.00
+    const usageEnricher = vi.fn(
+      async () =>
+        new Map([
+          [
+            arn1,
+            {
+              cloudfrontRequestsPerMonth: 10_000,
+              cloudfrontBytesPerMonth: 100,
+            },
+          ],
+          [
+            arn2,
+            {
+              cloudfrontRequestsPerMonth: 100_000,
+              cloudfrontBytesPerMonth: 500,
+            },
+          ],
+          [
+            arn3,
+            {
+              cloudfrontRequestsPerMonth: 5_000_000,
+              cloudfrontBytesPerMonth: 2000,
+            },
+          ],
+        ]),
+    );
+
+    const enricher = createListPricingEnricher(usageEnricher);
+    const result = await enricher([
+      makeResource(arn1, "AWS::CloudFront::Distribution", "global"),
+      makeResource(arn2, "AWS::CloudFront::Distribution", "global"),
+      makeResource(arn3, "AWS::CloudFront::Distribution", "global"),
+    ]);
+
+    expect(result.get(arn1)).toBe("$8.51/mo");
+    expect(result.get(arn2)).toBe("$42.60/mo");
+    expect(result.get(arn3)).toBe("$175.00/mo");
+    // Pricing MCP called twice total: one tuple (CloudFront + global)
+    // × 2 usage-based line items (data transfer + requests).
+    expect(mockToolInvoke).toHaveBeenCalledTimes(2);
+  });
+
+  it("falls back gracefully when CloudWatch IAM is denied (usage enricher returns empty)", async () => {
+    // Simulates the IAM-denied path: CloudWatch's silent-swallow leaves
+    // the usage map empty; pricing-enricher must fall back to the
+    // rate-hint, NOT throw and NOT emit a $/mo total.
+    const arn = "arn:aws:cloudfront::112233445566:distribution/EIAMDENIED";
+    mockToolInvoke.mockImplementation(routeByFilter());
+
+    const usageEnricher = vi.fn(async () => new Map());
+
+    const enricher = createListPricingEnricher(usageEnricher);
+
+    // Must not throw.
+    const result = await enricher([
+      makeResource(arn, "AWS::CloudFront::Distribution", "global"),
+    ]);
+
+    const label = result.get(arn);
+    expect(label).toBeDefined();
+    expect(label).not.toBe("$0.00/mo");
+    // Rate hint (tier-ladder text contains the first-tier rate).
+    expect(label).toContain("$0.0");
+  });
+
+  it("survives MCP per-line-item failures (data-transfer fails, requests succeeds → rate hint)", async () => {
+    // Failure isolation: if the data-transfer MCP call rejects, the
+    // distribution still falls back to the requests rate hint rather
+    // than crashing the whole tuple.
+    const arn = "arn:aws:cloudfront::112233445566:distribution/EPARTIAL";
+    mockToolInvoke.mockImplementation(
+      ({ filters }: { filters: Array<{ Field: string; Value: string }> }) => {
+        const fam = filters.find((f) => f.Field === "productFamily")?.Value;
+        if (fam === "Data Transfer") {
+          return Promise.reject(new Error("Pricing MCP transient"));
+        }
+        if (fam === "API Request") {
+          return Promise.resolve(wrapMcpText(CLOUDFRONT_REQUESTS_RESPONSE));
+        }
+        return Promise.resolve(null);
+      },
+    );
+
+    const usageEnricher = vi.fn(
+      async () =>
+        new Map([
+          [
+            arn,
+            { cloudfrontRequestsPerMonth: 1_000, cloudfrontBytesPerMonth: 100 },
+          ],
+        ]),
+    );
+
+    const enricher = createListPricingEnricher(usageEnricher);
+    const result = await enricher([
+      makeResource(arn, "AWS::CloudFront::Distribution", "global"),
+    ]);
+
+    // No tier ladder → no promotion → rate-hint fallback (requests rate).
+    const label = result.get(arn);
+    expect(label).toBeDefined();
+    expect(label).not.toBe("$0.00/mo");
+    expect(label).toMatch(/\$0\.0/);
+  });
+
+  // ────────────────────────────────────────────────────────────────
+  // F6-ITEM-2 (Quinn HIGH-1) — deterministic edge-region selection.
+  // The Pricing API publishes one tier ladder per edge region (NA,
+  // JP, SG, EU, etc.) at different per-GB rates. Without a
+  // `fromLocation` filter, `extractTieredPrice` picks whichever
+  // entry the MCP server happens to return first → $/mo drifts per
+  // run. The decomposer's `fromLocation=North America` filter must
+  // drive `itemMatchesFilters` to keep the NA tier ladder and
+  // reject JP / SG entries — regardless of where they sit in the
+  // response array.
+  // ────────────────────────────────────────────────────────────────
+  it("HIGH-1: pins data-transfer rate to NA tier regardless of fixture entry order", async () => {
+    const arn = "arn:aws:cloudfront::112233445566:distribution/EMULTIEDGE";
+    // Multi-edge fixture lists JP + SG BEFORE NA; the prior
+    // (pre-amendment) implementation would have picked JP's
+    // $0.114/GB → 100 GB × $0.114 + 10000 × $0.000001 = $11.41/mo.
+    // With the NA pin, we expect:
+    //   100 GB × $0.085 = $8.50 (tier 1 NA)
+    //   10,000 × $0.000001 = $0.01
+    //   Total: $8.51/mo
+    mockToolInvoke.mockImplementation(
+      ({ filters }: { filters: Array<{ Field: string; Value: string }> }) => {
+        const fam = filters.find((f) => f.Field === "productFamily")?.Value;
+        if (fam === "Data Transfer") {
+          return Promise.resolve(
+            wrapMcpText(CLOUDFRONT_DATA_TRANSFER_MULTI_EDGE_REGION_RESPONSE),
+          );
+        }
+        if (fam === "API Request") {
+          return Promise.resolve(wrapMcpText(CLOUDFRONT_REQUESTS_RESPONSE));
+        }
+        return Promise.resolve(null);
+      },
+    );
+
+    const usageEnricher = vi.fn(
+      async () =>
+        new Map([
+          [
+            arn,
+            {
+              cloudfrontRequestsPerMonth: 10_000,
+              cloudfrontBytesPerMonth: 100,
+            },
+          ],
+        ]),
+    );
+
+    const enricher = createListPricingEnricher(usageEnricher);
+    const result = await enricher([
+      makeResource(arn, "AWS::CloudFront::Distribution", "global"),
+    ]);
+
+    // Asserts the NA-pinned, deterministic rate. Any value other than
+    // $8.51/mo (e.g. $11.41/mo from JP, $12.01/mo from SG) means the
+    // fromLocation filter broke and edge selection regressed to
+    // non-determinism.
+    expect(result.get(arn)).toBe("$8.51/mo");
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────
+// `computeTieredCost` unit tests — the per-tier multiplier helper
+// is exported for direct verification of the math (independent of
+// MCP shape and async plumbing).
+// ──────────────────────────────────────────────────────────────────
+
+describe("computeTieredCost — tier-ladder math", () => {
+  // Canonical CloudFront NA rate ladder as PriceTier[].
+  const NA_TIERS = [
+    {
+      beginRange: 0,
+      endRange: 10240,
+      rate: "0.085",
+      currency: "USD",
+      unit: "GB",
+    },
+    {
+      beginRange: 10240,
+      endRange: 51200,
+      rate: "0.080",
+      currency: "USD",
+      unit: "GB",
+    },
+    {
+      beginRange: 51200,
+      endRange: 153600,
+      rate: "0.060",
+      currency: "USD",
+      unit: "GB",
+    },
+  ];
+
+  it("returns 0 for zero GB", async () => {
+    const { computeTieredCost } = await import("./pricing-enricher.js");
+    expect(computeTieredCost(0, NA_TIERS)).toBe(0);
+  });
+
+  it("returns null for empty tier list (caller falls back to rate hint)", async () => {
+    const { computeTieredCost } = await import("./pricing-enricher.js");
+    expect(computeTieredCost(100, [])).toBeNull();
+  });
+
+  it("computes a tier-1-only volume correctly (1000 GB × $0.085 = $85.00)", async () => {
+    const { computeTieredCost } = await import("./pricing-enricher.js");
+    expect(computeTieredCost(1000, NA_TIERS)).toBeCloseTo(85, 6);
+  });
+
+  it("computes a tier-crossing volume correctly (15360 GB → $1280.00)", async () => {
+    const { computeTieredCost } = await import("./pricing-enricher.js");
+    // 10240 × $0.085 = $870.40
+    // 5120 × $0.080 = $409.60
+    // Total: $1280.00
+    expect(computeTieredCost(15_360, NA_TIERS)).toBeCloseTo(1280, 6);
+  });
+
+  it("crosses 3 tiers correctly (61440 GB → $4761.60)", async () => {
+    // F6-ITEM-2 optional Quinn add: locks the bottom-tier branch
+    // behavior. 61440 GB (60 TB) walks through all three tiers:
+    //   Tier 1 (0–10 TB):   10240 GB × $0.085 = $870.40
+    //   Tier 2 (10–50 TB):  40960 GB × $0.080 = $3276.80
+    //   Tier 3 (50–150 TB): 10240 GB × $0.060 = $614.40
+    //   Total:                                  $4761.60
+    const { computeTieredCost } = await import("./pricing-enricher.js");
+    expect(computeTieredCost(61_440, NA_TIERS)).toBeCloseTo(4761.6, 4);
+  });
+
+  it("treats an open-ended top tier as infinity", async () => {
+    const { computeTieredCost } = await import("./pricing-enricher.js");
+    const tiers = [
+      {
+        beginRange: 0,
+        endRange: 100,
+        rate: "0.10",
+        currency: "USD",
+        unit: "GB",
+      },
+      { beginRange: 100, rate: "0.05", currency: "USD", unit: "GB" },
+    ];
+    // 100 × $0.10 + 900 × $0.05 = $10 + $45 = $55
+    expect(computeTieredCost(1000, tiers)).toBeCloseTo(55, 6);
+  });
+
+  it("returns null when a tier rate is unparseable", async () => {
+    const { computeTieredCost } = await import("./pricing-enricher.js");
+    const tiers = [
+      {
+        beginRange: 0,
+        endRange: 100,
+        rate: "not-a-number",
+        currency: "USD",
+        unit: "GB",
+      },
+    ];
+    expect(computeTieredCost(50, tiers)).toBeNull();
+  });
+});

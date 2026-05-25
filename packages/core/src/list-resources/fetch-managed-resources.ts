@@ -112,6 +112,29 @@ export type CreatedDateEnricher = (
 export interface ResourceUsage {
   /** Actual S3 storage in GB. Omit when CloudWatch returned no datapoint. */
   storageGB?: number;
+  /**
+   * CloudFront `Requests` metric (AWS/CloudFront namespace, Sum statistic)
+   * over the 30-day lookback window. Used to multiply the per-request
+   * rate into a real `$X.XX/mo` total. Omit when CloudWatch returned
+   * no datapoints (silently swallowed IAM denial, deleted distribution,
+   * etc.) — pricing-enricher then falls back to the rate-hint display.
+   *
+   * A populated value of `0` is a meaningful signal ("distribution exists
+   * but had zero traffic in the last 30 days") and the pricing-enricher
+   * treats it as "no usable multiplier" — see consumer for the fall-back
+   * branch that still surfaces the rate hint rather than a misleading
+   * `$0.00/mo`.
+   */
+  cloudfrontRequestsPerMonth?: number;
+  /**
+   * CloudFront `BytesDownloaded` metric (AWS/CloudFront namespace, Sum
+   * statistic) over the 30-day lookback window, converted to GB using
+   * the AWS billing convention (10^9 bytes/GB). Used to multiply the
+   * tiered per-GB data-transfer-out rate ladder into a real `$X.XX/mo`
+   * total. See `cloudfrontRequestsPerMonth` for the missing-vs-zero
+   * field-contract note.
+   */
+  cloudfrontBytesPerMonth?: number;
 }
 
 /**

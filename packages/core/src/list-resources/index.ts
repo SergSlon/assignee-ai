@@ -31,4 +31,4 @@ export {
   type CreatedDateEnricherCredentials,
 } from "./created-date-enricher.js";
 export { createListPricingEnricher } from "./pricing-enricher.js";
-export { createCloudWatchStorageEnricher } from "../services/storage-enricher.js";
+export { createCloudWatchUsageEnricher } from "../services/storage-enricher.js";

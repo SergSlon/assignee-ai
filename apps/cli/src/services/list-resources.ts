@@ -29,7 +29,7 @@ import { fetchManagedIamRoles } from "./iam-role-inventory.js";
 import {
   createListPricingEnricher,
   createListCreatedDateEnricher,
-  createCloudWatchStorageEnricher,
+  createCloudWatchUsageEnricher,
 } from "@assignee/core";
 
 // Re-export for consumers that import from this module.
@@ -134,7 +134,7 @@ export async function fetchManagedResources(
     // sum costs (e.g. `admin list` without `--total-cost`).
     enrichWithPricing: createListPricingEnricher(
       sdkCredentials && options?.withStorageEstimate
-        ? createCloudWatchStorageEnricher(sdkCredentials, resolvedRegion)
+        ? createCloudWatchUsageEnricher(sdkCredentials, resolvedRegion)
         : undefined,
     ),
     // Created-date enrichment: resolves creation timestamps for N/A rows.

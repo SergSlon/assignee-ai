@@ -207,25 +207,32 @@ export function operatorPolicy(
         // instead of the rate-hint fallback. `GetMetricStatistics`
         // does NOT support resource-level scoping (it scopes by metric
         // namespace via Condition keys), so the Resource is `*` and
-        // the Condition restricts to `AWS/S3` — operator credential
-        // leak can't pivot to read arbitrary application metrics
-        // (custom namespaces, AWS/EC2, AWS/Lambda…) that might
-        // disclose sensitive operational signal.
+        // the Condition restricts to the assignee-priced namespaces —
+        // operator credential leak can't pivot to read arbitrary
+        // application metrics (custom namespaces, AWS/EC2, AWS/Lambda…)
+        // that might disclose sensitive operational signal.
         //
-        // Without this statement the storage-enricher's CloudWatch
+        // F6 follow-up (2026-05-25): CloudFront baseline cost added.
+        // `AWS/CloudFront` was widened into the namespace allowlist so
+        // distributions can pull `Requests` + `BytesDownloaded` Sum
+        // metrics for the per-distribution $/mo calculation. Same
+        // tradeoff as the S3 line: the namespace is non-resource-
+        // scopable, so the Condition is the strongest available scope.
+        //
+        // Without this statement the usage-enricher's CloudWatch
         // calls return AccessDenied, the silent-swallow path leaves
-        // the storage map empty, and the F6 promotion never fires
+        // the usage map empty, and the F6 promotion never fires
         // (display reverts to the pre-fix rate hint).
         //
         // @see _backlog/wizard-ux-audit-2026-05-22.md F6
-        // @see apps/cli/src/services/storage-enricher.ts (consumer)
+        // @see packages/core/src/services/storage-enricher.ts (consumer)
         Sid: "CloudWatchStorageMetricsRead",
         Effect: IamEffect.ALLOW,
         Action: ["cloudwatch:GetMetricStatistics"],
         Resource: "*",
         Condition: {
           StringEquals: {
-            "cloudwatch:namespace": "AWS/S3",
+            "cloudwatch:namespace": ["AWS/S3", "AWS/CloudFront"],
           },
         },
       },

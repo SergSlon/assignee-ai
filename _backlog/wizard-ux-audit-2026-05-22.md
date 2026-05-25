@@ -254,17 +254,32 @@ Closed (this commit — F6 follow-up, prefix-aware matcher):
   `TimedStorage-GIR-ByteHrs`, `TimedStorage-INT-FA-ByteHrs` now
   match the prefixed API values after the same single strip).
 
+Closed (2026-05-25 follow-up commit — CloudFront baseline):
+
+- **CloudFront distributions** — pricing-enricher now multiplies
+  per-distribution CloudWatch `Requests` + `BytesDownloaded` Sum
+  metrics (AWS/CloudFront namespace, 30-day window, daily bucketing)
+  by the tiered data-transfer ladder + per-request rate from the
+  Pricing MCP via `extractTieredPrice`. New `ResourceUsage` fields
+  `cloudfrontRequestsPerMonth` and `cloudfrontBytesPerMonth` carry
+  the metric sums; the storage helper was generalised + renamed
+  `createCloudWatchStorageEnricher` →
+  `createCloudWatchUsageEnricher`. Operator IAM policy widened to
+  `cloudwatch:namespace ∈ {AWS/S3, AWS/CloudFront}` (same
+  `CloudWatchStorageMetricsRead` statement). Zero-traffic
+  distributions (Requests=0 OR Bytes=0) intentionally fall back to
+  the rate-hint display rather than claiming a misleading
+  `$0.00/mo`. PriceClass defaults to PriceClass_All (conservative-
+  high estimate); per-distribution PriceClass-aware pricing remains
+  a future enhancement (requires an extra
+  `cloudfront:GetDistributionConfig` call per row). Origin Shield
+  per-origin fees and Function-execution rates are explicitly out
+  of scope for this iteration — the two headline cost dimensions
+  (data transfer + requests) cover ~99% of typical distribution
+  spend.
+
 Out of scope for this iteration:
 
-- **CloudFront baseline** — distributions still surface as rate
-  hints. Real fix needs a CloudFront-specific enricher that adds
-  a baseline request count (no native AWS metric — would need to
-  query CloudFront `GetDistributionConfig` for PriceClass and emit
-  a minimum cost). File a separate item if the CloudFront line
-  becomes a visible UX irritant; the operator policy already has
-  `cloudwatch:GetMetricStatistics` scoped to `AWS/S3` only, so a
-  CloudFront extension also needs the policy to include
-  `AWS/CloudFront` in the namespace allowlist.
 - **Multi-storage-class buckets (lifecycle-tiered)** — only
   `StandardStorage` CloudWatch dimension is queried today. The
   prefix-aware matcher (closed above) fixes the single-class

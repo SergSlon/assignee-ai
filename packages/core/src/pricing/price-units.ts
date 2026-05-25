@@ -32,6 +32,15 @@ export const PriceUnit = {
   PER_1000_REQS: "/1000 reqs",
   PER_100K_NOTIFS: "/100K notifs",
   PER_10K_REQS: "/10K reqs",
+  /**
+   * Per-single-request rate. F6-ITEM-2 (Quinn HIGH-2): the AWS
+   * Pricing API publishes CloudFront request rates per-1-request
+   * (e.g. `0.0000010000` USD = $0.000001/req), not per-10K. The
+   * legacy `/10K reqs` label without a `scale: 10_000` multiplier
+   * was off by 4 orders of magnitude in implied meaning. Use this
+   * constant whenever the API returns a per-request rate directly.
+   */
+  PER_REQ: "/req",
   // Long-form variants used in strategy mcpConfig.unit fields
   PER_HOUR_LONG: "/hour",
   PER_GB_MONTH_LONG: "/GB-month",

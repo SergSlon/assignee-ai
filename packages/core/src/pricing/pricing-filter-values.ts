@@ -10,6 +10,19 @@ export const PricingFilterValue = {
   /** toLocationType value for internet-outbound data transfer in AWS Pricing API. */
   TO_LOCATION_OTHER: "Other",
 
+  // fromLocation values for CloudFront data-transfer edge regions.
+  // F6-ITEM-2 (Quinn HIGH-1): the Pricing API publishes a separate
+  // tier ladder per CloudFront edge region (NA $0.085/GB tier 1,
+  // EU $0.085, JP $0.114, SG $0.120, etc.). Without a fromLocation
+  // filter, `extractTieredPrice` picks whichever entry the MCP server
+  // happens to return first → non-deterministic $/mo across runs.
+  // We pin to NORTH_AMERICA because every Assignee hardcoded
+  // PriceClass pattern (static-website / spa-website / static-site)
+  // uses `PriceClass_100`, which routes through US/EU/Israel edges
+  // only — NA tier 1 ($0.085/GB) is the baseline that matches.
+  // PriceClass-aware per-edge selection is tracked as F6-followup.
+  FROM_LOCATION_NORTH_AMERICA: "North America",
+
   // Transfer types
   AWS_OUTBOUND: "AWS Outbound",
 

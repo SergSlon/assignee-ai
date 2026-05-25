@@ -31,7 +31,7 @@ import {
   requireAssigneeCredentials,
   createListCreatedDateEnricher,
   createListPricingEnricher,
-  createCloudWatchStorageEnricher,
+  createCloudWatchUsageEnricher,
   type ManagedIamRole,
   type ManagedResource,
   type RgtaMapping,
@@ -225,7 +225,7 @@ export async function fetchManagedResources(
       // Parity with apps/cli/src/services/list-resources.ts.
       enrichWithPricing: createListPricingEnricher(
         sdkCredentials
-          ? createCloudWatchStorageEnricher(sdkCredentials, resolvedRegion)
+          ? createCloudWatchUsageEnricher(sdkCredentials, resolvedRegion)
           : undefined,
       ),
       // Created-date enrichment: resolves creation timestamps for N/A rows.

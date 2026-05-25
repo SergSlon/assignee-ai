@@ -23,7 +23,10 @@ import {
 } from "@langchain/mcp-adapters";
 import { getMcpServerConfigs } from "../config/mcp-servers.js";
 import { defaultDecomposerRegistry } from "../pricing/barrels/decomposers.js";
-import { extractFirstTierPrice } from "../pricing/mcp-parser.js";
+import {
+  extractFirstTierPrice,
+  extractTieredPrice,
+} from "../pricing/mcp-parser.js";
 import { unwrapMcpText } from "../utils/mcp.js";
 import { McpServerName } from "../constants/mcp.js";
 import { ToolName } from "../constants/tools.js";
@@ -37,7 +40,9 @@ import type {
 } from "./fetch-managed-resources.js";
 import type { ManagedResource } from "./types.js";
 import type { AwsPricingResponse } from "../pricing/types.js";
+import type { PriceTier } from "../pricing/tier-ladder.js";
 import { PriceUnit } from "../pricing/price-units.js";
+import { RESOURCE_TYPES } from "../config/resource-types.js";
 
 /** Timeout per Pricing MCP call in milliseconds. */
 const PRICING_MCP_TIMEOUT_MS = 15_000;
@@ -323,6 +328,28 @@ export function createListPricingEnricher(
             const keyParts = key.split("::");
             const effectiveRegion = keyParts[keyParts.length - 1]!;
 
+            // ── CloudFront F6 promotion (2026-05-25) ──────────────
+            // CloudFront's rate-card is fundamentally different from
+            // every other resource type: 100% usage-based, with a
+            // TIERED per-GB data-transfer ladder and a per-request
+            // rate. The shared "extract first usage-based rate as
+            // hint" path returned `$0.085/GB` for every distribution
+            // regardless of actual traffic. The CloudFront branch
+            // pulls `Requests` + `BytesDownloaded` from the usage map
+            // (populated by the CloudWatch usage-enricher) and
+            // computes `(requests × rate) + tieredCost(bytes)` per
+            // distribution.
+            if (resourceType === RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION) {
+              await enrichCloudFrontGroup({
+                group,
+                effectiveRegion,
+                pricingTool,
+                usageByArn,
+                result,
+              });
+              continue;
+            }
+
             // Synthesise minimal desiredState for the decomposer
             const desiredState: Record<string, unknown> =
               buildMinimalDesiredState(resourceType);
@@ -606,10 +633,252 @@ function buildMinimalDesiredState(
       // KMS decomposer uses KeySpec to distinguish symmetric vs asymmetric
       // request fees; symmetric ($0.03/10K) is the common case.
       return { KeySpec: "SYMMETRIC_DEFAULT" };
-    case "AWS::CloudFront::Distribution":
-      // CloudFront decomposer ignores desiredState (returns 2 usage-based items)
-      return { DistributionConfig: { PriceClass: "PriceClass_All" } };
+    // F6-ITEM-2 (Quinn HIGH-1): CloudFront decomposer ignores
+    // desiredState entirely — the prior `PriceClass_All` synthesised
+    // value was dead code. PriceClass-aware per-edge rate selection
+    // requires an extra `cloudfront:GetDistributionConfig` call per
+    // distribution and is tracked as F6-followup.
     default:
       return {};
+  }
+}
+
+/**
+ * Compute the cumulative cost of `gb` GB of CloudFront data transfer
+ * across a tiered rate ladder. Mirrors AWS's monthly billing model:
+ * the first N GB charge at tier 1's rate, the next M GB at tier 2's
+ * rate, and so on. Tiers with `endRange === undefined` are the
+ * top-tier (infinity).
+ *
+ * Returns `null` when the tier ladder is empty or non-monotonic
+ * (caller falls back to rate-hint display).
+ *
+ * Worked example for 1 TB (1000 GB) with the canonical CloudFront
+ * North America rate card:
+ *   Tier 1 (0–10 TB):  1000 GB × $0.085 = $85.00
+ * The whole TB stays in tier 1; no tier 2 contribution. For 15 TB:
+ *   Tier 1 (0–10 TB):  10240 GB × $0.085 = $870.40
+ *   Tier 2 (10–50 TB): (15360-10240) GB × $0.080 = $409.60
+ *   Total: $1,280.00
+ *
+ * Exported `internal` for unit tests in `pricing-enricher.test.ts`.
+ */
+export function computeTieredCost(
+  gb: number,
+  tiers: PriceTier[],
+): number | null {
+  if (!tiers || tiers.length === 0) return null;
+  if (gb <= 0) return 0;
+  let total = 0;
+  let remaining = gb;
+  for (const tier of tiers) {
+    if (remaining <= 0) break;
+    const tierStart = tier.beginRange;
+    const tierEnd = tier.endRange ?? Infinity;
+    const tierWidth = tierEnd - tierStart;
+    if (tierWidth <= 0) continue;
+    const rate = parseFloat(tier.rate);
+    if (!Number.isFinite(rate)) return null;
+    const consume = Math.min(remaining, tierWidth);
+    total += consume * rate;
+    remaining -= consume;
+  }
+  return total;
+}
+
+/**
+ * Per-distribution CloudFront F6 promotion. Pulls the data-transfer
+ * tier ladder + the per-request rate via two Pricing MCP calls (one
+ * per usage-based line item the decomposer emits), then for each
+ * distribution in the group:
+ *   - Reads `cloudfrontRequestsPerMonth` + `cloudfrontBytesPerMonth`
+ *     from the usage map (populated by the CloudWatch usage-enricher).
+ *   - Computes `(requests × perRequestRate) + tieredCost(bytes)`.
+ *   - Promotes to `$X.XX/mo` via `formatCostLabel`.
+ *   - Falls back to a rate-hint display (the per-GB ladder summary)
+ *     when usage data is missing or fields are exactly 0 (the
+ *     CloudWatch enricher's "no traffic observed" signal — which is
+ *     distinct from "no data": a zero multiplier would yield a
+ *     misleading $0.00/mo so we surface the rate hint instead).
+ *
+ * Errors thrown by the inner MCP calls are caught at the per-tuple
+ * level — every distribution in the group falls back to the rate-hint
+ * branch (or N/A if even the rate-hint can't be extracted). This
+ * preserves the conservative-keep contract: the enricher never
+ * regresses the pre-F6 display.
+ */
+async function enrichCloudFrontGroup(args: {
+  group: ManagedResource[];
+  effectiveRegion: string;
+  pricingTool: StructuredTool;
+  usageByArn: Map<string, ResourceUsage>;
+  result: Map<string, string>;
+}): Promise<void> {
+  const { group, effectiveRegion, pricingTool, usageByArn, result } = args;
+
+  // F6-ITEM-2 baseline: North-America-edge baseline ($0.085/GB tier 1)
+  // — deterministic across runs thanks to the
+  // `fromLocation = "North America"` filter pinned in the CloudFront
+  // decomposer. Limitation: distributions deployed with
+  // `PriceClass_All` that route significant traffic through SG / HK /
+  // JP edges ($0.110–0.120/GB) under-cost by up to ~41%.
+  // PriceClass-aware enrichment requires extra
+  // `cloudfront:GetDistributionConfig` calls + per-edge-region rate
+  // selection — tracked as F6-followup.
+  const desiredState = buildMinimalDesiredState(
+    RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION,
+  );
+  const lineItems = defaultDecomposerRegistry.decompose(
+    RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION,
+    desiredState,
+  );
+  // Decomposer contract: [0] = Data transfer out, [1] = Requests.
+  const dataTransferItem = lineItems[0];
+  const requestsItem = lineItems[1];
+  if (!dataTransferItem || !requestsItem) {
+    // Decomposer reshuffled — degrade to no entries for the group
+    // (consumer leaves rows as N/A).
+    return;
+  }
+
+  // Pull the tiered data-transfer ladder.
+  let tiers: PriceTier[] | undefined;
+  let dataTransferRateHint: string | undefined;
+  try {
+    const rawResult = await withRetry(() =>
+      withTimeout(
+        pricingTool.invoke({
+          service_code: dataTransferItem.serviceCode,
+          region: effectiveRegion,
+          filters: dataTransferItem.filters,
+          output_options: {
+            pricing_terms: [PricingTerm.ON_DEMAND],
+          },
+        }),
+        PRICING_MCP_TIMEOUT_MS,
+      ),
+    );
+    if (rawResult !== null) {
+      const data = JSON.parse(
+        unwrapPricingMcpText(rawResult),
+      ) as AwsPricingResponse;
+      const tiered = extractTieredPrice(data, dataTransferItem.filters);
+      if (tiered) {
+        tiers = tiered.tiers;
+        dataTransferRateHint = tiered.text;
+      } else {
+        // Non-tiered response (some regions surface a flat per-GB
+        // rate) — fall back to extractFirstTierPrice so we still
+        // have at least the headline rate string.
+        const flat = extractFirstTierPrice(
+          data,
+          dataTransferItem.priceUnit,
+          dataTransferItem.scale,
+          dataTransferItem.filters,
+        );
+        if (flat) {
+          dataTransferRateHint = flat;
+          const rate = parseFloat(flat.replace(/^\$/, "").replace(/\/.*$/, ""));
+          if (Number.isFinite(rate)) {
+            tiers = [
+              {
+                beginRange: 0,
+                rate: String(rate),
+                currency: "USD",
+                unit: "GB",
+              },
+            ];
+          }
+        }
+      }
+    }
+  } catch {
+    // Inner MCP call failed — fall through; perRequestRate may still
+    // resolve and the per-distribution branch will gracefully degrade.
+  }
+
+  // Pull the per-request rate (flat tier).
+  let perRequestRate: number | undefined;
+  let requestsRateHint: string | undefined;
+  try {
+    const rawResult = await withRetry(() =>
+      withTimeout(
+        pricingTool.invoke({
+          service_code: requestsItem.serviceCode,
+          region: effectiveRegion,
+          filters: requestsItem.filters,
+          output_options: {
+            pricing_terms: [PricingTerm.ON_DEMAND],
+          },
+        }),
+        PRICING_MCP_TIMEOUT_MS,
+      ),
+    );
+    if (rawResult !== null) {
+      const data = JSON.parse(
+        unwrapPricingMcpText(rawResult),
+      ) as AwsPricingResponse;
+      const flat = extractFirstTierPrice(
+        data,
+        requestsItem.priceUnit,
+        requestsItem.scale,
+        requestsItem.filters,
+      );
+      if (flat) {
+        requestsRateHint = flat;
+        // Invariant: CloudFront requests are per-request; rate × raw
+        // count = monthly cost.
+        const rate = parseFloat(flat.replace(/^\$/, "").replace(/\/.*$/, ""));
+        if (Number.isFinite(rate)) {
+          perRequestRate = rate;
+        }
+      }
+    }
+  } catch {
+    // ditto — fall through; per-distribution branch handles missing rate.
+  }
+
+  // Per-distribution label assignment.
+  for (const r of group) {
+    if (!r.arn) continue;
+    const usage = usageByArn.get(r.arn);
+    const requests = usage?.cloudfrontRequestsPerMonth;
+    const bytesGb = usage?.cloudfrontBytesPerMonth;
+
+    // Promotion path: BOTH usage dimensions must be populated AND
+    // strictly positive. A zero on either side means the CloudWatch
+    // enricher saw the distribution but observed no traffic — the
+    // pricing math would yield a misleading $0.00/mo, so we surface
+    // the rate-hint fallback instead. ("Zero is not no-data; zero is
+    // a meaningful 'idle' signal that the rate-hint display
+    // communicates more accurately than a fake total.")
+    const canPromote =
+      requests !== undefined &&
+      requests > 0 &&
+      bytesGb !== undefined &&
+      bytesGb > 0 &&
+      perRequestRate !== undefined &&
+      tiers !== undefined &&
+      tiers.length > 0;
+
+    if (canPromote) {
+      const dataTransferCost = computeTieredCost(bytesGb!, tiers!);
+      if (dataTransferCost !== null) {
+        const requestsCost = requests! * perRequestRate!;
+        const total = dataTransferCost + requestsCost;
+        result.set(r.arn, `$${total.toFixed(2)}/mo`);
+        continue;
+      }
+    }
+
+    // Fallback: rate-hint display. Prefer the tier-ladder text from
+    // extractTieredPrice (richest signal); fall back to the
+    // first-tier hint string; finally to a generic "$rate/GB"
+    // synthesised string if neither parse succeeded. Skip the row
+    // entirely if we have NOTHING (consumer leaves it as N/A).
+    const hint = dataTransferRateHint ?? requestsRateHint;
+    if (hint) {
+      result.set(r.arn, hint);
+    }
   }
 }

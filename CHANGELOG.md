@@ -19,6 +19,33 @@ review methodology notes, see
 
 ### Added
 
+- **F6 CloudFront baseline cost closure** — `assignee admin list
+--total-cost` / `assignee infra destroy --all` now display real
+  `$X.XX/mo` totals for CloudFront distributions instead of the
+  per-GB rate hint, mirroring the S3 enricher closed in `1408ecd8`
+  (prefix-aware matcher) and `8dd1f3c5` (storage estimation). The
+  CloudWatch usage-enricher (renamed
+  `createCloudWatchStorageEnricher` →
+  `createCloudWatchUsageEnricher`) now also pulls AWS/CloudFront
+  `Requests` + `BytesDownloaded` Sum metrics over a 30-day window;
+  the pricing-enricher uses `extractTieredPrice` to compute the
+  tiered data-transfer cost + per-request rate per distribution.
+  Operator IAM policy `CloudWatchStorageMetricsRead` widened to
+  `cloudwatch:namespace ∈ {AWS/S3, AWS/CloudFront}`. Data-transfer
+  rate pinned to North-America-edge baseline ($0.085/GB tier 1)
+  via `fromLocation=North America` filter — deterministic across
+  runs; distributions whose traffic routes through SG/HK/JP edges
+  ($0.110–0.120/GB) under-cost by up to ~41% (per-distribution
+  PriceClass-aware enrichment requires extra `GetDistributionConfig`
+  calls and is tracked as F6-followup). Origin Shield and
+  Function-execution rates deferred. The four `PER_10K_REQS`
+  decomposers (KMS, SSM, SecretsManager, and previously CloudFront)
+  emit a display label that is mathematically off by 4 orders of
+  magnitude; CloudFront fixed in this commit by switching to
+  `PER_REQ`, the other three tracked in
+  `_backlog/per-10k-reqs-display-bug-other-services.md`. Closes the
+  CloudFront half of `_backlog/wizard-ux-audit-2026-05-22.md` F6.
+
 - **Wizard UX regression suite** (`3c5380a2`) — `pnpm wizard-audit`
   drives the checked-in PTY harness against `dev init --wizard` and
   `dev init --global --wizard`, diffs each captured screen against

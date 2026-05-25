@@ -24,6 +24,15 @@ export const PricingField = {
   ALARM_TYPE: "alarmType",
   FROM_LOCATION_TYPE: "fromLocationType",
   TO_LOCATION_TYPE: "toLocationType",
+  /**
+   * `fromLocation` attribute — the specific edge-region name (e.g.
+   * "North America", "Europe", "Japan") on AWS Pricing API responses
+   * for services whose rates differ per edge / region group
+   * (CloudFront data transfer is the canonical example). Distinct
+   * from `fromLocationType` which only carries the type bucket
+   * ("AWS Region" vs "AWS Edge Location").
+   */
+  FROM_LOCATION: "fromLocation",
   TRANSFER_TYPE: "transferType",
   // SQS queue type discriminator (Standard vs FIFO)
   QUEUE_TYPE: "queueType",
