@@ -15,6 +15,8 @@ export {
 export {
   fetchManagedResources,
   hasManagedByTag,
+  S3StorageClass,
+  S3_STORAGE_CLASSES,
   type FetchManagedResourcesOptions,
   type RgtaFetcher,
   type RgtaMapping,

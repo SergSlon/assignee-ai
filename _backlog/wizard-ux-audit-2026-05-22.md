@@ -278,18 +278,29 @@ Closed (2026-05-25 follow-up commit — CloudFront baseline):
   (data transfer + requests) cover ~99% of typical distribution
   spend.
 
-Out of scope for this iteration:
+Closed (2026-05-25 follow-up commit — multi-storage-class S3, F6
+fully closed):
 
-- **Multi-storage-class buckets (lifecycle-tiered)** — only
-  `StandardStorage` CloudWatch dimension is queried today. The
-  prefix-aware matcher (closed above) fixes the single-class
-  non-Standard case (one bucket, one class), but a bucket spanning
-  multiple classes (e.g. lifecycle-tiered Standard → IA → Glacier)
-  still surfaces only the StandardStorage dimension as fixed cost;
-  the other classes' bytes show only as rate hints. Real fix:
-  parallel `GetMetricStatistics` calls per `StorageType` dimension
-  and a per-class rate fan-out in the S3 decomposer. Quinn H1
-  follow-up.
+- **Multi-storage-class buckets (lifecycle-tiered)** — every S3
+  storage class (Standard, Standard-IA, OneZone-IA,
+  Intelligent-Tiering Frequent Access, Glacier Instant Retrieval,
+  Glacier Flexible Retrieval, Deep Archive) is now queried in
+  parallel via `Promise.allSettled` in the CloudWatch usage-enricher
+  (`createCloudWatchUsageEnricher`). Each present class contributes
+  to `ResourceUsage.storageByClass` (replaces the prior
+  single-class `storageGB` field via a deliberate breaking refactor;
+  every consumer was updated in lockstep). The pricing-enricher
+  iterates each present class, fetches the per-class per-GB-month
+  rate via a per-(region, class) Pricing MCP cache (cost ceiling =
+  `7 × region-count` MCP calls per pass, NOT `7 × bucket-count`),
+  and sums the contributions into one `$X.XX/mo` total. Glacier
+  (Flexible Retrieval) buckets carry an `≈` prefix to flag the
+  Standard / Expedited / Bulk retrieval-tier disambiguation gap.
+  Per-class Pricing MCP failures still surface a partial sum when
+  at least 50% of present classes resolve. Closes Quinn H1
+  follow-up; **F6 is now fully closed** (single-class S3 in
+  `1408ecd8`, CloudFront in `1c0e2a43`, multi-class S3 in this
+  commit).
 
 ---
 

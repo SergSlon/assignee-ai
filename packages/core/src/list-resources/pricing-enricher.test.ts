@@ -56,6 +56,7 @@ vi.mock("../config/mcp-servers.js", async (importOriginal) => {
 import { createListPricingEnricher } from "./pricing-enricher.js";
 import { getMcpServerConfigs } from "../config/mcp-servers.js";
 import type { ManagedResource } from "./types.js";
+import { S3StorageClass } from "./fetch-managed-resources.js";
 
 function makeResource(
   arn: string,
@@ -675,19 +676,20 @@ describe("createListPricingEnricher — F6 storage promotion", () => {
     });
   });
 
-  it("promotes per-GB-month rate to $/mo when storageGB is known (50 GB → $1.15/mo)", async () => {
+  it("promotes per-GB-month rate to $/mo when storageByClass.Standard is known (50 GB → $1.15/mo)", async () => {
     const arn = "arn:aws:s3:::my-test-bucket-50gb";
     mockToolInvoke.mockResolvedValue(wrapMcpText(S3_STORAGE_PRICING_RESPONSE));
 
-    // StorageEnricher reports 50 GB for this bucket.
+    // StorageEnricher reports 50 GB Standard for this bucket.
     const storageEnricher = vi.fn(
-      async () => new Map([[arn, { storageGB: 50 }]]),
+      async () =>
+        new Map([[arn, { storageByClass: { [S3StorageClass.STANDARD]: 50 } }]]),
     );
 
     const enricher = createListPricingEnricher(storageEnricher);
     const result = await enricher([makeResource(arn, "AWS::S3::Bucket")]);
 
-    // 50 GB × $0.023/GB-month = $1.15/mo
+    // 50 GB × $0.023/GB-month = $1.15/mo (Standard-only, no `≈` prefix).
     expect(result.get(arn)).toBe("$1.15/mo");
     expect(storageEnricher).toHaveBeenCalledTimes(1);
   });
@@ -760,7 +762,10 @@ describe("createListPricingEnricher — F6 storage promotion", () => {
     mockToolInvoke.mockResolvedValue(wrapMcpText(S3_STORAGE_PRICING_RESPONSE));
 
     const storageEnricher = vi.fn(
-      async () => new Map([[arnWithData, { storageGB: 100 }]]),
+      async () =>
+        new Map([
+          [arnWithData, { storageByClass: { [S3StorageClass.STANDARD]: 100 } }],
+        ]),
     );
 
     const enricher = createListPricingEnricher(storageEnricher);
@@ -783,7 +788,10 @@ describe("createListPricingEnricher — F6 storage promotion", () => {
     mockToolInvoke.mockResolvedValue(wrapMcpText(S3_STORAGE_PRICING_RESPONSE));
 
     const storageEnricher = vi.fn(
-      async () => new Map([[arn, { storageGB: 12.345 }]]),
+      async () =>
+        new Map([
+          [arn, { storageByClass: { [S3StorageClass.STANDARD]: 12.345 } }],
+        ]),
     );
 
     const enricher = createListPricingEnricher(storageEnricher);
@@ -822,7 +830,10 @@ describe("createListPricingEnricher — F6 storage promotion", () => {
     );
 
     const storageEnricher = vi.fn(
-      async () => new Map([[arn, { storageGB: 100 }]]),
+      async () =>
+        new Map([
+          [arn, { storageByClass: { [S3StorageClass.STANDARD]: 100 } }],
+        ]),
     );
 
     const enricher = createListPricingEnricher(storageEnricher);
@@ -838,7 +849,8 @@ describe("createListPricingEnricher — F6 storage promotion", () => {
       "arn:aws:elasticache:us-east-1:112233445566:cluster/no-decomposer";
     mockToolInvoke.mockResolvedValue(wrapMcpText(S3_STORAGE_PRICING_RESPONSE));
     const storageEnricher = vi.fn(
-      async () => new Map([[arn, { storageGB: 25 }]]),
+      async () =>
+        new Map([[arn, { storageByClass: { [S3StorageClass.STANDARD]: 25 } }]]),
     );
 
     const enricher = createListPricingEnricher(storageEnricher);
@@ -859,6 +871,391 @@ describe("createListPricingEnricher — F6 storage promotion", () => {
     expect(handed).toBeDefined();
     expect(handed).toHaveLength(1);
     expect(handed?.[0]?.arn).toBe(arn);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────
+// F6-ITEM-3 (Quinn H1 closure) — multi-storage-class S3 promotion.
+// The pricing-enricher now iterates every present class in
+// `storageByClass`, queries per-class per-GB-month rates via the
+// per-(region,class) MCP cache, and sums the contributions into one
+// `$X.XX/mo` total. Glacier (non-IR) buckets carry an `≈` prefix
+// to flag the retrieval-tier disambiguation gap.
+// ──────────────────────────────────────────────────────────────────
+
+/**
+ * Build an MCP fixture for an arbitrary per-GB-month storage rate.
+ * `usagetype` carries the region prefix (`USE1-`) to mirror the real
+ * AWS Pricing API shape.
+ */
+function s3StoragePricingFixture(args: {
+  usagetypePrefixed: string;
+  rateUsd: string;
+}) {
+  return JSON.stringify({
+    status: "success",
+    service_name: "AmazonS3",
+    data: [
+      {
+        product: {
+          productFamily: "Storage",
+          attributes: {
+            usagetype: args.usagetypePrefixed,
+            region: "us-east-1",
+          },
+        },
+        terms: {
+          OnDemand: {
+            "term-1": {
+              priceDimensions: {
+                "pd-1": {
+                  rateCode: "pd-1",
+                  beginRange: "0",
+                  endRange: "Inf",
+                  unit: "GB-Mo",
+                  pricePerUnit: { USD: args.rateUsd },
+                  description: `$${args.rateUsd} per GB-Month`,
+                },
+              },
+            },
+          },
+        },
+      },
+    ],
+  });
+}
+
+/**
+ * Canonical per-class published rates for us-east-1 (AWS public
+ * Pricing API as of 2026-05). Used as both the fixture rate AND the
+ * expected-math input so failures point at the math, not at fixture
+ * drift.
+ *
+ *   Standard:                $0.0230/GB-mo
+ *   Standard-IA:             $0.0125/GB-mo
+ *   OneZone-IA:              $0.0100/GB-mo
+ *   Intelligent-Tiering FA:  $0.0230/GB-mo  (Frequent Access tier = Standard)
+ *   Glacier Instant Retrieval: $0.0040/GB-mo
+ *   Glacier (Flexible Retrieval): $0.0036/GB-mo
+ *   Deep Archive:            $0.00099/GB-mo
+ */
+const CLASS_RATES_USD: Record<S3StorageClass, string> = {
+  [S3StorageClass.STANDARD]: "0.0230000000",
+  [S3StorageClass.STANDARD_IA]: "0.0125000000",
+  [S3StorageClass.ONE_ZONE_IA]: "0.0100000000",
+  [S3StorageClass.INTELLIGENT_TIERING_FA]: "0.0230000000",
+  [S3StorageClass.GLACIER_IR]: "0.0040000000",
+  [S3StorageClass.GLACIER]: "0.0036000000",
+  [S3StorageClass.DEEP_ARCHIVE]: "0.0009900000",
+};
+
+/**
+ * Canonical per-class usagetype values (canonical / unprefixed —
+ * matches `S3_CLASS_TO_USAGETYPE` in `pricing-enricher.ts`). The
+ * Pricing API responses prepend `USE1-` for us-east-1; the
+ * fixtures below build the prefixed shape.
+ */
+const CLASS_USAGETYPE: Record<S3StorageClass, string> = {
+  [S3StorageClass.STANDARD]: "TimedStorage-ByteHrs",
+  [S3StorageClass.STANDARD_IA]: "TimedStorage-SIA-ByteHrs",
+  [S3StorageClass.ONE_ZONE_IA]: "TimedStorage-ZIA-ByteHrs",
+  [S3StorageClass.INTELLIGENT_TIERING_FA]: "TimedStorage-INT-FA-ByteHrs",
+  [S3StorageClass.GLACIER_IR]: "TimedStorage-GIR-ByteHrs",
+  [S3StorageClass.GLACIER]: "TimedStorage-GlacierByteHrs",
+  [S3StorageClass.DEEP_ARCHIVE]: "TimedStorage-GDA-ByteHrs",
+};
+
+/**
+ * Route MCP responses by the line item's `usagetype` filter. Returns
+ * the per-class rate fixture; the inner Standard-only response (used
+ * by the existing usage-based first-item path) is still routed.
+ */
+function routeByUsagetype(
+  rates: Partial<Record<S3StorageClass, string>> = CLASS_RATES_USD,
+) {
+  return ({
+    filters,
+  }: {
+    filters: Array<{ Field: string; Value: string }>;
+  }) => {
+    const usagetypeFilter = filters.find((f) => f.Field === "usagetype")?.Value;
+    for (const cls of Object.values(S3StorageClass)) {
+      const canon = CLASS_USAGETYPE[cls as S3StorageClass];
+      if (usagetypeFilter === canon) {
+        const rate = rates[cls as S3StorageClass];
+        if (rate === undefined) {
+          return Promise.resolve(null);
+        }
+        return Promise.resolve(
+          wrapMcpText(
+            s3StoragePricingFixture({
+              usagetypePrefixed: `USE1-${canon}`,
+              rateUsd: rate,
+            }),
+          ),
+        );
+      }
+    }
+    // Non-storage filter (e.g. PUT requests) — out of scope for these
+    // multi-class tests; return null so the enricher's fallback path
+    // doesn't get a coincidental match.
+    return Promise.resolve(null);
+  };
+}
+
+describe("createListPricingEnricher — F6-ITEM-3 multi-class S3 promotion", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockInitConnections.mockResolvedValue(undefined);
+    mockClose.mockResolvedValue(undefined);
+    mockGetTools.mockResolvedValue([
+      { name: "get_pricing", invoke: mockToolInvoke },
+    ]);
+    vi.mocked(getMcpServerConfigs).mockReturnValue({
+      "aws-pricing-mcp-server": {
+        command: "uvx",
+        args: [
+          "--with",
+          "botocore[crt]",
+          "awslabs.aws-pricing-mcp-server@1.0.27",
+        ],
+        env: {
+          AWS_ACCESS_KEY_ID: "AKIAIOSFODNN7EXAMPLE",
+          AWS_SECRET_ACCESS_KEY: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+          AWS_DEFAULT_REGION: "us-east-1",
+          FASTMCP_LOG_LEVEL: "ERROR",
+        },
+      },
+    });
+  });
+
+  it("(regression) Standard-only bucket still resolves to single-class total (100 GB → $2.30/mo)", async () => {
+    const arn = "arn:aws:s3:::standard-only-bucket";
+    mockToolInvoke.mockImplementation(routeByUsagetype());
+
+    const storageEnricher = vi.fn(
+      async () =>
+        new Map([
+          [arn, { storageByClass: { [S3StorageClass.STANDARD]: 100 } }],
+        ]),
+    );
+
+    const enricher = createListPricingEnricher(storageEnricher);
+    const result = await enricher([makeResource(arn, "AWS::S3::Bucket")]);
+
+    // 100 GB × $0.0230 = $2.30/mo. Standard-only → no `≈` prefix.
+    expect(result.get(arn)).toBe("$2.30/mo");
+  });
+
+  it("IA-only bucket → SIA rate (200 GB × $0.0125 = $2.50/mo)", async () => {
+    const arn = "arn:aws:s3:::ia-only-bucket";
+    mockToolInvoke.mockImplementation(routeByUsagetype());
+
+    const storageEnricher = vi.fn(
+      async () =>
+        new Map([
+          [arn, { storageByClass: { [S3StorageClass.STANDARD_IA]: 200 } }],
+        ]),
+    );
+
+    const enricher = createListPricingEnricher(storageEnricher);
+    const result = await enricher([makeResource(arn, "AWS::S3::Bucket")]);
+
+    // 200 × $0.0125 = $2.50/mo. No Glacier → no `≈` prefix.
+    expect(result.get(arn)).toBe("$2.50/mo");
+  });
+
+  it("Mixed Standard + IA → sum of two contributions (100 Standard + 200 IA = $2.30 + $2.50 = $4.80/mo)", async () => {
+    const arn = "arn:aws:s3:::mixed-standard-ia-bucket";
+    mockToolInvoke.mockImplementation(routeByUsagetype());
+
+    const storageEnricher = vi.fn(
+      async () =>
+        new Map([
+          [
+            arn,
+            {
+              storageByClass: {
+                [S3StorageClass.STANDARD]: 100,
+                [S3StorageClass.STANDARD_IA]: 200,
+              },
+            },
+          ],
+        ]),
+    );
+
+    const enricher = createListPricingEnricher(storageEnricher);
+    const result = await enricher([makeResource(arn, "AWS::S3::Bucket")]);
+
+    // 100 × 0.0230 + 200 × 0.0125 = 2.30 + 2.50 = $4.80/mo.
+    expect(result.get(arn)).toBe("$4.80/mo");
+  });
+
+  it("Glacier-only bucket → cold-storage rate + `≈` prefix (1000 GB × $0.0036 = ≈$3.60/mo)", async () => {
+    const arn = "arn:aws:s3:::glacier-only-bucket";
+    mockToolInvoke.mockImplementation(routeByUsagetype());
+
+    const storageEnricher = vi.fn(
+      async () =>
+        new Map([
+          [arn, { storageByClass: { [S3StorageClass.GLACIER]: 1000 } }],
+        ]),
+    );
+
+    const enricher = createListPricingEnricher(storageEnricher);
+    const result = await enricher([makeResource(arn, "AWS::S3::Bucket")]);
+
+    // 1000 × $0.0036 = $3.60/mo. Glacier (Flexible Retrieval) →
+    // `≈` prefix to flag Standard/Expedited/Bulk retrieval-tier
+    // ambiguity.
+    expect(result.get(arn)).toBe("≈$3.60/mo");
+  });
+
+  it("All-6-classes bucket (no Deep Archive) → sum + `≈` prefix", async () => {
+    const arn = "arn:aws:s3:::all-six-classes-bucket";
+    mockToolInvoke.mockImplementation(routeByUsagetype());
+
+    const storageEnricher = vi.fn(
+      async () =>
+        new Map([
+          [
+            arn,
+            {
+              storageByClass: {
+                [S3StorageClass.STANDARD]: 100, // 100 × 0.0230 = 2.30
+                [S3StorageClass.STANDARD_IA]: 50, // 50 × 0.0125 = 0.625
+                [S3StorageClass.ONE_ZONE_IA]: 50, // 50 × 0.0100 = 0.50
+                [S3StorageClass.INTELLIGENT_TIERING_FA]: 100, // 100 × 0.0230 = 2.30
+                [S3StorageClass.GLACIER_IR]: 200, // 200 × 0.0040 = 0.80
+                [S3StorageClass.GLACIER]: 500, // 500 × 0.0036 = 1.80
+              },
+            },
+          ],
+        ]),
+    );
+
+    const enricher = createListPricingEnricher(storageEnricher);
+    const result = await enricher([makeResource(arn, "AWS::S3::Bucket")]);
+
+    // Sum: 2.30 + 0.625 + 0.50 + 2.30 + 0.80 + 1.80 = 8.325. JavaScript
+    // toFixed(2) renders this as "8.32" because the IEEE 754 binary
+    // representation of 8.325 is just below 8.325 — banker-rounding
+    // is not a factor; the IEEE representation is. The Glacier class
+    // is present so the `≈` prefix is added.
+    expect(result.get(arn)).toBe("≈$8.32/mo");
+  });
+
+  it("No-data bucket (storageByClass empty) → falls back to rate-hint display", async () => {
+    const arn = "arn:aws:s3:::no-data-bucket";
+    // No per-class fixture lookups happen; the Standard rate hint
+    // still flows through the existing usage-based first-item path.
+    mockToolInvoke.mockResolvedValue(wrapMcpText(S3_STORAGE_PRICING_RESPONSE));
+
+    // Enricher returns nothing for this ARN (every class empty).
+    const storageEnricher = vi.fn(async () => new Map());
+
+    const enricher = createListPricingEnricher(storageEnricher);
+    const result = await enricher([makeResource(arn, "AWS::S3::Bucket")]);
+
+    const label = result.get(arn);
+    expect(label).toBeDefined();
+    expect(label).toContain("/GB-mo");
+  });
+
+  it("Pricing MCP partial failure: SIA rate throws → still surfaces partial sum from Standard", async () => {
+    // Standard succeeds; SIA throws. Two present classes; resolved
+    // count = 1, failed count = 1 → resolvedCount * 2 (=2) >=
+    // presentClasses.length (=2), so the contract surfaces the partial
+    // sum (just Standard's contribution).
+    const arn = "arn:aws:s3:::partial-failure-bucket";
+    mockToolInvoke.mockImplementation(
+      ({ filters }: { filters: Array<{ Field: string; Value: string }> }) => {
+        const usagetypeFilter = filters.find(
+          (f) => f.Field === "usagetype",
+        )?.Value;
+        if (usagetypeFilter === CLASS_USAGETYPE[S3StorageClass.STANDARD_IA]) {
+          return Promise.reject(new Error("Pricing MCP transient: SIA"));
+        }
+        if (usagetypeFilter === CLASS_USAGETYPE[S3StorageClass.STANDARD]) {
+          return Promise.resolve(
+            wrapMcpText(
+              s3StoragePricingFixture({
+                usagetypePrefixed: `USE1-${CLASS_USAGETYPE[S3StorageClass.STANDARD]}`,
+                rateUsd: CLASS_RATES_USD[S3StorageClass.STANDARD],
+              }),
+            ),
+          );
+        }
+        return Promise.resolve(null);
+      },
+    );
+
+    const storageEnricher = vi.fn(
+      async () =>
+        new Map([
+          [
+            arn,
+            {
+              storageByClass: {
+                [S3StorageClass.STANDARD]: 100,
+                [S3StorageClass.STANDARD_IA]: 200,
+              },
+            },
+          ],
+        ]),
+    );
+
+    const enricher = createListPricingEnricher(storageEnricher);
+    const result = await enricher([makeResource(arn, "AWS::S3::Bucket")]);
+
+    // Standard contributes; SIA's $2.50 contribution is missing.
+    // Total = just 100 × 0.0230 = $2.30/mo (no `≈` because no
+    // Glacier class is present in the bucket).
+    expect(result.get(arn)).toBe("$2.30/mo");
+  });
+
+  it("per-(region, class) caching: 100 buckets in us-east-1 + 2 classes each → 2 MCP calls total", async () => {
+    // Quinn H1 cost-bound: 100 buckets × 7 classes = 700 potential
+    // MCP calls; the per-tuple cache must collapse this to 7. With
+    // only 2 classes populated, we expect 2 calls (Standard + SIA).
+    // Note: Standard is resolved via the existing usage-based
+    // first-item path (already 1 MCP call for the whole tuple), so
+    // the per-class fan-out for Standard short-circuits to the
+    // pre-resolved rate. SIA is the only "new" MCP call.
+    mockToolInvoke.mockImplementation(routeByUsagetype());
+
+    const arns = Array.from(
+      { length: 100 },
+      (_, i) => `arn:aws:s3:::cache-test-bucket-${i}`,
+    );
+    const storageEnricher = vi.fn(
+      async () =>
+        new Map(
+          arns.map((arn) => [
+            arn,
+            {
+              storageByClass: {
+                [S3StorageClass.STANDARD]: 10,
+                [S3StorageClass.STANDARD_IA]: 5,
+              },
+            },
+          ]),
+        ),
+    );
+
+    const enricher = createListPricingEnricher(storageEnricher);
+    const result = await enricher(
+      arns.map((a) => makeResource(a, "AWS::S3::Bucket")),
+    );
+
+    // Total MCP calls = 1 (Standard from usage-based first-item path)
+    // + 1 (SIA from per-class cache) = 2. NOT 200.
+    expect(mockToolInvoke).toHaveBeenCalledTimes(2);
+    // Every bucket gets the same total: 10 × 0.0230 + 5 × 0.0125 =
+    // 0.23 + 0.0625 = 0.2925 → $0.29/mo.
+    for (const arn of arns) {
+      expect(result.get(arn)).toBe("$0.29/mo");
+    }
   });
 });
 

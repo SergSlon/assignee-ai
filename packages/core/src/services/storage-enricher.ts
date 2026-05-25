@@ -7,7 +7,11 @@
  * closure) generalised the enricher to also pull `AWS/CloudFront`
  * `Requests` + `BytesDownloaded` metrics so the pricing-enricher can
  * multiply the per-request / per-GB rate ladder into real `$X.XX/mo`
- * totals for distributions too. The public factory is now named
+ * totals for distributions too. The same-session follow-up F6-ITEM-3
+ * (Quinn H1 closure) extended the S3 path to query EVERY storage class
+ * (Standard, IA, OneZone-IA, Intelligent-Tiering, Glacier-IR, Glacier,
+ * Deep Archive) in parallel so lifecycle-tiered buckets no longer
+ * silently mis-cost. The public factory is now named
  * `createCloudWatchUsageEnricher`; the old `createCloudWatchStorageEnricher`
  * name has been retired (every call site is now using the new name).
  *
@@ -21,7 +25,13 @@
  * the listing's existing Pricing-MCP latency budget. CloudFront
  * distributions issue TWO metric calls each (Requests + BytesDownloaded)
  * but those are queued in the same bounded queue so the concurrency cap
- * still holds.
+ * still holds. S3 buckets issue SEVEN parallel-inside-one-task metric
+ * calls (one per storage class) — they share the same outer-task slot
+ * in the bounded queue, but the per-bucket SDK pressure is ~7× the
+ * single-class path. Throttling-headroom math: 10 outer × 7 inner = 70
+ * peak in-flight calls, well under the 50-TPS CloudWatch quota with
+ * 30-day-window queries that take ~100ms each (so peak in-flight TPS
+ * sits at ~7, not 70).
  *
  * @see _backlog/wizard-ux-audit-2026-05-22.md F6
  * @see packages/core/src/list-resources/pricing-enricher.ts (consumer)
@@ -33,9 +43,11 @@ import {
   type Datapoint,
 } from "@aws-sdk/client-cloudwatch";
 import type { ManagedResource } from "../list-resources/types.js";
-import type {
-  ResourceUsage,
-  StorageEnricher,
+import {
+  S3_STORAGE_CLASSES,
+  S3StorageClass,
+  type ResourceUsage,
+  type StorageEnricher,
 } from "../list-resources/fetch-managed-resources.js";
 
 /**
@@ -134,8 +146,18 @@ interface SdkCredentials {
  * `(resources) => Promise<Map<...>>` to the pricing enricher.
  *
  * Handles two resource types today:
- *   - `AWS::S3::Bucket` — `BucketSizeBytes` (StandardStorage dim)
- *     → `ResourceUsage.storageGB`.
+ *   - `AWS::S3::Bucket` — `BucketSizeBytes` fanned across all 7
+ *     storage-class dimensions (Standard, Standard-IA, OneZone-IA,
+ *     Intelligent-Tiering Frequent Access, Glacier Instant Retrieval,
+ *     Glacier Flexible Retrieval, Deep Archive) via
+ *     `Promise.allSettled`. Each class with at least one non-null
+ *     `Average` datapoint contributes an entry to
+ *     `ResourceUsage.storageByClass`. A class with no datapoints
+ *     (the bucket has zero bytes there) is omitted entirely so the
+ *     pricing-enricher can short-circuit the per-class MCP query for
+ *     it. Per-class failures (e.g. transient throttle on the IA
+ *     call but Standard succeeds) don't abort the bucket — the
+ *     populated classes still land.
  *   - `AWS::CloudFront::Distribution` — `Requests` + `BytesDownloaded`
  *     (DistributionId dim, Region=Global) → `ResourceUsage.cloudfront*`.
  */
@@ -192,6 +214,17 @@ export function createCloudWatchUsageEnricher(
     const tasks: Array<() => Promise<void>> = [];
 
     // ── S3 bucket tasks ────────────────────────────────────────────
+    // F6-ITEM-3 (Quinn H1 closure) — each bucket fans out to 7 parallel
+    // `BucketSizeBytes` calls (one per storage class) via
+    // `Promise.allSettled` inside one outer-task slot. Empty datapoint
+    // arrays for a class → omit that class entirely from
+    // `storageByClass` (distinguishes "no observed data" from "0 GB
+    // observed" so the consumer can skip the per-class MCP query). A
+    // single-class throttle/IAM-denial doesn't abort the bucket — the
+    // surviving class entries still land in the map. A bucket where
+    // EVERY class returns no data → no `storageByClass` key set →
+    // map.set() is skipped → pricing-enricher falls back to rate-hint
+    // display (zero behavioural regression vs pre-F6).
     for (const [bucketRegion, group] of bucketsByRegion) {
       const client = clients.get(bucketRegion)!;
       const endTime = new Date();
@@ -201,36 +234,52 @@ export function createCloudWatchUsageEnricher(
         const name = bucketNameFromArn(arn);
         if (!name) continue;
         tasks.push(async () => {
-          try {
-            const resp = await client.send(
-              new GetMetricStatisticsCommand({
-                Namespace: "AWS/S3",
-                MetricName: "BucketSizeBytes",
-                Dimensions: [
-                  { Name: "BucketName", Value: name },
-                  { Name: "StorageType", Value: "StandardStorage" },
-                ],
-                StartTime: startTime,
-                EndTime: endTime,
-                Period: S3_PERIOD_SECONDS,
-                Statistics: ["Average"],
-              }),
-            );
-            const latest = pickLatestDatapoint(resp.Datapoints);
-            if (latest?.Average !== undefined) {
-              result.set(arn, { storageGB: latest.Average / BYTES_PER_GB });
+          const settled = await Promise.allSettled(
+            S3_STORAGE_CLASSES.map((cls) =>
+              client.send(
+                new GetMetricStatisticsCommand({
+                  Namespace: "AWS/S3",
+                  MetricName: "BucketSizeBytes",
+                  Dimensions: [
+                    { Name: "BucketName", Value: name },
+                    { Name: "StorageType", Value: cls },
+                  ],
+                  StartTime: startTime,
+                  EndTime: endTime,
+                  Period: S3_PERIOD_SECONDS,
+                  Statistics: ["Average"],
+                }),
+              ),
+            ),
+          );
+          const storageByClass: Partial<Record<S3StorageClass, number>> = {};
+          for (let i = 0; i < S3_STORAGE_CLASSES.length; i++) {
+            const cls = S3_STORAGE_CLASSES[i]!;
+            const outcome = settled[i]!;
+            if (outcome.status !== "fulfilled") {
+              // Per-class failure (IAM denial scoped to one dim,
+              // transient throttle on one call): skip silently and
+              // let the populated classes for this bucket still
+              // land. Deliberately don't write to stderr per class
+              // — would explode to 7N lines on missing-IAM accounts.
+              continue;
             }
-            // No datapoint (freshly-created bucket, never had objects,
-            // metric publication lag): leave ARN unmapped — pricing-
-            // enricher will fall back to rate-hint display.
-          } catch {
-            // Per-bucket failure (IAM denial, bucket deleted mid-list,
-            // CloudWatch transient): skip silently. We deliberately
-            // don't write to stderr per bucket — a missing-IAM
-            // configuration would emit one warning per bucket and
-            // drown the CLI output. The pricing-enricher's existing
-            // per-tuple warning is enough signal.
+            const datapoints = (outcome.value as { Datapoints?: Datapoint[] })
+              .Datapoints;
+            const latest = pickLatestDatapoint(datapoints);
+            if (latest?.Average !== undefined && latest.Average > 0) {
+              storageByClass[cls] = latest.Average / BYTES_PER_GB;
+            }
+            // Omit zero / no-datapoint entries entirely — see the
+            // F6-ITEM-3 field contract on `storageByClass`.
           }
+          if (Object.keys(storageByClass).length > 0) {
+            result.set(arn, { storageByClass });
+          }
+          // All 7 classes empty (freshly-created bucket, never had
+          // objects, every class's metric publication lag): leave
+          // ARN unmapped — pricing-enricher will fall back to
+          // rate-hint display.
         });
       }
     }

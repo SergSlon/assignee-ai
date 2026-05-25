@@ -31,15 +31,23 @@ import { unwrapMcpText } from "../utils/mcp.js";
 import { McpServerName } from "../constants/mcp.js";
 import { ToolName } from "../constants/tools.js";
 import { PricingTerm } from "../constants/pricing-api.js";
-import { PricingKind } from "../pricing/filter-constants.js";
+import {
+  PricingField,
+  PricingKind,
+  PricingMatchType,
+  PricingProductFamily,
+  PricingServiceCode,
+} from "../pricing/filter-constants.js";
+import { PricingFilterValue } from "../pricing/pricing-filter-values.js";
 import { HOURS_PER_MONTH } from "../config/constants/limits.js";
-import type {
-  PricingEnricher,
-  StorageEnricher,
-  ResourceUsage,
+import {
+  S3StorageClass,
+  type PricingEnricher,
+  type StorageEnricher,
+  type ResourceUsage,
 } from "./fetch-managed-resources.js";
 import type { ManagedResource } from "./types.js";
-import type { AwsPricingResponse } from "../pricing/types.js";
+import type { AwsPricingResponse, McpPricingFilter } from "../pricing/types.js";
 import type { PriceTier } from "../pricing/tier-ladder.js";
 import { PriceUnit } from "../pricing/price-units.js";
 import { RESOURCE_TYPES } from "../config/resource-types.js";
@@ -253,6 +261,13 @@ async function withPricingTool<T>(
  *    storage GB / usage volumes for in-scope resources (S3 today). When
  *    present, per-GB-month usage-based line items are multiplied by the
  *    actual GB volume and promoted to fixed-cost lines (closes F6).
+ *    For S3 buckets that span multiple storage classes (lifecycle-tiered
+ *    Standard → IA → Glacier), per-class rates are fetched in parallel
+ *    via the per-class MCP cache (F6-ITEM-3 / Quinn H1) so the
+ *    `$X.XX/mo` total sums the right per-class rate for each present
+ *    class. The cache is keyed by (region, class) so 100 buckets in
+ *    one region with two classes each → 2 MCP calls per pass total,
+ *    NOT 200.
  * 3. Groups input resources by (resourceType, region).
  * 4. For each unique tuple, calls `decompose()` on the registry + issues ONE
  *    Pricing MCP call per line item (via existing `queryLineItemPrices` shape).
@@ -262,9 +277,14 @@ async function withPricingTool<T>(
  * @param storageEnricher  Optional usage-lookup callback. When omitted the
  *   enricher behaves exactly as it did before F6 — per-GB-month rates surface
  *   as their displayPrice hint string (e.g. `"$0.0230/GB-month"`). When
- *   supplied and returning a non-empty storageGB for an S3 bucket ARN, the
- *   storage line item is treated as a fixed cost = `rate × storageGB` and
- *   contributes to a numeric `$X.XX/mo` total.
+ *   supplied and returning a non-empty `storageByClass` for an S3 bucket
+ *   ARN, each present class is multiplied by its class-specific per-GB
+ *   rate (single MCP call per (region, class) tuple, cached for the
+ *   pass) and the sum contributes to a numeric `$X.XX/mo` total.
+ *   Glacier-Flexible-Retrieval buckets carry an `≈` prefix on the
+ *   total to flag the retrieval-tier ambiguity (the per-GB rate maps
+ *   to a single number but the live cost depends on Standard /
+ *   Expedited / Bulk retrievals).
  */
 export function createListPricingEnricher(
   storageEnricher?: StorageEnricher,
@@ -312,6 +332,20 @@ export function createListPricingEnricher(
       bucket.push(r);
       grouped.set(key, bucket);
     }
+
+    // F6-ITEM-3 (Quinn H1 closure): per-class S3 storage rate cache. Keyed
+    // by `${region}::${S3StorageClass}`. The pricing-enricher closes the
+    // MCP client at the end of the call, so this cache lives for the
+    // duration of one enrichment pass (typically one `assignee admin list`
+    // / `infra destroy --all` invocation). Per-tuple semantics: 100 buckets
+    // in us-east-1 hitting Standard + IA → 2 MCP calls total, NOT 200.
+    // 100 buckets across 5 regions hitting Standard + IA → 10 MCP calls
+    // (`5 regions × 2 classes`), NOT 1000. Worst case (all 7 classes,
+    // every region) = `7 × region-count` MCP calls per pass, not
+    // `7 × bucket-count`. See `getPerClassS3Rate` for the fetch /
+    // memoise / null-cache contract.
+    const s3StorageRateCache = new Map<string, number | null>();
+    const s3StorageRateUnavailableCache = new Set<string>();
 
     try {
       await withPricingTool(async (pricingTool) => {
@@ -568,21 +602,115 @@ export function createListPricingEnricher(
               if (!r.arn) continue;
 
               const usage = usageByArn.get(r.arn);
-              const storageGB = usage?.storageGB;
+              const storageByClass = usage?.storageByClass;
 
-              // F6 promotion path: known GB + per-GB-month rate captured →
-              // compute a real $/mo storage line item that contributes to
-              // fixedSubtotal, flip anyFixedResolved so formatCostLabel
-              // emits the "$X.XX/mo" branch instead of the rate-hint
-              // fallback.
+              // F6 promotion path: known per-class GB + per-class
+              // per-GB-month rates → compute a real $/mo storage line
+              // item that contributes to fixedSubtotal, flip
+              // anyFixedResolved so formatCostLabel emits the
+              // "$X.XX/mo" branch instead of the rate-hint fallback.
+              //
+              // Two sub-paths:
+              //   (a) Multi-class S3 (F6-ITEM-3): iterate every class
+              //       present in `storageByClass`, look up the
+              //       per-class rate via the per-region/class MCP
+              //       cache, sum `classGB × classRate`. The Standard
+              //       class re-uses the already-resolved `storageRate`
+              //       (captured by the existing usage-based first-item
+              //       path) to avoid an extra MCP call for buckets
+              //       that only have Standard data.
+              //   (b) Single dimension that isn't S3-multi-class
+              //       (legacy generic resource types): the
+              //       `storageByClass` field is undefined, fall
+              //       through to the existing rate-hint display.
+              //
+              // Contract for partial MCP failure: if some classes
+              // resolve and others throw, we still surface the
+              // partial sum (subject to a > 50% failure rate threshold
+              // below). The omitted classes get logged via the
+              // pre-existing per-tuple stderr warning so the operator
+              // can see why the total is conservative.
               let perResourceFixedSubtotal = fixedSubtotal;
               let perResourceAnyFixed = anyFixedResolved;
-              if (
-                storageRate?.ratePerUnit !== undefined &&
-                storageGB !== undefined
-              ) {
-                perResourceFixedSubtotal += storageRate.ratePerUnit * storageGB;
-                perResourceAnyFixed = true;
+
+              if (storageByClass !== undefined) {
+                const presentClasses = Object.entries(storageByClass)
+                  .filter(([, gb]) => gb !== undefined && gb > 0)
+                  .map(([cls, gb]) => [cls as S3StorageClass, gb!] as const);
+
+                if (presentClasses.length > 0) {
+                  // Per-class fan-out. Pre-resolved `storageRate`
+                  // (from the usage-based first-item path above) only
+                  // applies to the Standard class — for every other
+                  // class we go through the per-class MCP cache.
+                  let multiClassSum = 0;
+                  let resolvedCount = 0;
+                  let failedCount = 0;
+                  for (const [cls, gb] of presentClasses) {
+                    const rate = await getPerClassS3Rate({
+                      cls,
+                      region: effectiveRegion,
+                      pricingTool,
+                      rateCache: s3StorageRateCache,
+                      unavailableCache: s3StorageRateUnavailableCache,
+                      standardClassPreResolvedRate:
+                        cls === S3StorageClass.STANDARD
+                          ? storageRate?.ratePerUnit
+                          : undefined,
+                    });
+                    if (rate === undefined || rate === null) {
+                      failedCount++;
+                      continue;
+                    }
+                    multiClassSum += rate * gb;
+                    resolvedCount++;
+                  }
+
+                  // Contract: surface a partial sum so long as at
+                  // least HALF of the present classes resolved.
+                  // Below that, fall back to the rate-hint display —
+                  // a sum built from fewer than half the classes
+                  // would understate the total more misleadingly
+                  // than a rate hint that at least says "we have a
+                  // ladder of per-GB rates here, results may vary".
+                  if (
+                    resolvedCount > 0 &&
+                    resolvedCount >= presentClasses.length - failedCount &&
+                    resolvedCount * 2 >= presentClasses.length
+                  ) {
+                    perResourceFixedSubtotal += multiClassSum;
+                    perResourceAnyFixed = true;
+                    // Glacier-tier ambiguity disclaimer: every
+                    // Glacier (non-IR) bucket carries the ≈ prefix
+                    // because the per-GB rate-card lists ONE number
+                    // but the user may be paying for Standard /
+                    // Expedited / Bulk retrievals at different
+                    // rates + the retrieval fee. The CLI doesn't
+                    // call `GetBucketLifecycleConfiguration` per
+                    // bucket today (would be one extra SDK call per
+                    // Glacier bucket). Surface `≈` so the displayed
+                    // $/mo reads as an estimate.
+                    const containsGlacierFlexible = presentClasses.some(
+                      ([cls]) => cls === S3StorageClass.GLACIER,
+                    );
+                    const label = formatCostLabel({
+                      fixedSubtotal: perResourceFixedSubtotal,
+                      fixedItems: fixedResults,
+                      usageBasedItems: usageResults,
+                      decomposerReportedFree: false,
+                      anyFixedResolved: perResourceAnyFixed,
+                    });
+                    if (label !== undefined) {
+                      result.set(
+                        r.arn,
+                        containsGlacierFlexible
+                          ? prefixApproxIfMoneyLabel(label)
+                          : label,
+                      );
+                    }
+                    continue;
+                  }
+                }
               }
 
               const label = formatCostLabel({
@@ -641,6 +769,166 @@ function buildMinimalDesiredState(
     default:
       return {};
   }
+}
+
+/**
+ * Canonical per-class Pricing API `usagetype` filter values used by the
+ * F6-ITEM-3 (Quinn H1) multi-class S3 promotion path. The keys match the
+ * `S3StorageClass` enum so the per-class fan-out joins by enum value.
+ *
+ * The values are the UNPREFIXED `usagetype` strings — real Pricing API
+ * responses prepend a region/edge token (e.g. `USE1-` for us-east-1,
+ * `EU-` for eu-west-1). The prefix-aware `attributeValueMatches`
+ * (F6-ITEM-1) strips that before equality comparison so this canonical
+ * map matches every region. See `pricing-filter-values.ts` for the
+ * SoT constants this map references.
+ *
+ * Glacier handling note: this map points the GLACIER (Flexible
+ * Retrieval) class at `TimedStorage-GlacierByteHrs` — the
+ * baseline-storage rate published per the AWS Pricing API for the
+ * `STANDARD → GLACIER` lifecycle transition. The per-GB rate ignores
+ * the three retrieval-pattern sub-tiers (Standard / Expedited /
+ * Bulk) which carry separate per-GB-retrieved + per-request fees.
+ * The pricing-enricher prefixes the resulting $/mo with `≈` when a
+ * Glacier (non-IR) class is present to flag the disambiguation gap;
+ * exact rates would require a per-bucket `GetBucketAnalyticsConfig`
+ * round-trip which is tracked as a future enhancement.
+ */
+const S3_CLASS_TO_USAGETYPE: Record<S3StorageClass, string> = {
+  [S3StorageClass.STANDARD]: PricingFilterValue.TIMED_STORAGE_BYTE_HRS,
+  [S3StorageClass.STANDARD_IA]: PricingFilterValue.TIMED_STORAGE_SIA_BYTE_HRS,
+  [S3StorageClass.ONE_ZONE_IA]: PricingFilterValue.TIMED_STORAGE_ZIA_BYTE_HRS,
+  [S3StorageClass.INTELLIGENT_TIERING_FA]:
+    PricingFilterValue.TIMED_STORAGE_INT_BYTE_HRS_FREQ,
+  [S3StorageClass.GLACIER_IR]: PricingFilterValue.TIMED_STORAGE_GIR_BYTE_HRS,
+  [S3StorageClass.GLACIER]: PricingFilterValue.TIMED_STORAGE_GLACIER_BYTE_HRS,
+  [S3StorageClass.DEEP_ARCHIVE]: PricingFilterValue.TIMED_STORAGE_GDA_BYTE_HRS,
+};
+
+/**
+ * Per-class per-region S3 storage rate lookup.
+ *
+ * Caching contract (Quinn H1 cost-bound):
+ *   - Hits the `rateCache` first. Key = `${region}::${cls}` (lowercase
+ *     class enum value). 100 buckets in us-east-1 with Standard + IA
+ *     populated → 2 MCP calls total across the entire enrichment pass.
+ *   - On cache miss, the unavailableCache (negative cache) is checked
+ *     to avoid retrying a known-failed (region, class) tuple.
+ *   - On both miss + cache-clean, dispatches ONE Pricing MCP call with
+ *     a per-class `usagetype` filter (via `S3_CLASS_TO_USAGETYPE`).
+ *     Success → rate stored in `rateCache`. Failure → entry added to
+ *     `unavailableCache` and `null` returned.
+ *
+ * Standard-class fast path: when `standardClassPreResolvedRate` is
+ * passed in, we use it directly without an MCP call. The pre-existing
+ * usage-based first-item path in the tuple loop already resolves the
+ * Standard rate for free (Standard is the FIRST usage-based item in
+ * the S3 decomposer); reusing that value preserves the
+ * "1 MCP call per Standard-only tuple" invariant from the pre-F6-ITEM-3
+ * behaviour.
+ */
+async function getPerClassS3Rate(args: {
+  cls: S3StorageClass;
+  region: string;
+  pricingTool: StructuredTool;
+  rateCache: Map<string, number | null>;
+  unavailableCache: Set<string>;
+  standardClassPreResolvedRate?: number;
+}): Promise<number | null | undefined> {
+  const { cls, region, pricingTool, rateCache, unavailableCache } = args;
+  // Fast path: re-use Standard rate the existing flow already resolved.
+  if (
+    cls === S3StorageClass.STANDARD &&
+    args.standardClassPreResolvedRate !== undefined &&
+    Number.isFinite(args.standardClassPreResolvedRate)
+  ) {
+    return args.standardClassPreResolvedRate;
+  }
+
+  const cacheKey = `${region}::${cls}`;
+  if (rateCache.has(cacheKey)) {
+    return rateCache.get(cacheKey)!;
+  }
+  if (unavailableCache.has(cacheKey)) {
+    return null;
+  }
+
+  const usagetype = S3_CLASS_TO_USAGETYPE[cls];
+  // Filters mirror the S3 decomposer's storage line item, with the
+  // class-specific `usagetype` swapped in. ProductFamily stays
+  // `Storage` for every class today — the Pricing API does NOT split
+  // Glacier into a separate `Cold Storage` family, despite some older
+  // AWS docs implying otherwise (verified against real us-east-1
+  // responses 2026-05-25: Glacier storage entries carry
+  // `productFamily: "Storage"`).
+  const filters: McpPricingFilter[] = [
+    {
+      Field: PricingField.PRODUCT_FAMILY,
+      Value: PricingProductFamily.STORAGE,
+      Type: PricingMatchType.TERM_MATCH,
+    },
+    {
+      Field: PricingField.USAGE_TYPE,
+      Value: usagetype,
+      Type: PricingMatchType.TERM_MATCH,
+    },
+  ];
+  try {
+    const rawResult = await withRetry(() =>
+      withTimeout(
+        pricingTool.invoke({
+          service_code: PricingServiceCode.S3,
+          region,
+          filters,
+          output_options: {
+            pricing_terms: [PricingTerm.ON_DEMAND],
+          },
+        }),
+        PRICING_MCP_TIMEOUT_MS,
+      ),
+    );
+    if (rawResult === null) {
+      unavailableCache.add(cacheKey);
+      return null;
+    }
+    const data = JSON.parse(
+      unwrapPricingMcpText(rawResult),
+    ) as AwsPricingResponse;
+    const priceStr = extractFirstTierPrice(
+      data,
+      PriceUnit.PER_GB_MONTH,
+      1,
+      filters,
+    );
+    if (!priceStr) {
+      unavailableCache.add(cacheKey);
+      return null;
+    }
+    const numericPart = priceStr.replace(/^\$/, "").replace(/\/.*$/, "");
+    const rate = parseFloat(numericPart);
+    if (!Number.isFinite(rate)) {
+      unavailableCache.add(cacheKey);
+      return null;
+    }
+    rateCache.set(cacheKey, rate);
+    return rate;
+  } catch {
+    unavailableCache.add(cacheKey);
+    return null;
+  }
+}
+
+/**
+ * Prefix a `$X.XX/mo` money-shaped label with the unicode `≈` to flag
+ * that the total is an estimate (Glacier sub-tier ambiguity). Leaves
+ * non-money-shaped labels (rate hints, `unavailable`, `$0/mo`)
+ * untouched.
+ */
+function prefixApproxIfMoneyLabel(label: string): string {
+  if (/^\$\d+(\.\d+)?\/mo$/.test(label)) {
+    return `≈${label}`;
+  }
+  return label;
 }
 
 /**

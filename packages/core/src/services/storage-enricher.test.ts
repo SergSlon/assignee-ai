@@ -13,6 +13,10 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { ManagedResource } from "../list-resources/types.js";
+import {
+  S3_STORAGE_CLASSES,
+  S3StorageClass,
+} from "../list-resources/fetch-managed-resources.js";
 
 // vi.mock hoists ABOVE module-scope const declarations — using
 // `vi.hoisted` puts the shared mock state in the same hoisted phase
@@ -80,6 +84,65 @@ function statsResponse(bytes: number, timestamp: Date = new Date()) {
 }
 
 /**
+ * F6-ITEM-3 — route per S3 `StorageType` dimension. Each bucket now
+ * fans out 7 GetMetricStatistics calls (one per class); legacy tests
+ * that only care about the Standard class use this helper to return
+ * the Standard `Average` payload for `StandardStorage` and empty
+ * datapoints for every other class.
+ */
+function routeStandardOnlyS3(bytes: number) {
+  return (command: {
+    input: {
+      Namespace?: string;
+      MetricName?: string;
+      Dimensions?: Array<{ Name?: string; Value?: string }>;
+    };
+  }) => {
+    if (
+      command.input.Namespace === "AWS/S3" &&
+      command.input.MetricName === "BucketSizeBytes"
+    ) {
+      const storageType = command.input.Dimensions?.find(
+        (d) => d.Name === "StorageType",
+      )?.Value;
+      if (storageType === S3StorageClass.STANDARD) {
+        return Promise.resolve(statsResponse(bytes));
+      }
+      return Promise.resolve({ Datapoints: [] });
+    }
+    return Promise.resolve({ Datapoints: [] });
+  };
+}
+
+/**
+ * F6-ITEM-3 — route per S3 `StorageType` dimension with a per-class
+ * byte map. Classes not in the map return empty datapoints.
+ */
+function routeMultiClassS3(byClass: Partial<Record<S3StorageClass, number>>) {
+  return (command: {
+    input: {
+      Namespace?: string;
+      MetricName?: string;
+      Dimensions?: Array<{ Name?: string; Value?: string }>;
+    };
+  }) => {
+    if (
+      command.input.Namespace === "AWS/S3" &&
+      command.input.MetricName === "BucketSizeBytes"
+    ) {
+      const storageType = command.input.Dimensions?.find(
+        (d) => d.Name === "StorageType",
+      )?.Value as S3StorageClass | undefined;
+      if (storageType && byClass[storageType] !== undefined) {
+        return Promise.resolve(statsResponse(byClass[storageType]!));
+      }
+      return Promise.resolve({ Datapoints: [] });
+    }
+    return Promise.resolve({ Datapoints: [] });
+  };
+}
+
+/**
  * Build a CloudWatch GetMetricStatistics response with N daily Sum
  * datapoints — matches the CloudFront `Requests`/`BytesDownloaded`
  * shape (Sum statistic, daily Period).
@@ -123,64 +186,101 @@ describe("createCloudWatchUsageEnricher — S3 BucketSizeBytes", () => {
   it("converts BucketSizeBytes datapoint to GB and emits one map entry", async () => {
     // 50 GB worth of bytes (AWS billing convention: 10^9 bytes / GB)
     const fiftyGBInBytes = 50_000_000_000;
-    mockSend.mockResolvedValue(statsResponse(fiftyGBInBytes));
+    mockSend.mockImplementation(routeStandardOnlyS3(fiftyGBInBytes));
 
     const arn = "arn:aws:s3:::test-bucket-50gb";
     const enricher = createCloudWatchUsageEnricher(CREDS, "us-east-1");
     const result = await enricher([makeResource(arn, "AWS::S3::Bucket")]);
 
-    expect(result.get(arn)).toEqual({ storageGB: 50 });
-    expect(mockSend).toHaveBeenCalledTimes(1);
+    expect(result.get(arn)).toEqual({
+      storageByClass: { [S3StorageClass.STANDARD]: 50 },
+    });
+    // F6-ITEM-3: 7 calls per bucket (one per storage class), not 1.
+    expect(mockSend).toHaveBeenCalledTimes(S3_STORAGE_CLASSES.length);
   });
 
-  it("forwards the bucket name as BucketName dimension on the GetMetricStatistics call", async () => {
-    mockSend.mockResolvedValue(statsResponse(1_000_000_000));
+  it("forwards the bucket name and StorageType dimension on every per-class GetMetricStatistics call", async () => {
+    mockSend.mockImplementation(routeStandardOnlyS3(1_000_000_000));
 
     const arn = "arn:aws:s3:::test-bucket-with-extracted-name";
     const enricher = createCloudWatchUsageEnricher(CREDS, "us-east-1");
     await enricher([makeResource(arn, "AWS::S3::Bucket")]);
 
-    const command = mockSend.mock.calls[0]![0]!;
-    expect(command.input.Namespace).toBe("AWS/S3");
-    expect(command.input.MetricName).toBe("BucketSizeBytes");
-    expect(command.input.Dimensions).toEqual([
-      { Name: "BucketName", Value: "test-bucket-with-extracted-name" },
-      { Name: "StorageType", Value: "StandardStorage" },
-    ]);
-    expect(command.input.Period).toBe(86_400);
-    expect(command.input.Statistics).toEqual(["Average"]);
+    // F6-ITEM-3: 7 calls, one per S3StorageClass enum value.
+    expect(mockSend).toHaveBeenCalledTimes(S3_STORAGE_CLASSES.length);
+    const calls = mockSend.mock.calls;
+    const storageTypesQueried = calls.map(
+      (c) =>
+        c[0]!.input.Dimensions.find(
+          (d: { Name?: string }) => d.Name === "StorageType",
+        )?.Value,
+    );
+    expect(storageTypesQueried.sort()).toEqual([...S3_STORAGE_CLASSES].sort());
+    // Every call carries the same Namespace, MetricName, BucketName,
+    // Period, and Statistics — only the StorageType dimension varies.
+    for (const call of calls) {
+      const cmd = call[0]!;
+      expect(cmd.input.Namespace).toBe("AWS/S3");
+      expect(cmd.input.MetricName).toBe("BucketSizeBytes");
+      expect(cmd.input.Period).toBe(86_400);
+      expect(cmd.input.Statistics).toEqual(["Average"]);
+      expect(cmd.input.Dimensions).toContainEqual({
+        Name: "BucketName",
+        Value: "test-bucket-with-extracted-name",
+      });
+    }
   });
 
   it("uses the latest datapoint when CloudWatch returns multiple", async () => {
     // Two daily datapoints — yesterday and today. Enricher MUST pick today.
     const today = new Date("2026-05-24T00:00:00Z");
     const yesterday = new Date("2026-05-23T00:00:00Z");
-    mockSend.mockResolvedValue({
-      Datapoints: [
-        { Timestamp: yesterday, Average: 1_000_000_000 }, // 1 GB
-        { Timestamp: today, Average: 5_000_000_000 }, // 5 GB
-      ],
-    });
+    mockSend.mockImplementation(
+      (command: {
+        input: {
+          Namespace?: string;
+          MetricName?: string;
+          Dimensions?: Array<{ Name?: string; Value?: string }>;
+        };
+      }) => {
+        if (
+          command.input.Namespace === "AWS/S3" &&
+          command.input.Dimensions?.find((d) => d.Name === "StorageType")
+            ?.Value === S3StorageClass.STANDARD
+        ) {
+          return Promise.resolve({
+            Datapoints: [
+              { Timestamp: yesterday, Average: 1_000_000_000 }, // 1 GB
+              { Timestamp: today, Average: 5_000_000_000 }, // 5 GB
+            ],
+          });
+        }
+        return Promise.resolve({ Datapoints: [] });
+      },
+    );
 
     const arn = "arn:aws:s3:::test-bucket-multi-datapoint";
     const enricher = createCloudWatchUsageEnricher(CREDS, "us-east-1");
     const result = await enricher([makeResource(arn, "AWS::S3::Bucket")]);
 
-    expect(result.get(arn)).toEqual({ storageGB: 5 });
+    expect(result.get(arn)).toEqual({
+      storageByClass: { [S3StorageClass.STANDARD]: 5 },
+    });
   });
 
-  it("omits ARN when CloudWatch returns zero datapoints (freshly-created bucket)", async () => {
+  it("omits ARN when CloudWatch returns zero datapoints across all 7 classes (freshly-created bucket)", async () => {
     mockSend.mockResolvedValue({ Datapoints: [] });
 
     const arn = "arn:aws:s3:::test-bucket-no-datapoints";
     const enricher = createCloudWatchUsageEnricher(CREDS, "us-east-1");
     const result = await enricher([makeResource(arn, "AWS::S3::Bucket")]);
 
-    // No data → no entry → consumer falls back to rate-hint display.
+    // No data on any of the 7 classes → no entry → consumer falls
+    // back to rate-hint display.
     expect(result.has(arn)).toBe(false);
   });
 
-  it("omits ARN when CloudWatch throws (IAM denial, bucket deleted, etc.)", async () => {
+  it("omits ARN when every per-class call throws (IAM denial covers all dimensions)", async () => {
     mockSend.mockRejectedValue(
       new Error("AccessDenied: User has no cloudwatch:GetMetricStatistics"),
     );
@@ -189,11 +289,12 @@ describe("createCloudWatchUsageEnricher — S3 BucketSizeBytes", () => {
     const enricher = createCloudWatchUsageEnricher(CREDS, "us-east-1");
     const result = await enricher([makeResource(arn, "AWS::S3::Bucket")]);
 
+    // All 7 per-class calls fail → no class entries → no ARN entry.
     expect(result.has(arn)).toBe(false);
   });
 
   it("filters out non-S3 / non-CloudFront resources before calling CloudWatch", async () => {
-    mockSend.mockResolvedValue(statsResponse(2_000_000_000));
+    mockSend.mockImplementation(routeStandardOnlyS3(2_000_000_000));
 
     const enricher = createCloudWatchUsageEnricher(CREDS, "us-east-1");
     const result = await enricher([
@@ -210,16 +311,16 @@ describe("createCloudWatchUsageEnricher — S3 BucketSizeBytes", () => {
 
     expect(result.size).toBe(1);
     expect(result.get("arn:aws:s3:::only-s3-bucket")).toEqual({
-      storageGB: 2,
+      storageByClass: { [S3StorageClass.STANDARD]: 2 },
     });
-    // Exactly one SDK call: for the S3 bucket only.
-    expect(mockSend).toHaveBeenCalledTimes(1);
+    // 7 SDK calls (one per storage class) — all for the only S3 bucket.
+    expect(mockSend).toHaveBeenCalledTimes(S3_STORAGE_CLASSES.length);
   });
 
   it("groups buckets by their own region (not the listing region)", async () => {
     // Two buckets in different regions. Each region should get its own
     // CloudWatch client; both buckets should be queried.
-    mockSend.mockResolvedValue(statsResponse(1_000_000_000));
+    mockSend.mockImplementation(routeStandardOnlyS3(1_000_000_000));
 
     const enricher = createCloudWatchUsageEnricher(CREDS, "us-east-1");
     await enricher([
@@ -231,14 +332,15 @@ describe("createCloudWatchUsageEnricher — S3 BucketSizeBytes", () => {
     // via the mock class's constructor).
     const regions = cloudWatchClientCalls.map((c) => c.region).sort();
     expect(regions).toEqual(["eu-west-1", "us-east-1"]);
-    expect(mockSend).toHaveBeenCalledTimes(2);
+    // 2 buckets × 7 classes = 14 calls.
+    expect(mockSend).toHaveBeenCalledTimes(2 * S3_STORAGE_CLASSES.length);
   });
 
   it("treats region='global' resources as living in the listing region", async () => {
     // S3 buckets are normally region-scoped — but defensive: a global
     // resource should still get bucketed under the listing region so
     // the CloudWatch client is initialised somewhere reasonable.
-    mockSend.mockResolvedValue(statsResponse(3_000_000_000));
+    mockSend.mockImplementation(routeStandardOnlyS3(3_000_000_000));
 
     const enricher = createCloudWatchUsageEnricher(CREDS, "ap-south-1");
     await enricher([
@@ -250,7 +352,7 @@ describe("createCloudWatchUsageEnricher — S3 BucketSizeBytes", () => {
   });
 
   it("skips ARNs that don't match the S3 bucket shape (defensive)", async () => {
-    mockSend.mockResolvedValue(statsResponse(1_000_000_000));
+    mockSend.mockImplementation(routeStandardOnlyS3(1_000_000_000));
 
     // ARN claims S3 type but the format is wrong (object ARN, not bucket).
     // Defensive: the enricher should skip without crashing.
@@ -262,12 +364,36 @@ describe("createCloudWatchUsageEnricher — S3 BucketSizeBytes", () => {
     expect(mockSend).not.toHaveBeenCalled();
   });
 
-  it("never throws — survives an exploding individual task without poisoning the pool", async () => {
-    // First bucket throws; second succeeds. The second result must
-    // still land in the map.
-    mockSend
-      .mockRejectedValueOnce(new Error("first bucket explodes"))
-      .mockResolvedValueOnce(statsResponse(7_000_000_000));
+  it("never throws — survives an exploding individual bucket task without poisoning the pool", async () => {
+    // F6-ITEM-3: per-bucket task does Promise.allSettled across 7 calls
+    // so the "exploding bucket" case is now "every class fails". Bucket A
+    // → all 7 class calls reject; bucket B → all 7 class calls succeed.
+    // Bucket B's entry must still land in the map.
+    let bucketSeen = 0;
+    mockSend.mockImplementation(
+      (command: {
+        input: {
+          Namespace?: string;
+          Dimensions?: Array<{ Name?: string; Value?: string }>;
+        };
+      }) => {
+        const name = command.input.Dimensions?.find(
+          (d) => d.Name === "BucketName",
+        )?.Value;
+        if (name === "bucket-explodes") {
+          bucketSeen++;
+          return Promise.reject(new Error("first bucket explodes"));
+        }
+        // bucket-survives → only Standard returns data.
+        const storageType = command.input.Dimensions?.find(
+          (d) => d.Name === "StorageType",
+        )?.Value;
+        if (storageType === S3StorageClass.STANDARD) {
+          return Promise.resolve(statsResponse(7_000_000_000));
+        }
+        return Promise.resolve({ Datapoints: [] });
+      },
+    );
 
     const enricher = createCloudWatchUsageEnricher(CREDS, "us-east-1");
     const result = await enricher([
@@ -277,37 +403,51 @@ describe("createCloudWatchUsageEnricher — S3 BucketSizeBytes", () => {
 
     expect(result.has("arn:aws:s3:::bucket-explodes")).toBe(false);
     expect(result.get("arn:aws:s3:::bucket-survives")).toEqual({
-      storageGB: 7,
+      storageByClass: { [S3StorageClass.STANDARD]: 7 },
     });
+    // Both buckets attempted 7 per-class calls each.
+    expect(bucketSeen).toBe(S3_STORAGE_CLASSES.length);
   });
 
-  it("respects concurrency limit (no more than N parallel in-flight calls)", async () => {
-    // Throw a sentinel so we can count concurrent calls. Each task
-    // records "in-flight" on entry and "settled" on exit; max
-    // simultaneous in-flight count must equal the configured limit.
-    let inFlight = 0;
-    let maxObserved = 0;
-    mockSend.mockImplementation(async () => {
-      inFlight++;
-      maxObserved = Math.max(maxObserved, inFlight);
-      await new Promise((r) => setTimeout(r, 20));
-      inFlight--;
-      return statsResponse(1_000_000_000);
-    });
+  it("respects bucket-level concurrency limit (no more than N buckets in flight at once)", async () => {
+    // F6-ITEM-3: each bucket fans out to 7 parallel per-class calls
+    // INSIDE one outer-task slot, so the outer-task concurrency cap
+    // bounds the bucket count, not the raw call count. With
+    // concurrency=3, max 3 buckets in flight → max 3 × 7 = 21 calls in
+    // flight. Track concurrency at the bucket granularity (one tick
+    // per BucketName).
+    const bucketsInFlight = new Set<string>();
+    let maxBucketsObserved = 0;
+    mockSend.mockImplementation(
+      async (command: {
+        input: { Dimensions?: Array<{ Name?: string; Value?: string }> };
+      }) => {
+        const name =
+          command.input.Dimensions?.find((d) => d.Name === "BucketName")
+            ?.Value ?? "";
+        bucketsInFlight.add(name);
+        maxBucketsObserved = Math.max(maxBucketsObserved, bucketsInFlight.size);
+        await new Promise((r) => setTimeout(r, 20));
+        bucketsInFlight.delete(name);
+        return statsResponse(1_000_000_000);
+      },
+    );
 
-    // 20 buckets, concurrency=3 → max in-flight should never exceed 3.
+    // 20 buckets, concurrency=3 → max buckets in flight should never
+    // exceed 3 (per-class fan-out is internal to each task slot).
     const buckets = Array.from({ length: 20 }, (_, i) =>
       makeResource(`arn:aws:s3:::bucket-${i}`, "AWS::S3::Bucket"),
     );
     const enricher = createCloudWatchUsageEnricher(CREDS, "us-east-1", 3);
     await enricher(buckets);
 
-    expect(maxObserved).toBeLessThanOrEqual(3);
-    expect(mockSend).toHaveBeenCalledTimes(20);
+    expect(maxBucketsObserved).toBeLessThanOrEqual(3);
+    // 20 buckets × 7 classes = 140 calls total.
+    expect(mockSend).toHaveBeenCalledTimes(20 * S3_STORAGE_CLASSES.length);
   });
 
   it("calls destroy() on every spawned CloudWatch client (no socket leaks)", async () => {
-    mockSend.mockResolvedValue(statsResponse(1_000_000_000));
+    mockSend.mockImplementation(routeStandardOnlyS3(1_000_000_000));
 
     const enricher = createCloudWatchUsageEnricher(CREDS, "us-east-1");
     await enricher([
@@ -324,13 +464,121 @@ describe("createCloudWatchUsageEnricher — S3 BucketSizeBytes", () => {
     // 1 GB in AWS billing = 1_000_000_000 bytes, NOT 1_073_741_824.
     // The rate card is in GB-month at the billing definition, so the
     // multiplication must use the same definition.
-    mockSend.mockResolvedValue(statsResponse(1_000_000_000));
+    mockSend.mockImplementation(routeStandardOnlyS3(1_000_000_000));
 
     const arn = "arn:aws:s3:::test-exactly-1gb";
     const enricher = createCloudWatchUsageEnricher(CREDS, "us-east-1");
     const result = await enricher([makeResource(arn, "AWS::S3::Bucket")]);
 
-    expect(result.get(arn)).toEqual({ storageGB: 1 });
+    expect(result.get(arn)).toEqual({
+      storageByClass: { [S3StorageClass.STANDARD]: 1 },
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────────
+  // F6-ITEM-3 (Quinn H1 closure) — multi-storage-class S3 fan-out.
+  // ──────────────────────────────────────────────────────────────
+
+  it("populates every class with data for a multi-class lifecycle-tiered bucket", async () => {
+    // Mixed bucket: 100 GB Standard + 50 GB IA + 30 GB Glacier (rest empty).
+    mockSend.mockImplementation(
+      routeMultiClassS3({
+        [S3StorageClass.STANDARD]: 100_000_000_000,
+        [S3StorageClass.STANDARD_IA]: 50_000_000_000,
+        [S3StorageClass.GLACIER]: 30_000_000_000,
+      }),
+    );
+
+    const arn = "arn:aws:s3:::multi-class-bucket";
+    const enricher = createCloudWatchUsageEnricher(CREDS, "us-east-1");
+    const result = await enricher([makeResource(arn, "AWS::S3::Bucket")]);
+
+    expect(result.get(arn)).toEqual({
+      storageByClass: {
+        [S3StorageClass.STANDARD]: 100,
+        [S3StorageClass.STANDARD_IA]: 50,
+        [S3StorageClass.GLACIER]: 30,
+      },
+    });
+    // 7 per-class calls dispatched; the consumer only sees the
+    // populated ones (empty classes intentionally omitted from the
+    // map so the pricing-enricher can short-circuit per-class MCP
+    // queries for them).
+    expect(mockSend).toHaveBeenCalledTimes(S3_STORAGE_CLASSES.length);
+  });
+
+  it("survives per-class throttle: IA throws but Standard succeeds → only Standard lands", async () => {
+    mockSend.mockImplementation(
+      (command: {
+        input: {
+          Namespace?: string;
+          Dimensions?: Array<{ Name?: string; Value?: string }>;
+        };
+      }) => {
+        const storageType = command.input.Dimensions?.find(
+          (d) => d.Name === "StorageType",
+        )?.Value as S3StorageClass | undefined;
+        if (storageType === S3StorageClass.STANDARD_IA) {
+          return Promise.reject(
+            new Error("ThrottlingException: Rate exceeded"),
+          );
+        }
+        if (storageType === S3StorageClass.STANDARD) {
+          return Promise.resolve(statsResponse(10_000_000_000));
+        }
+        return Promise.resolve({ Datapoints: [] });
+      },
+    );
+
+    const arn = "arn:aws:s3:::partial-failure-bucket";
+    const enricher = createCloudWatchUsageEnricher(CREDS, "us-east-1");
+    const result = await enricher([makeResource(arn, "AWS::S3::Bucket")]);
+
+    // IA throw must not abort the bucket — Standard still lands.
+    expect(result.get(arn)).toEqual({
+      storageByClass: { [S3StorageClass.STANDARD]: 10 },
+    });
+  });
+
+  it("omits zero-byte classes entirely (distinguishes 'no data' from 'literal 0 GB')", async () => {
+    // The CloudWatch helper treats a populated `Average: 0` exactly
+    // like an empty datapoint array — both signal "no observed bytes".
+    // Keeping the class key with value 0 would force the pricing-
+    // enricher to issue a per-class MCP query for $0.00 — waste.
+    mockSend.mockImplementation(
+      (command: {
+        input: {
+          Namespace?: string;
+          Dimensions?: Array<{ Name?: string; Value?: string }>;
+        };
+      }) => {
+        const storageType = command.input.Dimensions?.find(
+          (d) => d.Name === "StorageType",
+        )?.Value as S3StorageClass | undefined;
+        if (storageType === S3StorageClass.STANDARD) {
+          return Promise.resolve(statsResponse(5_000_000_000));
+        }
+        if (storageType === S3StorageClass.STANDARD_IA) {
+          // Average is literally 0 (e.g. all IA objects were deleted
+          // yesterday; the metric still publishes a daily row).
+          return Promise.resolve(statsResponse(0));
+        }
+        return Promise.resolve({ Datapoints: [] });
+      },
+    );
+
+    const arn = "arn:aws:s3:::zero-byte-class-bucket";
+    const enricher = createCloudWatchUsageEnricher(CREDS, "us-east-1");
+    const result = await enricher([makeResource(arn, "AWS::S3::Bucket")]);
+
+    // STANDARD_IA must be ABSENT from the map (not present with 0).
+    const entry = result.get(arn);
+    expect(entry?.storageByClass).toEqual({
+      [S3StorageClass.STANDARD]: 5,
+    });
+    expect(entry?.storageByClass).not.toHaveProperty(
+      S3StorageClass.STANDARD_IA,
+    );
   });
 });
 
@@ -576,11 +824,23 @@ describe("createCloudWatchUsageEnricher — CloudFront Requests + BytesDownloade
   });
 
   it("mixes S3 + CloudFront cleanly — both populate their own fields", async () => {
-    // Routing logic distinguishes by Namespace + MetricName.
+    // Routing logic distinguishes by Namespace + MetricName + S3 StorageType.
     mockSend.mockImplementation(
-      (command: { input: { Namespace?: string; MetricName?: string } }) => {
+      (command: {
+        input: {
+          Namespace?: string;
+          MetricName?: string;
+          Dimensions?: Array<{ Name?: string; Value?: string }>;
+        };
+      }) => {
         if (command.input.Namespace === "AWS/S3") {
-          return Promise.resolve(statsResponse(2_000_000_000)); // 2 GB
+          const storageType = command.input.Dimensions?.find(
+            (d) => d.Name === "StorageType",
+          )?.Value;
+          if (storageType === S3StorageClass.STANDARD) {
+            return Promise.resolve(statsResponse(2_000_000_000)); // 2 GB Standard
+          }
+          return Promise.resolve({ Datapoints: [] });
         }
         if (command.input.MetricName === "Requests") {
           return Promise.resolve(sumResponse([500, 500], "Count")); // 1000 reqs
@@ -600,7 +860,9 @@ describe("createCloudWatchUsageEnricher — CloudFront Requests + BytesDownloade
       makeResource(cfArn, "AWS::CloudFront::Distribution", "global"),
     ]);
 
-    expect(result.get(s3Arn)).toEqual({ storageGB: 2 });
+    expect(result.get(s3Arn)).toEqual({
+      storageByClass: { [S3StorageClass.STANDARD]: 2 },
+    });
     expect(result.get(cfArn)).toEqual({
       cloudfrontRequestsPerMonth: 1_000,
       cloudfrontBytesPerMonth: 1, // 1e9 bytes = 1 GB
@@ -608,8 +870,12 @@ describe("createCloudWatchUsageEnricher — CloudFront Requests + BytesDownloade
   });
 
   it("respects bounded concurrency for mixed S3 + CloudFront workloads", async () => {
-    // 3 buckets + 2 distributions = 5 tasks (CF fans two reads in
-    // parallel inside one task, so the queue counts 5 outer tasks).
+    // F6-ITEM-3: 3 buckets + 2 distributions = 5 outer tasks. Each
+    // S3 task internally fans out 7 per-class CloudWatch calls; each
+    // CloudFront task fans out 2 (Requests + BytesDownloaded). Outer
+    // concurrency cap = 2, so worst-case in-flight = 2 outer ×
+    // max(7, 2) = 14. (The mix means one CF + one S3 task could
+    // both be in flight together, peaking at 7 + 2 = 9.)
     let inFlight = 0;
     let maxObserved = 0;
     mockSend.mockImplementation(async () => {
@@ -638,11 +904,9 @@ describe("createCloudWatchUsageEnricher — CloudFront Requests + BytesDownloade
     ];
     await enricher(inputs);
 
-    // CloudFront task itself fans two parallel reads internally, so
-    // observed in-flight may exceed `concurrency` by the CF fan-out
-    // factor. The hard ceiling we assert is `concurrency × CF_FANOUT`
-    // where CF_FANOUT is 2 (Requests + BytesDownloaded). Outer-task
-    // concurrency is still bounded.
-    expect(maxObserved).toBeLessThanOrEqual(2 * 2);
+    // Outer-task concurrency cap is `2`; each S3 outer task fans 7
+    // parallel calls internally; each CF outer task fans 2 calls.
+    // Worst case = 2 S3 tasks in flight at once = 14 in-flight calls.
+    expect(maxObserved).toBeLessThanOrEqual(2 * S3_STORAGE_CLASSES.length);
   });
 });

@@ -19,6 +19,36 @@ review methodology notes, see
 
 ### Added
 
+- **F6 multi-storage-class S3 baseline closure (F6 fully closed)** —
+  `assignee admin list --total-cost` / `assignee infra destroy --all`
+  now compute `$X.XX/mo` totals for lifecycle-tiered S3 buckets that
+  span Standard, Standard-IA, OneZone-IA, Intelligent-Tiering
+  Frequent-Access, Glacier Instant Retrieval, Glacier Flexible
+  Retrieval, and Deep Archive — not just the StandardStorage
+  dimension. The CloudWatch usage-enricher now fans 7 parallel
+  `BucketSizeBytes` calls per bucket (one per `StorageType`
+  dimension) via `Promise.allSettled`; the pricing-enricher iterates
+  every present class, fetches each class's per-GB-month rate via a
+  per-(region, class) Pricing MCP cache (cost ceiling =
+  `7 × region-count` MCP calls per pass, NOT `7 × bucket-count`),
+  and sums the contributions. The prior single-class
+  `ResourceUsage.storageGB` field was deliberately REPLACED — not
+  augmented — by `storageByClass`; carrying both fields side-by-side
+  would have preserved the silent-mis-cost regression Quinn's H1
+  deferral originally flagged (a bucket with 90% Glacier + 10%
+  Standard would still mis-cost under the single-class field). Every
+  consumer was refactored in lockstep. Glacier (Flexible Retrieval)
+  buckets carry an `≈` prefix on the displayed total to flag the
+  Standard / Expedited / Bulk retrieval-tier ambiguity — the per-GB
+  rate-card lists ONE number but the live cost depends on which
+  retrieval pattern dominates (per-bucket
+  `GetBucketAnalyticsConfig` disambiguation tracked as a future
+  enhancement). Partial Pricing MCP failures surface a partial sum
+  so long as at least 50% of present classes resolved. Closes
+  Quinn H1 follow-up; F6 progression: single-class in `1408ecd8`
+  (prefix-aware matcher), CloudFront in `1c0e2a43`, multi-class in
+  this commit.
+
 - **F6 CloudFront baseline cost closure** — `assignee admin list
 --total-cost` / `assignee infra destroy --all` now display real
   `$X.XX/mo` totals for CloudFront distributions instead of the

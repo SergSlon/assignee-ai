@@ -86,15 +86,69 @@ export type CreatedDateEnricher = (
 ) => Promise<Map<string, string>>;
 
 /**
+ * S3 storage class identifiers — used as the dimension `Value` on the
+ * `StorageType` dimension of `AWS/S3` CloudWatch `BucketSizeBytes`
+ * queries AND as the lookup key inside `ResourceUsage.storageByClass`.
+ *
+ * The enum VALUES match the CloudWatch dimension Value strings
+ * verbatim (AWS publishes one `BucketSizeBytes` series per class, e.g.
+ * `BucketSizeBytes/StandardStorage`, `BucketSizeBytes/StandardIAStorage`).
+ *
+ * Mapping to Pricing API `usagetype` filter values (canonical /
+ * unprefixed — real responses prepend a region token like `USE1-`
+ * which `attributeValueMatches` strips):
+ *
+ *   STANDARD                    → `TimedStorage-ByteHrs`
+ *   STANDARD_IA                 → `TimedStorage-SIA-ByteHrs`
+ *   ONE_ZONE_IA                 → `TimedStorage-ZIA-ByteHrs`
+ *   INTELLIGENT_TIERING_FA      → `TimedStorage-INT-FA-ByteHrs`
+ *   GLACIER_IR                  → `TimedStorage-GIR-ByteHrs`
+ *   GLACIER                     → `TimedStorage-GlacierByteHrs`
+ *   DEEP_ARCHIVE                → `TimedStorage-GDA-ByteHrs`
+ *
+ * The canonical values live in `pricing-filter-values.ts`
+ * (TIMED_STORAGE_* keys); the mapping is owned by the multi-class F6
+ * promotion path in `pricing-enricher.ts` (`S3_CLASS_TO_USAGETYPE`).
+ * F6-ITEM-3 closure of Quinn H1.
+ */
+export enum S3StorageClass {
+  STANDARD = "StandardStorage",
+  STANDARD_IA = "StandardIAStorage",
+  ONE_ZONE_IA = "OneZoneIAStorage",
+  INTELLIGENT_TIERING_FA = "IntelligentTieringFAStorage",
+  GLACIER_IR = "GlacierInstantRetrievalStorage",
+  GLACIER = "GlacierStorage",
+  DEEP_ARCHIVE = "DeepArchiveStorage",
+}
+
+/** Ordered list of every S3 storage class — used by the CloudWatch
+ *  fan-out so the order is deterministic across runs. */
+export const S3_STORAGE_CLASSES: readonly S3StorageClass[] = [
+  S3StorageClass.STANDARD,
+  S3StorageClass.STANDARD_IA,
+  S3StorageClass.ONE_ZONE_IA,
+  S3StorageClass.INTELLIGENT_TIERING_FA,
+  S3StorageClass.GLACIER_IR,
+  S3StorageClass.GLACIER,
+  S3StorageClass.DEEP_ARCHIVE,
+] as const;
+
+/**
  * Usage metrics fetched from AWS to convert rate-card hints (e.g.
  * `$0.0230/GB-month`) into resolved monthly totals (e.g. `$1.15/mo`).
  *
  * Closes F6 from the wizard UX audit — the bulk-destroy / admin-list
  * "≥ $0.00/month" lower-bound display.
  *
- * Today only `storageGB` is wired (S3 buckets via CloudWatch
- * `BucketSizeBytes`). Future: `requestsPerMonth` for CloudFront /
- * Lambda baseline, `dataTransferGB` for egress, etc.
+ * Today wires three usage families:
+ *   - `storageByClass` — per-storage-class S3 GB volumes (Quinn H1
+ *     closure, F6-ITEM-3). Each key in the partial record is an
+ *     `S3StorageClass` enum value; the value is the GB volume
+ *     observed in CloudWatch for that class. Omit a class entirely
+ *     when CloudWatch returned no datapoints (the consumer
+ *     distinguishes "no data" from a literal 0 GB this way).
+ *   - `cloudfrontRequestsPerMonth` / `cloudfrontBytesPerMonth` —
+ *     CloudFront baseline cost (F6-ITEM-2).
  *
  * **Field contract** (Quinn F6 M3 follow-up): every field is OPTIONAL
  * — "missing" means "no usage data for this dimension, fall back to
@@ -106,12 +160,39 @@ export type CreatedDateEnricher = (
  * additive, and the consumer in `pricing-enricher.ts` must explicitly
  * opt into using each field.
  *
+ * **Breaking change (F6-ITEM-3)**: the prior single-class `storageGB`
+ * field was deliberately REPLACED — not augmented — by
+ * `storageByClass`. The shim-free refactor is intentional: a
+ * lifecycle-tiered bucket where 90% of the bytes sit in Glacier and
+ * 10% in Standard would silently mis-cost under the single-class
+ * field (only StandardStorage was queried, so the Glacier bytes
+ * were invisible). Carrying both fields side-by-side would have
+ * preserved the silent-mis-cost regression. Every consumer was
+ * refactored in lockstep — see commit body for the call-site
+ * inventory.
+ *
  * @see _backlog/wizard-ux-audit-2026-05-22.md F6
  * @see packages/core/src/list-resources/pricing-enricher.ts (consumer)
  */
 export interface ResourceUsage {
-  /** Actual S3 storage in GB. Omit when CloudWatch returned no datapoint. */
-  storageGB?: number;
+  /**
+   * Per-S3-storage-class GB volumes (F6-ITEM-3 / Quinn H1 closure).
+   *
+   * Each key is an `S3StorageClass` enum value; the value is the GB
+   * volume CloudWatch's `BucketSizeBytes` reported for that class's
+   * `StorageType` dimension. ABSENT keys mean "no datapoint for that
+   * class" — the pricing-enricher treats absence as "this class has
+   * no observed bytes" and excludes it from the per-class fan-out,
+   * which is distinct from a literal `0` GB (a populated `0` would
+   * still trigger a per-class MCP query that returns $0.00 for that
+   * class, which is wasteful — so the CloudWatch helper omits the
+   * key when datapoints are empty).
+   *
+   * A bucket with NO classes populated (e.g. brand-new bucket whose
+   * first datapoint hasn't published yet) falls back to the
+   * rate-hint display, same as the pre-F6 behaviour.
+   */
+  storageByClass?: Partial<Record<S3StorageClass, number>>;
   /**
    * CloudFront `Requests` metric (AWS/CloudFront namespace, Sum statistic)
    * over the 30-day lookback window. Used to multiply the per-request

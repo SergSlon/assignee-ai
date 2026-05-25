@@ -52,6 +52,38 @@ export const PricingFilterValue = {
   // are surfaced as awareness-only via the cost-advisor when the IT
   // configuration declares lifecycle transitions to them.
   TIMED_STORAGE_INT_BYTE_HRS_FREQ: "TimedStorage-INT-FA-ByteHrs",
+  // F6-ITEM-3 (Quinn H1 closure) — per-storage-class usagetype filter
+  // values used by the multi-class F6 promotion path. Each entry is
+  // the CANONICAL (unprefixed) value as the AWS Pricing API exposes
+  // it; real responses prepend a region/edge token (e.g. `USE1-`,
+  // `EU-`, `APN1-`) which the prefix-aware `attributeValueMatches`
+  // (F6-ITEM-1) strips before equality comparison. The matching
+  // CloudWatch `StorageType` dimension value lives in the
+  // `S3StorageClass` enum (see `fetch-managed-resources.ts`); the
+  // two maps must stay in lockstep because the F6 multi-class
+  // pricing-enricher fan-out joins them by enum key.
+  //
+  // Verified against AWS Pricing API documentation (s3 storage class
+  // billing dimension naming): NA-edge region us-east-1 returns these
+  // values prefixed `USE1-` in real responses.
+  TIMED_STORAGE_SIA_BYTE_HRS: "TimedStorage-SIA-ByteHrs",
+  TIMED_STORAGE_ZIA_BYTE_HRS: "TimedStorage-ZIA-ByteHrs",
+  TIMED_STORAGE_GIR_BYTE_HRS: "TimedStorage-GIR-ByteHrs",
+  // Glacier Flexible Retrieval (formerly "S3 Glacier") — the
+  // baseline cold-storage tier the AWS lifecycle transition
+  // `STANDARD → GLACIER` lands in. The AWS Pricing API publishes
+  // this usagetype as `TimedStorage-GlacierByteHrs` (NOT the
+  // shorter `GFS-` variant used in some older docs); verified
+  // against real us-east-1 responses showing
+  // `USE1-TimedStorage-GlacierByteHrs`. The `≈` $/mo display
+  // prefix surfaces in the pricing-enricher because this class
+  // covers three retrieval-pattern sub-tiers (Standard /
+  // Expedited / Bulk) at different per-GB rates AND a separate
+  // retrieval fee — the rate-card baseline picks the cheapest
+  // (Bulk) and the prefix flags the disambiguation gap to the
+  // user.
+  TIMED_STORAGE_GLACIER_BYTE_HRS: "TimedStorage-GlacierByteHrs",
+  TIMED_STORAGE_GDA_BYTE_HRS: "TimedStorage-GDA-ByteHrs",
 
   // RDS deployment options
   MULTI_AZ: "Multi-AZ",
