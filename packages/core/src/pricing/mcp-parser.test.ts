@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { extractFirstTierPrice, extractTieredPrice } from "./mcp-parser.js";
+import {
+  attributeValueMatches,
+  extractFirstTierPrice,
+  extractTieredPrice,
+} from "./mcp-parser.js";
 import type { AwsPricingResponse } from "./types.js";
 
 describe("extractFirstTierPrice — contract tests for AwsPricingResponse shape", () => {
@@ -266,6 +270,72 @@ describe("extractFirstTierPrice — contract tests for AwsPricingResponse shape"
 
     const result = extractFirstTierPrice(data, "/GB-month");
     expect(result).toBe("$0.0500/GB-month");
+  });
+});
+
+// ─── attributeValueMatches — region/class-prefix strip (F6 follow-up) ────────
+//
+// Real AWS Pricing API responses prefix `usagetype` attributes with a
+// region or storage-class token (e.g. `USE1-`, `EU-`) before the
+// canonical core. Decomposers store the canonical UN-prefixed value as
+// the TERM_MATCH filter, so the matcher must strip one leading
+// ALL-CAPS-DIGITS-HYPHEN token and retry the equality check.
+//
+// These four cases lock the prefix-aware behaviour: three real-world
+// non-Standard S3 storage classes (Standard-IA, Glacier Instant
+// Retrieval, Intelligent-Tiering Frequent Access — the L7 fixture
+// case) plus one control that MUST NOT strip.
+
+describe("attributeValueMatches — region/class-prefix strip", () => {
+  it("matches S3 Standard-IA after stripping the USE1- region prefix", () => {
+    // Real AWS shape: `USE1-TimedStorage-SIA-ByteHrs` (us-east-1,
+    // StandardIA). Stored filter value (un-prefixed core):
+    // `TimedStorage-SIA-ByteHrs`.
+    expect(
+      attributeValueMatches(
+        "USE1-TimedStorage-SIA-ByteHrs",
+        "TimedStorage-SIA-ByteHrs",
+      ),
+    ).toBe(true);
+  });
+
+  it("matches S3 Glacier Instant Retrieval after stripping the USE1- region prefix", () => {
+    // Real AWS shape: `USE1-TimedStorage-GIR-ByteHrs` (us-east-1,
+    // Glacier Instant Retrieval). Stored filter value:
+    // `TimedStorage-GIR-ByteHrs`.
+    expect(
+      attributeValueMatches(
+        "USE1-TimedStorage-GIR-ByteHrs",
+        "TimedStorage-GIR-ByteHrs",
+      ),
+    ).toBe(true);
+  });
+
+  it("matches S3 Intelligent-Tiering Frequent Access after stripping the USE1- region prefix (L7 fixture case)", () => {
+    // Real AWS shape: `USE1-TimedStorage-INT-FA-ByteHrs` (us-east-1,
+    // Intelligent-Tiering Frequent Access). Stored filter value
+    // (PricingFilterValue.TIMED_STORAGE_INT_BYTE_HRS_FREQ):
+    // `TimedStorage-INT-FA-ByteHrs`.
+    expect(
+      attributeValueMatches(
+        "USE1-TimedStorage-INT-FA-ByteHrs",
+        "TimedStorage-INT-FA-ByteHrs",
+      ),
+    ).toBe(true);
+  });
+
+  it("does NOT strip a lowercase or partial-caps prefix (control case)", () => {
+    // `mycompany-foo` has a lowercase prefix — must NOT be stripped.
+    // If we naively stripped any leading `<word>-`, this would match
+    // `foo` and produce false positives on completely unrelated
+    // values (and on values like `gp3` or `MyValue-attr`). The
+    // conservative `^[A-Z0-9]+-` regex requires ALL caps + digits in
+    // the prefix, so this stays a reject.
+    expect(attributeValueMatches("mycompany-foo", "foo")).toBe(false);
+    // Exact-equality still holds for unprefixed values.
+    expect(attributeValueMatches("foo", "foo")).toBe(true);
+    // Partial-caps prefix must NOT be stripped (mixed case).
+    expect(attributeValueMatches("MyValue-attr", "attr")).toBe(false);
   });
 });
 

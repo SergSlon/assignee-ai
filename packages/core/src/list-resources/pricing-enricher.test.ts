@@ -600,15 +600,19 @@ const S3_STORAGE_PRICING_RESPONSE = JSON.stringify({
  * Production-shape S3 storage rate fixture. Mirrors the real AWS
  * Pricing API response: `usagetype` includes the region prefix
  * (`USE1-` for us-east-1, `EU-` for eu-west-1, etc.) AND the response
- * is a single item with full product metadata. The MCP server has
- * already filtered server-side based on the filter we passed; our
- * client-side `itemMatchesFilters` then has to either reject (because
- * the prefixed value doesn't exact-match `TimedStorage-ByteHrs`) or
- * fall through to the singleItemNoMetadata trust path.
+ * is a single item with full product metadata.
  *
  * Quinn L7 follow-up: locks the real-world response-shape behaviour
  * so a future Pricing-API change is caught at test time, not in
  * production.
+ *
+ * As of the F6 follow-up commit (prefix-aware matcher),
+ * `itemMatchesFilters` strips a leading ALL-CAPS-DIGITS-HYPHEN token
+ * (e.g. `USE1-`) from the API-returned attribute value before
+ * comparing against the stored filter. So the prefixed
+ * `USE1-TimedStorage-ByteHrs` now matches the stored
+ * `TimedStorage-ByteHrs` filter and the F6 promotion path fires
+ * against the real production response shape.
  */
 const S3_STORAGE_PRICING_RESPONSE_PRODUCTION_SHAPE = JSON.stringify({
   status: "success",
@@ -806,9 +810,12 @@ describe("createListPricingEnricher — F6 storage promotion", () => {
     // Real AWS Pricing API responses include the region prefix on the
     // `usagetype` attribute (e.g. `USE1-TimedStorage-ByteHrs` in
     // us-east-1). The decomposer's filter uses the unprefixed value
-    // `TimedStorage-ByteHrs` — `itemMatchesFilters` would naively
-    // reject. Verify the F6 promotion path still works on the
-    // realistic production shape.
+    // `TimedStorage-ByteHrs`. As of the F6 follow-up commit,
+    // `itemMatchesFilters` strips a single leading
+    // ALL-CAPS-DIGITS-HYPHEN prefix from the API-returned attribute
+    // value before comparing, so the prefixed value matches the stored
+    // filter and the F6 promotion path fires against the real
+    // production response shape.
     const arn = "arn:aws:s3:::production-shape-bucket";
     mockToolInvoke.mockResolvedValue(
       wrapMcpText(S3_STORAGE_PRICING_RESPONSE_PRODUCTION_SHAPE),
@@ -821,31 +828,8 @@ describe("createListPricingEnricher — F6 storage promotion", () => {
     const enricher = createListPricingEnricher(storageEnricher);
     const result = await enricher([makeResource(arn, "AWS::S3::Bucket")]);
 
-    const label = result.get(arn);
-    // If the rate-extraction works on the production shape, we expect
-    // the $/mo total. If `itemMatchesFilters` rejects on the prefixed
-    // usagetype, we'd fall back to either a rate hint (no F6) or
-    // undefined (no entry).
-    //
-    // The current behaviour with the real shape: extractFirstTierPrice
-    // calls itemMatchesFilters which rejects (USE1-... !==
-    // TimedStorage-...) → filtered is empty → singleItemNoMetadata
-    // would normally save us, BUT the product metadata is present, so
-    // singleItemNoMetadata is false. Result: priceStr is null → no
-    // usageResults push → label is undefined.
-    //
-    // This is a real production gap discovered via Quinn's L7 follow-up.
-    // The fix lives in `itemMatchesFilters` — make the usageType check
-    // partition/region-tolerant by allowing a region-prefix to precede
-    // the expected value. Documented here as a known limitation; the
-    // test currently asserts the buggy state and will need updating
-    // when the matcher fix lands.
-    //
-    // TODO(F6 follow-up): make `itemMatchesFilters` tolerant of the
-    // AWS region prefix on `usagetype` attributes. Once that lands,
-    // change this assertion to `expect(label).toBe("$2.30/mo")` —
-    // 100 GB × $0.023 = $2.30/mo.
-    expect(label).toBeUndefined();
+    // 100 GB × $0.023/GB-month = $2.30/mo
+    expect(result.get(arn)).toBe("$2.30/mo");
   });
 
   it("calls storageEnricher with the priceable subset, not the raw input", async () => {

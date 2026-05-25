@@ -34,6 +34,62 @@ interface ProductInfo {
   attributes?: Record<string, string>;
 }
 
+/**
+ * AWS Pricing API region/class prefix on `usagetype` attributes.
+ *
+ * Real Pricing API responses prepend a short ALL-CAPS-DIGITS-HYPHEN
+ * token (or a chain of such tokens) onto the usagetype, e.g.:
+ *
+ *   `USE1-TimedStorage-ByteHrs`         (us-east-1, Standard)
+ *   `EU-TimedStorage-ByteHrs`           (eu-west-1, Standard)
+ *   `USE1-TimedStorage-SIA-ByteHrs`     (Standard-IA)
+ *   `USE1-TimedStorage-GIR-ByteHrs`     (Glacier Instant Retrieval)
+ *   `USE1-TimedStorage-INT-FA-ByteHrs`  (Intelligent-Tiering Frequent)
+ *
+ * Decomposers store the canonical *un*prefixed value as the TERM_MATCH
+ * filter (e.g. `TimedStorage-ByteHrs`), so a naive equality check
+ * against the API-returned value fails for any non-default region.
+ *
+ * This regex strips ONE leading ALL-CAPS-DIGITS-HYPHEN token (terminated
+ * by `-`) from an API value before retrying the equality check. It is
+ * intentionally conservative:
+ *
+ *   - prefix MUST be at the start (`^`)
+ *   - prefix MUST contain only `A-Z` and `0-9`
+ *   - prefix MUST end with `-` (followed by at least one more char)
+ *   - lowercase letters, no-hyphen values, and partial-caps values
+ *     (e.g. `MyValue`, `name-foo`, `gp3`) are left untouched
+ *
+ * One strip is sufficient for every observed real-world case — the
+ * region prefix is the only ALL-CAPS prefix on usagetype values; the
+ * inner storage-class tokens (`SIA-`, `GIR-`, `INT-FA-`) become part
+ * of the matched stored filter value after the strip.
+ */
+const PRICING_API_PREFIX_RE = /^[A-Z0-9]+-/;
+
+/**
+ * Compare a single API attribute value against a filter value.
+ * Returns true on exact match, OR on match-after-stripping a single
+ * ALL-CAPS-DIGITS-HYPHEN prefix (e.g. `USE1-`) from the API value.
+ *
+ * The prefix strip only fires when the regex matches the API value's
+ * leading chars — values without such a prefix are compared
+ * exact-equality only.
+ *
+ * @internal exported for unit tests (see `mcp-parser.test.ts`).
+ */
+export function attributeValueMatches(
+  apiValue: string,
+  expected: string,
+): boolean {
+  if (apiValue === expected) return true;
+  if (PRICING_API_PREFIX_RE.test(apiValue)) {
+    const stripped = apiValue.replace(PRICING_API_PREFIX_RE, "");
+    if (stripped === expected) return true;
+  }
+  return false;
+}
+
 function itemMatchesFilters(
   item: { product?: ProductInfo },
   filters: McpPricingFilter[],
@@ -57,7 +113,10 @@ function itemMatchesFilters(
       const attrKey = Object.keys(product.attributes).find(
         (k) => k.toLowerCase() === field.toLowerCase(),
       );
-      if (attrKey && product.attributes[attrKey] !== expected) {
+      if (
+        attrKey &&
+        !attributeValueMatches(product.attributes[attrKey]!, expected)
+      ) {
         return false;
       }
     }

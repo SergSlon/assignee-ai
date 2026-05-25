@@ -234,6 +234,26 @@ command is summing costs — `admin list --total-cost`, `admin status`,
 `--total-cost`) skips the per-bucket CloudWatch round-trip
 (Quinn H2 follow-up gate via `FetchOptions.withStorageEstimate`).
 
+Closed (this commit — F6 follow-up, prefix-aware matcher):
+
+- **S3 single-class non-Standard buckets** — `itemMatchesFilters`
+  in `packages/core/src/pricing/mcp-parser.ts` now strips a single
+  leading ALL-CAPS-DIGITS-HYPHEN prefix (e.g. `USE1-`, `EU-`,
+  `APN1-`) from API-returned attribute values before comparing
+  against stored filter values. This fixes the L7-fixture case
+  where real-world `usagetype=USE1-TimedStorage-ByteHrs` (or any
+  non-default region) was rejected by the naive equality check,
+  bailing the F6 promotion path and falling back to a rate-hint
+  display. The L7 test
+  (`packages/core/src/list-resources/pricing-enricher.test.ts`)
+  now asserts `$2.30/mo` for a 100 GB bucket at $0.023/GB-month
+  in us-east-1, exercising the real production response shape.
+  Single-class IA / Glacier Instant Retrieval / Intelligent-
+  Tiering buckets also work transparently for the same reason
+  (their canonical stored filters like `TimedStorage-SIA-ByteHrs`,
+  `TimedStorage-GIR-ByteHrs`, `TimedStorage-INT-FA-ByteHrs` now
+  match the prefixed API values after the same single strip).
+
 Out of scope for this iteration:
 
 - **CloudFront baseline** — distributions still surface as rate
@@ -245,11 +265,16 @@ Out of scope for this iteration:
   `cloudwatch:GetMetricStatistics` scoped to `AWS/S3` only, so a
   CloudFront extension also needs the policy to include
   `AWS/CloudFront` in the namespace allowlist.
-- **Multi-storage-class buckets** — only `StandardStorage` is
-  queried today. IA / Glacier / Intelligent-Tiering buckets fall
-  back to the rate-hint display (Quinn H1 follow-up). Easy to
-  extend with parallel calls per class once we have a real account
-  with a non-Standard bucket to dogfood against.
+- **Multi-storage-class buckets (lifecycle-tiered)** — only
+  `StandardStorage` CloudWatch dimension is queried today. The
+  prefix-aware matcher (closed above) fixes the single-class
+  non-Standard case (one bucket, one class), but a bucket spanning
+  multiple classes (e.g. lifecycle-tiered Standard → IA → Glacier)
+  still surfaces only the StandardStorage dimension as fixed cost;
+  the other classes' bytes show only as rate hints. Real fix:
+  parallel `GetMetricStatistics` calls per `StorageType` dimension
+  and a per-class rate fan-out in the S3 decomposer. Quinn H1
+  follow-up.
 
 ---
 
