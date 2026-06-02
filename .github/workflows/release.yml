@@ -692,7 +692,7 @@ jobs:
         # SHA pin verified against `gh api repos/github/codeql-action/git/refs/tags/v3.27.1`
         # (tag dereferences to commit 4f3212b61783c3c68e8309a0f18a699764811cda).
         # Dependabot will bump weekly; re-verify when the comment-tag changes.
-        uses: github/codeql-action/upload-sarif@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v4.35.5
+        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4.36.0
         with:
           sarif_file: ${{ steps.scan.outputs.sarif }}
           category: grype-sbom-scan
