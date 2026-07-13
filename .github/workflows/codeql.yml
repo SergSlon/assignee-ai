@@ -61,13 +61,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Initialize CodeQL
         # SHA pin verified against `gh api repos/github/codeql-action/git/refs/tags/v3.27.1`
         # (tag dereferences to commit 4f3212b61783c3c68e8309a0f18a699764811cda).
         # Dependabot will bump to v3 latest weekly; re-verify when the comment-tag changes.
-        uses: github/codeql-action/init@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v4.35.5
+        uses: github/codeql-action/init@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
         with:
           languages: ${{ matrix.language }}
           # `security-and-quality` includes the security suite + a curated
@@ -94,7 +94,7 @@ jobs:
         # GitHub Advanced Security on this private repo. See
         # `.github/workflows/codeql.yml` history + the customer-demo
         # 2026-05-06 audit closure for context.
-        uses: github/codeql-action/analyze@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v4.35.5
+        uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
         with:
           category: "/language:${{ matrix.language }}"
           upload: never
